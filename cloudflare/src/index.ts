@@ -27,7 +27,7 @@ export default {
       return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
     if (url.pathname === '/api/world' && request.method === 'GET') {
-      const [world, human, institutions, resources, business, technology, proposal, machines, account, ballots, succession] = await Promise.all([
+      const [world, human, institutions, resources, business, technology, proposal, machines, account, ballots, succession, prices] = await Promise.all([
         env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
         env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM institutions').all(),
@@ -39,18 +39,20 @@ export default {
         env.DB.prepare('SELECT balance FROM account_balances WHERE account_id = ?').bind('account-amara').first<{ balance: number }>(),
         env.DB.prepare('SELECT choice, COUNT(*) AS count FROM ballots WHERE proposal_id = ? GROUP BY choice').bind('042').all(),
         env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(),
+        env.DB.prepare('SELECT * FROM market_prices ORDER BY product').all(),
       ]);
       const institutionRows = institutions.results as Array<Record<string, unknown>>;
       const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
       const resourceMap = Object.fromEntries((resources.results as Array<Record<string, unknown>>).map((item) => [item.resource, item.amount]));
       const voteCounts = Object.fromEntries((ballots.results as Array<Record<string, unknown>>).map((item) => [item.choice, Number(item.count)]));
+      const marketProducts = Object.fromEntries((prices.results as Array<Record<string, unknown>>).map((item) => [item.product, { price: item.price, supply: item.supply, demand: item.demand }]));
       return Response.json({
         clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
         human: { id: human?.id, name: human?.display_name, credits: account?.balance ?? 0, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31 },
         life: { generation: 1, successor: succession ?? null, estatePeriodDays: succession?.estate_period_days ?? 30 },
         institutions: { ouc: byKind('OUC'), corporation: byKind('CORPORATION'), city: byKind('CITY'), business: byKind('BUSINESS') },
-        resources: resourceMap, business: business ?? {}, market: { products: {}, orders: [], lastSettlement: null },
+        resources: resourceMap, business: business ?? {}, market: { products: marketProducts, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
         technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: [], persistence: 'cloudflare-d1'
       });
