@@ -122,6 +122,14 @@ export default {
       ]);
       return Response.json({ wealth: wealth.results, cities: cities.results, corporations: corporations.results, technologies: technologies.results, generatedFrom: 'cloudflare-d1', persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/cities' && request.method === 'GET') {
+      const cities = await env.DB.prepare('SELECT * FROM cities ORDER BY id').all();
+      return Response.json({ cities: cities.results, persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/corporations' && request.method === 'GET') {
+      const corporations = await env.DB.prepare('SELECT * FROM corporations ORDER BY id').all();
+      return Response.json({ corporations: corporations.results, persistence: 'cloudflare-d1' });
+    }
     if (url.pathname === '/api/cities/CITY-0084/budget' && request.method === 'POST') {
       const body = await request.json<{ category?: string; amount?: number }>();
       const category = body.category?.trim();
