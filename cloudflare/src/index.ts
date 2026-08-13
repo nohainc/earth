@@ -60,6 +60,16 @@ export default {
       const result = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
       return Response.json({ ok: result?.ok === 1, persistence: 'cloudflare-d1', environment: env.ENVIRONMENT });
     }
+    if (url.pathname === '/api/institutions' && request.method === 'GET') {
+      const [community, city, corporation, membership, budgets] = await Promise.all([
+        env.DB.prepare('SELECT * FROM communities ORDER BY id').all(),
+        env.DB.prepare('SELECT * FROM cities ORDER BY id').all(),
+        env.DB.prepare('SELECT * FROM corporations ORDER BY id').all(),
+        env.DB.prepare('SELECT * FROM memberships ORDER BY human_id').all(),
+        env.DB.prepare('SELECT * FROM budgets ORDER BY game_day DESC').all(),
+      ]);
+      return Response.json({ community: community.results, city: city.results, corporation: corporation.results, membership: membership.results, budgets: budgets.results, persistence: 'cloudflare-d1' });
+    }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {

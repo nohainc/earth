@@ -5,3 +5,7 @@ INSERT OR IGNORE INTO world_state (id, game_day, game_minute, health, market_bat
 INSERT OR IGNORE INTO businesses (id, owner_id, name, policy, condition) VALUES ('B-1048', 'H-0044', 'Kline Works', 'reliability', 96);
 INSERT OR IGNORE INTO resource_balances (owner_id, resource, amount) VALUES ('H-0044', 'material', 420), ('H-0044', 'components', 86), ('H-0044', 'energy', 92), ('H-0044', 'compute', 64);
 INSERT OR IGNORE INTO proposals (id, institution_id, title, body, status, opens_at, closes_at) VALUES ('042', 'OUC-001', 'Components maintenance levy', 'Fund resilient component maintenance across the shared economy.', 'open', CURRENT_TIMESTAMP, datetime('now', '+30 days'));
+INSERT OR IGNORE INTO cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity, treasury) VALUES ('CITY-0084', 'CITY-0084', 18, 76, 92, 88, 64, 0);
+INSERT OR IGNORE INTO corporations (id, institution_id, member_count, treasury, constitution_version) VALUES ('CORP-001', 'CORP-001', 42, 0, 1);
+INSERT OR IGNORE INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ('H-0044', 'CORP-001', 'CITY-0084', 160);
+INSERT OR IGNORE INTO budgets (id, institution_id, category, amount, game_day) VALUES ('BUDGET-CITY-0084', 'CITY-0084', 'public-services', 0, 184);
