@@ -27,7 +27,7 @@ export default {
       return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
     if (url.pathname === '/api/world' && request.method === 'GET') {
-      const [world, human, institutions, resources, business, technology, proposal, machines] = await Promise.all([
+      const [world, human, institutions, resources, business, technology, proposal, machines, account] = await Promise.all([
         env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
         env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM institutions').all(),
@@ -36,6 +36,7 @@ export default {
         env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind('TECH-001').first(),
         env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind('042').first(),
         env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind('H-0044').all(),
+        env.DB.prepare('SELECT balance FROM account_balances WHERE account_id = ?').bind('account-amara').first<{ balance: number }>(),
       ]);
       const institutionRows = institutions.results as Array<Record<string, unknown>>;
       const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
@@ -43,7 +44,7 @@ export default {
       return Response.json({
         clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
-        human: { id: human?.id, name: human?.display_name, credits: 18420, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31 },
+        human: { id: human?.id, name: human?.display_name, credits: account?.balance ?? 0, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31 },
         life: { generation: 1, successor: null, estatePeriodDays: 30 },
         institutions: { ouc: byKind('OUC'), corporation: byKind('CORPORATION'), city: byKind('CITY'), business: byKind('BUSINESS') },
         resources: resourceMap, business: business ?? {}, market: { products: {}, orders: [], lastSettlement: null },
