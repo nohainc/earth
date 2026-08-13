@@ -73,14 +73,18 @@ class EarthApi {
   Future<EarthState> advanceDay() async =>
       EarthState((await _request('/api/day/advance', method: 'POST'))['state']
           as Map<String, dynamic>);
-  Future<EarthState> setPolicy(String policy) async =>
-      EarthState((await _request('/api/businesses/kline-works/policy',
-          method: 'POST',
-          body: {'policy': policy}))['state'] as Map<String, dynamic>);
-  Future<EarthState> fundResearch() async =>
-      EarthState((await _request('/api/research/fund',
-          method: 'POST',
-          body: {'amount': 240}))['state'] as Map<String, dynamic>);
+  Future<EarthState> setPolicy(String policy) async {
+    await _request('/api/businesses/kline-works/policy',
+        method: 'POST', body: {'policy': policy});
+    return world();
+  }
+
+  Future<EarthState> fundResearch() async {
+    await _request('/api/technology/TECH-001/fund',
+        method: 'POST', body: {'amount': 240});
+    return world();
+  }
+
   Future<EarthState> vote(String choice) async =>
       EarthState((await _request('/api/governance/proposals/042/vote',
           method: 'POST',

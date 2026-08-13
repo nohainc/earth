@@ -267,6 +267,12 @@ export default {
       const counts = await env.DB.prepare('SELECT choice, COUNT(*) AS count FROM ballots WHERE proposal_id = ? GROUP BY choice').bind(proposalId).all();
       return Response.json({ ok: true, proposalId, humanId, vote: body.vote, counts: counts.results, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/businesses/kline-works/policy' && request.method === 'POST') {
+      const body = await request.json<{ policy?: string }>();
+      if (!['reliability', 'margin', 'capacity'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Unknown business policy' }, { status: 400 });
+      await env.DB.prepare('UPDATE businesses SET policy = ? WHERE id = ?').bind(body.policy, 'B-1048').run();
+      return Response.json({ ok: true, policy: body.policy, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind('B-1048').first(), persistence: 'cloudflare-d1' });
+    }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
     }
