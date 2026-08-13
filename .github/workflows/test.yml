@@ -56,3 +56,5 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build web --release --dart-define=EARTH_API_URL=https://earth-world.vitalii-e07.workers.dev
+      - name: Check deployed D1-backed Worker
+        run: curl --fail --silent --show-error https://earth-world.vitalii-e07.workers.dev/api/health
