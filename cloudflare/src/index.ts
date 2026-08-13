@@ -85,6 +85,19 @@ export default {
       ]);
       return Response.json({ community: community.results, city: city.results, corporation: corporation.results, membership: membership.results, budgets: budgets.results, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/communities' && request.method === 'GET') {
+      return Response.json({ communities: (await env.DB.prepare('SELECT * FROM communities ORDER BY id').all()).results, persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/communities' && request.method === 'POST') {
+      const body = await request.json<{ name?: string; founderId?: string }>();
+      const name = body.name?.trim();
+      const founderId = body.founderId || 'H-0044';
+      if (!name || name.length < 3 || name.length > 80) return Response.json({ ok: false, error: 'Community name must be 3–80 characters' }, { status: 400 });
+      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(founderId).first())) return Response.json({ ok: false, error: 'Founder not found' }, { status: 404 });
+      const communityId = `COMM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+      await env.DB.prepare('INSERT INTO communities (id, name, founder_id, shared_credits) VALUES (?, ?, ?, 0)').bind(communityId, name, founderId).run();
+      return Response.json({ ok: true, community: await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(communityId).first(), persistence: 'cloudflare-d1' });
+    }
     if (url.pathname === '/api/cities/CITY-0084/budget' && request.method === 'POST') {
       const body = await request.json<{ category?: string; amount?: number }>();
       const category = body.category?.trim();
