@@ -40,6 +40,7 @@ class EarthState {
       json['governance'] as Map<String, dynamic>;
   Map<String, dynamic> get institutions =>
       json['institutions'] as Map<String, dynamic>;
+  Map<String, dynamic> get life => json['life'] as Map<String, dynamic>;
   List<dynamic> get machines =>
       (json['machines'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get market =>
@@ -106,6 +107,11 @@ class EarthApi {
   Future<EarthState> settleMarket(String product) async {
     await _request('/api/market/settle',
         method: 'POST', body: {'product': product});
+    return world();
+  }
+
+  Future<EarthState> registerSuccessor(String name) async {
+    await _request('/api/successor', method: 'POST', body: {'name': name});
     return world();
   }
 
@@ -367,7 +373,25 @@ class _Dashboard extends StatelessWidget {
                                         .settleMarket(entry.key)),
                                 child: const Text('SETTLE'))
                           ]));
-                }).toList()))
+                }).toList())),
+        _Panel(
+            title: 'LIFE / SUCCESSION',
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(state.life['successor'] == null
+                  ? 'No successor registered.'
+                  : 'Successor: ${(state.life['successor'] as Map<String, dynamic>)['successor_name']}'),
+              const SizedBox(height: 8),
+              Text('Estate period: ${state.life['estatePeriodDays']} days',
+                  style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 10),
+              OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => action(() =>
+                          const EarthApi().registerSuccessor('Alex Kline')),
+                  child: const Text('REGISTER ALEX KLINE'))
+            ]))
       ]),
     ]);
   }
