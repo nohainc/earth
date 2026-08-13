@@ -94,6 +94,15 @@ class EarthApi {
     return world();
   }
 
+  Future<EarthState> submitOrder(String product, double limitPrice) async {
+    await _request('/api/market/orders', method: 'POST', body: {
+      'product': product,
+      'quantity': 1,
+      'limitPrice': limitPrice,
+    });
+    return world();
+  }
+
   Future<EarthState> vote(String choice) async {
     await _request('/api/governance/proposals/042/vote',
         method: 'POST', body: {'vote': choice});
@@ -334,7 +343,17 @@ class _Dashboard extends StatelessWidget {
                                     ?.copyWith(fontWeight: FontWeight.w700)),
                             Text(
                                 'S ${product['supply']}  ·  D ${product['demand']}',
-                                style: const TextStyle(fontSize: 11))
+                                style: const TextStyle(fontSize: 11)),
+                            const SizedBox(height: 6),
+                            OutlinedButton(
+                                onPressed: busy
+                                    ? null
+                                    : () => action(() => const EarthApi()
+                                        .submitOrder(
+                                            entry.key,
+                                            (product['price'] as num)
+                                                .toDouble())),
+                                child: const Text('BUY 1'))
                           ]));
                 }).toList()))
       ]),
