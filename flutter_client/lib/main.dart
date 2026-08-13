@@ -76,6 +76,8 @@ class EarthState {
       ((json['market'] as Map<String, dynamic>)['trades'] as List<dynamic>?) ?? const [];
   List<dynamic> get communities =>
       (json['communities'] as List<dynamic>?) ?? const [];
+  Map<String, dynamic> get audit =>
+      (json['audit'] as Map<String, dynamic>?) ?? const {};
   List<dynamic> get ledgerEntries =>
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
@@ -537,7 +539,14 @@ class _Dashboard extends StatelessWidget {
                 }),
               const SizedBox(height: 8),
               OutlinedButton(onPressed: busy ? null : () => action(() => const EarthApi().createCommunity()), child: const Text('FOUND CARTHAGE MAKERS')),
-            ]))
+            ])),
+        _Panel(
+            title: 'WORLD INTEGRITY / AUDIT',
+            child: Wrap(spacing: 8, runSpacing: 8, children: state.audit.entries.map((entry) => Chip(
+                label: Text('${entry.key}: ${entry.value ? 'OK' : 'CHECK'}', style: const TextStyle(fontSize: 10)),
+                avatar: Icon(entry.value ? Icons.check_circle : Icons.warning, size: 14, color: entry.value ? _cyanAccent : Colors.orange),
+                backgroundColor: Colors.white10,
+              )).toList()))
       ]),
     ]);
   }

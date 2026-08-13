@@ -62,6 +62,11 @@ const worker = {
         env.DB.prepare('SELECT COUNT(*) AS count FROM patents WHERE technology_id = ? AND status = ?').bind('TECH-001', 'active').first(),
         env.DB.prepare('SELECT COUNT(*) AS count FROM technology_licenses WHERE patent_id = ? AND status = ?').bind('PAT-TECH-001', 'active').first(),
       ]);
+      const audit = await Promise.all([
+        env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
+        env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
+        env.DB.prepare('SELECT COUNT(*) AS invalid FROM machines WHERE condition < 0 OR condition > 100').first<{ invalid: number }>(),
+      ]);
       return Response.json({
         clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
@@ -73,6 +78,7 @@ const worker = {
         technology: { research: technology ?? {}, activePatents: Number(technologyRegistry[0]?.count ?? 0), activeLicenses: Number(technologyRegistry[1]?.count ?? 0) }, machines: machines.results, ledgerEntries: ledger.results,
         rankings: { cities: rankings[0].results, corporations: rankings[1].results },
         communities: communities.results,
+        audit: { balancesNonNegative: Number(audit[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2]?.invalid ?? 0) === 0 },
         persistence: 'cloudflare-d1'
       });
     }
