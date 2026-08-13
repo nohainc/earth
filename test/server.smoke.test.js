@@ -26,6 +26,7 @@ test('health endpoint reports operational checks and request tracing', async () 
   assert.equal(result.status, 200);
   assert.equal(result.body.ok, true);
   assert.ok(result.body.checks);
+  assert.equal(result.headers.get('x-earth-api-version'), '2026-08');
 });
 
 test('world activity exposes only public simulation signals', async () => {

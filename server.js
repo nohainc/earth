@@ -134,7 +134,7 @@ function audit() {
   const ballotUniqueness = new Set(ballots).size === ballots.length;
   return { ok: ordersValid && ledgerValid && balancesValid && ballotUniqueness, checks: { ordersValid, ledgerValid, balancesValid, ballotUniqueness }, inspected: { orders: state.market.orders.length, ledgerEntries: state.ledger.length, humans: Object.keys(state.humans).length, ballots: ballots.length }, gameDay: state.clock.day };
 }
-function send(res, status, data) { res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' }); res.end(JSON.stringify(data)); }
+function send(res, status, data) { res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type', 'x-earth-api-version': '2026-08' }); res.end(JSON.stringify(data)); }
 async function serveStatic(res, pathname) {
   const files = { '/': resolve('index.html'), '/index.html': resolve('index.html'), '/landing.css': resolve('landing.css'), '/prototype3.html': resolve('prototype3.html'), '/prototype3.css': resolve('prototype3.css'), '/prototype3.js': resolve('prototype3.js') };
   const file = files[pathname]; if (!file) return false;

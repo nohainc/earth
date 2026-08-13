@@ -449,6 +449,7 @@ export default {
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     headers.set('Access-Control-Expose-Headers', 'X-Request-ID');
     headers.set('X-Request-ID', requestId);
+    headers.set('X-EARTH-API-Version', '2026-08');
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
