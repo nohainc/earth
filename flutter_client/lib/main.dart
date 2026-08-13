@@ -42,6 +42,9 @@ class EarthState {
       json['institutions'] as Map<String, dynamic>;
   List<dynamic> get machines =>
       (json['machines'] as List<dynamic>?) ?? const [];
+  Map<String, dynamic> get market =>
+      (json['market'] as Map<String, dynamic>)['products']
+          as Map<String, dynamic>;
 }
 
 class EarthApi {
@@ -305,7 +308,35 @@ class _Dashboard extends StatelessWidget {
                                                   machine['id'] as String)),
                                       child: const Text('MAINTAIN'))
                                 ]));
-                      }).toList()))
+                      }).toList())),
+        _Panel(
+            title: 'CENTRAL MARKET / LIVE SIGNALS',
+            child: Wrap(
+                spacing: 18,
+                runSpacing: 12,
+                children: state.market.entries.map((entry) {
+                  final product = entry.value as Map<String, dynamic>;
+                  return SizedBox(
+                      width: 150,
+                      child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(entry.key.toUpperCase(),
+                                style: const TextStyle(
+                                    fontSize: 10,
+                                    letterSpacing: 1,
+                                    fontWeight: FontWeight.w700)),
+                            const SizedBox(height: 5),
+                            Text('${product['price']} C',
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleMedium
+                                    ?.copyWith(fontWeight: FontWeight.w700)),
+                            Text(
+                                'S ${product['supply']}  ·  D ${product['demand']}',
+                                style: const TextStyle(fontSize: 11))
+                          ]));
+                }).toList()))
       ]),
     ]);
   }
