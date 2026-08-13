@@ -76,9 +76,11 @@ class EarthApi {
 
   Future<EarthState> world() async =>
       EarthState(await _request('/api/world') as Map<String, dynamic>);
-  Future<EarthState> advanceDay() async =>
-      EarthState((await _request('/api/day/advance', method: 'POST'))['state']
-          as Map<String, dynamic>);
+  Future<EarthState> advanceDay() async {
+    await _request('/api/day/advance', method: 'POST');
+    return world();
+  }
+
   Future<EarthState> setPolicy(String policy) async {
     await _request('/api/businesses/kline-works/policy',
         method: 'POST', body: {'policy': policy});
