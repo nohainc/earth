@@ -1,19 +1,20 @@
-export interface Env {
-  ENVIRONMENT: string;
-  HYPERDRIVE: Hyperdrive;
-  MARKET_COORDINATOR: DurableObjectNamespace;
-}
+import { DurableObject } from 'cloudflare:workers';
 
-export class MarketCoordinator {
-  constructor(private readonly state: DurableObjectState, private readonly env: Env) {}
+export class MarketCoordinator extends DurableObject<Env> {
+  constructor(ctx: DurableObjectState, env: Env) {
+    super(ctx, env);
+    ctx.blockConcurrencyWhile(async () => {
+      await ctx.storage.put('initialized', true);
+    });
+  }
 
-  async fetch(request: Request): Promise<Response> {
-    if (request.method === 'POST') {
-      const payload = await request.json<unknown>();
-      await this.state.storage.put('lastCommand', { payload, at: new Date().toISOString() });
-      return Response.json({ ok: true, coordinator: 'market', accepted: true });
-    }
-    return Response.json({ ok: true, coordinator: 'market', state: await this.state.storage.get('lastCommand') });
+  async submitCommand(payload: unknown): Promise<{ ok: true; coordinator: string }> {
+    await this.ctx.storage.put('lastCommand', { payload, at: new Date().toISOString() });
+    return { ok: true, coordinator: 'market' };
+  }
+
+  async snapshot(): Promise<unknown> {
+    return this.ctx.storage.get('lastCommand');
   }
 }
 
@@ -21,8 +22,9 @@ export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/edge/market') {
-      const id = env.MARKET_COORDINATOR.idFromName('central-market');
-      return env.MARKET_COORDINATOR.get(id).fetch(request);
+      const stub = env.MARKET_COORDINATOR.getByName('central-market');
+      if (request.method === 'POST') return Response.json(await stub.submitCommand(await request.json()));
+      return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
