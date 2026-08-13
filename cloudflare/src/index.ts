@@ -140,6 +140,29 @@ export default {
       await env.DB.prepare('INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, royalty_rate) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET royalty_rate = excluded.royalty_rate, status = \'active\'').bind(licenseId, patent.id, patent.owner_id, licenseeId, royaltyRate).run();
       return Response.json({ ok: true, license: await env.DB.prepare('SELECT * FROM technology_licenses WHERE id = ?').bind(licenseId).first(), persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/finance' && request.method === 'GET') {
+      const [accounts, rules] = await Promise.all([env.DB.prepare('SELECT * FROM account_balances ORDER BY account_id').all(), env.DB.prepare('SELECT * FROM tax_rules WHERE active = 1 ORDER BY id').all()]);
+      return Response.json({ accounts: accounts.results, taxRules: rules.results, persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/taxes/settle' && request.method === 'POST') {
+      const body = await request.json<{ accountId?: string; taxableAmount?: number }>();
+      const accountId = body.accountId || 'account-amara';
+      const taxableAmount = Number(body.taxableAmount);
+      if (!Number.isFinite(taxableAmount) || taxableAmount <= 0) return Response.json({ ok: false, error: 'Taxable amount must be positive' }, { status: 400 });
+      const rule = await env.DB.prepare('SELECT * FROM tax_rules WHERE id = ? AND active = 1').bind('TAX-OUC-BASIC').first<{ rate: number; version: number }>();
+      const account = await env.DB.prepare('SELECT * FROM account_balances WHERE account_id = ?').bind(accountId).first<{ owner_id: string; balance: number }>();
+      if (!rule || !account) return Response.json({ ok: false, error: 'Tax rule or account not found' }, { status: 404 });
+      const amount = Math.round(taxableAmount * Number(rule.rate) * 100) / 100;
+      if (Number(account.balance) < amount) return Response.json({ ok: false, error: 'Insufficient Credits for tax settlement' }, { status: 409 });
+      const correlationId = crypto.randomUUID();
+      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
+      await env.DB.batch([
+        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ?').bind(amount, accountId),
+        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(amount, 'account-ouc-treasury'),
+        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, gameDay, accountId, 'account-ouc-treasury', amount, 'CREDIT', 'tax_settlement', accountId, `tax-v${rule.version}`, correlationId),
+      ]);
+      return Response.json({ ok: true, amount, ruleVersion: rule.version, correlationId, accounts: (await env.DB.prepare('SELECT * FROM account_balances WHERE account_id IN (?, ?)').bind(accountId, 'account-ouc-treasury').all()).results, persistence: 'cloudflare-d1' });
+    }
     const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
     if (maintenanceMatch && request.method === 'POST') {
       const machineId = maintenanceMatch[1];

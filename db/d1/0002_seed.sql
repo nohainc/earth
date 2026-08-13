@@ -12,3 +12,5 @@ INSERT OR IGNORE INTO budgets (id, institution_id, category, amount, game_day) V
 INSERT OR IGNORE INTO communities (id, name, founder_id, status, shared_credits) VALUES ('COMM-0001', 'Carthage Civic Mesh', 'H-0044', 'active', 0);
 INSERT OR IGNORE INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity) VALUES ('M-0044-01', 'H-0044', 'Service Robot 01', 'service-robot', 84, 62, 190, 1.2);
 INSERT OR IGNORE INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day) VALUES ('R-TECH-001', 'TECH-001', 'H-0044', 240, 72, 'active', 120);
+INSERT OR IGNORE INTO account_balances (account_id, owner_id, balance, currency) VALUES ('account-amara', 'H-0044', 18420, 'CREDIT'), ('account-ouc-treasury', 'OUC-001', 0, 'CREDIT');
+INSERT OR IGNORE INTO tax_rules (id, scope, category, rate, active, version) VALUES ('TAX-OUC-BASIC', 'OUC', 'basic-levy', 0.01, 1, 1);
