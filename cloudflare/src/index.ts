@@ -368,8 +368,15 @@ const worker = {
     }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
-  async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
-    // Background settlement/aging work will be connected to the authoritative command bus.
+  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
+    const world = await env.DB.prepare('SELECT game_day, game_minute FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number; game_minute: number }>();
+    const minute = Number(world?.game_minute ?? 0) + 5;
+    const day = Number(world?.game_day ?? 184) + (minute >= 1440 ? 1 : 0);
+    await env.DB.batch([
+      env.DB.prepare('UPDATE world_state SET game_day = ?, game_minute = ? WHERE id = ?').bind(day, minute % 1440, 'WORLD'),
+      env.DB.prepare('UPDATE machines SET condition = MAX(0, condition - MAX(0.05, utilization * 0.005)), maintenance_due = maintenance_due + MAX(1, utilization * 0.25)'),
+      ...(day % 365 === 0 && minute < 5 ? [env.DB.prepare('UPDATE humans SET age_years = age_years + 1')]: []),
+    ]);
   }
 };
 
