@@ -49,6 +49,10 @@ const worker = {
       const resourceMap = Object.fromEntries((resources.results as Array<Record<string, unknown>>).map((item) => [item.resource, item.amount]));
       const voteCounts = Object.fromEntries((ballots.results as Array<Record<string, unknown>>).map((item) => [item.choice, Number(item.count)]));
       const marketProducts = Object.fromEntries((prices.results as Array<Record<string, unknown>>).map((item) => [item.product, { price: item.price, supply: item.supply, demand: item.demand }]));
+      const rankings = await Promise.all([
+        env.DB.prepare('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10').all(),
+        env.DB.prepare('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10').all(),
+      ]);
       return Response.json({
         clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
@@ -57,7 +61,9 @@ const worker = {
         institutions: { ouc: byKind('OUC'), corporation: { ...byKind('CORPORATION'), ...corporationMetrics }, city: { ...byKind('CITY'), ...cityMetrics }, business: byKind('BUSINESS') },
         resources: resourceMap, business: business ?? {}, market: { products: marketProducts, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
-        technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: ledger.results, persistence: 'cloudflare-d1'
+        technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: ledger.results,
+        rankings: { cities: rankings[0].results, corporations: rankings[1].results },
+        persistence: 'cloudflare-d1'
       });
     }
     if (url.pathname === '/api/day/advance' && request.method === 'POST') {

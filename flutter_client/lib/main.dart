@@ -70,6 +70,8 @@ class EarthState {
           as Map<String, dynamic>;
   List<dynamic> get ledgerEntries =>
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
+  Map<String, dynamic> get rankings =>
+      (json['rankings'] as Map<String, dynamic>?) ?? const {};
 }
 
 class EarthApi {
@@ -452,7 +454,35 @@ class _Dashboard extends StatelessWidget {
                               '${entry['reason_type']}  ·  ${entry['amount']} ${entry['currency']}\n${entry['debit_account']} → ${entry['credit_account']}',
                               style: const TextStyle(fontSize: 12)));
                     }).toList()))
+        ,
+        _Panel(
+            title: 'WORLD RANKINGS / D1 LIVE',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              _RankingLine('CITIES', state.rankings['cities']),
+              const SizedBox(height: 12),
+              _RankingLine('CORPORATIONS', state.rankings['corporations']),
+            ]))
       ]),
+    ]);
+  }
+}
+
+class _RankingLine extends StatelessWidget {
+  final String label;
+  final dynamic rows;
+  const _RankingLine(this.label, this.rows);
+  @override
+  Widget build(BuildContext context) {
+    final list = rows is List ? rows : const [];
+    final first = list.isEmpty ? null : list.first as Map<String, dynamic>;
+    final value = first == null
+        ? 'No entries yet'
+        : label == 'CITIES'
+            ? '${first['id']}  ·  ${first['residents']} residents'
+            : '${first['id']}  ·  ${first['member_count']} members';
+    return Row(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
+      Text(label, style: const TextStyle(color: _muted, fontSize: 10, letterSpacing: 1)),
+      Text(value, style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700))
     ]);
   }
 }
