@@ -105,9 +105,10 @@ class EarthApi {
         : await http.get(uri);
     final decoded = jsonDecode(response.body);
     if (response.statusCode >= 400) {
+      final requestId = response.headers['x-request-id'];
       throw Exception(decoded is Map
-          ? decoded['error'] ?? 'Request failed'
-          : 'Request failed');
+          ? '${decoded['error'] ?? 'Request failed'}${requestId == null ? '' : ' (request $requestId)'}'
+          : 'Request failed${requestId == null ? '' : ' (request $requestId)'}');
     }
     return decoded;
   }

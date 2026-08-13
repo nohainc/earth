@@ -433,6 +433,7 @@ export default {
         'Access-Control-Allow-Origin': request.headers.get('Origin') ?? '*',
         'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
         'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Expose-Headers': 'X-Request-ID',
         'Access-Control-Max-Age': '86400',
         'X-Request-ID': requestId,
       } });
@@ -446,6 +447,7 @@ export default {
     }
     headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    headers.set('Access-Control-Expose-Headers', 'X-Request-ID');
     headers.set('X-Request-ID', requestId);
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
