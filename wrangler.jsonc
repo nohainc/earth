@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "earth-world",
+  "main": "cloudflare/src/index.ts",
+  "compatibility_date": "2026-08-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "vars": { "ENVIRONMENT": "development" },
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "REPLACE_WITH_HYPERDRIVE_ID" }],
+  "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "env": {
+    "staging": { "name": "earth-world-staging", "vars": { "ENVIRONMENT": "staging" } },
+    "production": { "name": "earth-world-production", "vars": { "ENVIRONMENT": "production" } }
+  }
+}
