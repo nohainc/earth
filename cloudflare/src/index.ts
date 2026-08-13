@@ -163,10 +163,10 @@ export default {
       ]);
       return Response.json({ ok: true, amount, ruleVersion: rule.version, correlationId, accounts: (await env.DB.prepare('SELECT * FROM account_balances WHERE account_id IN (?, ?)').bind(accountId, 'account-ouc-treasury').all()).results, persistence: 'cloudflare-d1' });
     }
-    if (url.pathname === '/api/life/successor' && request.method === 'GET') {
+    if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
     }
-    if (url.pathname === '/api/life/successor' && request.method === 'POST') {
+    if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'POST') {
       const body = await request.json<{ name?: string; estatePeriodDays?: number }>();
       const successorName = body.name?.trim();
       const estatePeriodDays = Number(body.estatePeriodDays ?? 30);
