@@ -62,6 +62,7 @@ const worker = {
         env.DB.prepare('SELECT COUNT(*) AS count FROM patents WHERE technology_id = ? AND status = ?').bind('TECH-001', 'active').first(),
         env.DB.prepare('SELECT COUNT(*) AS count FROM technology_licenses WHERE patent_id = ? AND status = ?').bind('PAT-TECH-001', 'active').first(),
       ]);
+      const finance = await env.DB.prepare('SELECT scope, category, rate, version FROM tax_rules WHERE active = 1 ORDER BY id').all();
       const audit = await Promise.all([
         env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
         env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
@@ -79,6 +80,7 @@ const worker = {
         rankings: { cities: rankings[0].results, corporations: rankings[1].results },
         communities: communities.results,
         audit: { balancesNonNegative: Number(audit[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2]?.invalid ?? 0) === 0 },
+        finance: { taxRules: finance.results },
         persistence: 'cloudflare-d1'
       });
     }

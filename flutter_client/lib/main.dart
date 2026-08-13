@@ -78,6 +78,8 @@ class EarthState {
       (json['communities'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get audit =>
       (json['audit'] as Map<String, dynamic>?) ?? const {};
+  Map<String, dynamic> get finance =>
+      (json['finance'] as Map<String, dynamic>?) ?? const {};
   List<dynamic> get ledgerEntries =>
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
@@ -547,6 +549,17 @@ class _Dashboard extends StatelessWidget {
                 avatar: Icon(entry.value ? Icons.check_circle : Icons.warning, size: 14, color: entry.value ? _cyanAccent : Colors.orange),
                 backgroundColor: Colors.white10,
               )).toList()))
+        ,
+        _Panel(
+            title: 'PUBLIC FINANCE / GOVERNANCE',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              ...((state.finance['taxRules'] as List<dynamic>?) ?? const []).map((raw) {
+                final rule = raw as Map<String, dynamic>;
+                return Text('${rule['scope']} / ${rule['category']}  ·  ${(NumberFormatHelper.percent(rule['rate']))}  ·  v${rule['version']}', style: const TextStyle(color: _muted, fontSize: 11));
+              }),
+              const SizedBox(height: 8),
+              const Text('Treasury settlement and public spending require authenticated player action.', style: TextStyle(color: _muted, fontSize: 10)),
+            ]))
       ]),
     ]);
   }
@@ -605,6 +618,10 @@ class _Sidebar extends StatelessWidget {
 }
 
 const _cyanAccent = Color(0xff55d8b2);
+
+class NumberFormatHelper {
+  static String percent(dynamic value) => '${(double.tryParse('$value') ?? 0) * 100}%';
+}
 
 class _HeroCard extends StatelessWidget {
   final EarthState state;
