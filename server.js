@@ -88,6 +88,7 @@ function command(path, body) {
   if (path === '/api/world' && body.method === 'GET') return snapshot();
   if (path === '/api/storage' && body.method === 'GET') return { configured: Boolean(database), mode: database ? 'postgres-ready' : 'memory-fallback' };
   if (path === '/api/health' && body.method === 'GET') return { ok: true, checks: { database: true, coreSchema: true, balancesNonNegative: true, machineConditionsBounded: true }, persistence: database ? 'postgres' : 'memory' };
+  if (path === '/api/world/activity' && body.method === 'GET') return { activity: [{ type: 'world_clock', day: state.clock.day }, { type: 'research_progress', progress: state.technology.research.progress }, { type: 'market_cycle', batch: state.world.batch }], persistence: database ? 'postgres' : 'memory' };
   if (path === '/api/audit' && body.method === 'GET') return audit();
   if (path === '/api/institutions' && body.method === 'GET') return state.institutions;
   if (path === '/api/life/successor' && body.method === 'POST') {
@@ -124,7 +125,7 @@ function command(path, body) {
   }
   throw new Error('Route not found');
 }
-function snapshot() { return { clock: state.clock, world: state.world, human: human(), life: state.life, institutions: state.institutions, resources: state.resources, business: state.businesses.klineWorks, market: state.market, governance: state.governance, technology: state.technology, ledgerEntries: state.ledger.slice(-25) }; }
+function snapshot() { return { clock: state.clock, world: state.world, human: human(), life: state.life, institutions: state.institutions, resources: state.resources, business: state.businesses.klineWorks, market: state.market, governance: state.governance, technology: state.technology, publicActivity: [{ type: 'world_clock', day: state.clock.day }, { type: 'research_progress', progress: state.technology.research.progress }, { type: 'market_cycle', batch: state.world.batch }], ledgerEntries: state.ledger.slice(-25) }; }
 function audit() {
   const ordersValid = state.market.orders.every(order => order.filled >= 0 && order.filled <= order.quantity && ['open', 'partial', 'filled', 'rejected', 'cancelled'].includes(order.status));
   const ledgerValid = state.ledger.every(entry => entry.amount > 0 && entry.debit && entry.credit && entry.currency === 'CREDIT' && entry.debit !== entry.credit);
