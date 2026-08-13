@@ -163,6 +163,19 @@ export default {
       ]);
       return Response.json({ ok: true, amount, ruleVersion: rule.version, correlationId, accounts: (await env.DB.prepare('SELECT * FROM account_balances WHERE account_id IN (?, ?)').bind(accountId, 'account-ouc-treasury').all()).results, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/life/successor' && request.method === 'GET') {
+      return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/life/successor' && request.method === 'POST') {
+      const body = await request.json<{ name?: string; estatePeriodDays?: number }>();
+      const successorName = body.name?.trim();
+      const estatePeriodDays = Number(body.estatePeriodDays ?? 30);
+      if (!successorName || successorName.length < 2) return Response.json({ ok: false, error: 'Successor name is required' }, { status: 400 });
+      if (!Number.isInteger(estatePeriodDays) || estatePeriodDays < 7 || estatePeriodDays > 90) return Response.json({ ok: false, error: 'Estate period must be between 7 and 90 days' }, { status: 400 });
+      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
+      await env.DB.prepare('INSERT INTO succession_plans (human_id, successor_name, registered_game_day, estate_period_days) VALUES (?, ?, ?, ?) ON CONFLICT(human_id) DO UPDATE SET successor_name = excluded.successor_name, registered_game_day = excluded.registered_game_day, estate_period_days = excluded.estate_period_days').bind('H-0044', successorName, day, estatePeriodDays).run();
+      return Response.json({ ok: true, successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
+    }
     const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
     if (maintenanceMatch && request.method === 'POST') {
       const machineId = maintenanceMatch[1];
