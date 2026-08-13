@@ -18,7 +18,7 @@ export class MarketCoordinator extends DurableObject<Env> {
   }
 }
 
-export default {
+const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/edge/market') {
@@ -356,4 +356,30 @@ export default {
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
     // Background settlement/aging work will be connected to the authoritative command bus.
   }
+};
+
+export default {
+  async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: {
+        'Access-Control-Allow-Origin': request.headers.get('Origin') ?? '*',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Max-Age': '86400',
+      } });
+    }
+    const response = await worker.fetch(request, env, ctx);
+    const headers = new Headers(response.headers);
+    const origin = request.headers.get('Origin');
+    if (origin === 'https://earth-client.pages.dev' || origin?.endsWith('.earth-client.pages.dev')) {
+      headers.set('Access-Control-Allow-Origin', origin);
+      headers.set('Vary', 'Origin');
+    }
+    headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
+  },
+  async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    return worker.scheduled(event, env, ctx);
+  },
 };
