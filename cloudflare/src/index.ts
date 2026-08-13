@@ -193,6 +193,25 @@ export default {
       ]);
       return Response.json({ ok: true, amount, city: await env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind(cityId).first(), treasury: await env.DB.prepare('SELECT * FROM account_balances WHERE account_id = ?').bind('account-ouc-treasury').first(), correlationId, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/market/orders' && request.method === 'GET') {
+      const product = url.searchParams.get('product');
+      const query = product ? env.DB.prepare('SELECT * FROM market_orders WHERE product = ? ORDER BY created_at DESC LIMIT 100').bind(product) : env.DB.prepare('SELECT * FROM market_orders ORDER BY created_at DESC LIMIT 100');
+      return Response.json({ orders: (await query.all()).results, persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/market/orders' && request.method === 'POST') {
+      const body = await request.json<{ humanId?: string; product?: string; quantity?: number; limitPrice?: number }>();
+      const humanId = body.humanId || 'H-0044';
+      const product = body.product;
+      const quantity = Number(body.quantity);
+      const limitPrice = Number(body.limitPrice);
+      if (!['material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
+      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first())) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
+      const orderId = crypto.randomUUID();
+      await env.DB.prepare('INSERT INTO market_orders (id, human_id, product, quantity, limit_price) VALUES (?, ?, ?, ?, ?)').bind(orderId, humanId, product, quantity, limitPrice).run();
+      const coordinator = env.MARKET_COORDINATOR.getByName(`market-${product}`);
+      const coordination = await coordinator.submitCommand({ type: 'order.submitted', orderId, product, quantity });
+      return Response.json({ ok: true, order: await env.DB.prepare('SELECT * FROM market_orders WHERE id = ?').bind(orderId).first(), coordination, persistence: 'cloudflare-d1' });
+    }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
     }
