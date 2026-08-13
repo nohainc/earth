@@ -121,6 +121,19 @@ class EarthApi {
     return world();
   }
 
+  Future<EarthState> grantPatent() async {
+    await _request('/api/technology/TECH-001/patent', method: 'POST');
+    return world();
+  }
+
+  Future<EarthState> licenseTechnology() async {
+    await _request('/api/technology/TECH-001/license', method: 'POST', body: {
+      'licenseeId': 'H-0044',
+      'royaltyRate': 0.05,
+    });
+    return world();
+  }
+
   Future<EarthState> maintainMachine(String machineId) async {
     await _request('/api/machines/$machineId/maintenance',
         method: 'POST', body: {'amount': 10});
@@ -350,7 +363,12 @@ class _Dashboard extends StatelessWidget {
                   onPressed: busy
                       ? null
                       : () => action(() => const EarthApi().fundResearch()),
-                  child: const Text('FUND 240 C'))
+                  child: const Text('FUND 240 C')),
+              const SizedBox(height: 10),
+              Wrap(spacing: 8, children: [
+                OutlinedButton(onPressed: busy ? null : () => action(() => const EarthApi().grantPatent()), child: const Text('GRANT PATENT')),
+                OutlinedButton(onPressed: busy ? null : () => action(() => const EarthApi().licenseTechnology()), child: const Text('LICENSE 5%')),
+              ])
             ])),
         _Panel(
             title: 'OUC PROPOSAL ${proposal['id']}',
