@@ -338,6 +338,7 @@ const worker = {
       return Response.json({ ok: true, filled: true, orderId: order.id, tradeId, product, quantity: fill, clearingPrice: price.price, total, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
+      await env.DB.prepare("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP").run();
       const proposals = await env.DB.prepare('SELECT * FROM proposals ORDER BY closes_at ASC').all();
       const ballots = await env.DB.prepare('SELECT proposal_id, choice, COUNT(*) AS count FROM ballots GROUP BY proposal_id, choice').all();
       return Response.json({ proposals: proposals.results, voteCounts: ballots.results, persistence: 'cloudflare-d1' });
@@ -345,6 +346,7 @@ const worker = {
     const voteMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
     if (voteMatch && request.method === 'POST') {
       const proposalId = voteMatch[1];
+      await env.DB.prepare("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP").run();
       const body = await request.json<{ humanId?: string; vote?: string }>();
       const humanId = body.humanId || 'H-0044';
       if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
