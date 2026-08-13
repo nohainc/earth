@@ -46,6 +46,8 @@ class EarthState {
   Map<String, dynamic> get market =>
       (json['market'] as Map<String, dynamic>)['products']
           as Map<String, dynamic>;
+  List<dynamic> get ledgerEntries =>
+      (json['ledgerEntries'] as List<dynamic>?) ?? const [];
 }
 
 class EarthApi {
@@ -391,7 +393,21 @@ class _Dashboard extends StatelessWidget {
                       : () => action(() =>
                           const EarthApi().registerSuccessor('Alex Kline')),
                   child: const Text('REGISTER ALEX KLINE'))
-            ]))
+            ])),
+        _Panel(
+            title: 'CENTRAL LEDGER / RECENT ACTIVITY',
+            child: state.ledgerEntries.isEmpty
+                ? const Text('No ledger activity yet.')
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: state.ledgerEntries.take(8).map((raw) {
+                      final entry = raw as Map<String, dynamic>;
+                      return Padding(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          child: Text(
+                              '${entry['reason_type']}  ·  ${entry['amount']} ${entry['currency']}\n${entry['debit_account']} → ${entry['credit_account']}',
+                              style: const TextStyle(fontSize: 12)));
+                    }).toList()))
       ]),
     ]);
   }
