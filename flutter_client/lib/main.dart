@@ -91,10 +91,11 @@ class EarthApi {
     return world();
   }
 
-  Future<EarthState> vote(String choice) async =>
-      EarthState((await _request('/api/governance/proposals/042/vote',
-          method: 'POST',
-          body: {'vote': choice}))['state'] as Map<String, dynamic>);
+  Future<EarthState> vote(String choice) async {
+    await _request('/api/governance/proposals/042/vote',
+        method: 'POST', body: {'vote': choice});
+    return world();
+  }
 }
 
 class CommandCenter extends StatefulWidget {
