@@ -66,7 +66,15 @@ export default {
         env.DB.prepare('UPDATE machines SET condition = MAX(0, condition - MAX(0.1, utilization * 0.01)), maintenance_due = maintenance_due + MAX(1, utilization * 0.5)'),
         ...(day % 365 === 0 ? [env.DB.prepare('UPDATE humans SET age_years = age_years + 1 WHERE id = ?').bind('H-0044')] : []),
       ]);
-      return Response.json({ ok: true, result: { day }, state: { clock: { day, minute: 0, realSecondsPerGameMinute: 1 }, world: { health: 68, batch: 498 }, human: { id: 'H-0044', name: 'Amara Kline', credits: 18420, standing: 742, legacy: 31, ageYears: 31 }, life: { generation: 1, successor: null, estatePeriodDays: 30 }, institutions: { ouc: {}, corporation: {}, city: {}, business: {} }, resources: {}, business: {}, market: { products: {}, orders: [], lastSettlement: null }, governance: { proposals: [] }, technology: { research: {} }, ledgerEntries: [], persistence: 'cloudflare-d1' } });
+      const [updatedHuman, updatedAccount, updatedMachines, updatedResources, updatedBusiness, updatedTechnology] = await Promise.all([
+        env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind('H-0044').first(),
+        env.DB.prepare('SELECT balance FROM account_balances WHERE account_id = ?').bind('account-amara').first<{ balance: number }>(),
+        env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind('H-0044').all(),
+        env.DB.prepare('SELECT resource, amount FROM resource_balances WHERE owner_id = ?').bind('H-0044').all(),
+        env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind('B-1048').first(),
+        env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind('TECH-001').first(),
+      ]);
+      return Response.json({ ok: true, result: { day }, state: { clock: { day, minute: 0, realSecondsPerGameMinute: 1 }, world: { health: 68, batch: 498 }, human: { id: updatedHuman?.id, name: updatedHuman?.display_name, credits: updatedAccount?.balance ?? 0, standing: updatedHuman?.standing ?? 0, legacy: updatedHuman?.legacy ?? 0, ageYears: updatedHuman?.age_years ?? 31 }, life: { generation: 1, successor: null, estatePeriodDays: 30 }, institutions: {}, resources: Object.fromEntries((updatedResources.results as Array<Record<string, unknown>>).map((item) => [item.resource, item.amount])), business: updatedBusiness ?? {}, market: { products: {}, orders: [], lastSettlement: null }, governance: { proposals: [] }, technology: { research: updatedTechnology ?? {} }, machines: updatedMachines.results, ledgerEntries: [], persistence: 'cloudflare-d1' } });
     }
     if (url.pathname === '/api/health') {
       const result = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
