@@ -134,7 +134,7 @@ function audit() {
 }
 function send(res, status, data) { res.writeHead(status, { 'content-type': 'application/json', 'access-control-allow-origin': '*', 'access-control-allow-headers': 'content-type' }); res.end(JSON.stringify(data)); }
 async function serveStatic(res, pathname) {
-  const files = { '/': resolve('index.html'), '/index.html': resolve('index.html'), '/landing.css': resolve('landing.css'), '/prototype3.html': resolve('../prototype3.html'), '/prototype3.css': resolve('../prototype3.css'), '/prototype3.js': resolve('../prototype3.js') };
+  const files = { '/': resolve('index.html'), '/index.html': resolve('index.html'), '/landing.css': resolve('landing.css'), '/prototype3.html': resolve('prototype3.html'), '/prototype3.css': resolve('prototype3.css'), '/prototype3.js': resolve('prototype3.js') };
   const file = files[pathname]; if (!file) return false;
   const content = await readFile(file); const types = { '.html': 'text/html; charset=utf-8', '.css': 'text/css; charset=utf-8', '.js': 'text/javascript; charset=utf-8' };
   res.writeHead(200, { 'content-type': types[extname(file)] || 'application/octet-stream' }); res.end(content); return true;
