@@ -27,7 +27,7 @@ export default {
       return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
     if (url.pathname === '/api/world' && request.method === 'GET') {
-      const [world, human, institutions, resources, business, technology, proposal, machines, account, ballots, succession, prices, ledger] = await Promise.all([
+      const [world, human, institutions, resources, business, technology, proposal, machines, account, ballots, succession, prices, ledger, cityMetrics, corporationMetrics] = await Promise.all([
         env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
         env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM institutions').all(),
@@ -41,6 +41,8 @@ export default {
         env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM market_prices ORDER BY product').all(),
         env.DB.prepare('SELECT * FROM ledger_entries ORDER BY created_at DESC LIMIT 25').all(),
+        env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind('CITY-0084').first(),
+        env.DB.prepare('SELECT * FROM corporations WHERE id = ?').bind('CORP-001').first(),
       ]);
       const institutionRows = institutions.results as Array<Record<string, unknown>>;
       const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
@@ -52,7 +54,7 @@ export default {
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
         human: { id: human?.id, name: human?.display_name, credits: account?.balance ?? 0, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31 },
         life: { generation: 1, successor: succession ?? null, estatePeriodDays: succession?.estate_period_days ?? 30 },
-        institutions: { ouc: byKind('OUC'), corporation: byKind('CORPORATION'), city: byKind('CITY'), business: byKind('BUSINESS') },
+        institutions: { ouc: byKind('OUC'), corporation: { ...byKind('CORPORATION'), ...corporationMetrics }, city: { ...byKind('CITY'), ...cityMetrics }, business: byKind('BUSINESS') },
         resources: resourceMap, business: business ?? {}, market: { products: marketProducts, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
         technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: ledger.results, persistence: 'cloudflare-d1'

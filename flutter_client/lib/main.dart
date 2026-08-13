@@ -246,6 +246,11 @@ class _Dashboard extends StatelessWidget {
                   style: const TextStyle(
                       fontSize: 12, letterSpacing: .8, color: _ink)))),
       const SizedBox(height: 14),
+      _Panel(
+          title: 'INSTITUTIONS / CAPACITY',
+          child: Text(
+              'CITY  ${state.institutions['city']['residents']} residents  ·  housing ${state.institutions['city']['housing_capacity']}  ·  energy ${state.institutions['city']['energy_capacity']}\nCORPORATION  ${state.institutions['corporation']['member_count']} members  ·  constitution v${state.institutions['corporation']['constitution_version']}')),
+      const SizedBox(height: 14),
       Wrap(spacing: 14, runSpacing: 14, children: [
         _Panel(
             title: 'BUSINESS / KLINE WORKS',
