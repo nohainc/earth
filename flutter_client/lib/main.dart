@@ -85,6 +85,12 @@ class EarthApi {
     return world();
   }
 
+  Future<EarthState> maintainMachine(String machineId) async {
+    await _request('/api/machines/$machineId/maintenance',
+        method: 'POST', body: {'amount': 10});
+    return world();
+  }
+
   Future<EarthState> vote(String choice) async =>
       EarthState((await _request('/api/governance/proposals/042/vote',
           method: 'POST',
@@ -288,7 +294,15 @@ class _Dashboard extends StatelessWidget {
                                           '${machine['name']}\n${machine['machine_type']}')),
                                   Text(
                                       '${machine['condition']}%\n${machine['maintenance_due']} due',
-                                      textAlign: TextAlign.right)
+                                      textAlign: TextAlign.right),
+                                  const SizedBox(width: 10),
+                                  OutlinedButton(
+                                      onPressed: busy
+                                          ? null
+                                          : () => action(() => const EarthApi()
+                                              .maintainMachine(
+                                                  machine['id'] as String)),
+                                      child: const Text('MAINTAIN'))
                                 ]));
                       }).toList()))
       ]),
