@@ -10,6 +10,12 @@ docker compose up -d postgres
 DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm start
 ```
 
+## Public preview
+
+- Flutter web client: https://earth-client.pages.dev
+- Immutable deployment: https://3b432e42.earth-client.pages.dev
+- Worker API: https://earth-world.vitalii-e07.workers.dev
+
 ## Cloudflare target
 
 - Cloudflare Workers: edge API and static routing
@@ -18,7 +24,7 @@ DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm start
 - Queues: retryable notifications, statistics, aging, and settlement side effects
 - R2: reports, logos, exports, and future media
 
-The current `server.js` is the local authoritative reference implementation. The next deployment adapter should preserve its command/query contract while moving HTTP routing to a Worker and database access behind Hyperdrive.
+The current `server.js` remains the local PostgreSQL reference implementation. The deployed game client uses the D1-backed Worker API above; the Flutter client is the primary web UI.
 
 ## Secrets
 
