@@ -25,5 +25,6 @@ CREATE TABLE IF NOT EXISTS patents (id TEXT PRIMARY KEY, technology_id TEXT NOT 
 CREATE TABLE IF NOT EXISTS technology_licenses (id TEXT PRIMARY KEY, patent_id TEXT NOT NULL REFERENCES patents(id), licensor_id TEXT NOT NULL REFERENCES humans(id), licensee_id TEXT NOT NULL REFERENCES humans(id), royalty_rate NUMERIC NOT NULL DEFAULT 0, status TEXT NOT NULL DEFAULT 'active');
 CREATE TABLE IF NOT EXISTS account_balances (account_id TEXT PRIMARY KEY, owner_id TEXT NOT NULL, balance NUMERIC NOT NULL DEFAULT 0 CHECK (balance >= 0), currency TEXT NOT NULL DEFAULT 'CREDIT');
 CREATE TABLE IF NOT EXISTS tax_rules (id TEXT PRIMARY KEY, scope TEXT NOT NULL, category TEXT NOT NULL, rate NUMERIC NOT NULL CHECK (rate >= 0 AND rate <= 1), active INTEGER NOT NULL DEFAULT 1, version INTEGER NOT NULL DEFAULT 1);
+CREATE TABLE IF NOT EXISTS market_prices (product TEXT PRIMARY KEY, price NUMERIC NOT NULL CHECK (price > 0), supply NUMERIC NOT NULL DEFAULT 0, demand NUMERIC NOT NULL DEFAULT 0, game_day INTEGER NOT NULL);
 CREATE INDEX IF NOT EXISTS ledger_game_day_idx ON ledger_entries(game_day);
 CREATE INDEX IF NOT EXISTS market_orders_book_idx ON market_orders(product, status, limit_price, created_at);

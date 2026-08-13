@@ -212,6 +212,36 @@ export default {
       const coordination = await coordinator.submitCommand({ type: 'order.submitted', orderId, product, quantity });
       return Response.json({ ok: true, order: await env.DB.prepare('SELECT * FROM market_orders WHERE id = ?').bind(orderId).first(), coordination, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/market/settle' && request.method === 'POST') {
+      const body = await request.json<{ product?: string }>();
+      const product = body.product;
+      if (!['material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
+      const price = await env.DB.prepare('SELECT * FROM market_prices WHERE product = ?').bind(product).first<{ price: number; supply: number }>();
+      const order = await env.DB.prepare("SELECT * FROM market_orders WHERE product = ? AND status IN ('open','partial') ORDER BY created_at ASC LIMIT 1").bind(product).first<Record<string, unknown>>();
+      if (!price || !order) return Response.json({ ok: true, filled: false, reason: 'No eligible order or price', persistence: 'cloudflare-d1' });
+      const remaining = Number(order.quantity) - Number(order.filled_quantity);
+      const fill = Math.min(remaining, Number(price.supply));
+      if (fill <= 0) return Response.json({ ok: true, filled: false, reason: 'No available supply', persistence: 'cloudflare-d1' });
+      const account = await env.DB.prepare('SELECT balance FROM account_balances WHERE owner_id = ?').bind(order.human_id).first<{ balance: number }>();
+      const total = Math.round(fill * Number(price.price) * 100) / 100;
+      if (!account || Number(account.balance) < total) {
+        await env.DB.prepare("UPDATE market_orders SET status = 'rejected' WHERE id = ?").bind(order.id).run();
+        return Response.json({ ok: false, error: 'Insufficient Credits', orderId: order.id }, { status: 409 });
+      }
+      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
+      const tradeId = crypto.randomUUID();
+      const newFilled = Number(order.filled_quantity) + fill;
+      const status = newFilled >= Number(order.quantity) ? 'filled' : 'partial';
+      await env.DB.batch([
+        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE owner_id = ?').bind(total, order.human_id),
+        env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, ?, ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(order.human_id, product, fill),
+        env.DB.prepare('UPDATE market_orders SET filled_quantity = ?, status = ? WHERE id = ?').bind(newFilled, status, order.id),
+        env.DB.prepare('UPDATE market_prices SET supply = supply - ?, demand = MAX(0, demand - ?), game_day = ? WHERE product = ?').bind(fill, fill, gameDay, product),
+        env.DB.prepare('INSERT INTO market_trades (id, order_id, product, quantity, clearing_price, game_day) VALUES (?, ?, ?, ?, ?, ?)').bind(tradeId, order.id, product, fill, price.price, gameDay),
+        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(tradeId, gameDay, order.human_id, 'central-market', total, 'CREDIT', 'market_trade', order.id, 'market-v1', tradeId),
+      ]);
+      return Response.json({ ok: true, filled: true, orderId: order.id, tradeId, product, quantity: fill, clearingPrice: price.price, total, persistence: 'cloudflare-d1' });
+    }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
     }

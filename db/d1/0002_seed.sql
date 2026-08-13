@@ -14,3 +14,4 @@ INSERT OR IGNORE INTO machines (id, owner_id, name, machine_type, condition, uti
 INSERT OR IGNORE INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day) VALUES ('R-TECH-001', 'TECH-001', 'H-0044', 240, 72, 'active', 120);
 INSERT OR IGNORE INTO account_balances (account_id, owner_id, balance, currency) VALUES ('account-amara', 'H-0044', 18420, 'CREDIT'), ('account-ouc-treasury', 'OUC-001', 0, 'CREDIT');
 INSERT OR IGNORE INTO tax_rules (id, scope, category, rate, active, version) VALUES ('TAX-OUC-BASIC', 'OUC', 'basic-levy', 0.01, 1, 1);
+INSERT OR IGNORE INTO market_prices (product, price, supply, demand, game_day) VALUES ('material', 32.4, 1240, 980, 184), ('components', 118.7, 186, 276, 184), ('energy', 0.84, 920, 850, 184), ('compute', 2.16, 4820, 2910, 184);
