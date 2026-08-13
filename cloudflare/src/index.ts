@@ -53,13 +53,17 @@ const worker = {
         env.DB.prepare('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10').all(),
         env.DB.prepare('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10').all(),
       ]);
+      const [book, trades] = await Promise.all([
+        env.DB.prepare("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product").all(),
+        env.DB.prepare('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product').all(),
+      ]);
       return Response.json({
         clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
         human: { id: human?.id, name: human?.display_name, credits: account?.balance ?? 0, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31 },
         life: { generation: 1, successor: succession ?? null, estatePeriodDays: succession?.estate_period_days ?? 30 },
         institutions: { ouc: byKind('OUC'), corporation: { ...byKind('CORPORATION'), ...corporationMetrics }, city: { ...byKind('CITY'), ...cityMetrics }, business: byKind('BUSINESS') },
-        resources: resourceMap, business: business ?? {}, market: { products: marketProducts, orders: [], lastSettlement: null },
+        resources: resourceMap, business: business ?? {}, market: { products: marketProducts, book: book.results, trades: trades.results, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
         technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: ledger.results,
         rankings: { cities: rankings[0].results, corporations: rankings[1].results },
@@ -249,6 +253,11 @@ const worker = {
         env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, 'account-ouc-treasury', cityId, amount, 'CREDIT', 'public_spending', cityId, 'finance-v1', correlationId),
       ]);
       return Response.json({ ok: true, amount, city: await env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind(cityId).first(), treasury: await env.DB.prepare('SELECT * FROM account_balances WHERE account_id = ?').bind('account-ouc-treasury').first(), correlationId, persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/market/book' && request.method === 'GET') {
+      const rows = await env.DB.prepare("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product").all();
+      const trades = await env.DB.prepare('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product').all();
+      return Response.json({ book: rows.results, trades: trades.results, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/market/orders' && request.method === 'GET') {
       const product = url.searchParams.get('product');

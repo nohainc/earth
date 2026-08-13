@@ -68,6 +68,10 @@ class EarthState {
   Map<String, dynamic> get market =>
       (json['market'] as Map<String, dynamic>)['products']
           as Map<String, dynamic>;
+  List<dynamic> get marketBook =>
+      ((json['market'] as Map<String, dynamic>)['book'] as List<dynamic>?) ?? const [];
+  List<dynamic> get marketTrades =>
+      ((json['market'] as Map<String, dynamic>)['trades'] as List<dynamic>?) ?? const [];
   List<dynamic> get ledgerEntries =>
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
@@ -442,6 +446,14 @@ class _Dashboard extends StatelessWidget {
                                 child: const Text('SETTLE'))
                           ]));
                 }).toList())),
+        _Panel(
+            title: 'CENTRAL MARKET / ORDER BOOK',
+            child: state.marketBook.isEmpty
+                ? const Text('No open orders. The market is waiting for a new signal.')
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: state.marketBook.map((raw) {
+                    final row = raw as Map<String, dynamic>;
+                    return Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('${row['product']}  ·  ${row['open_quantity']} open  ·  best ${row['best_price']} C', style: const TextStyle(fontSize: 11)));
+                  }).toList())),
         _Panel(
             title: 'LIFE / SUCCESSION',
             child:
