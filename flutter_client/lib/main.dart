@@ -40,6 +40,8 @@ class EarthState {
       json['governance'] as Map<String, dynamic>;
   Map<String, dynamic> get institutions =>
       json['institutions'] as Map<String, dynamic>;
+  List<dynamic> get machines =>
+      (json['machines'] as List<dynamic>?) ?? const [];
 }
 
 class EarthApi {
@@ -263,6 +265,28 @@ class _Dashboard extends StatelessWidget {
                           child: Text(choice)))
                       .toList())
             ])),
+        _Panel(
+            title: 'AUTOMATION / MACHINES',
+            child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: state.machines.isEmpty
+                    ? [const Text('No registered machines.')]
+                    : state.machines.map((raw) {
+                        final machine = raw as Map<String, dynamic>;
+                        return Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                      child: Text(
+                                          '${machine['name']}\n${machine['machine_type']}')),
+                                  Text(
+                                      '${machine['condition']}%\n${machine['maintenance_due']} due',
+                                      textAlign: TextAlign.right)
+                                ]));
+                      }).toList()))
       ]),
     ]);
   }

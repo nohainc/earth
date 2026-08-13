@@ -27,7 +27,7 @@ export default {
       return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
     if (url.pathname === '/api/world' && request.method === 'GET') {
-      const [world, human, institutions, resources, business, technology, proposal] = await Promise.all([
+      const [world, human, institutions, resources, business, technology, proposal, machines] = await Promise.all([
         env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
         env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM institutions').all(),
@@ -35,6 +35,7 @@ export default {
         env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind('B-1048').first(),
         env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind('TECH-001').first(),
         env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind('042').first(),
+        env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind('H-0044').all(),
       ]);
       const institutionRows = institutions.results as Array<Record<string, unknown>>;
       const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
@@ -47,7 +48,7 @@ export default {
         institutions: { ouc: byKind('OUC'), corporation: byKind('CORPORATION'), city: byKind('CITY'), business: byKind('BUSINESS') },
         resources: resourceMap, business: business ?? {}, market: { products: {}, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: 0, oppose: 0, uncast: 1 }, ballots: {} }] },
-        technology: { research: technology ?? {} }, ledgerEntries: [], persistence: 'cloudflare-d1'
+        technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: [], persistence: 'cloudflare-d1'
       });
     }
     if (url.pathname === '/api/day/advance' && request.method === 'POST') {
