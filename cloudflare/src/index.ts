@@ -116,6 +116,29 @@ export default {
       ]);
       return Response.json({ ok: true, project: await env.DB.prepare('SELECT * FROM research_projects WHERE id = ?').bind(project.id).first(), technology: await env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind('TECH-001').first(), persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/technology/TECH-001/patent' && request.method === 'POST') {
+      const project = await env.DB.prepare('SELECT * FROM research_projects WHERE technology_id = ?').bind('TECH-001').first<Record<string, unknown>>();
+      if (!project || Number(project.progress) < 100) return Response.json({ ok: false, error: 'Research must reach 100% before patent grant' }, { status: 409 });
+      const existing = await env.DB.prepare('SELECT * FROM patents WHERE technology_id = ? AND status = ?').bind('TECH-001', 'active').first();
+      if (existing) return Response.json({ ok: true, patent: existing, persistence: 'cloudflare-d1' });
+      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
+      const patentId = `PAT-TECH-001`;
+      await env.DB.prepare('INSERT INTO patents (id, technology_id, owner_id, granted_game_day, expiry_game_day) VALUES (?, ?, ?, ?, ?)').bind(patentId, 'TECH-001', project.owner_id, day, day + 3650).run();
+      return Response.json({ ok: true, patent: await env.DB.prepare('SELECT * FROM patents WHERE id = ?').bind(patentId).first(), persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/technology/TECH-001/license' && request.method === 'POST') {
+      const body = await request.json<{ licenseeId?: string; royaltyRate?: number }>();
+      const licenseeId = body.licenseeId || 'H-0044';
+      const royaltyRate = Number(body.royaltyRate ?? 0.05);
+      const patent = await env.DB.prepare('SELECT * FROM patents WHERE technology_id = ? AND status = ?').bind('TECH-001', 'active').first<Record<string, unknown>>();
+      if (!patent) return Response.json({ ok: false, error: 'An active patent is required' }, { status: 409 });
+      if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1) return Response.json({ ok: false, error: 'Royalty rate must be between 0 and 1' }, { status: 400 });
+      const licensee = await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(licenseeId).first();
+      if (!licensee) return Response.json({ ok: false, error: 'Licensee not found' }, { status: 404 });
+      const licenseId = `LIC-${patent.id}-${licenseeId}`;
+      await env.DB.prepare('INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, royalty_rate) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET royalty_rate = excluded.royalty_rate, status = \'active\'').bind(licenseId, patent.id, patent.owner_id, licenseeId, royaltyRate).run();
+      return Response.json({ ok: true, license: await env.DB.prepare('SELECT * FROM technology_licenses WHERE id = ?').bind(licenseId).first(), persistence: 'cloudflare-d1' });
+    }
     const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
     if (maintenanceMatch && request.method === 'POST') {
       const machineId = maintenanceMatch[1];
