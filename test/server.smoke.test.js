@@ -85,3 +85,15 @@ test('audit endpoint confirms core world invariants', async () => {
   assert.equal(body.checks.balancesValid, true);
   assert.equal(body.checks.ballotUniqueness, true);
 });
+
+test('public landing page and game client are served from the same entrypoint', async () => {
+  const landing = await fetch(`http://127.0.0.1:${port}/`);
+  const landingHtml = await landing.text();
+  assert.equal(landing.status, 200);
+  assert.match(landing.headers.get('content-type'), /text\/html/);
+  assert.match(landingHtml, /Build a future/);
+  assert.match(landingHtml, /prototype3\.html/);
+  const game = await fetch(`http://127.0.0.1:${port}/prototype3.html`);
+  assert.equal(game.status, 200);
+  assert.match(await game.text(), /The world is moving/);
+});
