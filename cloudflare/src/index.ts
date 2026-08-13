@@ -104,6 +104,15 @@ export default {
       await env.DB.prepare('INSERT INTO communities (id, name, founder_id, shared_credits) VALUES (?, ?, ?, 0)').bind(communityId, name, founderId).run();
       return Response.json({ ok: true, community: await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(communityId).first(), persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/rankings' && request.method === 'GET') {
+      const [wealth, cities, corporations, technologies] = await Promise.all([
+        env.DB.prepare('SELECT owner_id AS human_id, balance FROM account_balances WHERE currency = ? ORDER BY balance DESC').bind('CREDIT').all(),
+        env.DB.prepare('SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities ORDER BY treasury DESC').all(),
+        env.DB.prepare('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC').all(),
+        env.DB.prepare('SELECT id, name, owner_id, progress FROM technologies ORDER BY progress DESC').all(),
+      ]);
+      return Response.json({ wealth: wealth.results, cities: cities.results, corporations: corporations.results, technologies: technologies.results, generatedFrom: 'cloudflare-d1', persistence: 'cloudflare-d1' });
+    }
     if (url.pathname === '/api/cities/CITY-0084/budget' && request.method === 'POST') {
       const body = await request.json<{ category?: string; amount?: number }>();
       const category = body.category?.trim();
