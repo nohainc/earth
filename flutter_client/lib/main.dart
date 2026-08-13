@@ -82,6 +82,8 @@ class EarthState {
       (json['finance'] as Map<String, dynamic>?) ?? const {};
   List<dynamic> get ledgerEntries =>
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
+  List<dynamic> get publicActivity =>
+      (json['publicActivity'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
       (json['rankings'] as Map<String, dynamic>?) ?? const {};
 }
@@ -522,6 +524,14 @@ class _Dashboard extends StatelessWidget {
                               style: const TextStyle(fontSize: 12)));
                     }).toList()))
         ,
+        _Panel(
+            title: 'WORLD FEED / RECENT EVENTS',
+            child: state.publicActivity.isEmpty
+                ? const Text('No public events recorded yet.')
+                : Column(crossAxisAlignment: CrossAxisAlignment.start, children: state.publicActivity.take(8).map((raw) {
+                    final event = raw as Map<String, dynamic>;
+                    return Padding(padding: const EdgeInsets.only(bottom: 7), child: Text('DAY ${event['game_day']}  ·  ${event['reason_type']}  ·  ${event['rule_version']}', style: const TextStyle(fontSize: 11)));
+                  }).toList())),
         _Panel(
             title: 'WORLD RANKINGS / D1 LIVE',
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [

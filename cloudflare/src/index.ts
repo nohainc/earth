@@ -77,6 +77,7 @@ const worker = {
         resources: resourceMap, business: business ?? {}, market: { products: marketProducts, book: book.results, trades: trades.results, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
         technology: { research: technology ?? {}, activePatents: Number(technologyRegistry[0]?.count ?? 0), activeLicenses: Number(technologyRegistry[1]?.count ?? 0) }, machines: machines.results, ledgerEntries: ledger.results,
+        publicActivity: [{ type: 'world_clock', day: world?.game_day ?? 184 }, { type: 'research_progress', progress: technology?.progress ?? 0 }, { type: 'market_cycle', batch: world?.market_batch_seconds ?? 498 }],
         rankings: { cities: rankings[0].results, corporations: rankings[1].results },
         communities: communities.results,
         audit: { balancesNonNegative: Number(audit[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2]?.invalid ?? 0) === 0 },
@@ -105,6 +106,13 @@ const worker = {
     if (url.pathname === '/api/health') {
       const result = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
       return Response.json({ ok: result?.ok === 1, persistence: 'cloudflare-d1', environment: env.ENVIRONMENT });
+    }
+    if (url.pathname === '/api/world/activity' && request.method === 'GET') {
+      const [world, technology] = await Promise.all([
+        env.DB.prepare('SELECT game_day, market_batch_seconds FROM world_state WHERE id = ?').bind('WORLD').first(),
+        env.DB.prepare('SELECT progress FROM technologies WHERE id = ?').bind('TECH-001').first(),
+      ]);
+      return Response.json({ activity: [{ type: 'world_clock', day: world?.game_day ?? 184 }, { type: 'research_progress', progress: technology?.progress ?? 0 }, { type: 'market_cycle', batch: world?.market_batch_seconds ?? 498 }], persistence: 'cloudflare-d1' });
     }
     if ((url.pathname === '/api/audit' || url.pathname === '/api/world/audit') && request.method === 'GET') {
       const [balances, ledger, machines, succession] = await Promise.all([
