@@ -2,8 +2,11 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 
-const _violet = Color(0xff7163e8);
-const _ink = Color(0xff172033);
+const _violet = Color(0xff8b7cf6);
+const _ink = Color(0xfff1f0ff);
+const _canvas = Color(0xff111327);
+const _surface = Color(0xff1b1e38);
+const _muted = Color(0xff9698b5);
 
 void main() => runApp(const EarthApp());
 
@@ -14,11 +17,30 @@ class EarthApp extends StatelessWidget {
         title: 'EARTH — An OUC World',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
-          brightness: Brightness.light,
-          scaffoldBackgroundColor: const Color(0xfff4f6fb),
-          colorScheme: ColorScheme.fromSeed(seedColor: _violet),
+          brightness: Brightness.dark,
+          scaffoldBackgroundColor: _canvas,
+          colorScheme: ColorScheme.fromSeed(seedColor: _violet, brightness: Brightness.dark),
           fontFamily: 'Manrope',
           useMaterial3: true,
+          appBarTheme: const AppBarTheme(
+            backgroundColor: Colors.transparent,
+            foregroundColor: _ink,
+            elevation: 0,
+            centerTitle: false,
+          ),
+          cardTheme: CardThemeData(
+            color: _surface.withValues(alpha: .72),
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: BorderSide(color: Colors.white12),
+            ),
+          ),
+          textTheme: ThemeData.dark().textTheme.apply(
+                bodyColor: _ink,
+                displayColor: _ink,
+              ),
         ),
         home: const CommandCenter(),
       );
@@ -189,11 +211,19 @@ class _CommandCenterState extends State<CommandCenter> {
                   : _ErrorState(message: error!, retry: () => _run(api.world)))
           : RefreshIndicator(
               onRefresh: () async => _run(api.world),
-              child: ListView(
-                  padding: const EdgeInsets.fromLTRB(24, 26, 24, 48),
-                  children: [
-                    _Dashboard(state: current, busy: busy, action: _run)
-                  ])),
+              child: Container(
+                  decoration: const BoxDecoration(
+                    gradient: LinearGradient(
+                      colors: [_canvas, Color(0xff171936), _canvas],
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                    ),
+                  ),
+                  child: ListView(
+                      padding: const EdgeInsets.fromLTRB(28, 26, 28, 56),
+                      children: [
+                        _Dashboard(state: current, busy: busy, action: _run)
+                      ]))),
     );
   }
 }
@@ -217,10 +247,11 @@ class _Dashboard extends StatelessWidget {
           style: Theme.of(context)
               .textTheme
               .displaySmall
-              ?.copyWith(color: _ink, fontWeight: FontWeight.w800)),
+              ?.copyWith(color: _ink, fontWeight: FontWeight.w800, letterSpacing: -1.2)),
       const SizedBox(height: 8),
       Text(
-          'Day ${state.clock['day']} · ${state.institutions['city']['name']} · ${state.institutions['corporation']['name']}'),
+          'DAY ${state.clock['day']}  ·  ${state.institutions['city']['name']}  ·  ${state.institutions['corporation']['name']}',
+          style: const TextStyle(color: _muted, fontSize: 11, letterSpacing: .7)),
       const SizedBox(height: 24),
       Wrap(spacing: 14, runSpacing: 14, children: [
         _Metric(
@@ -246,7 +277,7 @@ class _Dashboard extends StatelessWidget {
               padding: const EdgeInsets.all(20),
               child: Text('RESOURCE RESERVES   $resourceText',
                   style: const TextStyle(
-                      fontSize: 12, letterSpacing: .8, color: _ink)))),
+                      fontSize: 11, letterSpacing: .8, color: _muted)))),
       const SizedBox(height: 14),
       _Panel(
           title: 'INSTITUTIONS / CAPACITY',
@@ -435,7 +466,8 @@ class _Panel extends StatelessWidget {
                   children: [
                     Text(title,
                         style: const TextStyle(
-                            fontSize: 11,
+                            color: _muted,
+                            fontSize: 10,
                             letterSpacing: 1.1,
                             fontWeight: FontWeight.w700)),
                     const SizedBox(height: 14),
@@ -466,7 +498,7 @@ class _Metric extends StatelessWidget {
                         style: Theme.of(context)
                             .textTheme
                             .titleLarge
-                            ?.copyWith(fontWeight: FontWeight.w700))
+                            ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -.5))
                   ]))));
 }
 
