@@ -8,6 +8,20 @@ on:
 jobs:
   server:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: earth
+          POSTGRES_USER: earth
+          POSTGRES_PASSWORD: earth_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U earth -d earth"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -16,5 +30,13 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      - name: Apply PostgreSQL schema and seed
+        env:
+          PGPASSWORD: earth_ci
+        run: |
+          psql -h localhost -U earth -d earth -f db/migrations/001_initial.sql
+          psql -h localhost -U earth -d earth -f db/seed.sql
       - run: npm run check
       - run: npm test
+        env:
+          DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth

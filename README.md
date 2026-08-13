@@ -24,6 +24,17 @@ docker compose up -d postgres
 
 The Compose setup mounts the migration and seed files directly into PostgreSQL's initialization directory so a fresh volume is created in the correct order.
 
+On macOS without Docker, use the Homebrew PostgreSQL service:
+
+```bash
+brew install postgresql@16
+brew services start postgresql@16
+createdb earth
+psql -d earth -f db/migrations/001_initial.sql
+psql -d earth -f db/seed.sql
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
+```
+
 The Flutter client scaffold is in `flutter_client/`. It targets Web, iOS, and macOS and reads canonical world state from the prototype API.
 
 ## Repository map
@@ -32,7 +43,7 @@ The Flutter client scaffold is in `flutter_client/`. It targets Web, iOS, and ma
 - `database.js` — optional PostgreSQL write-through adapter
 - `db/migrations/001_initial.sql` — relational world schema
 - `db/seed.sql` — initial OUC / City / Corporation / Human world
-- `../prototype3.html` — selected futuristic web client
+- `prototype3.html` — selected futuristic web client
 - `flutter_client/` — shared Flutter client foundation
 - `test/server.smoke.test.js` — end-to-end command and invariant checks
 
