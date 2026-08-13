@@ -72,6 +72,8 @@ class EarthState {
       ((json['market'] as Map<String, dynamic>)['book'] as List<dynamic>?) ?? const [];
   List<dynamic> get marketTrades =>
       ((json['market'] as Map<String, dynamic>)['trades'] as List<dynamic>?) ?? const [];
+  List<dynamic> get communities =>
+      (json['communities'] as List<dynamic>?) ?? const [];
   List<dynamic> get ledgerEntries =>
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
@@ -176,6 +178,14 @@ class EarthApi {
 
   Future<EarthState> joinCorporation() async {
     await _request('/api/corporations/CORP-001/membership', method: 'POST', body: {'humanId': 'H-0044'});
+    return world();
+  }
+
+  Future<EarthState> createCommunity() async {
+    await _request('/api/communities', method: 'POST', body: {
+      'name': 'Carthage Makers',
+      'founderId': 'H-0044',
+    });
     return world();
   }
 }
@@ -511,6 +521,19 @@ class _Dashboard extends StatelessWidget {
               _RankingLine('CITIES', state.rankings['cities']),
               const SizedBox(height: 12),
               _RankingLine('CORPORATIONS', state.rankings['corporations']),
+            ])),
+        _Panel(
+            title: 'COMMUNITIES / SHARED LIFE',
+            child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              if (state.communities.isEmpty)
+                const Text('No communities registered yet.')
+              else
+                ...state.communities.take(5).map((raw) {
+                  final community = raw as Map<String, dynamic>;
+                  return Padding(padding: const EdgeInsets.only(bottom: 7), child: Text('${community['name']}  ·  ${community['status']}', style: const TextStyle(fontSize: 11)));
+                }),
+              const SizedBox(height: 8),
+              OutlinedButton(onPressed: busy ? null : () => action(() => const EarthApi().createCommunity()), child: const Text('FOUND CARTHAGE MAKERS')),
             ]))
       ]),
     ]);

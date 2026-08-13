@@ -57,6 +57,7 @@ const worker = {
         env.DB.prepare("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product").all(),
         env.DB.prepare('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product').all(),
       ]);
+      const communities = await env.DB.prepare('SELECT id, name, status FROM communities ORDER BY name LIMIT 20').all();
       return Response.json({
         clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
         world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498 },
@@ -67,6 +68,7 @@ const worker = {
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
         technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: ledger.results,
         rankings: { cities: rankings[0].results, corporations: rankings[1].results },
+        communities: communities.results,
         persistence: 'cloudflare-d1'
       });
     }
