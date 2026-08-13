@@ -148,6 +148,19 @@ class EarthApi {
         method: 'POST', body: {'vote': choice});
     return world();
   }
+
+  Future<EarthState> setCityBudget(String category) async {
+    await _request('/api/cities/CITY-0084/budget', method: 'POST', body: {
+      'category': category,
+      'amount': 0,
+    });
+    return world();
+  }
+
+  Future<EarthState> joinCorporation() async {
+    await _request('/api/corporations/CORP-001/membership', method: 'POST', body: {'humanId': 'H-0044'});
+    return world();
+  }
 }
 
 class CommandCenter extends StatefulWidget {
@@ -289,8 +302,15 @@ class _Dashboard extends StatelessWidget {
       const SizedBox(height: 14),
       _Panel(
           title: 'INSTITUTIONS / CAPACITY',
-          child: Text(
-              'CITY  ${state.institutions['city']['residents']} residents  ·  housing ${state.institutions['city']['housing_capacity']}  ·  energy ${state.institutions['city']['energy_capacity']}\nCORPORATION  ${state.institutions['corporation']['member_count']} members  ·  constitution v${state.institutions['corporation']['constitution_version']}')),
+          child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            Text('CITY  ${state.institutions['city']['residents']} residents  ·  housing ${state.institutions['city']['housing_capacity']}  ·  energy ${state.institutions['city']['energy_capacity']}'),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: busy ? null : () => action(() => const EarthApi().setCityBudget('maintenance')), child: const Text('PROPOSE MAINTENANCE BUDGET')),
+            const SizedBox(height: 8),
+            Text('CORPORATION  ${state.institutions['corporation']['member_count']} members  ·  constitution v${state.institutions['corporation']['constitution_version']}'),
+            const SizedBox(height: 10),
+            OutlinedButton(onPressed: busy ? null : () => action(() => const EarthApi().joinCorporation()), child: const Text('JOIN HELIOS COOPERATIVE')),
+          ])),
       const SizedBox(height: 14),
       Wrap(spacing: 14, runSpacing: 14, children: [
         _Panel(
