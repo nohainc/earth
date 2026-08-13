@@ -184,6 +184,10 @@ const worker = {
       const existing = await env.DB.prepare('SELECT corporation_id FROM memberships WHERE human_id = ?').bind(humanId).first<{ corporation_id: string | null }>();
       if (existing?.corporation_id && existing.corporation_id !== 'CORP-001') return Response.json({ ok: false, error: 'Human already belongs to another corporation' }, { status: 409 });
       await env.DB.prepare('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES (?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?)) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = excluded.city_id').bind(humanId, 'CORP-001', 'CITY-0084', 'WORLD').run();
+      await env.DB.batch([
+        env.DB.prepare("UPDATE corporations SET member_count = (SELECT COUNT(*) FROM memberships WHERE corporation_id = 'CORP-001') WHERE id = 'CORP-001'"),
+        env.DB.prepare("UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = 'CITY-0084') WHERE id = 'CITY-0084'"),
+      ]);
       return Response.json({ ok: true, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(humanId).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/machines' && request.method === 'GET') {
@@ -399,6 +403,7 @@ const worker = {
       env.DB.prepare('UPDATE machines SET condition = MAX(0, condition - MAX(0.05, utilization * 0.005)), maintenance_due = maintenance_due + MAX(1, utilization * 0.25)'),
       env.DB.prepare("UPDATE market_prices SET price = MAX(1, ROUND(price * (1 + MIN(0.05, MAX(-0.05, (demand - supply) / MAX(1, supply + demand)))) , 2)), game_day = ?").bind(day),
       env.DB.prepare("UPDATE world_state SET health = CAST(MAX(0, MIN(100, (SELECT COALESCE(AVG(condition), 68) FROM machines))) AS INTEGER) WHERE id = 'WORLD'"),
+      env.DB.prepare("UPDATE cities SET health_capacity = CAST(MAX(0, MIN(100, (SELECT health FROM world_state WHERE id = 'WORLD'))) AS INTEGER)"),
       ...(minute >= 1440 ? [
         env.DB.prepare("UPDATE research_projects SET progress = MIN(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'"),
         env.DB.prepare("UPDATE technologies SET progress = MIN(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)"),
