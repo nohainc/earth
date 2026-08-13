@@ -27,7 +27,7 @@ export default {
       return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
     if (url.pathname === '/api/world' && request.method === 'GET') {
-      const [world, human, institutions, resources, business, technology, proposal, machines, account, ballots, succession, prices] = await Promise.all([
+      const [world, human, institutions, resources, business, technology, proposal, machines, account, ballots, succession, prices, ledger] = await Promise.all([
         env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
         env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM institutions').all(),
@@ -40,6 +40,7 @@ export default {
         env.DB.prepare('SELECT choice, COUNT(*) AS count FROM ballots WHERE proposal_id = ? GROUP BY choice').bind('042').all(),
         env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(),
         env.DB.prepare('SELECT * FROM market_prices ORDER BY product').all(),
+        env.DB.prepare('SELECT * FROM ledger_entries ORDER BY created_at DESC LIMIT 25').all(),
       ]);
       const institutionRows = institutions.results as Array<Record<string, unknown>>;
       const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
@@ -54,7 +55,7 @@ export default {
         institutions: { ouc: byKind('OUC'), corporation: byKind('CORPORATION'), city: byKind('CITY'), business: byKind('BUSINESS') },
         resources: resourceMap, business: business ?? {}, market: { products: marketProducts, orders: [], lastSettlement: null },
         governance: { proposals: [{ ...(proposal ?? { id: '042', title: 'Components maintenance levy', status: 'open' }), votes: { support: voteCounts.support ?? 0, oppose: voteCounts.oppose ?? 0, abstain: voteCounts.abstain ?? 0 }, ballots: {} }] },
-        technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: [], persistence: 'cloudflare-d1'
+        technology: { research: technology ?? {} }, machines: machines.results, ledgerEntries: ledger.results, persistence: 'cloudflare-d1'
       });
     }
     if (url.pathname === '/api/day/advance' && request.method === 'POST') {
