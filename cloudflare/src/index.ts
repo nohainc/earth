@@ -104,8 +104,14 @@ const worker = {
       return Response.json({ ok: true, result: { day }, state: { clock: { day, minute: 0, realSecondsPerGameMinute: 1 }, world: { health: 68, batch: 498 }, human: { id: updatedHuman?.id, name: updatedHuman?.display_name, credits: updatedAccount?.balance ?? 0, standing: updatedHuman?.standing ?? 0, legacy: updatedHuman?.legacy ?? 0, ageYears: updatedHuman?.age_years ?? 31 }, life: { generation: 1, successor: null, estatePeriodDays: 30 }, institutions: {}, resources: Object.fromEntries((updatedResources.results as Array<Record<string, unknown>>).map((item) => [item.resource, item.amount])), business: updatedBusiness ?? {}, market: { products: {}, orders: [], lastSettlement: null }, governance: { proposals: [] }, technology: { research: updatedTechnology ?? {} }, machines: updatedMachines.results, ledgerEntries: [], persistence: 'cloudflare-d1' } });
     }
     if (url.pathname === '/api/health') {
-      const result = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
-      return Response.json({ ok: result?.ok === 1, persistence: 'cloudflare-d1', environment: env.ENVIRONMENT });
+      const [result, tables, balances, machines] = await Promise.all([
+        env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>(),
+        env.DB.prepare("SELECT COUNT(*) AS count FROM sqlite_master WHERE type = 'table' AND name IN ('world_state','humans','market_prices','account_balances','ledger_entries')").first<{ count: number }>(),
+        env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
+        env.DB.prepare('SELECT COUNT(*) AS invalid FROM machines WHERE condition < 0 OR condition > 100').first<{ invalid: number }>(),
+      ]);
+      const checks = { database: result?.ok === 1, coreSchema: Number(tables?.count ?? 0) === 5, balancesNonNegative: Number(balances?.invalid ?? 0) === 0, machineConditionsBounded: Number(machines?.invalid ?? 0) === 0 };
+      return Response.json({ ok: Object.values(checks).every(Boolean), checks, persistence: 'cloudflare-d1', environment: env.ENVIRONMENT, workerVersion: '0.1.0' });
     }
     if (url.pathname === '/api/world/activity' && request.method === 'GET') {
       const [world, technology] = await Promise.all([
