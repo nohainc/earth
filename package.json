@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js",
-    "test": "node --test test/server.smoke.test.js",
+    "test": "node --test test/server.smoke.test.js test/simulation.test.js",
     "cf:check": "wrangler deploy --dry-run",
     "cf:types": "wrangler types"
   },
