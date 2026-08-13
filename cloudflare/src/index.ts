@@ -95,6 +95,27 @@ export default {
     if (url.pathname === '/api/machines' && request.method === 'GET') {
       return Response.json({ machines: (await env.DB.prepare('SELECT * FROM machines ORDER BY id').all()).results, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/technology' && request.method === 'GET') {
+      const [projects, patents, licenses] = await Promise.all([
+        env.DB.prepare('SELECT * FROM research_projects ORDER BY id').all(),
+        env.DB.prepare('SELECT * FROM patents ORDER BY id').all(),
+        env.DB.prepare('SELECT * FROM technology_licenses ORDER BY id').all(),
+      ]);
+      return Response.json({ projects: projects.results, patents: patents.results, licenses: licenses.results, persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/technology/TECH-001/fund' && request.method === 'POST') {
+      const body = await request.json<{ amount?: number }>();
+      const amount = Number(body.amount ?? 240);
+      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Funding amount must be positive' }, { status: 400 });
+      const project = await env.DB.prepare('SELECT * FROM research_projects WHERE technology_id = ?').bind('TECH-001').first<Record<string, unknown>>();
+      if (!project) return Response.json({ ok: false, error: 'Research project not found' }, { status: 404 });
+      const progress = Math.min(100, Number(project.progress) + Math.min(10, amount / 60));
+      await env.DB.batch([
+        env.DB.prepare('UPDATE research_projects SET budget = budget + ?, progress = ? WHERE id = ?').bind(amount, progress, project.id),
+        env.DB.prepare('UPDATE technologies SET progress = ? WHERE id = ?').bind(progress, 'TECH-001'),
+      ]);
+      return Response.json({ ok: true, project: await env.DB.prepare('SELECT * FROM research_projects WHERE id = ?').bind(project.id).first(), technology: await env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind('TECH-001').first(), persistence: 'cloudflare-d1' });
+    }
     const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
     if (maintenanceMatch && request.method === 'POST') {
       const machineId = maintenanceMatch[1];
