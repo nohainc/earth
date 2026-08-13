@@ -9,3 +9,4 @@ INSERT OR IGNORE INTO cities (id, institution_id, residents, housing_capacity, e
 INSERT OR IGNORE INTO corporations (id, institution_id, member_count, treasury, constitution_version) VALUES ('CORP-001', 'CORP-001', 42, 0, 1);
 INSERT OR IGNORE INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ('H-0044', 'CORP-001', 'CITY-0084', 160);
 INSERT OR IGNORE INTO budgets (id, institution_id, category, amount, game_day) VALUES ('BUDGET-CITY-0084', 'CITY-0084', 'public-services', 0, 184);
+INSERT OR IGNORE INTO communities (id, name, founder_id, status, shared_credits) VALUES ('COMM-0001', 'Carthage Civic Mesh', 'H-0044', 'active', 0);

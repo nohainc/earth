@@ -70,6 +70,28 @@ export default {
       ]);
       return Response.json({ community: community.results, city: city.results, corporation: corporation.results, membership: membership.results, budgets: budgets.results, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/cities/CITY-0084/budget' && request.method === 'POST') {
+      const body = await request.json<{ category?: string; amount?: number }>();
+      const category = body.category?.trim();
+      const amount = Number(body.amount);
+      if (!category || !Number.isFinite(amount) || amount < 0) return Response.json({ ok: false, error: 'A valid budget category and non-negative amount are required' }, { status: 400 });
+      const city = await env.DB.prepare('SELECT treasury FROM cities WHERE id = ?').bind('CITY-0084').first<{ treasury: number }>();
+      if (!city) return Response.json({ ok: false, error: 'City not found' }, { status: 404 });
+      if (amount > Number(city.treasury)) return Response.json({ ok: false, error: 'Budget exceeds city treasury' }, { status: 400 });
+      const id = `BUDGET-CITY-0084-${category}`;
+      await env.DB.prepare('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES (?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?)) ON CONFLICT(id) DO UPDATE SET amount = excluded.amount, game_day = excluded.game_day').bind(id, 'CITY-0084', category, amount, 'WORLD').run();
+      return Response.json({ ok: true, budget: await env.DB.prepare('SELECT * FROM budgets WHERE id = ?').bind(id).first(), persistence: 'cloudflare-d1' });
+    }
+    if (url.pathname === '/api/corporations/CORP-001/membership' && request.method === 'POST') {
+      const body = await request.json<{ humanId?: string }>();
+      const humanId = body.humanId || 'H-0044';
+      const human = await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first();
+      if (!human) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
+      const existing = await env.DB.prepare('SELECT corporation_id FROM memberships WHERE human_id = ?').bind(humanId).first<{ corporation_id: string | null }>();
+      if (existing?.corporation_id && existing.corporation_id !== 'CORP-001') return Response.json({ ok: false, error: 'Human already belongs to another corporation' }, { status: 409 });
+      await env.DB.prepare('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES (?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?)) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = excluded.city_id').bind(humanId, 'CORP-001', 'CITY-0084', 'WORLD').run();
+      return Response.json({ ok: true, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(humanId).first(), persistence: 'cloudflare-d1' });
+    }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
