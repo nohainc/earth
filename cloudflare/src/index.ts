@@ -92,6 +92,27 @@ export default {
       await env.DB.prepare('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES (?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?)) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = excluded.city_id').bind(humanId, 'CORP-001', 'CITY-0084', 'WORLD').run();
       return Response.json({ ok: true, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(humanId).first(), persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/machines' && request.method === 'GET') {
+      return Response.json({ machines: (await env.DB.prepare('SELECT * FROM machines ORDER BY id').all()).results, persistence: 'cloudflare-d1' });
+    }
+    const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
+    if (maintenanceMatch && request.method === 'POST') {
+      const machineId = maintenanceMatch[1];
+      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first<Record<string, unknown>>();
+      if (!machine) return Response.json({ ok: false, error: 'Machine not found' }, { status: 404 });
+      const body = await request.json<{ amount?: number }>();
+      const amount = Number(body.amount ?? 10);
+      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
+      const before = Number(machine.condition);
+      const after = Math.min(100, before + amount * 0.8);
+      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
+      const eventId = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare('UPDATE machines SET condition = ?, maintenance_due = MAX(0, maintenance_due - ?) WHERE id = ?').bind(after, amount, machineId),
+        env.DB.prepare('INSERT INTO maintenance_events (id, machine_id, owner_id, resource, amount, condition_before, condition_after, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(eventId, machineId, machine.owner_id, 'components', amount, before, after, gameDay),
+      ]);
+      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), eventId, persistence: 'cloudflare-d1' });
+    }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
   async scheduled(_event: ScheduledEvent, _env: Env, _ctx: ExecutionContext): Promise<void> {
