@@ -54,7 +54,11 @@ export default {
     if (url.pathname === '/api/day/advance' && request.method === 'POST') {
       const current = await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>();
       const day = (current?.game_day ?? 184) + 1;
-      await env.DB.prepare('UPDATE world_state SET game_day = ?, game_minute = 0 WHERE id = ?').bind(day, 'WORLD').run();
+      await env.DB.batch([
+        env.DB.prepare('UPDATE world_state SET game_day = ?, game_minute = 0 WHERE id = ?').bind(day, 'WORLD'),
+        env.DB.prepare('UPDATE machines SET condition = MAX(0, condition - MAX(0.1, utilization * 0.01)), maintenance_due = maintenance_due + MAX(1, utilization * 0.5)'),
+        ...(day % 365 === 0 ? [env.DB.prepare('UPDATE humans SET age_years = age_years + 1 WHERE id = ?').bind('H-0044')] : []),
+      ]);
       return Response.json({ ok: true, result: { day }, state: { clock: { day, minute: 0, realSecondsPerGameMinute: 1 }, world: { health: 68, batch: 498 }, human: { id: 'H-0044', name: 'Amara Kline', credits: 18420, standing: 742, legacy: 31, ageYears: 31 }, life: { generation: 1, successor: null, estatePeriodDays: 30 }, institutions: { ouc: {}, corporation: {}, city: {}, business: {} }, resources: {}, business: {}, market: { products: {}, orders: [], lastSettlement: null }, governance: { proposals: [] }, technology: { research: {} }, ledgerEntries: [], persistence: 'cloudflare-d1' } });
     }
     if (url.pathname === '/api/health') {
