@@ -1,0 +1,8 @@
+{
+  "name": "earth-world",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "dependencies": { "pg": "^8.12.0" },
+  "scripts": { "start": "node server.js", "check": "node --check server.js", "test": "node --test test/server.smoke.test.js" }
+}

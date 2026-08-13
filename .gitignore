@@ -1,0 +1,9 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.dart_tool/
+build/
+.idea/
+.vscode/
+*.log
