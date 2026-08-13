@@ -103,6 +103,12 @@ class EarthApi {
     return world();
   }
 
+  Future<EarthState> settleMarket(String product) async {
+    await _request('/api/market/settle',
+        method: 'POST', body: {'product': product});
+    return world();
+  }
+
   Future<EarthState> vote(String choice) async {
     await _request('/api/governance/proposals/042/vote',
         method: 'POST', body: {'vote': choice});
@@ -353,7 +359,13 @@ class _Dashboard extends StatelessWidget {
                                             entry.key,
                                             (product['price'] as num)
                                                 .toDouble())),
-                                child: const Text('BUY 1'))
+                                child: const Text('BUY 1')),
+                            OutlinedButton(
+                                onPressed: busy
+                                    ? null
+                                    : () => action(() => const EarthApi()
+                                        .settleMarket(entry.key)),
+                                child: const Text('SETTLE'))
                           ]));
                 }).toList()))
       ]),
