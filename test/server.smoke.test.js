@@ -28,6 +28,14 @@ test('health endpoint reports operational checks and request tracing', async () 
   assert.ok(result.body.checks);
 });
 
+test('world activity exposes only public simulation signals', async () => {
+  const result = await request('/api/world/activity');
+  assert.equal(result.status, 200);
+  assert.equal(result.body.activity.length, 3);
+  assert.deepEqual(result.body.activity.map(event => event.type), ['world_clock', 'research_progress', 'market_cycle']);
+  assert.ok(!JSON.stringify(result.body).includes('account-amara'));
+});
+
 test('world snapshot contains the EARTH core entities', async () => {
   const { status, body } = await request('/api/world');
   assert.equal(status, 200);
