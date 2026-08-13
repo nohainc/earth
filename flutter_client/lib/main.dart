@@ -58,6 +58,8 @@ class EarthState {
   Map<String, dynamic> get technology =>
       (json['technology'] as Map<String, dynamic>)['research']
           as Map<String, dynamic>;
+  Map<String, dynamic> get technologyRegistry =>
+      (json['technology'] as Map<String, dynamic>);
   Map<String, dynamic> get governance =>
       json['governance'] as Map<String, dynamic>;
   Map<String, dynamic> get institutions =>
@@ -364,6 +366,7 @@ class _Dashboard extends StatelessWidget {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('${state.technology['progress']}% complete',
                   style: Theme.of(context).textTheme.headlineSmall),
+              Text('Patents ${state.technologyRegistry['activePatents']}  ·  Licenses ${state.technologyRegistry['activeLicenses']}', style: const TextStyle(color: _muted, fontSize: 11)),
               const SizedBox(height: 10),
               LinearProgressIndicator(
                   value:
