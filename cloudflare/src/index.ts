@@ -299,7 +299,10 @@ const worker = {
       if (!['material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
       if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first())) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
       const orderId = crypto.randomUUID();
-      await env.DB.prepare('INSERT INTO market_orders (id, human_id, product, quantity, limit_price) VALUES (?, ?, ?, ?, ?)').bind(orderId, humanId, product, quantity, limitPrice).run();
+      await env.DB.batch([
+        env.DB.prepare('INSERT INTO market_orders (id, human_id, product, quantity, limit_price) VALUES (?, ?, ?, ?, ?)').bind(orderId, humanId, product, quantity, limitPrice),
+        env.DB.prepare('UPDATE market_prices SET demand = demand + ? WHERE product = ?').bind(quantity, product),
+      ]);
       const coordinator = env.MARKET_COORDINATOR.getByName(`market-${product}`);
       const coordination = await coordinator.submitCommand({ type: 'order.submitted', orderId, product, quantity });
       return Response.json({ ok: true, order: await env.DB.prepare('SELECT * FROM market_orders WHERE id = ?').bind(orderId).first(), coordination, persistence: 'cloudflare-d1' });
@@ -309,7 +312,7 @@ const worker = {
       const product = body.product;
       if (!['material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
       const price = await env.DB.prepare('SELECT * FROM market_prices WHERE product = ?').bind(product).first<{ price: number; supply: number }>();
-      const order = await env.DB.prepare("SELECT * FROM market_orders WHERE product = ? AND status IN ('open','partial') ORDER BY created_at ASC LIMIT 1").bind(product).first<Record<string, unknown>>();
+      const order = await env.DB.prepare("SELECT * FROM market_orders WHERE product = ? AND status IN ('open','partial') AND limit_price >= ? ORDER BY created_at ASC LIMIT 1").bind(product, price?.price ?? 0).first<Record<string, unknown>>();
       if (!price || !order) return Response.json({ ok: true, filled: false, reason: 'No eligible order or price', persistence: 'cloudflare-d1' });
       const remaining = Number(order.quantity) - Number(order.filled_quantity);
       const fill = Math.min(remaining, Number(price.supply));
