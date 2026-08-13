@@ -34,7 +34,7 @@ class EarthApp extends StatelessWidget {
             elevation: 0,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(14),
-              side: BorderSide(color: Colors.white12),
+              side: const BorderSide(color: Colors.white12),
             ),
           ),
           textTheme: ThemeData.dark().textTheme.apply(
