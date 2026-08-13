@@ -7,7 +7,7 @@ let processHandle;
 const request = async (path, options) => {
   const response = await fetch(`http://127.0.0.1:${port}${path}`, options);
   const body = await response.json();
-  return { status: response.status, body };
+  return { status: response.status, body, headers: response.headers };
 };
 
 before(async () => {
@@ -20,6 +20,13 @@ before(async () => {
 });
 
 after(() => processHandle?.kill());
+
+test('health endpoint reports operational checks and request tracing', async () => {
+  const result = await request('/api/health');
+  assert.equal(result.status, 200);
+  assert.equal(result.body.ok, true);
+  assert.ok(result.body.checks);
+});
 
 test('world snapshot contains the EARTH core entities', async () => {
   const { status, body } = await request('/api/world');

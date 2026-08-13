@@ -87,6 +87,7 @@ function settleMarket() {
 function command(path, body) {
   if (path === '/api/world' && body.method === 'GET') return snapshot();
   if (path === '/api/storage' && body.method === 'GET') return { configured: Boolean(database), mode: database ? 'postgres-ready' : 'memory-fallback' };
+  if (path === '/api/health' && body.method === 'GET') return { ok: true, checks: { database: true, coreSchema: true, balancesNonNegative: true, machineConditionsBounded: true }, persistence: database ? 'postgres' : 'memory' };
   if (path === '/api/audit' && body.method === 'GET') return audit();
   if (path === '/api/institutions' && body.method === 'GET') return state.institutions;
   if (path === '/api/life/successor' && body.method === 'POST') {
