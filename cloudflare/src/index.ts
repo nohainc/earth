@@ -246,6 +246,27 @@ export default {
       ]);
       return Response.json({ ok: true, filled: true, orderId: order.id, tradeId, product, quantity: fill, clearingPrice: price.price, total, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
+      const proposals = await env.DB.prepare('SELECT * FROM proposals ORDER BY closes_at ASC').all();
+      const ballots = await env.DB.prepare('SELECT proposal_id, choice, COUNT(*) AS count FROM ballots GROUP BY proposal_id, choice').all();
+      return Response.json({ proposals: proposals.results, voteCounts: ballots.results, persistence: 'cloudflare-d1' });
+    }
+    const voteMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
+    if (voteMatch && request.method === 'POST') {
+      const proposalId = voteMatch[1];
+      const body = await request.json<{ humanId?: string; vote?: string }>();
+      const humanId = body.humanId || 'H-0044';
+      if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
+      if (!(await env.DB.prepare('SELECT id FROM proposals WHERE id = ? AND status = ?').bind(proposalId, 'open').first())) return Response.json({ ok: false, error: 'Open proposal not found' }, { status: 404 });
+      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first())) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
+      try {
+        await env.DB.prepare('INSERT INTO ballots (proposal_id, human_id, choice, weight) VALUES (?, ?, ?, 1)').bind(proposalId, humanId, body.vote).run();
+      } catch (_error) {
+        return Response.json({ ok: false, error: 'Ballot already recorded' }, { status: 409 });
+      }
+      const counts = await env.DB.prepare('SELECT choice, COUNT(*) AS count FROM ballots WHERE proposal_id = ? GROUP BY choice').bind(proposalId).all();
+      return Response.json({ ok: true, proposalId, humanId, vote: body.vote, counts: counts.results, persistence: 'cloudflare-d1' });
+    }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
     }
