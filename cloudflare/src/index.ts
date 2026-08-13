@@ -397,6 +397,7 @@ const worker = {
     await env.DB.batch([
       env.DB.prepare('UPDATE world_state SET game_day = ?, game_minute = ? WHERE id = ?').bind(day, minute % 1440, 'WORLD'),
       env.DB.prepare('UPDATE machines SET condition = MAX(0, condition - MAX(0.05, utilization * 0.005)), maintenance_due = maintenance_due + MAX(1, utilization * 0.25)'),
+      env.DB.prepare("UPDATE market_prices SET price = MAX(1, ROUND(price * (1 + MIN(0.05, MAX(-0.05, (demand - supply) / MAX(1, supply + demand)))) , 2)), game_day = ?").bind(day),
       ...(day % 365 === 0 && minute < 5 ? [env.DB.prepare('UPDATE humans SET age_years = age_years + 1')]: []),
     ]);
   }
