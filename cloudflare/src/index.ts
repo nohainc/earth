@@ -61,6 +61,16 @@ export default {
       const result = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
       return Response.json({ ok: result?.ok === 1, persistence: 'cloudflare-d1', environment: env.ENVIRONMENT });
     }
+    if (url.pathname === '/api/audit' && request.method === 'GET') {
+      const [balances, ledger, machines, succession] = await Promise.all([
+        env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
+        env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
+        env.DB.prepare('SELECT COUNT(*) AS invalid FROM machines WHERE condition < 0 OR condition > 100').first<{ invalid: number }>(),
+        env.DB.prepare('SELECT COUNT(*) AS count FROM succession_plans WHERE human_id = ?').bind('H-0044').first<{ count: number }>(),
+      ]);
+      const checks = { balancesNonNegative: Number(balances?.invalid ?? 0) === 0, ledgerEntriesValid: Number(ledger?.invalid ?? 0) === 0, machineConditionsBounded: Number(machines?.invalid ?? 0) === 0, oneSuccessionPlanPerHuman: Number(succession?.count ?? 0) <= 1 };
+      return Response.json({ ok: Object.values(checks).every(Boolean), checks, persistence: 'cloudflare-d1' });
+    }
     if (url.pathname === '/api/institutions' && request.method === 'GET') {
       const [community, city, corporation, membership, budgets] = await Promise.all([
         env.DB.prepare('SELECT * FROM communities ORDER BY id').all(),
