@@ -173,6 +173,26 @@ export default {
       ]);
       return Response.json({ ok: true, amount, ruleVersion: rule.version, correlationId, accounts: (await env.DB.prepare('SELECT * FROM account_balances WHERE account_id IN (?, ?)').bind(accountId, 'account-ouc-treasury').all()).results, persistence: 'cloudflare-d1' });
     }
+    if (url.pathname === '/api/finance/public-spending' && request.method === 'POST') {
+      const body = await request.json<{ cityId?: string; category?: string; amount?: number }>();
+      const cityId = body.cityId || 'CITY-0084';
+      const category = body.category?.trim() || 'public-services';
+      const amount = Number(body.amount);
+      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Public spending amount must be positive' }, { status: 400 });
+      const treasury = await env.DB.prepare('SELECT balance FROM account_balances WHERE account_id = ?').bind('account-ouc-treasury').first<{ balance: number }>();
+      const city = await env.DB.prepare('SELECT id FROM cities WHERE id = ?').bind(cityId).first();
+      if (!city) return Response.json({ ok: false, error: 'City not found' }, { status: 404 });
+      if (!treasury || Number(treasury.balance) < amount) return Response.json({ ok: false, error: 'OUC treasury cannot fund this spending' }, { status: 409 });
+      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
+      const correlationId = crypto.randomUUID();
+      await env.DB.batch([
+        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ?').bind(amount, 'account-ouc-treasury'),
+        env.DB.prepare('UPDATE cities SET treasury = treasury + ? WHERE id = ?').bind(amount, cityId),
+        env.DB.prepare('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET amount = amount + excluded.amount, game_day = excluded.game_day').bind(`SPEND-${cityId}-${category}`, cityId, category, amount, day),
+        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, 'account-ouc-treasury', cityId, amount, 'CREDIT', 'public_spending', cityId, 'finance-v1', correlationId),
+      ]);
+      return Response.json({ ok: true, amount, city: await env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind(cityId).first(), treasury: await env.DB.prepare('SELECT * FROM account_balances WHERE account_id = ?').bind('account-ouc-treasury').first(), correlationId, persistence: 'cloudflare-d1' });
+    }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind('H-0044').first(), persistence: 'cloudflare-d1' });
     }
