@@ -61,7 +61,7 @@ export default {
       const result = await env.DB.prepare('SELECT 1 AS ok').first<{ ok: number }>();
       return Response.json({ ok: result?.ok === 1, persistence: 'cloudflare-d1', environment: env.ENVIRONMENT });
     }
-    if (url.pathname === '/api/audit' && request.method === 'GET') {
+    if ((url.pathname === '/api/audit' || url.pathname === '/api/world/audit') && request.method === 'GET') {
       const [balances, ledger, machines, succession] = await Promise.all([
         env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
         env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
