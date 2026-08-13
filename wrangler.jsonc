@@ -6,7 +6,7 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": { "ENVIRONMENT": "development" },
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "REPLACE_WITH_HYPERDRIVE_ID" }],
+  "d1_databases": [{ "binding": "DB", "database_name": "earth-world", "database_id": "440aa7a3-9418-49ab-90d2-7529c99a489a" }],
   "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],
   "triggers": { "crons": ["*/5 * * * *"] },
