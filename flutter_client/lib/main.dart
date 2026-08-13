@@ -219,11 +219,15 @@ class _CommandCenterState extends State<CommandCenter> {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: ListView(
-                      padding: const EdgeInsets.fromLTRB(28, 26, 28, 56),
-                      children: [
-                        _Dashboard(state: current, busy: busy, action: _run)
-                      ]))),
+                  child: Row(children: [
+                    const _Sidebar(),
+                    Expanded(
+                        child: ListView(
+                            padding: const EdgeInsets.fromLTRB(34, 26, 42, 56),
+                            children: [
+                              _Dashboard(state: current, busy: busy, action: _run)
+                            ]))
+                  ]))),
     );
   }
 }
@@ -243,6 +247,8 @@ class _Dashboard extends StatelessWidget {
         .map((e) => '${e.key}: ${e.value}')
         .join('  ·  ');
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _HeroCard(state: state),
+      const SizedBox(height: 16),
       Text('The world is moving.',
           style: Theme.of(context)
               .textTheme
@@ -449,6 +455,63 @@ class _Dashboard extends StatelessWidget {
       ]),
     ]);
   }
+}
+
+class _Sidebar extends StatelessWidget {
+  const _Sidebar();
+  @override
+  Widget build(BuildContext context) => Container(
+      width: 218,
+      padding: const EdgeInsets.fromLTRB(18, 24, 14, 20),
+      decoration: const BoxDecoration(
+          border: Border(right: BorderSide(color: Colors.white12))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('◌  EARTH', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3)),
+        const Padding(
+            padding: EdgeInsets.only(left: 28, top: 2, bottom: 26),
+            child: Text('AN OUC WORLD', style: TextStyle(fontSize: 8, color: _muted, letterSpacing: 1.2))),
+        Container(
+            padding: const EdgeInsets.all(11),
+            decoration: BoxDecoration(color: _surface.withValues(alpha: .8), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),
+            child: const Row(children: [
+              CircleAvatar(radius: 16, backgroundColor: _violet, child: Text('AK', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800))),
+              SizedBox(width: 9),
+              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text('Amara Kline', style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)), Text('Independent · New Carthage', style: TextStyle(fontSize: 8, color: _muted))]))
+            ])),
+        const SizedBox(height: 22),
+        for (final item in ['✦  Command center', '⌁  Central Market', '◈  Kline Works', '⊙  Civic life', '⌖  New Carthage', '✧  Technology'])
+          Padding(padding: const EdgeInsets.only(bottom: 5), child: Text(item, style: TextStyle(color: item.startsWith('✦') ? _violet : _muted, fontSize: 11, fontWeight: item.startsWith('✦') ? FontWeight.w700 : FontWeight.w500))),
+        const Spacer(),
+        const Divider(color: Colors.white12),
+        const Text('●  WORLD CLOCK', style: TextStyle(color: _cyanAccent, fontSize: 9, letterSpacing: 1)),
+        const SizedBox(height: 7),
+        const Text('DAY 184 · 07:42', style: TextStyle(fontSize: 10, letterSpacing: 1))
+      ]));
+}
+
+const _cyanAccent = Color(0xff55d8b2);
+
+class _HeroCard extends StatelessWidget {
+  final EarthState state;
+  const _HeroCard({required this.state});
+  @override
+  Widget build(BuildContext context) => Container(
+      height: 218,
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+      decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: Colors.white12),
+          gradient: const LinearGradient(colors: [_surface, Color(0xff24234c)])),
+      child: Stack(children: [
+        Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('●  WORLD HEALTH · STABLE', style: TextStyle(color: _cyanAccent, fontSize: 9, letterSpacing: 1)),
+          const SizedBox(height: 13),
+          Text('${state.world['health']}', style: const TextStyle(fontSize: 58, fontWeight: FontWeight.w300, letterSpacing: -4)),
+          const Text('Scarcity is beginning to reallocate investment across the Central Market.', style: TextStyle(color: _muted, fontSize: 10)),
+        ]),
+        Positioned(right: 55, top: 3, child: Container(width: 150, height: 150, decoration: BoxDecoration(shape: BoxShape.circle, border: Border.all(color: _violet.withValues(alpha: .5), width: 1), boxShadow: [BoxShadow(color: _violet.withValues(alpha: .22), blurRadius: 40)]), child: Center(child: Container(width: 82, height: 82, decoration: const BoxDecoration(shape: BoxShape.circle, gradient: RadialGradient(colors: [_violet, Color(0xff5145b7)])), child: const Column(mainAxisAlignment: MainAxisAlignment.center, children: [Text('EARTH', style: TextStyle(fontSize: 8, letterSpacing: 2)), Text('184', style: TextStyle(fontSize: 24, fontWeight: FontWeight.w800)), Text('DAY', style: TextStyle(fontSize: 8, letterSpacing: 1))])))))
+      ]));
+
 }
 
 class _Panel extends StatelessWidget {
