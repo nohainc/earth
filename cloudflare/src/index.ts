@@ -438,7 +438,10 @@ export default {
         'X-Request-ID': requestId,
       } });
     }
-    const response = await worker.fetch(request, env, ctx);
+    const url = new URL(request.url);
+    const response = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health'
+      ? await worker.fetch(request, env, ctx)
+      : await env.ASSETS.fetch(request);
     const headers = new Headers(response.headers);
     const origin = request.headers.get('Origin');
     if (origin === 'https://earth-client.pages.dev' || origin?.endsWith('.earth-client.pages.dev')) {

@@ -12,14 +12,14 @@ DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm start
 
 ## Public preview
 
-- Flutter web client: https://earth-client.pages.dev
-- Planned primary domain: https://earthuc.com
+- Primary virtual world: https://earthuc.com
+- Pages rollback client: https://earth-client.pages.dev
 - Immutable deployment: https://3b432e42.earth-client.pages.dev
 - Worker API: https://earth-world.vitalii-e07.workers.dev
 
 ## Cloudflare target
 
-- Cloudflare Workers: edge API and static routing
+- Cloudflare Workers Static Assets: unified Flutter client, edge API, and static routing
 - Hyperdrive: connection acceleration to the managed PostgreSQL database
 - Durable Objects: serialized market batches, governance coordinators, and live sessions
 - Queues: retryable notifications, statistics, aging, and settlement side effects

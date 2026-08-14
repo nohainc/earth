@@ -94,7 +94,7 @@ class EarthApi {
   const EarthApi({String? baseUrl})
       : baseUrl = baseUrl ??
             const String.fromEnvironment('EARTH_API_URL',
-                defaultValue: 'https://earth-world.vitalii-e07.workers.dev');
+                defaultValue: '');
 
   Future<dynamic> _request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
