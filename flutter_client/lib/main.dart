@@ -15,7 +15,7 @@ class EarthApp extends StatelessWidget {
   const EarthApp({super.key});
   @override
   Widget build(BuildContext context) => MaterialApp(
-        title: 'EARTH — An OUC World',
+        title: 'EARTH — United Corporations',
         debugShowCheckedModeBanner: false,
         theme: ThemeData(
           brightness: Brightness.dark,
@@ -396,7 +396,7 @@ class _Dashboard extends StatelessWidget {
               ])
             ])),
         _Panel(
-            title: 'OUC PROPOSAL ${proposal['id']}',
+            title: 'UC PROPOSAL ${proposal['id']}',
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text(proposal['title']),
@@ -613,7 +613,7 @@ class _Sidebar extends StatelessWidget {
         const Text('◌  EARTH', style: TextStyle(fontSize: 17, fontWeight: FontWeight.w800, letterSpacing: 3)),
         const Padding(
             padding: EdgeInsets.only(left: 28, top: 2, bottom: 26),
-            child: Text('AN OUC WORLD', style: TextStyle(fontSize: 8, color: _muted, letterSpacing: 1.2))),
+            child: Text('UNITED CORPORATIONS', style: TextStyle(fontSize: 8, color: _muted, letterSpacing: 1.2))),
         Container(
             padding: const EdgeInsets.all(11),
             decoration: BoxDecoration(color: _surface.withValues(alpha: .8), borderRadius: BorderRadius.circular(12), border: Border.all(color: Colors.white12)),

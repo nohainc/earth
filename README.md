@@ -42,7 +42,7 @@ The Flutter client scaffold is in `flutter_client/`. It targets Web, iOS, and ma
 - `server.js` — authoritative prototype API and event stream
 - `database.js` — optional PostgreSQL write-through adapter
 - `db/migrations/001_initial.sql` — relational world schema
-- `db/seed.sql` — initial OUC / City / Corporation / Human world
+- `db/seed.sql` — initial United Corporations / City / Corporation / Human world
 - `prototype3.html` — selected futuristic web client
 - `flutter_client/` — shared Flutter client foundation
 - `test/server.smoke.test.js` — end-to-end command and invariant checks
