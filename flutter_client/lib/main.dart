@@ -7,6 +7,7 @@ const _ink = Color(0xfff1f0ff);
 const _canvas = Color(0xff111327);
 const _surface = Color(0xff1b1e38);
 const _muted = Color(0xff9698b5);
+const _apiVersion = '2026-08';
 
 void main() => runApp(const EarthApp());
 
@@ -103,6 +104,10 @@ class EarthApi {
             headers: {'content-type': 'application/json'},
             body: jsonEncode(body ?? {}))
         : await http.get(uri);
+    final apiVersion = response.headers['x-earth-api-version'];
+    if (apiVersion != null && apiVersion != _apiVersion) {
+      throw Exception('Incompatible EARTH API version $apiVersion (expected $_apiVersion)');
+    }
     final decoded = jsonDecode(response.body);
     if (response.statusCode >= 400) {
       final requestId = response.headers['x-request-id'];
