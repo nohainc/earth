@@ -13,6 +13,7 @@ DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm start
 ## Public preview
 
 - Flutter web client: https://earth-client.pages.dev
+- Planned primary domain: https://earthuc.com
 - Immutable deployment: https://3b432e42.earth-client.pages.dev
 - Worker API: https://earth-world.vitalii-e07.workers.dev
 
