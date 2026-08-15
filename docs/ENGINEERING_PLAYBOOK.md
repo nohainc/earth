@@ -169,7 +169,8 @@ vertical slice when possible.
 - Registration requires display name, email, password, and repeated password.
 - Verification-required login errors must expose a resend-verification action.
 - Verification and recovery responses remain generic for unknown addresses.
-- Verification resend is throttled server-side and uses `earth@nohainc.com`.
+- Verification resend is throttled server-side, sends from the authenticated
+  `earth@auth.earthuc.com` domain, and replies to `earth@nohainc.com`.
 - Session cookies are issued and cleared only by the Worker; Flutter never
   stores or constructs an authentication token itself.
 

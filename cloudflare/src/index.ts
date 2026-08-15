@@ -333,7 +333,7 @@ async function issueActionToken(env: Env, humanId: string, action: 'verify_email
   const path = action === 'verify_email' ? '/api/auth/verify-email' : '/api/auth/reset-password';
   const subject = action === 'verify_email' ? 'Verify your EARTH identity' : 'Reset your EARTH password';
   const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}?token=${encodeURIComponent(token)}\n\nThis link expires soon and can only be used once.`;
-  await env.EMAIL.send({ to: email, from: { email: 'earth@nohainc.com', name: 'EARTH Identity' }, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
+  await env.EMAIL.send({ to: email, from: { email: env.EMAIL_FROM, name: 'EARTH Identity' }, replyTo: env.EMAIL_REPLY_TO, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
 }
 
 export class MarketCoordinator extends DurableObject<Env> {
@@ -385,9 +385,29 @@ export class MarketCoordinator extends DurableObject<Env> {
   }
 }
 
+async function advanceWorldFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  try {
+    const result = await withRepository(env, async (repository) => {
+      const authority = await repository.query("SELECT 1 FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT 1 FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [viewer.id]);
+      if (!authority.rows[0]) throw new Error('Only an active OUC Delegate may advance the simulation clock manually');
+      await resolveProposalsPostgres(repository);
+      return advanceWorldPostgres(repository, 1440);
+    });
+    if (!result) throw new Error('PostgreSQL repository is unavailable');
+    const state = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewer.id));
+    return Response.json({ ok: true, result, state, persistence: 'planetscale-postgres' });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unable to advance the simulation clock';
+    return Response.json({ ok: false, error: message }, { status: /delegate/i.test(message) ? 403 : 409 });
+  }
+}
+
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
     if (url.pathname === '/api/auth/me' && request.method === 'GET') {
       const human = await currentHuman(request, env);
       return Response.json({ authenticated: Boolean(human), human, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
