@@ -3514,7 +3514,12 @@ export default {
       } });
     }
     const url = new URL(request.url);
-    const response = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health'
+    const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health';
+    // The handler still contains historical D1 compatibility branches. Keep
+    // the provider boundary at the edge so no data request can reach one when
+    // PostgreSQL is not explicitly configured as the authority.
+    if (isDataRequest) authorityMode(env);
+    const response = isDataRequest
       ? await worker.fetch(request, env, ctx)
       : url.pathname === '/'
         ? await env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request))
