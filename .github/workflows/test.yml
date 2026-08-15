@@ -32,10 +32,10 @@ jobs:
       - run: npm ci
       - name: Apply PostgreSQL schema and seed
         env:
-          PGPASSWORD: earth_ci
+          DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth
         run: |
-          psql -h localhost -U earth -d earth -f db/migrations/001_initial.sql
-          psql -h localhost -U earth -d earth -f db/seed.sql
+          npm run db:migrate:postgres
+          PGPASSWORD=earth_ci psql -h localhost -U earth -d earth -f db/seed.sql
       - run: npm run check
       - run: npm test
         env:
@@ -56,5 +56,5 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build web --release --dart-define=EARTH_API_URL=https://earth-world.vitalii-e07.workers.dev
-      - name: Check deployed D1-backed Worker
-        run: curl --fail --silent --show-error https://earth-world.vitalii-e07.workers.dev/api/health
+      - name: Check deployed PostgreSQL Worker
+        run: curl --fail --silent --show-error https://earthuc.com/api/health
