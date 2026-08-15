@@ -332,7 +332,7 @@ async function issueActionToken(env: Env, humanId: string, action: 'verify_email
   const path = action === 'verify_email' ? '/api/auth/verify-email' : '/api/auth/reset-password';
   const subject = action === 'verify_email' ? 'Verify your EARTH identity' : 'Reset your EARTH password';
   const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}?token=${encodeURIComponent(token)}\n\nThis link expires soon and can only be used once.`;
-  await env.EMAIL.send({ to: email, from: { email: 'earth@auth.earthuc.com', name: 'EARTH Identity' }, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
+  await env.EMAIL.send({ to: email, from: { email: 'earth@nohainc.com', name: 'EARTH Identity' }, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
 }
 
 export class MarketCoordinator extends DurableObject<Env> {
