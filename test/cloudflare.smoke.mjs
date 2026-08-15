@@ -100,6 +100,10 @@ assert.equal(world.body.error, 'Authentication required');
 assert.equal(world.body.code, 'AUTHENTICATION_REQUIRED');
 assert.equal(world.body.correlationId, 'smoke-error-contract');
 
+const businessProfile = await get('/api/businesses/B-1048');
+assert.equal(businessProfile.response.status, 401);
+assert.equal(businessProfile.body.code, 'AUTHENTICATION_REQUIRED');
+
 const opportunities = await get('/api/world');
 assert.equal(opportunities.response.status, 401);
 assert.equal(opportunities.body.code, 'AUTHENTICATION_REQUIRED');

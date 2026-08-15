@@ -198,6 +198,8 @@ class EarthApi {
 
   Future<Map<String, dynamic>> businessFinancials(String businessId) async =>
       (await _request('/api/businesses/$businessId/financials')) as Map<String, dynamic>;
+  Future<Map<String, dynamic>> businessProfile(String businessId) async =>
+      (await _request('/api/businesses/$businessId')) as Map<String, dynamic>;
 
   Future<List<dynamic>> membershipEvents() async {
     final response = (await _request('/api/membership/events?limit=20')) as Map<String, dynamic>;
@@ -778,6 +780,7 @@ class _CommandCenterState extends State<CommandCenter> {
   List<dynamic> authorityEvents = const [];
   Map<String, dynamic> businessOwnership = const {};
   Map<String, dynamic> businessFinancials = const {};
+  Map<String, dynamic> businessProfile = const {};
   List<dynamic> productionCatalog = const [];
   int unreadNotifications = 0;
   Timer? eventTimer;
@@ -862,12 +865,14 @@ class _CommandCenterState extends State<CommandCenter> {
       final value = await action();
       Map<String, dynamic> ownership = const {};
       Map<String, dynamic> financials = const {};
+      Map<String, dynamic> profile = const {};
       final businessId = value.business['id'] as String?;
       if (businessId != null && businessId.isNotEmpty) {
+        try { profile = await api.businessProfile(businessId); } catch (_) { /* Keep the canonical world snapshot usable. */ }
         try { ownership = await api.businessOwnership(businessId); } catch (_) { /* Keep the canonical world snapshot usable. */ }
         try { financials = await api.businessFinancials(businessId); } catch (_) { /* Keep the canonical world snapshot usable. */ }
       }
-      if (mounted) setState(() { state = value; businessOwnership = ownership; businessFinancials = financials; });
+      if (mounted) setState(() { state = value; businessProfile = profile; businessOwnership = ownership; businessFinancials = financials; });
       await _refreshEvents();
     } catch (exception) {
       if (mounted) {
@@ -946,7 +951,7 @@ class _CommandCenterState extends State<CommandCenter> {
                         child: ListView(
                             padding: const EdgeInsets.fromLTRB(34, 26, 42, 56),
                             children: [
-                              _Dashboard(state: current, busy: busy, events: events, notifications: notifications, ownershipEvents: ownershipEvents, businessOwnership: businessOwnership, businessFinancials: businessFinancials, membershipEvents: membershipEvents, authorityEvents: authorityEvents, productionCatalog: productionCatalog, unreadNotifications: unreadNotifications, action: _run)
+                              _Dashboard(state: current, busy: busy, events: events, notifications: notifications, ownershipEvents: ownershipEvents, businessOwnership: businessOwnership, businessFinancials: businessFinancials, businessProfile: businessProfile, membershipEvents: membershipEvents, authorityEvents: authorityEvents, productionCatalog: productionCatalog, unreadNotifications: unreadNotifications, action: _run)
                             ]))
                   ]))),
     );
@@ -982,13 +987,14 @@ class _Dashboard extends StatelessWidget {
   final List<dynamic> ownershipEvents;
   final Map<String, dynamic> businessOwnership;
   final Map<String, dynamic> businessFinancials;
+  final Map<String, dynamic> businessProfile;
   final List<dynamic> membershipEvents;
   final List<dynamic> authorityEvents;
   final List<dynamic> productionCatalog;
   final int unreadNotifications;
   final Future<void> Function(Future<EarthState> Function()) action;
   const _Dashboard(
-      {required this.state, required this.busy, required this.events, required this.notifications, required this.ownershipEvents, required this.businessOwnership, required this.businessFinancials, required this.membershipEvents, required this.authorityEvents, required this.productionCatalog, required this.unreadNotifications, required this.action});
+      {required this.state, required this.busy, required this.events, required this.notifications, required this.ownershipEvents, required this.businessOwnership, required this.businessFinancials, required this.businessProfile, required this.membershipEvents, required this.authorityEvents, required this.productionCatalog, required this.unreadNotifications, required this.action});
   @override
   Widget build(BuildContext context) {
     final proposals = (state.governance['proposals'] as List<dynamic>?) ?? const [];
@@ -1100,6 +1106,8 @@ class _Dashboard extends StatelessWidget {
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Policy: ${state.business['policy']}'),
               Text('Condition: ${state.business['condition']}%'),
+              if (businessProfile['business'] is Map) Text('Sector: ${(businessProfile['business'] as Map<String, dynamic>)['sector']} · status ${(businessProfile['business'] as Map<String, dynamic>)['status']}', style: const TextStyle(color: _muted, fontSize: 11)),
+              if (businessProfile['assets'] is List) Text('Assigned machines: ${(businessProfile['assets'] as List).length}', style: const TextStyle(color: _muted, fontSize: 11)),
               Text('Financials: revenue ${state.business['revenue'] ?? 0} C · costs ${state.business['operating_costs'] ?? 0} C · profit ${state.business['profit'] ?? 0} C', style: const TextStyle(color: _muted, fontSize: 11)),
               if (businessFinancials['business'] is Map) Text('Taxed revenue: ${(businessFinancials['business'] as Map<String, dynamic>)['taxed_revenue'] ?? 0} C · last assessed day ${(businessFinancials['business'] as Map<String, dynamic>)['last_game_day'] ?? 0}', style: const TextStyle(color: _muted, fontSize: 11)),
               const Text('Revenue is recorded when owner output clears through the canonical market; production inputs are operating costs.', style: TextStyle(color: _muted, fontSize: 10)),

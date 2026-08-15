@@ -129,3 +129,33 @@ export async function readBusiness(repository: PostgresRepository, businessId: s
   const business = await repository.query("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, business_financials.revenue, business_financials.operating_costs, business_financials.profit, business_financials.taxed_revenue, business_financials.last_game_day, business_financials.updated_at FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))", [businessId, viewerId]);
   return business.rows[0] ? { business: business.rows[0] } : { error: 'Business financial statement is not available to this Human' };
 }
+
+export async function readBusinessProfile(repository: PostgresRepository, businessId: string, viewerId: string): Promise<Record<string, unknown>> {
+  const access = await repository.query<{ id: string; owner_id: string; manager_id: string | null }>(
+    'SELECT businesses.id, businesses.owner_id, business_management.manager_id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))',
+    [businessId, viewerId],
+  );
+  if (!access.rows[0]) return { error: 'Business profile is not available to this Human' };
+
+  const [business, financials, management, constitution, assets, holders] = await Promise.all([
+    repository.query('SELECT id, owner_id, name, sector, policy, condition, status FROM businesses WHERE id = $1', [businessId]),
+    repository.query('SELECT revenue, operating_costs, profit, taxed_revenue, last_game_day, updated_at FROM business_financials WHERE business_id = $1', [businessId]),
+    repository.query('SELECT business_management.manager_id, humans.display_name AS manager_name, business_management.appointed_by, business_management.appointed_game_day, business_management.updated_at FROM business_management JOIN humans ON humans.id = business_management.manager_id WHERE business_management.business_id = $1', [businessId]),
+    repository.query('SELECT version, shareholder_vote_threshold, board_approval_threshold, dilution_notice_days, updated_by, updated_game_day, updated_at FROM business_constitutions WHERE business_id = $1', [businessId]),
+    repository.query('SELECT business_assets.machine_id, machines.name, machines.machine_type, machines.condition, machines.utilization, business_assets.assigned_game_day, business_assets.assigned_by FROM business_assets JOIN machines ON machines.id = business_assets.machine_id WHERE business_assets.business_id = $1 ORDER BY business_assets.machine_id', [businessId]),
+    repository.query('SELECT business_shares.holder_id, humans.display_name, business_shares.shares FROM business_shares JOIN humans ON humans.id = business_shares.holder_id WHERE business_shares.business_id = $1 ORDER BY business_shares.shares DESC, business_shares.holder_id', [businessId]),
+  ]);
+  const totalIssuedShares = holders.rows.reduce((total, holder) => total + Number((holder as { shares: unknown }).shares ?? 0), 0);
+  return {
+    business: business.rows[0] ?? null,
+    financials: financials.rows[0] ?? null,
+    management: management.rows[0] ?? { manager_id: access.rows[0].manager_id ?? access.rows[0].owner_id, owner_id: access.rows[0].owner_id },
+    constitution: constitution.rows[0] ?? null,
+    assets: assets.rows,
+    ownership: {
+      totalIssuedShares,
+      holders: holders.rows.map((holder) => ({ ...holder, percentage: totalIssuedShares > 0 ? Math.round(Number((holder as { shares: unknown }).shares ?? 0) / totalIssuedShares * 10000) / 100 : 0 })),
+    },
+    access: { viewerId, isOwner: access.rows[0].owner_id === viewerId, isManager: access.rows[0].manager_id === viewerId },
+  };
+}
