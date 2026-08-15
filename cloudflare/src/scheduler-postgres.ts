@@ -73,6 +73,29 @@ async function completeContracts(tx: PostgresRepository, day: number): Promise<v
   }
 }
 
+async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): Promise<void> {
+  const licenses = await tx.query<{ id: string; licensor_id: string; licensee_id: string; royalty_rate: string }>("SELECT technology_licenses.id, licensor_id, licensee_id, royalty_rate FROM technology_licenses JOIN patents ON patents.id = technology_licenses.patent_id WHERE technology_licenses.status = 'active' AND patents.status = 'active' AND licensor_id <> licensee_id");
+  for (const license of licenses.rows) {
+    const usage = await tx.query<{ amount: string }>('SELECT COALESCE(SUM(amount), 0) AS amount FROM production_events WHERE owner_id = $1 AND game_day = $2', [license.licensee_id, day]);
+    const royalty = Math.round(Number(usage.rows[0]?.amount ?? 0) * Math.max(0, Number(license.royalty_rate)) * 0.1 * 100) / 100;
+    if (royalty <= 0) continue;
+    const correlationId = `ROYALTY-${license.id}-${day}`;
+    if ((await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1 AND reason_type = 'technology_royalty'", [correlationId])).rows[0]) continue;
+    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id FOR UPDATE", [license.licensee_id, license.licensor_id]);
+    const buyer = accounts.rows.find((row) => row.owner_id === license.licensee_id);
+    const owner = accounts.rows.find((row) => row.owner_id === license.licensor_id);
+    if (!buyer || !owner || Number(buyer.balance) < royalty) {
+      await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Royalty payment pending\',$3,$4) ON CONFLICT DO NOTHING', [`ROYALTY-PENDING-${license.id}-${day}`, license.licensee_id, `The ${royalty} Credit royalty for license ${license.id} is pending until your balance is sufficient.`, license.id]);
+      continue;
+    }
+    if ((await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [royalty, buyer.account_id])).rowCount !== 1) continue;
+    await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [royalty, owner.account_id]);
+    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,\'CREDIT\',\'technology_royalty\',$6,\'technology-v3\',$7)', [crypto.randomUUID(), day, buyer.account_id, owner.account_id, royalty, license.id, correlationId]);
+    await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [royalty, day, license.licensee_id]);
+    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Technology royalty paid\',$3,$4), ($5,$6,\'technology\',\'Technology royalty received\',$7,$4)', [crypto.randomUUID(), license.licensee_id, `${royalty} Credits paid for licensed technology usage.`, license.id, crypto.randomUUID(), license.licensor_id, `${royalty} Credits received from licensed technology usage.`]);
+  }
+}
+
 async function updateFinancialStates(tx: PostgresRepository, day: number): Promise<void> {
   const candidates = await tx.query<{ id: string; kind: string; value: string; current: string }>("SELECT id, 'BUSINESS' AS kind, condition AS value, status AS current FROM businesses UNION ALL SELECT id, 'CITY', treasury, 'active' FROM cities UNION ALL SELECT id, 'CORPORATION', treasury, 'active' FROM corporations");
   for (const candidate of candidates.rows) {
@@ -153,6 +176,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM machines) * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'world_clock','A new game tick begins',$3) ON CONFLICT (id) DO NOTHING", [`CLOCK-${day}-${minute}`, day, JSON.stringify({ newDay })]);
     const productionEvents = await settleProduction(tx, day);
+    await settleTechnologyRoyalties(tx, day);
     await runAiMaintenance(tx, day);
     await completeContracts(tx, day);
     return { day, minute, newDay, productionEvents };
