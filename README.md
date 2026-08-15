@@ -35,9 +35,9 @@ psql -d earth -f db/seed.sql
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
 ```
 
-The Flutter client in `flutter_client/` is the production web application. It reads canonical state from the Cloudflare Worker API backed by the remote D1 database. The public landing page is served at `/landing`; the authenticated application is served at `/app`.
+The Flutter client in `flutter_client/` is the production web application. It reads canonical state from the Cloudflare Worker API backed by PlanetScale PostgreSQL through Hyperdrive. The public landing page is served at `/landing`; the authenticated application is served at `/app`.
 
-To run Flutter against the deployed Worker and remote D1-backed API:
+To run Flutter against the deployed Worker and PostgreSQL-backed API:
 
 ```bash
 cd flutter_client

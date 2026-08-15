@@ -23,21 +23,21 @@ The Worker serves the compiled Flutter web client from `flutter_client/build/web
 - Cloudflare Workers Static Assets: unified Flutter client, edge API, and static routing
 - Hyperdrive: connection acceleration to the managed PostgreSQL database
 - Durable Objects: serialized market batches, governance coordinators, and live sessions
-- Queues: retryable notifications, statistics, aging, and settlement side effects
+- Queues: future retryable notifications, statistics, aging, and settlement side effects
 - R2: reports, logos, exports, and future media
 
-The current `server.js` remains the local PostgreSQL reference implementation. The deployed game client uses the D1-backed Worker API above; the Flutter client is the primary web UI.
+The current `server.js` remains the local PostgreSQL reference implementation. The deployed game client uses the PostgreSQL-backed Worker API above; the Flutter client is the primary web UI.
 
 ## Secrets
 
 Never commit `DATABASE_URL` or Cloudflare credentials. Use `.env` locally and Wrangler secrets in deployed environments.
 
-## Remote D1 verification
+## Production PostgreSQL verification
 
 ```bash
-npx wrangler d1 migrations list earth-world --remote
-npx wrangler d1 execute earth-world --remote --command "SELECT 1 AS ok;"
+DATABASE_URL="$DATABASE_URL" npm run db:verify:manifest
+DATABASE_URL="$DATABASE_URL" D1_EXPORT=backups/earth-d1-cutover-backup.sql npm run db:verify:d1-postgres
 npm run cf:smoke
 ```
 
-The Flutter web build is tested against the deployed API with `--dart-define=EARTH_API_URL=https://earthuc.com`; production uses the same Worker and remote D1 path.
+The Flutter web build is tested against the deployed API with `--dart-define=EARTH_API_URL=https://earthuc.com`; production uses the same Worker and PlanetScale PostgreSQL authority.
