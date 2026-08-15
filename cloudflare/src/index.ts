@@ -1338,23 +1338,15 @@ const worker = {
       }
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        await withRepository(env, (repository) => resolveProposalsPostgres(repository));
-        const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      await resolveGovernanceProposals(env);
-      const proposals = await env.DB.prepare('SELECT * FROM proposals ORDER BY closes_at ASC').all();
-      const ballots = await env.DB.prepare('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice').all();
-      return Response.json({ proposals: proposals.results, voteCounts: ballots.results, persistence: 'cloudflare-d1' });
+      await withRepository(env, (repository) => resolveProposalsPostgres(repository));
+      const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listGovernanceRulesPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const rules = await env.DB.prepare("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC").all();
-      return Response.json({ rules: rules.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listGovernanceRulesPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'POST') {
       const human = await currentHuman(request, env);
@@ -1369,114 +1361,43 @@ const worker = {
       if (!Number.isInteger(durationHours) || durationHours < 24 || durationHours > 168) return Response.json({ ok: false, error: 'Decision window must be between 24 and 168 hours' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        const targetCategory = body.target?.category?.trim() || null;
-        const targetValue = body.target?.value ?? null;
-        if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal creation failed' }, { status: 409 });
-        }
-      }
-      const priorProposal = await env.DB.prepare('SELECT * FROM proposals WHERE institution_id = ? AND correlation_id = ?').bind(institutionId, correlationId).first();
-      if (priorProposal) return Response.json({ ok: true, alreadyProcessed: true, proposal: priorProposal, correlationId, persistence: 'cloudflare-d1' });
-      const institution = await env.DB.prepare("SELECT id, kind, status FROM institutions WHERE id = ? AND kind IN ('OUC','CITY','CORPORATION')").bind(institutionId).first<{ id: string; kind: string; status: string }>();
-      if (!institution) return Response.json({ ok: false, error: 'Governable institution not found' }, { status: 404 });
-      if (institution.status !== 'active') return Response.json({ ok: false, error: 'Institution is not active' }, { status: 409 });
-      if (!(await eligibleForInstitution(env, human.id, institutionId))) return Response.json({ ok: false, error: 'Human is not eligible to propose at this institution' }, { status: 403 });
-      const rule = body.ruleVersionId
-        ? await env.DB.prepare("SELECT id, status, value_json FROM governance_rules WHERE id = ? AND institution_id = ?").bind(body.ruleVersionId, institutionId).first<{ id: string; status: string; value_json: string }>()
-        : await env.DB.prepare("SELECT id, status, value_json FROM governance_rules WHERE institution_id = ? AND status = 'active' ORDER BY version DESC LIMIT 1").bind(institutionId).first<{ id: string; status: string; value_json: string }>();
-      if (!rule || rule.status !== 'active') return Response.json({ ok: false, error: 'An active governance rule version is required' }, { status: 409 });
-      const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      let ruleConfig: Record<string, unknown> = {};
-      try { ruleConfig = JSON.parse(rule.value_json ?? '{}') as Record<string, unknown>; } catch (_error) { /* use engine defaults */ }
-      const quorum = Number(ruleConfig.quorum ?? 0.25);
-      const approvalThreshold = Number(ruleConfig.approvalThreshold ?? 0.5);
-      const implementationDelay = Number(ruleConfig.implementationDelayDays ?? 1);
-      if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) return Response.json({ ok: false, error: 'Governance rule parameters are invalid' }, { status: 409 });
       const targetCategory = body.target?.category?.trim() || null;
-      const targetValue = body.target?.value ? JSON.stringify(body.target.value) : null;
       if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
-      if (targetValue && targetValue.length > 2000) return Response.json({ ok: false, error: 'Target rule payload is too large' }, { status: 400 });
-      await env.DB.prepare("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, target_category, target_value_json, correlation_id) VALUES (?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, datetime('now', ?), ?, ?, ?, ?, datetime('now', ?), ?, ?, ?)").bind(proposalId, institutionId, title, proposalBody, `+${durationHours} hours`, rule.id, quorum, approvalThreshold, implementationDelay, `+${durationHours + implementationDelay * 24} hours`, targetCategory, targetValue, correlationId).run();
-      return Response.json({ ok: true, proposal: await env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(proposalId).first(), createdBy: human.id, correlationId, persistence: 'cloudflare-d1' }, { status: 201 });
+      try {
+        const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue: body.target?.value ?? null, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal creation failed' }, { status: 409 });
+      }
     }
     const voteMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
     if (voteMatch && request.method === 'POST') {
-      const proposalId = voteMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ vote?: string }>();
-        const human = await currentHuman(request, env);
-        if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-        if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => castVotePostgres(repository, { proposalId, humanId: human.id, choice: body.vote! }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Ballot failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('already') ? 409 : 403 });
-        }
-      }
-      await resolveGovernanceProposals(env);
-      const body = await request.json<{ vote?: string }>();
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const humanId = human.id;
+      const body = await request.json<{ vote?: string }>();
       if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
-      if (!(await env.DB.prepare('SELECT id FROM proposals WHERE id = ? AND status = ?').bind(proposalId, 'open').first())) return Response.json({ ok: false, error: 'Open proposal not found' }, { status: 404 });
-      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first())) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
-      const proposal = await env.DB.prepare('SELECT institution_id FROM proposals WHERE id = ?').bind(proposalId).first<{ institution_id: string }>();
-      if (!(await canExerciseDelegatedRole(env, humanId, proposal?.institution_id ?? ''))) return Response.json({ ok: false, error: 'Human is not eligible to vote at this institution' }, { status: 403 });
-      const weight = await votingWeight(env, humanId, proposal?.institution_id ?? '');
       try {
-        await env.DB.prepare('INSERT INTO ballots (proposal_id, human_id, choice, weight) VALUES (?, ?, ?, ?)').bind(proposalId, humanId, body.vote, weight).run();
-      } catch (_error) {
-        return Response.json({ ok: false, error: 'Ballot already recorded' }, { status: 409 });
+        const result = await withRepository(env, (repository) => castVotePostgres(repository, { proposalId: voteMatch[1], humanId: human.id, choice: body.vote! }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Ballot failed';
+        return Response.json({ ok: false, error: message }, { status: /already/i.test(message) ? 409 : /not found/i.test(message) ? 404 : 403 });
       }
-      const counts = await env.DB.prepare('SELECT choice, ROUND(SUM(weight), 3) AS count FROM ballots WHERE proposal_id = ? GROUP BY choice').bind(proposalId).all();
-      return Response.json({ ok: true, proposalId, humanId, vote: body.vote, weight, counts: counts.results, persistence: 'cloudflare-d1' });
     }
     const executeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/execute$/);
     if (executeProposalMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => executeProposalPostgres(repository, { proposalId: executeProposalMatch[1], humanId: viewer.id }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal execution failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => executeProposalPostgres(repository, { proposalId: executeProposalMatch[1], humanId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Proposal execution failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
-      const proposal = await env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(executeProposalMatch[1]).first<Record<string, unknown>>();
-      if (!proposal) return Response.json({ ok: false, error: 'Proposal not found' }, { status: 404 });
-      if (proposal.outcome !== 'passed') return Response.json({ ok: false, error: 'Only passed proposals can be executed' }, { status: 409 });
-      if (proposal.executed_at) return Response.json({ ok: true, executionStatus: 'executed', proposal, persistence: 'cloudflare-d1' });
-      if (new Date(String(proposal.implementation_at ?? '')).getTime() > Date.now()) return Response.json({ ok: false, error: 'Implementation delay has not elapsed' }, { status: 409 });
-      if (!(await canExerciseDelegatedRole(env, viewer.id, String(proposal.institution_id)))) return Response.json({ ok: false, error: 'Human is not authorized to execute this institution rule' }, { status: 403 });
-      const category = String(proposal.target_category ?? '').trim();
-      const valueJson = String(proposal.target_value_json ?? '');
-      if (!category || !valueJson) {
-        await env.DB.prepare("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = ?").bind(proposal.id).run();
-        return Response.json({ ok: true, executionStatus: 'skipped', reason: 'Proposal has no target rule payload', persistence: 'cloudflare-d1' });
-      }
-      if (!['market', 'finance', 'services', 'technology'].includes(category) || valueJson.length > 2000) return Response.json({ ok: false, error: 'Target rule is outside engine bounds' }, { status: 409 });
-      let targetValue: Record<string, unknown>;
-      try { targetValue = JSON.parse(valueJson) as Record<string, unknown>; } catch (_error) { return Response.json({ ok: false, error: 'Target rule payload is invalid JSON' }, { status: 409 }); }
-      if (category === 'finance' && targetValue.rate !== undefined && (!(typeof targetValue.rate === 'number') || Number(targetValue.rate) < 0 || Number(targetValue.rate) > 0.25)) return Response.json({ ok: false, error: 'Finance rule rate must be between 0 and 0.25' }, { status: 409 });
-      const prior = await env.DB.prepare("SELECT version FROM governance_rules WHERE institution_id = ? AND category = ? ORDER BY version DESC LIMIT 1").bind(proposal.institution_id, category).first<{ version: number }>();
-      const ruleId = `RULE-${String(proposal.institution_id)}-${category}-${Number(prior?.version ?? 0) + 1}`;
-      await env.DB.batch([
-        env.DB.prepare("INSERT INTO governance_rules (id, institution_id, name, category, value_json, version, status, created_by) VALUES (?, ?, ?, ?, ?, ?, 'active', ?)").bind(ruleId, proposal.institution_id, String(proposal.title), category, JSON.stringify(targetValue), Number(prior?.version ?? 0) + 1, viewer.id),
-        env.DB.prepare("UPDATE governance_rules SET status = 'superseded' WHERE institution_id = ? AND category = ? AND status = 'active'").bind(proposal.institution_id, category),
-        env.DB.prepare("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'executed' WHERE id = ?").bind(proposal.id),
-          env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, (SELECT game_day FROM world_state WHERE id = \'WORLD\'), ?, ?, ?)').bind(crypto.randomUUID(), 'rule.changed', `Rule ${category} changed`, JSON.stringify({ proposalId: proposal.id, ruleId })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'governance', 'Rule executed', `Your institution executed ${category}.`, ruleId),
-      ]);
-      return Response.json({ ok: true, executionStatus: 'executed', rule: await env.DB.prepare('SELECT * FROM governance_rules WHERE id = ?').bind(ruleId).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/businesses' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
