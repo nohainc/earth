@@ -873,7 +873,8 @@ const worker = {
           const snapshot = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewerId));
           if (snapshot) return Response.json(snapshot);
         } catch (error) {
-          return Response.json({ ok: false, error: 'World snapshot is temporarily unavailable', detail: error instanceof Error ? error.message : 'PostgreSQL read failure', persistence: 'planetscale-postgres' }, { status: 503 });
+          console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
+          return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
         }
       }
       const [world, human, institutions, resources, business, technology, proposals, machines, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts] = await Promise.all([
@@ -3723,6 +3724,29 @@ export default {
     headers.set('Access-Control-Expose-Headers', 'X-Request-ID');
     headers.set('X-Request-ID', requestId);
     headers.set('X-EARTH-API-Version', '2026-08');
+    if (response.status >= 400 && response.headers.get('content-type')?.includes('application/json')) {
+      try {
+        const payload = await response.clone().json() as Record<string, unknown>;
+        if (payload && typeof payload === 'object' && !payload.code) {
+          const codeByStatus: Record<number, string> = {
+            400: 'VALIDATION_ERROR',
+            401: 'AUTHENTICATION_REQUIRED',
+            403: 'FORBIDDEN',
+            404: 'NOT_FOUND',
+            409: 'CONFLICT',
+            429: 'RATE_LIMITED',
+            500: 'INTERNAL_ERROR',
+            503: 'SERVICE_UNAVAILABLE',
+          };
+          payload.code = codeByStatus[response.status] ?? 'REQUEST_FAILED';
+          payload.correlationId = requestId;
+          headers.set('content-type', 'application/json');
+          return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
+        }
+      } catch {
+        // Preserve non-JSON or malformed error responses unchanged.
+      }
+    }
     return new Response(response.body, { status: response.status, statusText: response.statusText, headers });
   },
   async scheduled(event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
