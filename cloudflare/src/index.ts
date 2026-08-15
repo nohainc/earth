@@ -3380,7 +3380,7 @@ const worker = {
     if (authorityMode(env) === 'postgres') {
       const result = await withRepository(env, async (repository) => {
         await resolveProposalsPostgres(repository);
-        const world = await advanceWorldPostgres(repository);
+        const world = await advanceWorldPostgres(repository, 5, String(_event.scheduledTime));
         const delivered = await deliverOutbox(repository, (event) => env.MARKET_COORDINATOR.getByName('events-global').broadcast(event.payload));
         return { ...world, outboxDelivered: delivered };
       });
