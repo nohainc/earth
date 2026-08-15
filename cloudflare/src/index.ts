@@ -21,7 +21,7 @@ import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMe
 import { auditWorld as auditWorldPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres } from './read-postgres';
 
 const SESSION_DAYS = 7;
-const WEB_ASSET_VERSION = '2026-08-15-landing-route-1';
+const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 const MACHINE_CATALOG: Record<string, { output: string; credit: number; material: number; capacity: number }> = {
   extractor: { output: 'material', credit: 4200, material: 80, capacity: 2 },
   'energy-array': { output: 'energy', credit: 3600, material: 60, capacity: 2 },
