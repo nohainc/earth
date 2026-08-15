@@ -567,135 +567,14 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const viewerId = viewer.id;
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const snapshot = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewerId));
-          if (snapshot) return Response.json(snapshot);
-        } catch (error) {
-          console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
-          return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
-        }
+      try {
+        const snapshot = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewerId));
+        if (!snapshot) return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
+        return Response.json(snapshot);
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
+        return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
       }
-      const [world, human, institutions, resources, business, technology, proposals, machines, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts] = await Promise.all([
-        env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
-        env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM institutions').all(),
-        env.DB.prepare('SELECT resource, amount FROM resource_balances WHERE owner_id = ?').bind(viewerId).all(),
-        env.DB.prepare("SELECT businesses.*, COALESCE((SELECT SUM(shares) FROM business_shares WHERE business_id = businesses.id AND holder_id = ?), 0) AS owned_shares, COALESCE((SELECT SUM(shares) FROM business_shares WHERE business_id = businesses.id), 0) AS total_issued_shares, (SELECT holder_id FROM business_shares WHERE business_id = businesses.id ORDER BY shares DESC, holder_id LIMIT 1) AS controlling_human_id, COALESCE(business_constitutions.version, 1) AS constitution_version, COALESCE(business_constitutions.shareholder_vote_threshold, 0.5) AS shareholder_vote_threshold, COALESCE(business_constitutions.board_approval_threshold, 0.5) AS board_approval_threshold, COALESCE(business_constitutions.dilution_notice_days, 3) AS dilution_notice_days, COALESCE(business_management.manager_id, businesses.owner_id) AS manager_id, COALESCE(business_financials.revenue, 0) AS revenue, COALESCE(business_financials.operating_costs, 0) AS operating_costs, COALESCE(business_financials.profit, 0) AS profit FROM businesses LEFT JOIN business_constitutions ON business_constitutions.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id LEFT JOIN business_financials ON business_financials.business_id = businesses.id WHERE businesses.owner_id = ? OR business_management.manager_id = ? OR EXISTS (SELECT 1 FROM business_shares viewer_shares WHERE viewer_shares.business_id = businesses.id AND viewer_shares.holder_id = ?) ORDER BY businesses.id LIMIT 1").bind(viewerId, viewerId, viewerId, viewerId).first(),
-        env.DB.prepare('SELECT * FROM technologies WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM proposals ORDER BY closes_at ASC LIMIT 20').all(),
-        env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind(viewerId).all(),
-        env.DB.prepare('SELECT balance FROM account_balances WHERE owner_id = ? AND currency = ?').bind(viewerId, 'CREDIT').first<{ balance: number }>(),
-        env.DB.prepare('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice').all(),
-        env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM market_prices ORDER BY product').all(),
-        env.DB.prepare('SELECT * FROM ledger_entries ORDER BY created_at DESC LIMIT 25').all(),
-        env.DB.prepare("SELECT * FROM cities WHERE id = COALESCE((SELECT city_id FROM memberships WHERE human_id = ? AND city_id IS NOT NULL), 'CITY-0084')").bind(viewerId).first(),
-        env.DB.prepare("SELECT * FROM corporations WHERE id = COALESCE((SELECT corporation_id FROM memberships WHERE human_id = ? AND corporation_id IS NOT NULL), 'CORP-001')").bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM personal_financial_states WHERE human_id = ?').bind(viewerId).first(),
-        env.DB.prepare("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = ? OR negotiated_contracts.counterparty_id = ? ORDER BY negotiated_contracts.created_at DESC LIMIT 30").bind(viewerId, viewerId).all(),
-      ]);
-      const institutionRows = institutions.results as Array<Record<string, unknown>>;
-      const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
-      const resourceMap = Object.fromEntries((resources.results as Array<Record<string, unknown>>).map((item) => [item.resource, item.amount]));
-      const voteCounts = (ballots.results as Array<Record<string, unknown>>).reduce<Record<string, Record<string, number>>>((all, item) => {
-        const proposalId = String(item.proposal_id);
-        all[proposalId] ??= {};
-        all[proposalId][String(item.choice)] = Number(item.count);
-        return all;
-      }, {});
-      const marketProducts = Object.fromEntries((prices.results as Array<Record<string, unknown>>).map((item) => [item.product, { price: item.price, supply: item.supply, demand: item.demand }]));
-      const marketFee = await marketFeeRate(env);
-      const rankings = await Promise.all([
-        env.DB.prepare('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10').all(),
-        env.DB.prepare('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10').all(),
-      ]);
-      const [book, trades] = await Promise.all([
-        env.DB.prepare("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product").all(),
-        env.DB.prepare('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product').all(),
-      ]);
-      const ownOrders = await env.DB.prepare("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = ? AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50").bind(viewerId).all();
-      const productionEvents = await env.DB.prepare('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = ? ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT 30').bind(viewerId).all();
-      const aiAssistants = await env.DB.prepare('SELECT id, tier, policy, enabled FROM ai_assistants WHERE owner_id = ? ORDER BY id').bind(viewerId).all();
-      const aiRecommendations = [
-        ...(machines.results as Array<Record<string, unknown>>).filter((machine) => Number(machine.condition ?? 100) < 40).map((machine) => ({ type: 'maintenance', priority: 'high', subject: machine.id, message: `${machine.name} is below 40% condition; allocate Components or enable maintenance automation.` })),
-        ...(machines.results as Array<Record<string, unknown>>).filter((machine) => Number(machine.utilization ?? 0) > 0 && Number(machine.condition ?? 100) < 70).map((machine) => ({ type: 'utilization', priority: 'medium', subject: machine.id, message: `Reduce utilization for ${machine.name} until its condition improves.` })),
-        ...(Number(cityMetrics?.health_capacity ?? 0) / 100 < 0.5 ? [{ type: 'services', priority: 'high', subject: 'CITY-HEALTH', message: 'Health service is critical; propose or fund additional city health capacity.' }] : []),
-      ];
-      const communities = await env.DB.prepare('SELECT id, name, status FROM communities ORDER BY name LIMIT 20').all();
-      const technologyRegistry = await Promise.all([
-        env.DB.prepare('SELECT COUNT(*) AS count FROM patents WHERE technology_id = ? AND status = ?').bind(technology?.id ?? '', 'active').first(),
-        env.DB.prepare('SELECT COUNT(*) AS count FROM technology_licenses WHERE patent_id IN (SELECT id FROM patents WHERE technology_id = ?) AND status = ?').bind(technology?.id ?? '', 'active').first(),
-      ]);
-      const finance = await env.DB.prepare('SELECT scope, category, rate, version FROM tax_rules WHERE active = 1 ORDER BY id').all();
-      const liquidity = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index").first<{ active_humans: number; money_supply: number; living_cost_index: number }>();
-      const liquidityTarget = Number(liquidity?.active_humans ?? 0) * Math.max(0.5, Number(liquidity?.living_cost_index ?? 1)) * 100;
-      const liquiditySupply = Number(liquidity?.money_supply ?? 0);
-      const liquidityStatus = liquiditySupply < liquidityTarget * 0.8 ? 'below-corridor' : liquiditySupply > liquidityTarget * 1.2 ? 'above-corridor' : 'inside-corridor';
-      const audit = await Promise.all([
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
-        env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM machines WHERE condition < 0 OR condition > 100').first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)').first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)').first<{ invalid: number }>(),
-      ]);
-      const financialStates = await env.DB.prepare('SELECT institution_id, institution_kind, status, since_game_day, recovery_game_day FROM financial_states ORDER BY institution_kind, institution_id').all();
-      const roles = await env.DB.prepare("SELECT institution_roles.id, institution_roles.name, institution_roles.institution_id, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id").all();
-      const serviceRatios = cityMetrics ? {
-        housing: Math.min(1, Number(cityMetrics.housing_capacity ?? 0) / Math.max(1, Number(cityMetrics.residents ?? 0))),
-        energy: Math.min(1, Number(cityMetrics.energy_capacity ?? 0) / Math.max(1, Number(cityMetrics.residents ?? 0))),
-        connectivity: Math.min(1, Number(cityMetrics.connectivity_capacity ?? 0) / Math.max(1, Number(cityMetrics.residents ?? 0))),
-        health: Math.min(1, Number(cityMetrics.health_capacity ?? 0) / 100),
-      } : { housing: 0.75, energy: 0.75, connectivity: 0.75, health: 0.5 };
-      const serviceStatus = {
-        housing: serviceRatios.housing >= 1 ? 'normal' : serviceRatios.housing >= 0.75 ? 'basic' : 'critical',
-        utilities: serviceRatios.energy >= 1 ? 'normal' : serviceRatios.energy >= 0.75 ? 'basic' : 'critical',
-        connectivity: serviceRatios.connectivity >= 1 ? 'normal' : serviceRatios.connectivity >= 0.75 ? 'basic' : 'critical',
-        health: serviceRatios.health >= 0.8 ? 'normal' : serviceRatios.health >= 0.5 ? 'basic' : 'critical',
-      };
-      const cityQualification = cityMetrics ? {
-        activePopulation: Number(cityMetrics.residents ?? 0) >= 10,
-        housing: Number(cityMetrics.housing_capacity ?? 0) >= Number(cityMetrics.residents ?? 0),
-        energy: Number(cityMetrics.energy_capacity ?? 0) >= Number(cityMetrics.residents ?? 0),
-        connectivity: Number(cityMetrics.connectivity_capacity ?? 0) >= Number(cityMetrics.residents ?? 0),
-        health: Number(cityMetrics.health_capacity ?? 0) >= 50,
-        treasury: Number(cityMetrics.treasury ?? 0) >= 0,
-        governance: true,
-      } : {};
-      const corporationQualification = corporationMetrics ? {
-        activeMembership: Number(corporationMetrics.member_count ?? 0) >= 30,
-        recognizedCity: Boolean(await env.DB.prepare('SELECT id FROM cities WHERE id = (SELECT city_id FROM memberships WHERE corporation_id = ? AND city_id IS NOT NULL LIMIT 1)').bind(corporationMetrics.id).first()),
-        treasury: Number(corporationMetrics.treasury ?? 0) >= 1000,
-        constitution: Number(corporationMetrics.constitution_version ?? 0) >= 1,
-        governance: true,
-      } : {};
-      const history = await Promise.all([
-        env.DB.prepare('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12').all(),
-        env.DB.prepare('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20').all(),
-      ]);
-      return Response.json({
-        clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
-        world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498, livingCostIndex: world?.living_cost_index ?? 1, essentialServicesIndex: world?.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
-        human: { id: human?.id, name: human?.display_name, credits: account?.balance ?? 0, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31, politicalEligibilityGameDay: human?.political_eligibility_game_day ?? 0, politicalMaturity: Number(world?.game_day ?? 0) >= Number(human?.political_eligibility_game_day ?? 0) },
-        life: { generation: 1, status: human?.life_status ?? 'active', ageYears: human?.age_years ?? 31, successor: succession ?? null, estatePeriodDays: succession?.estate_period_days ?? 30 },
-        membership: membership ?? null,
-        institutions: { ouc: byKind('OUC'), corporation: { ...byKind('CORPORATION'), ...corporationMetrics }, city: { ...byKind('CITY'), ...cityMetrics }, business: byKind('BUSINESS') },
-        resources: resourceMap, business: business ?? {}, market: { products: marketProducts, book: book.results, trades: trades.results, orders: ownOrders.results, feeRate: marketFee, lastSettlement: null },
-        governance: { proposals: (proposals.results as Array<Record<string, unknown>>).map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
-        technology: { research: technology ?? {}, activePatents: Number(technologyRegistry[0]?.count ?? 0), activeLicenses: Number(technologyRegistry[1]?.count ?? 0) }, machines: machines.results, productionEvents: productionEvents.results, aiAssistants: aiAssistants.results, aiRecommendations, ledgerEntries: ledger.results,
-        publicActivity: [{ type: 'world_clock', day: world?.game_day ?? 184 }, { type: 'research_progress', progress: technology?.progress ?? 0 }, { type: 'market_cycle', batch: world?.market_batch_seconds ?? 498 }],
-        rankings: { cities: rankings[0].results, corporations: rankings[1].results },
-        history: { events: history[0].results, rankings: history[1].results },
-        financeStatus: financialStates.results,
-        personalFinance: personalFinance ?? { status: 'active', protected_credits: 100 },
-        contracts: contracts.results,
-        roles: roles.results,
-        communities: communities.results,
-        audit: { balancesNonNegative: Number(audit[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4]?.invalid ?? 0) === 0 },
-        finance: { taxRules: finance.results, liquidity: { activeHumans: Number(liquidity?.active_humans ?? 0), moneySupply: liquiditySupply, target: liquidityTarget, corridor: { low: liquidityTarget * 0.8, high: liquidityTarget * 1.2 }, status: liquidityStatus } },
-        persistence: 'cloudflare-d1'
-      });
     }
     if (url.pathname === '/api/ai' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
