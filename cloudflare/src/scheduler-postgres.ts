@@ -173,8 +173,15 @@ async function settleProduction(tx: PostgresRepository, day: number): Promise<nu
   return events;
 }
 
-export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5): Promise<{ day: number; minute: number; newDay: boolean; productionEvents: number; marketSettlements: number }> {
+export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
   const result = await repository.transaction(async (tx) => {
+    if (idempotencyKey) {
+      const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`SCHEDULED-TICK-${idempotencyKey}`]);
+      if (prior.rows[0]) {
+        const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'");
+        return { day: Number(world.rows[0]?.game_day ?? 0), minute: Number(world.rows[0]?.game_minute ?? 0), newDay: false, productionEvents: 0, marketSettlements: 0, alreadyProcessed: true };
+      }
+    }
     const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
     const currentDay = Number(world.rows[0]?.game_day ?? 0);
     const currentMinute = Number(world.rows[0]?.game_minute ?? 0);
@@ -214,8 +221,12 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await settleTechnologyRoyalties(tx, day);
     await runAiMaintenance(tx, day);
     await completeContracts(tx, day);
+    if (idempotencyKey) {
+      await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, JSON.stringify({ day, minute, newDay, productionEvents })]);
+    }
     return { day, minute, newDay, productionEvents };
   });
+  if (result.alreadyProcessed) return result;
   let marketSettlements = 0;
   for (const product of products) {
     const settled = await settleMarket(repository, product);

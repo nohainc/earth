@@ -94,6 +94,37 @@ export async function listTechnology(repository: PostgresRepository): Promise<Re
   return { projects: projects.rows, patents: patents.rows, licenses: licenses.rows };
 }
 
+export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const [proposals, ballots] = await Promise.all([
+    repository.query('SELECT * FROM proposals ORDER BY closes_at ASC'),
+    repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
+  ]);
+  return { proposals: proposals.rows, voteCounts: ballots.rows };
+}
+
+export async function listGovernanceRules(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const rules = await repository.query("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC");
+  return { rules: rules.rows };
+}
+
+export async function getServiceStatus(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
+  const city = (await repository.query<Record<string, number>>('SELECT cities.* FROM cities JOIN memberships ON memberships.city_id = cities.id WHERE memberships.human_id = $1', [humanId])).rows[0];
+  const independentBaseline = { housing: 0.75, utilities: 0.75, connectivity: 0.75, health: 0.5 };
+  const ratios = city ? {
+    housing: Math.min(1, Number(city.housing_capacity ?? 0) / Math.max(1, Number(city.residents ?? 0))),
+    utilities: Math.min(1, Number(city.energy_capacity ?? 0) / Math.max(1, Number(city.residents ?? 0))),
+    connectivity: Math.min(1, Number(city.connectivity_capacity ?? 0) / Math.max(1, Number(city.residents ?? 0))),
+    health: Math.min(1, Number(city.health_capacity ?? 0) / 100),
+  } : independentBaseline;
+  const status = Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= 0.75 ? 'basic' : 'critical']));
+  return { cityId: city?.id ?? null, provider: city ? 'city-capacity' : 'ouc-independent-minimum', ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)) };
+}
+
+export async function listProductionEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
+  const events = await repository.query('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = $1 ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT $2', [humanId, limit]);
+  return { events: events.rows };
+}
+
 export async function readBusiness(repository: PostgresRepository, businessId: string, viewerId: string): Promise<Record<string, unknown>> {
   const business = await repository.query("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, business_financials.revenue, business_financials.operating_costs, business_financials.profit, business_financials.taxed_revenue, business_financials.last_game_day, business_financials.updated_at FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))", [businessId, viewerId]);
   return business.rows[0] ? { business: business.rows[0] } : { error: 'Business financial statement is not available to this Human' };

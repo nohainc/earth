@@ -4,6 +4,7 @@ const wrangler = await readFile(new URL('../wrangler.jsonc', import.meta.url), '
 const workerTypes = await readFile(new URL('../worker-configuration.d.ts', import.meta.url), 'utf8');
 const repository = await readFile(new URL('../cloudflare/src/repository.ts', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../cloudflare/src/index.ts', import.meta.url), 'utf8');
+const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
 
 if (/d1_databases|"DB"\s*:/.test(wrangler)) throw new Error('D1 bindings must not be configured for EARTH');
 if (!wrangler.includes('"PERSISTENCE_AUTHORITY": "postgres"')) throw new Error('PostgreSQL authority must be configured');
@@ -11,6 +12,8 @@ if (!wrangler.includes('"binding": "HYPERDRIVE"')) throw new Error('Hyperdrive b
 if (/\bDB\s*:\s*D1Database/.test(workerTypes)) throw new Error('Generated Worker types must not expose a DB binding');
 if (!repository.includes('PostgreSQL persistence authority is required')) throw new Error('Repository must fail closed on non-PostgreSQL authority');
 if (!worker.includes('if (isDataRequest) authorityMode(env);')) throw new Error('Worker data boundary must fail closed before routing requests');
+if (!worker.includes('String(_event.scheduledTime)')) throw new Error('Scheduled world ticks must carry an idempotency key');
+if (!scheduler.includes('SCHEDULED-TICK-')) throw new Error('Scheduled world ticks must persist an atomic replay marker');
 if (!worker.includes('async function advanceWorldFromPostgres')) throw new Error('World-clock command must have a PostgreSQL-only handler');
 if (!worker.includes("if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);")) throw new Error('World-clock command must bypass legacy provider branches');
 if (!worker.includes('async function productionEventsFromPostgres')) throw new Error('Production history must have a PostgreSQL-only handler');
