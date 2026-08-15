@@ -117,8 +117,8 @@ PostgreSQL transaction slices currently live in production:
 - contract arbitration and refunds;
 - business creation with shares, constitution, management, and financials;
 - machine acquisition, maintenance, and utilization updates.
+- succession registration and estate inheritance settlement;
 - production settlement, machine upgrades, recycling, and machine sales;
-- succession inheritance;
 - governance, research, licensing, and scheduled world advancement;
 - scheduled depreciation, taxation, basic levy, AI maintenance, contract
   completion, financial-state transitions, and ranking snapshots.
