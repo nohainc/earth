@@ -3721,7 +3721,7 @@ export default {
     if (response.status >= 400 && response.headers.get('content-type')?.includes('application/json')) {
       try {
         const payload = await response.clone().json() as Record<string, unknown>;
-        if (payload && typeof payload === 'object' && !payload.code) {
+        if (payload && typeof payload === 'object') {
           const codeByStatus: Record<number, string> = {
             400: 'VALIDATION_ERROR',
             401: 'AUTHENTICATION_REQUIRED',
@@ -3732,8 +3732,8 @@ export default {
             500: 'INTERNAL_ERROR',
             503: 'SERVICE_UNAVAILABLE',
           };
-          payload.code = codeByStatus[response.status] ?? 'REQUEST_FAILED';
-          payload.correlationId = requestId;
+          if (typeof payload.code !== 'string' || !payload.code) payload.code = codeByStatus[response.status] ?? 'REQUEST_FAILED';
+          if (typeof payload.correlationId !== 'string' || !payload.correlationId) payload.correlationId = requestId;
           headers.set('content-type', 'application/json');
           return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
         }
