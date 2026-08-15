@@ -1468,7 +1468,7 @@ class _Dashboard extends StatelessWidget {
                     return Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('DAY ${event['game_day']}  ·  ${event['action']}  ·  ROLE ${event['role_id']}', style: const TextStyle(fontSize: 11)));
                   }).toList())),
         _Panel(
-            title: 'WORLD RANKINGS / D1 LIVE',
+            title: 'WORLD RANKINGS / POSTGRES LIVE',
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               _RankingLine('CITIES', state.rankings['cities']),
               const SizedBox(height: 12),
