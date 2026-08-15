@@ -1173,11 +1173,9 @@ const worker = {
     if (url.pathname === '/api/machines' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => repository.query('SELECT * FROM machines WHERE owner_id = $1 ORDER BY id', [viewer.id]));
-        if (result) return Response.json({ machines: result.rows, persistence: 'planetscale-postgres' });
-      }
-      return Response.json({ machines: (await env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind(viewer.id).all()).results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => repository.query('SELECT * FROM machines WHERE owner_id = $1 ORDER BY id', [viewer.id]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ machines: result.rows, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/machines/acquire' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1188,36 +1186,13 @@ const worker = {
       if (!spec) return Response.json({ ok: false, error: 'Unsupported machine type' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: 'energy', correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine acquisition failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: 'energy', correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine acquisition failed' }, { status: 409 });
       }
-      const priorAcquisition = await env.DB.prepare("SELECT reason_id FROM ledger_entries WHERE reason_type = 'machine_acquisition' AND correlation_id = ?").bind(correlationId).first<{ reason_id: string }>();
-      if (priorAcquisition) return Response.json({ ok: true, alreadyProcessed: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(priorAcquisition.reason_id).first(), acquisitionId: correlationId, persistence: 'cloudflare-d1' });
-      const [account, material] = await Promise.all([
-        env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>(),
-        env.DB.prepare("SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = 'material'").bind(viewer.id).first<{ amount: number }>(),
-      ]);
-      if (!account || Number(account.balance) < spec.credit) return Response.json({ ok: false, error: 'Insufficient Credits for machine acquisition' }, { status: 409 });
-      if (!material || Number(material.amount) < spec.material) return Response.json({ ok: false, error: 'Insufficient Material for machine acquisition' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const machineId = `M-${viewer.id}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const acquisitionId = correlationId;
-      const ledgerId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(spec.credit, account.account_id, spec.credit),
-        env.DB.prepare("UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = 'material' AND amount >= ?").bind(spec.material, viewer.id, spec.material),
-        env.DB.prepare('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity, output_resource, input_resource) VALUES (?, ?, ?, ?, 100, 25, 0, ?, ?, ?)').bind(machineId, viewer.id, `${type.replaceAll('-', ' ')} ${machineId.slice(-4)}`, type, spec.capacity, spec.output, 'energy'),
-        env.DB.prepare("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, ?, ?, 'machine-acquisition' FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1").bind(machineId, day, viewer.id),
-        env.DB.prepare('INSERT INTO machine_acquisitions (id, machine_id, owner_id, machine_type, credit_cost, material_cost, game_day) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(acquisitionId, machineId, viewer.id, type, spec.credit, spec.material, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(ledgerId, day, account.account_id, 'machine-registry', spec.credit, 'CREDIT', 'machine_acquisition', machineId, 'machine-v1', acquisitionId),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', machineId, null, viewer.id, 1, 'machine_acquisition', acquisitionId, day),
-      ]);
-      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), acquisitionId, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     if (url.pathname === '/api/production/catalog' && request.method === 'GET') {
       return Response.json({ sectors: [
@@ -2303,48 +2278,19 @@ const worker = {
       const machineId = maintenanceMatch[1];
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ amount?: number; correlationId?: string }>();
-        const amount = Number(body.amount ?? 10);
-        const correlationId = String(body.correlationId ?? '').trim();
-        if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
-        if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid maintenance correlationId is required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => maintainMachinePostgres(repository, { machineId, ownerId: viewer.id, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Machine maintenance failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
-      }
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found' }, { status: 404 });
-      if (machine.owner_id !== viewer.id) return Response.json({ ok: false, error: 'This machine belongs to another Human' }, { status: 403 });
       const body = await request.json<{ amount?: number; correlationId?: string }>();
       const amount = Number(body.amount ?? 10);
-      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
       const correlationId = String(body.correlationId ?? '').trim();
+      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
       if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid maintenance correlationId is required' }, { status: 400 });
-      const existing = await env.DB.prepare('SELECT id, amount, game_day FROM maintenance_events WHERE machine_id = ? AND correlation_id = ?').bind(machineId, correlationId).first<{ id: string; amount: number; game_day: number }>();
-      if (existing) return Response.json({ ok: true, alreadyProcessed: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), eventId: existing.id, amount: existing.amount, gameDay: existing.game_day, correlationId, persistence: 'cloudflare-d1' });
-      const before = Number(machine.condition);
-      const after = Math.min(100, before + amount * 0.8);
-      const components = await env.DB.prepare("SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = 'components'").bind(viewer.id).first<{ amount: number }>();
-      if (!components || Number(components.amount) < amount) return Response.json({ ok: false, error: 'Insufficient Components for maintenance' }, { status: 409 });
-      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const [componentPrice, asset] = await Promise.all([
-        env.DB.prepare("SELECT price FROM market_prices WHERE product = 'components'").first<{ price: number }>(),
-        env.DB.prepare('SELECT business_id FROM business_assets WHERE machine_id = ?').bind(machineId).first<{ business_id: string }>(),
-      ]);
-      const maintenanceCost = Math.round(amount * Number(componentPrice?.price ?? 0) * 100) / 100;
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare("UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = 'components' AND amount >= ?").bind(amount, viewer.id, amount),
-        env.DB.prepare('UPDATE machines SET condition = ?, maintenance_due = MAX(0, maintenance_due - ?) WHERE id = ?').bind(after, amount, machineId),
-        env.DB.prepare('INSERT INTO maintenance_events (id, machine_id, owner_id, resource, amount, condition_before, condition_after, game_day, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(eventId, machineId, machine.owner_id, 'components', amount, before, after, gameDay, correlationId),
-        ...(asset?.business_id ? [env.DB.prepare('UPDATE business_financials SET operating_costs = operating_costs + ?, profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = ?').bind(maintenanceCost, maintenanceCost, gameDay, asset.business_id)] : []),
-      ]);
-      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), eventId, amount, gameDay, correlationId, persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => maintainMachinePostgres(repository, { machineId, ownerId: viewer.id, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine maintenance failed';
+        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
+      }
     }
     const decommissionMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/decommission$/);
     if (decommissionMatch && request.method === 'POST') {
@@ -2374,114 +2320,53 @@ const worker = {
     if (utilizationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ utilization?: number }>();
-        const utilization = Number(body.utilization);
-        if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) return Response.json({ ok: false, error: 'Utilization must be a whole percentage from 0 to 100' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => setMachineUtilizationPostgres(repository, { machineId: utilizationMatch[1], ownerId: viewer.id, utilization }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine utilization update failed' }, { status: 404 });
-        }
-      }
-      const machine = await env.DB.prepare('SELECT owner_id FROM machines WHERE id = ?').bind(utilizationMatch[1]).first<{ owner_id: string }>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found' }, { status: 404 });
-      if (machine.owner_id !== viewer.id) return Response.json({ ok: false, error: 'This machine belongs to another Human' }, { status: 403 });
       const body = await request.json<{ utilization?: number }>();
       const utilization = Number(body.utilization);
       if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) return Response.json({ ok: false, error: 'Utilization must be a whole percentage from 0 to 100' }, { status: 400 });
-      await env.DB.prepare('UPDATE machines SET utilization = ? WHERE id = ? AND owner_id = ?').bind(utilization, utilizationMatch[1], viewer.id).run();
-      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(utilizationMatch[1]).first(), persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => setMachineUtilizationPostgres(repository, { machineId: utilizationMatch[1], ownerId: viewer.id, utilization }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine utilization update failed' }, { status: 404 });
+      }
     }
     const upgradeMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/upgrade$/);
     if (upgradeMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ otp?: string; correlationId?: string }>();
-        if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => upgradeMachinePostgres(repository, { machineId: upgradeMatch[1], ownerId: viewer.id, correlationId, creditCost: 600, componentsCost: 20 }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Machine upgrade failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
-      }
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ? AND owner_id = ?').bind(upgradeMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found for this Human' }, { status: 404 });
-      const body = await request.json<{ otp?: string }>();
+      const body = await request.json<{ otp?: string; correlationId?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
-      const creditCost = 600;
-      const componentsCost = 20;
-      const capacityBefore = Number(machine.productive_capacity ?? 1);
-      if (capacityBefore >= 5) return Response.json({ ok: false, error: 'Machine has reached the engine upgrade ceiling' }, { status: 409 });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      const components = await env.DB.prepare("SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = 'components'").bind(viewer.id).first<{ amount: number }>();
-      if (!account || Number(account.balance) < creditCost) return Response.json({ ok: false, error: 'Insufficient Credits for machine upgrade' }, { status: 409 });
-      if (!components || Number(components.amount) < componentsCost) return Response.json({ ok: false, error: 'Insufficient Components for machine upgrade' }, { status: 409 });
-      const capacityAfter = Math.min(5, Math.round((capacityBefore + 0.2) * 100) / 100);
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(creditCost, account.account_id, creditCost),
-        env.DB.prepare("UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = 'components' AND amount >= ?").bind(componentsCost, viewer.id, componentsCost),
-        env.DB.prepare('UPDATE machines SET productive_capacity = ?, condition = MAX(0, condition - 5) WHERE id = ? AND owner_id = ?').bind(capacityAfter, machine.id, viewer.id),
-        env.DB.prepare('INSERT INTO machine_upgrade_events (id, machine_id, owner_id, credit_cost, components_cost, capacity_before, capacity_after, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(eventId, machine.id, viewer.id, creditCost, componentsCost, capacityBefore, capacityAfter, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, account.account_id, 'account-ouc-treasury', creditCost, 'CREDIT', 'machine_upgrade', machine.id, 'machine-v2', eventId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'production', 'Machine upgraded', `${machine.name} capacity increased to ${capacityAfter}; condition requires maintenance after installation.`, machine.id),
-      ]);
-      return Response.json({ ok: true, eventId, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machine.id).first(), creditCost, componentsCost, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => upgradeMachinePostgres(repository, { machineId: upgradeMatch[1], ownerId: viewer.id, correlationId, creditCost: 600, componentsCost: 20 }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine upgrade failed';
+        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
+      }
     }
     const saleMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/sell$/);
     if (saleMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>();
-        const buyerId = body.buyerId?.trim();
-        const price = Math.round(Number(body.price) * 100) / 100;
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!buyerId || buyerId === viewer.id || !Number.isFinite(price) || price <= 0 || price > 1000000) return Response.json({ ok: false, error: 'Buyer and sale price are invalid' }, { status: 400 });
-        if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-        if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine sale' }, { status: 401 });
-        try {
-          const result = await withRepository(env, (repository) => sellMachinePostgres(repository, { machineId: saleMatch[1], sellerId: viewer.id, buyerId, price, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Machine sale failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
-      }
-      const body = await request.json<{ buyerId?: string; price?: number; otp?: string }>();
+      const body = await request.json<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>();
       const buyerId = body.buyerId?.trim();
       const price = Math.round(Number(body.price) * 100) / 100;
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (!buyerId || buyerId === viewer.id || !Number.isFinite(price) || price <= 0 || price > 1000000) return Response.json({ ok: false, error: 'Buyer and sale price are invalid' }, { status: 400 });
+      if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine sale' }, { status: 401 });
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ? AND owner_id = ?').bind(saleMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found for this Human' }, { status: 404 });
-      const buyer = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(buyerId).first();
-      const buyerAccount = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(buyerId).first<{ account_id: string; balance: number }>();
-      const sellerAccount = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string }>();
-      if (!buyer || !buyerAccount || !sellerAccount) return Response.json({ ok: false, error: 'Active buyer account not found' }, { status: 404 });
-      if (Number(buyerAccount.balance) < price) return Response.json({ ok: false, error: 'Buyer has insufficient Credits' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const saleId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(price, buyerAccount.account_id, price),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(price, sellerAccount.account_id),
-        env.DB.prepare('UPDATE machines SET owner_id = ? WHERE id = ? AND owner_id = ?').bind(buyerId, machine.id, viewer.id),
-        env.DB.prepare('DELETE FROM business_assets WHERE machine_id = ?').bind(machine.id),
-        env.DB.prepare("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, ?, ?, 'secondary-sale' FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1").bind(machine.id, day, buyerId),
-        env.DB.prepare('INSERT INTO machine_sales (id, machine_id, seller_id, buyer_id, price, game_day) VALUES (?, ?, ?, ?, ?, ?)').bind(saleId, machine.id, viewer.id, buyerId, price, day),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', machine.id, viewer.id, buyerId, 1, 'secondary_sale', saleId, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, buyerAccount.account_id, sellerAccount.account_id, price, 'CREDIT', 'machine_sale', machine.id, 'machine-v2', saleId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'market', 'Machine sold', `${machine.name} sold for ${price} Credits.`, machine.id, crypto.randomUUID(), buyerId, 'market', 'Machine acquired', `${machine.name} acquired for ${price} Credits.`, machine.id),
-      ]);
-      return Response.json({ ok: true, saleId, machineId: machine.id, buyerId, price, persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => sellMachinePostgres(repository, { machineId: saleMatch[1], sellerId: viewer.id, buyerId, price, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine sale failed';
+        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
+      }
     }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
