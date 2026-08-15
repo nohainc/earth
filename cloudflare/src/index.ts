@@ -481,14 +481,12 @@ async function institutionsFromPostgres(request: Request, env: Env): Promise<Res
 }
 
 async function rankingsFromPostgres(request: Request, env: Env): Promise<Response> {
-  if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
   if (!result) throw new Error('PostgreSQL repository is unavailable');
   return Response.json({ ...result, persistence: 'planetscale-postgres' });
 }
 
 async function historyFromPostgres(request: Request, env: Env): Promise<Response> {
-  if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const url = new URL(request.url);
   const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
   const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
