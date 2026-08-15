@@ -3197,7 +3197,10 @@ const worker = {
   },
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     if (authorityMode(env) === 'postgres') {
-      const result = await withRepository(env, (repository) => advanceWorldPostgres(repository));
+      const result = await withRepository(env, async (repository) => {
+        await resolveProposalsPostgres(repository);
+        return advanceWorldPostgres(repository);
+      });
       if (result) {
         await env.MARKET_COORDINATOR.getByName('events-global').broadcast({ type: result.newDay ? 'world_day_started' : 'world_tick', gameDay: result.day, gameMinute: result.minute, productionEvents: result.productionEvents, marketSettlements: result.marketSettlements, at: new Date().toISOString() });
         return;

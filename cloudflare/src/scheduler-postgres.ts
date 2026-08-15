@@ -156,7 +156,12 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const day = currentDay + (newDay ? 1 : 0);
     const minute = nextMinute % 1440;
     await tx.query('UPDATE world_state SET game_day = $1, game_minute = $2 WHERE id = \'WORLD\'', [day, minute]);
+    const expiringRoles = await tx.query<{ id: string; human_id: string; institution_id: string; role_id: string }>("SELECT id, human_id, institution_id, role_id FROM role_assignments WHERE status = 'active' AND ends_game_day <= $1 FOR UPDATE", [day]);
     await tx.query("UPDATE role_assignments SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
+    for (const role of expiringRoles.rows) {
+      await tx.query("INSERT INTO authority_events (id,human_id,institution_id,role_id,action,game_day,reason) VALUES ($1,$2,$3,$4,'expired',$5,'term_completed') ON CONFLICT (human_id,role_id,action,game_day) DO NOTHING", [`ROLE-EXPIRED-${role.human_id}-${role.role_id}-${day}`, role.human_id, role.institution_id, role.role_id, day]);
+      await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'governance','Role term completed',$3,$4) ON CONFLICT DO NOTHING", [`ROLE-EXPIRED-${role.human_id}-${role.role_id}-${day}`, role.human_id, `Your term for role ${role.role_id} has ended. You may claim an eligible role again when available.`, role.role_id]);
+    }
     await tx.query("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
     await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP");
     await tx.query("UPDATE machines SET condition = GREATEST(0, condition - GREATEST(0.05, utilization * 0.005 * CASE COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC LIMIT 1), 'efficiency') WHEN 'durability' THEN 0.7 WHEN 'safety' THEN 0.8 ELSE 1 END)), maintenance_due = maintenance_due + GREATEST(1, utilization * 0.25)");
