@@ -36,6 +36,8 @@ database.
 | AI assistants and service effects | Implemented | Policy/authority boundaries and cost ledger parity |
 | Notifications, audit, activity, SSE/WebSocket | Implemented | Read-model rebuild and event ordering verification |
 | Transactional side effects and retry delivery | Implemented | PostgreSQL outbox, row-lock claiming, retry delay, and post-publish acknowledgement |
+| Game-time governance windows | Implemented | Migration 007 stores proposal close and implementation boundaries as game day/minute |
+| Atomic credit transfer | Implemented | Migration 008 keeps balance mutation, idempotency replay, and ledger insertion inside one PostgreSQL primitive |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 
 ## Required migration gates
@@ -69,6 +71,8 @@ database.
   economic state.
 - Validate API payloads at the boundary and keep Flutter models generated from
   the versioned API contract as the client surface grows.
+- Treat proposal close and implementation game time as authoritative; legacy
+  wall-clock timestamps remain audit and compatibility fields only.
 
 ## Cutover result
 

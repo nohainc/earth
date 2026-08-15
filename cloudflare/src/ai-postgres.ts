@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
 
 export async function listAssistants(repository: PostgresRepository, ownerId: string): Promise<Record<string, unknown>> {
   return { assistants: (await repository.query('SELECT id, tier, policy, enabled, created_at FROM ai_assistants WHERE owner_id = $1 ORDER BY id', [ownerId])).rows };
@@ -25,10 +26,19 @@ export async function upgradeAssistant(repository: PostgresRepository, input: { 
     const correlationId = `AI-UPGRADE-${assistant.rows[0].id}`;
     const prior = await tx.query("SELECT id FROM ledger_entries WHERE reason_type = 'ai_upgrade' AND correlation_id = $1", [correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, cost, correlationId, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
-    const debit = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [cost, account.rows[0].account_id]);
-    if (debit.rowCount !== 1) throw new Error('AI upgrade payment reservation failed');
+    const transfer = await transferCredits(tx, {
+      ledgerId: crypto.randomUUID(),
+      gameDay,
+      debitAccount: account.rows[0].account_id,
+      creditAccount: 'account-ouc-treasury',
+      amount: cost,
+      reasonType: 'ai_upgrade',
+      reasonId: input.assistantId,
+      ruleVersion: 'ai-v1',
+      correlationId,
+    });
+    if (transfer.status === 'already_processed') return { ok: true, alreadyProcessed: true, cost, correlationId, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
     await tx.query("UPDATE ai_assistants SET tier = 'business' WHERE id = $1 AND owner_id = $2", [input.assistantId, input.ownerId]);
-    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), gameDay, account.rows[0].account_id, 'account-ouc-treasury', cost, 'CREDIT', 'ai_upgrade', input.assistantId, 'ai-v1', correlationId]);
     await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Business AI activated', 'Your AI assistant now supports bounded business maintenance automation and recommendation policies.', input.assistantId]);
     return { ok: true, cost, correlationId, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
   });

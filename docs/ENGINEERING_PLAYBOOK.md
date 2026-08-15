@@ -4,6 +4,11 @@ This is the project-owned implementation guide for future human and AI
 contributors. It supplements the original EARTH engineering guide and is
 intentionally practical for the current codebase.
 
+The detailed system-boundary and database responsibility contract is maintained
+in [`ARCHITECTURE.md`](./ARCHITECTURE.md). When this playbook and that contract
+appear to conflict, resolve the difference explicitly in a new migration or
+architecture decision before implementing the slice.
+
 ## Architecture
 
 EARTH uses a functional core and imperative shell:

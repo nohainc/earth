@@ -1,4 +1,6 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, moneyToCents } from './money';
 
 export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; budget: number; focus: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -65,17 +67,16 @@ export async function licenseTechnology(repository: PostgresRepository, input: {
     const licenseId = `LIC-${patent.rows[0].id}-${input.licenseeId}`;
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     if (input.licenseeId !== input.ownerId) {
-      const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id FOR UPDATE", [input.licenseeId, input.ownerId]);
+      const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id", [input.licenseeId, input.ownerId]);
       const buyer = accounts.rows.find((row) => row.owner_id === input.licenseeId);
       const owner = accounts.rows.find((row) => row.owner_id === input.ownerId);
-      if (!buyer || !owner || Number(buyer.balance) < input.licenseFee) throw new Error('Licensee has insufficient Credits');
-      const debited = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.licenseFee, buyer.account_id]);
-      if (debited.rowCount !== 1) throw new Error('License fee reservation failed');
-      await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [input.licenseFee, owner.account_id]);
-      await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), buyer.account_id, owner.account_id, input.licenseFee, 'CREDIT', 'technology_license_fee', licenseId, 'technology-v3', input.correlationId]);
-      await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [input.licenseFee, Number(world.rows[0]?.game_day ?? 0), input.licenseeId]);
+      const licenseFeeCents = moneyToCents(input.licenseFee);
+      const licenseFee = centsToMoney(licenseFeeCents);
+      if (!buyer || !owner || moneyToCents(buyer.balance) < licenseFeeCents) throw new Error('Licensee has insufficient Credits');
+      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: Number(world.rows[0]?.game_day ?? 0), debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: licenseFee, reasonType: 'technology_license_fee', reasonId: licenseId, ruleVersion: 'technology-v4', correlationId: input.correlationId });
+      await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [licenseFee, Number(world.rows[0]?.game_day ?? 0), input.licenseeId]);
     }
     await tx.query("INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, royalty_rate) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET royalty_rate = excluded.royalty_rate, status = 'active'", [licenseId, patent.rows[0].id, input.ownerId, input.licenseeId, input.royaltyRate]);
-    return { ok: true, license: (await tx.query('SELECT * FROM technology_licenses WHERE id = $1', [licenseId])).rows[0], licenseFee: input.licenseFee, correlationId: input.correlationId };
+    return { ok: true, license: (await tx.query('SELECT * FROM technology_licenses WHERE id = $1', [licenseId])).rows[0], licenseFee: Number(centsToMoney(moneyToCents(input.licenseFee))), correlationId: input.correlationId };
   });
 }
