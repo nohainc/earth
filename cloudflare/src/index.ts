@@ -1089,216 +1089,87 @@ const worker = {
     if (cityBudgetMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const cityId = cityBudgetMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ category?: string; amount?: number }>();
-        const category = body.category?.trim();
-        const amount = Number(body.amount);
-        if (!category || !Number.isFinite(amount) || amount < 0) return Response.json({ ok: false, error: 'A valid budget category and non-negative amount are required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => setCityBudgetPostgres(repository, { humanId: viewer.id, cityId, category, amount, correlationId: crypto.randomUUID() }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'City budget update failed';
-          return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : 400 });
-        }
-      }
-      if (!(await env.DB.prepare("SELECT role_assignments.id FROM role_assignments JOIN institution_roles ON institution_roles.id = role_assignments.role_id WHERE role_assignments.human_id = ? AND role_assignments.institution_id = ? AND role_assignments.status = 'active' AND institution_roles.name IN ('City Mayor', 'Infrastructure Planner')").bind(viewer.id, cityId).first())) return Response.json({ ok: false, error: 'An active City Mayor or Infrastructure Planner term is required' }, { status: 403 });
-      const body = await request.json<{ category?: string; amount?: number }>();
+      const body = await request.json<{ category?: string; amount?: number; correlationId?: string }>();
       const category = body.category?.trim();
       const amount = Number(body.amount);
-      if (!category || !Number.isFinite(amount) || amount < 0) return Response.json({ ok: false, error: 'A valid budget category and non-negative amount are required' }, { status: 400 });
-      const city = await env.DB.prepare('SELECT treasury FROM cities WHERE id = ?').bind(cityId).first<{ treasury: number }>();
-      if (!city) return Response.json({ ok: false, error: 'City not found' }, { status: 404 });
-      const id = `BUDGET-${cityId}-${category}`;
-      const currentBudget = await env.DB.prepare('SELECT amount FROM budgets WHERE id = ?').bind(id).first<{ amount: number }>();
-      const previousAmount = Number(currentBudget?.amount ?? 0);
-      const delta = amount - previousAmount;
-      if (delta > Number(city.treasury)) return Response.json({ ok: false, error: 'Budget exceeds city treasury' }, { status: 400 });
-      const correlationId = crypto.randomUUID();
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE cities SET treasury = treasury - ? WHERE id = ? AND treasury >= ?').bind(delta, cityId, Math.max(0, delta)),
-        env.DB.prepare('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET amount = excluded.amount, game_day = excluded.game_day').bind(id, cityId, category, amount, day),
-        ...(delta !== 0 ? [env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, delta > 0 ? cityId : 'city-budget', delta > 0 ? 'city-budget' : cityId, Math.abs(delta), 'CREDIT', 'city_budget_allocation', id, 'city-finance-v1', correlationId)] : []),
-        ...(delta > 0 ? [env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) SELECT ?, human_id, ?, ?, ?, ? FROM role_assignments WHERE institution_id = ? AND status = \'active\'').bind(crypto.randomUUID(), 'institution', 'City budget allocated', `${amount} Credits allocated to ${category}.`, id, cityId)] : []),
-      ]);
-      return Response.json({ ok: true, budget: await env.DB.prepare('SELECT * FROM budgets WHERE id = ?').bind(id).first(), city: await env.DB.prepare('SELECT id, treasury FROM cities WHERE id = ?').bind(cityId).first(), correlationId, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (!category || !Number.isFinite(amount) || amount < 0 || correlationId.length > 120) return Response.json({ ok: false, error: 'A valid budget category, amount, and correlation ID are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => setCityBudgetPostgres(repository, { humanId: viewer.id, cityId: cityBudgetMatch[1], category, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'City budget update failed';
+        return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : 400 });
+      }
     }
     const corporationMembershipMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/membership$/);
-    if (corporationMembershipMatch && request.method === 'POST') {
+    if (corporationMembershipMatch && (request.method === 'POST' || request.method === 'DELETE')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const corporationId = corporationMembershipMatch[1];
-      const humanId = viewer.id;
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => changeCorporationMembershipPostgres(repository, { humanId, corporationId, action: request.method === 'POST' ? 'join' : 'leave' }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Corporation membership change failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => changeCorporationMembershipPostgres(repository, { humanId: viewer.id, corporationId: corporationMembershipMatch[1], action: request.method === 'POST' ? 'join' : 'leave' }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Corporation membership change failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member/i.test(message) ? 409 : 400 });
       }
-      const corporation = await env.DB.prepare('SELECT id FROM corporations WHERE id = ?').bind(corporationId).first();
-      if (!corporation) return Response.json({ ok: false, error: 'Corporation not found' }, { status: 404 });
-      const human = await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first();
-      if (!human) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
-      const existing = await env.DB.prepare('SELECT corporation_id FROM memberships WHERE human_id = ?').bind(humanId).first<{ corporation_id: string | null }>();
-      if (existing?.corporation_id && existing.corporation_id !== corporationId) return Response.json({ ok: false, error: 'Human already belongs to another corporation' }, { status: 409 });
-      const cityId = (await env.DB.prepare('SELECT city_id FROM memberships WHERE corporation_id = ? AND city_id IS NOT NULL LIMIT 1').bind(corporationId).first<{ city_id: string }>())?.city_id ?? null;
-      await env.DB.prepare('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES (?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?)) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = COALESCE(memberships.city_id, excluded.city_id)').bind(humanId, corporationId, cityId, 'WORLD').run();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE corporations SET member_count = (SELECT COUNT(*) FROM memberships WHERE corporation_id = ?) WHERE id = ?').bind(corporationId, corporationId),
-        ...(cityId ? [env.DB.prepare('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = ?) WHERE id = ?').bind(cityId, cityId)] : []),
-        env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?), ?)').bind(crypto.randomUUID(), humanId, 'CORPORATION', corporationId, 'joined', 'WORLD', 'voluntary_membership'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`CORP-JOINED-${humanId}-${corporationId}`, humanId, 'institution', 'Corporation joined', `You joined corporation ${corporationId}.`, corporationId),
-      ]);
-      return Response.json({ ok: true, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(humanId).first(), persistence: 'cloudflare-d1' });
-    }
-    if (corporationMembershipMatch && request.method === 'DELETE') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const corporationId = corporationMembershipMatch[1];
-      const cityId = (await env.DB.prepare('SELECT city_id FROM memberships WHERE human_id = ? AND corporation_id = ?').bind(viewer.id, corporationId).first<{ city_id: string | null }>())?.city_id;
-      await env.DB.prepare('UPDATE memberships SET corporation_id = NULL WHERE human_id = ? AND corporation_id = ?').bind(viewer.id, corporationId).run();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE corporations SET member_count = (SELECT COUNT(*) FROM memberships WHERE corporation_id = ?) WHERE id = ?').bind(corporationId, corporationId),
-        ...(cityId ? [env.DB.prepare('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = ?) WHERE id = ?').bind(cityId, cityId)] : []),
-        env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?), ?)').bind(crypto.randomUUID(), viewer.id, 'CORPORATION', corporationId, 'left', 'WORLD', 'voluntary_resignation'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`CORP-LEFT-${viewer.id}-${corporationId}`, viewer.id, 'institution', 'Corporation left', `You left corporation ${corporationId}.`, corporationId),
-      ]);
-      return Response.json({ ok: true, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(viewer.id).first(), persistence: 'cloudflare-d1' });
     }
     const residencyMatch = url.pathname.match(/^\/api\/cities\/([^/]+)\/residency$/);
     if (residencyMatch && (request.method === 'POST' || request.method === 'DELETE')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const cityId = residencyMatch[1];
-      if (authorityMode(env) !== 'postgres' && !(await env.DB.prepare('SELECT id FROM cities WHERE id = ?').bind(cityId).first())) return Response.json({ ok: false, error: 'City not found' }, { status: 404 });
-      const day = authorityMode(env) === 'postgres' ? 0 : (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
       const body = request.method === 'POST' ? await request.json<{ correlationId?: string }>() : {};
-      const correlationId = body.correlationId?.trim() || `RESIDENCY-${viewer.id}-${cityId}-${request.method}-${day}`;
+      const dayKey = request.method === 'POST' ? '' : 'leave';
+      const correlationId = body.correlationId?.trim() || `RESIDENCY-${viewer.id}-${residencyMatch[1]}-${request.method}-${dayKey}`;
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => changeCityResidencyPostgres(repository, { humanId: viewer.id, cityId, action: request.method === 'POST' ? 'join' : 'leave', correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'City residency change failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|resident/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => changeCityResidencyPostgres(repository, { humanId: viewer.id, cityId: residencyMatch[1], action: request.method === 'POST' ? 'join' : 'leave', correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'City residency change failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|resident/i.test(message) ? 409 : 400 });
       }
-      const replay = await env.DB.prepare('SELECT institution_id, action, game_day FROM membership_events WHERE id = ? AND human_id = ?').bind(correlationId, viewer.id).first<{ institution_id: string; action: string; game_day: number }>();
-      if (replay) return Response.json({ ok: true, alreadyProcessed: true, residency: replay.action === 'joined' ? 'resident' : 'independent', correlationId, gameDay: replay.game_day, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(viewer.id).first(), persistence: 'cloudflare-d1' });
-      const existingMembership = await env.DB.prepare('SELECT city_id FROM memberships WHERE human_id = ?').bind(viewer.id).first<{ city_id: string | null }>();
-      const previousCityId = existingMembership?.city_id ?? null;
-      if (request.method === 'POST') {
-        await env.DB.batch([
-          env.DB.prepare('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES (?, NULL, ?, ?) ON CONFLICT(human_id) DO UPDATE SET city_id = excluded.city_id, joined_game_day = excluded.joined_game_day').bind(viewer.id, cityId, day),
-          ...(previousCityId && previousCityId !== cityId ? [env.DB.prepare('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = ?) WHERE id = ?').bind(previousCityId, previousCityId)] : []),
-          env.DB.prepare('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = ?) WHERE id = ?').bind(cityId, cityId),
-        ]);
-      } else {
-        await env.DB.batch([
-          env.DB.prepare('UPDATE memberships SET city_id = NULL WHERE human_id = ? AND city_id = ?').bind(viewer.id, cityId),
-          env.DB.prepare('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = ?) WHERE id = ?').bind(cityId, cityId),
-        ]);
-      }
-      const action = request.method === 'POST' ? 'joined' : 'left';
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(correlationId, viewer.id, 'CITY', cityId, action, day, request.method === 'POST' ? 'voluntary_residency' : 'voluntary_departure'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`CITY-${action.toUpperCase()}-${viewer.id}-${cityId}`, viewer.id, 'institution', action === 'joined' ? 'City residency established' : 'City residency ended', action === 'joined' ? `You are now a resident of city ${cityId}.` : `You left city ${cityId}.`, cityId),
-      ]);
-      return Response.json({ ok: true, residency: action === 'joined' ? 'resident' : 'independent', correlationId, membership: await env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(viewer.id).first(), city: await env.DB.prepare('SELECT id, residents FROM cities WHERE id = ?').bind(cityId).first(), persistence: 'cloudflare-d1' });
     }
     const corporationSpendMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/treasury\/spend$/);
     if (corporationSpendMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const corporationId = corporationSpendMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ category?: string; amount?: number; cityId?: string; correlationId?: string }>();
-        const amount = Number(body.amount);
-        const category = body.category?.trim() || 'public-services';
-        const cityId = body.cityId?.trim() || 'CITY-0084';
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) return Response.json({ ok: false, error: 'Treasury amount must be between 0 and 100,000 Credits' }, { status: 400 });
-        if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => spendCorporationTreasuryPostgres(repository, { humanId: viewer.id, corporationId, cityId, category, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Corporation treasury spending failed';
-          return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : /insufficient/i.test(message) ? 409 : 400 });
-        }
-      }
-      if (!(await env.DB.prepare("SELECT role_assignments.id FROM role_assignments JOIN institution_roles ON institution_roles.id = role_assignments.role_id WHERE role_assignments.human_id = ? AND role_assignments.institution_id = ? AND role_assignments.status = 'active' AND institution_roles.name IN ('Corporation Executive', 'Corporation Treasurer')").bind(viewer.id, corporationId).first())) return Response.json({ ok: false, error: 'An active Corporation Executive or Treasurer term is required' }, { status: 403 });
       const body = await request.json<{ category?: string; amount?: number; cityId?: string; correlationId?: string }>();
       const amount = Number(body.amount);
       const category = body.category?.trim() || 'public-services';
       const cityId = body.cityId?.trim() || 'CITY-0084';
-      if (!Number.isFinite(amount) || amount <= 0 || amount > 100000) return Response.json({ ok: false, error: 'Treasury amount must be between 0 and 100,000 Credits' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      const priorSpending = await env.DB.prepare("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'corporation_public_spending' AND correlation_id = ?").bind(correlationId).first<{ amount: number; game_day: number }>();
-      if (priorSpending) return Response.json({ ok: true, alreadyProcessed: true, amount: priorSpending.amount, gameDay: priorSpending.game_day, correlationId, persistence: 'cloudflare-d1' });
-      const [corporation, city] = await Promise.all([
-        env.DB.prepare('SELECT treasury FROM corporations WHERE id = ?').bind(corporationId).first<{ treasury: number }>(),
-        env.DB.prepare('SELECT id FROM cities WHERE id = ?').bind(cityId).first(),
-      ]);
-      if (!corporation || !city) return Response.json({ ok: false, error: 'Corporation or destination City not found' }, { status: 404 });
-      if (Number(corporation.treasury) < amount) return Response.json({ ok: false, error: 'Insufficient Corporation Treasury' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE corporations SET treasury = treasury - ? WHERE id = ? AND treasury >= ?').bind(amount, corporationId, amount),
-        env.DB.prepare('UPDATE cities SET treasury = treasury + ? WHERE id = ?').bind(amount, cityId),
-        env.DB.prepare('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET amount = amount + excluded.amount, game_day = excluded.game_day').bind(`CORP-SPEND-${correlationId}`, cityId, category, amount, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, corporationId, cityId, amount, 'CREDIT', 'corporation_public_spending', cityId, 'corp-finance-v1', correlationId),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'corporation_public_spending', `Corporation funding reached ${cityId}`, JSON.stringify({ corporationId, cityId, category, amount, correlationId })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'institution', 'Corporation spending recorded', `${amount} Credits were routed from ${corporationId} to ${cityId} for ${category}.`, correlationId),
-        env.DB.prepare("INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) SELECT lower(hex(randomblob(16))), human_id, 'institution', 'City funding received', ? || ' Credits were routed to ' || ? || ' for ' || ? || '.', ? FROM memberships WHERE city_id = ? AND human_id != ?").bind(amount, cityId, category, correlationId, cityId, viewer.id),
-      ]);
-      return Response.json({ ok: true, amount, category, cityId, corporation: await env.DB.prepare('SELECT id, treasury FROM corporations WHERE id = ?').bind(corporationId).first(), city: await env.DB.prepare('SELECT id, treasury FROM cities WHERE id = ?').bind(cityId).first(), correlationId, persistence: 'cloudflare-d1' });
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || correlationId.length > 120) return Response.json({ ok: false, error: 'Treasury amount and correlation ID are invalid' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => spendCorporationTreasuryPostgres(repository, { humanId: viewer.id, corporationId: corporationSpendMatch[1], cityId, category, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Corporation treasury spending failed';
+        return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : /insufficient/i.test(message) ? 409 : 400 });
+      }
     }
     const corporationContributionMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/contributions$/);
     if (corporationContributionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const corporationId = corporationContributionMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ amount?: number; correlationId?: string }>();
-        const amount = Math.round(Number(body.amount) * 100) / 100;
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) return Response.json({ ok: false, error: 'Contribution must be between 0 and 10,000 Credits' }, { status: 400 });
-        if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => contributeToCorporationPostgres(repository, { humanId: viewer.id, corporationId, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Corporation contribution failed';
-          return Response.json({ ok: false, error: message }, { status: /membership|required/i.test(message) ? 403 : /insufficient/i.test(message) ? 409 : 400 });
-        }
-      }
-      if (!(await env.DB.prepare('SELECT human_id FROM memberships WHERE human_id = ? AND corporation_id = ?').bind(viewer.id, corporationId).first())) return Response.json({ ok: false, error: 'Corporation membership is required' }, { status: 403 });
       const body = await request.json<{ amount?: number; correlationId?: string }>();
       const amount = Math.round(Number(body.amount) * 100) / 100;
-      if (!Number.isFinite(amount) || amount <= 0 || amount > 10000) return Response.json({ ok: false, error: 'Contribution must be between 0 and 10,000 Credits' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      const priorContribution = await env.DB.prepare("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'corporation_contribution' AND correlation_id = ?").bind(correlationId).first<{ amount: number; game_day: number }>();
-      if (priorContribution) return Response.json({ ok: true, alreadyProcessed: true, amount: priorContribution.amount, gameDay: priorContribution.game_day, correlationId, persistence: 'cloudflare-d1' });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      if (!account || Number(account.balance) < amount) return Response.json({ ok: false, error: 'Insufficient Credits for contribution' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(amount, account.account_id, amount),
-        env.DB.prepare('UPDATE corporations SET treasury = treasury + ? WHERE id = ?').bind(amount, corporationId),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, account.account_id, corporationId, amount, 'CREDIT', 'corporation_contribution', corporationId, 'corp-finance-v1', correlationId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'institution', 'Corporation contribution recorded', `${amount} Credits added to the Corporation Treasury.`, corporationId),
-      ]);
-      return Response.json({ ok: true, amount, corporation: await env.DB.prepare('SELECT id, treasury FROM corporations WHERE id = ?').bind(corporationId).first(), correlationId, persistence: 'cloudflare-d1' });
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 10000 || correlationId.length > 120) return Response.json({ ok: false, error: 'Contribution amount or correlation ID is invalid' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => contributeToCorporationPostgres(repository, { humanId: viewer.id, corporationId: corporationContributionMatch[1], amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Corporation contribution failed';
+        return Response.json({ ok: false, error: message }, { status: /membership|required/i.test(message) ? 403 : /insufficient/i.test(message) ? 409 : 400 });
+      }
     }
+
     if (url.pathname === '/api/machines' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
