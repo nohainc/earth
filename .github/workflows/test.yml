@@ -4,9 +4,18 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: earth-tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   server:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -44,6 +53,7 @@ jobs:
           DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth
 
   flutter:
+    timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:
       run:
