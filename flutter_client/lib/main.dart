@@ -678,7 +678,13 @@ class _AuthScreenState extends State<AuthScreen> {
         if (mounted) widget.onAuthenticated({'authenticated': true, 'human': result['human']});
       }
     } catch (exception) {
-      if (mounted) setState(() => error = exception.toString().replaceFirst('Exception: ', ''));
+      final message = exception.toString().replaceFirst('Exception: ', '');
+      if (mounted) {
+        setState(() {
+          error = message;
+          verificationPending = message.toLowerCase().contains('verify your email');
+        });
+      }
     } finally {
       if (mounted) setState(() => busy = false);
     }

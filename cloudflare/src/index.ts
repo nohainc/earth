@@ -533,7 +533,10 @@ const worker = {
         if (email) {
           const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
           if (credential && !credential.email_verified_at) {
-            try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email); } catch { /* Keep the response generic. */ }
+            const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
+            if (!recentlySent) {
+              try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email); } catch { /* Keep the response generic. */ }
+            }
           }
         }
         return Response.json({ ok: true, message: 'If that identity exists and needs verification, a new email has been sent.' });
