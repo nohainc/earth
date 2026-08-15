@@ -1158,61 +1158,28 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listEventsPostgres(repository, viewer.id, limit));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [ledger, trades, maintenance, production, proposals] = await Promise.all([
-        env.DB.prepare('SELECT id, created_at AS occurred_at, reason_type AS type, amount, game_day, debit_account AS actor FROM ledger_entries ORDER BY created_at DESC LIMIT ?').bind(limit).all(),
-        env.DB.prepare("SELECT id, created_at AS occurred_at, 'market_trade' AS type, quantity AS amount, game_day, product AS actor FROM market_trades ORDER BY created_at DESC LIMIT ?").bind(limit).all(),
-        env.DB.prepare("SELECT id, created_at AS occurred_at, 'machine_maintenance' AS type, amount, game_day, machine_id AS actor FROM maintenance_events WHERE owner_id = ? ORDER BY created_at DESC LIMIT ?").bind(viewer.id, limit).all(),
-        env.DB.prepare("SELECT id, created_at AS occurred_at, 'machine_production' AS type, amount, game_day, machine_id AS actor FROM production_events WHERE owner_id = ? ORDER BY created_at DESC LIMIT ?").bind(viewer.id, limit).all(),
-        env.DB.prepare("SELECT id, opens_at AS occurred_at, 'proposal_opened' AS type, 0 AS amount, CAST(strftime('%s', opens_at) AS INTEGER) AS game_day, institution_id AS actor FROM proposals ORDER BY opens_at DESC LIMIT ?").bind(limit).all(),
-      ]);
-      const events = [...ledger.results, ...trades.results, ...maintenance.results, ...production.results, ...proposals.results]
-        .sort((a, b) => String((b as Record<string, unknown>).occurred_at).localeCompare(String((a as Record<string, unknown>).occurred_at)))
-        .slice(0, limit);
-      return Response.json({ ok: true, events, generatedAt: new Date().toISOString(), persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listEventsPostgres(repository, viewer.id, limit));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/notifications' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.id, limit));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const notifications = await env.DB.prepare('SELECT id, notification_type, title, body, entity_id, read_at, created_at FROM notifications WHERE human_id = ? ORDER BY created_at DESC LIMIT ?').bind(viewer.id, limit).all();
-      return Response.json({ notifications: notifications.results, unread: (await env.DB.prepare('SELECT COUNT(*) AS count FROM notifications WHERE human_id = ? AND read_at IS NULL').bind(viewer.id).first<{ count: number }>())?.count ?? 0, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.id, limit));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
     if (notificationReadMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => markNotificationReadPostgres(repository, viewer.id, notificationReadMatch[1]));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      await env.DB.prepare('UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE id = ? AND human_id = ?').bind(notificationReadMatch[1], viewer.id).run();
-      return Response.json({ ok: true, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => markNotificationReadPostgres(repository, viewer.id, notificationReadMatch[1]));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if ((url.pathname === '/api/audit' || url.pathname === '/api/world/audit') && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [balances, ledger, machines, succession, corporationCounts, cityCounts] = await Promise.all([
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
-        env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM machines WHERE condition < 0 OR condition > 100').first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS count FROM succession_plans WHERE human_id = ?').bind(viewer.id).first<{ count: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)').first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)').first<{ invalid: number }>(),
-      ]);
-      const checks = { balancesNonNegative: Number(balances?.invalid ?? 0) === 0, ledgerEntriesValid: Number(ledger?.invalid ?? 0) === 0, machineConditionsBounded: Number(machines?.invalid ?? 0) === 0, oneSuccessionPlanPerHuman: Number(succession?.count ?? 0) <= 1, corporationMemberCountsConsistent: Number(corporationCounts?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(cityCounts?.invalid ?? 0) === 0 };
-      return Response.json({ ok: Object.values(checks).every(Boolean), checks, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/institutions' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
