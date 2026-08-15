@@ -85,6 +85,8 @@
     "machines_output_resource_idx",
     "machines_input_resource_idx",
     "production_events_owner_idx",
-    "market_orders_reserved_idx"
+    "market_orders_reserved_idx",
+    "event_outbox_pending_idx",
+    "event_outbox_aggregate_idx"
   ]
 }
