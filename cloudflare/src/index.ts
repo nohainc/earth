@@ -475,7 +475,6 @@ async function auditFromPostgres(request: Request, env: Env): Promise<Response> 
 }
 
 async function institutionsFromPostgres(request: Request, env: Env): Promise<Response> {
-  if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
   if (!result) throw new Error('PostgreSQL repository is unavailable');
   return Response.json({ ...result, persistence: 'planetscale-postgres' });
