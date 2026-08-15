@@ -10,16 +10,29 @@
     "directory": "./flutter_client/build/web",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/api/*", "/edge/*", "/health"]
+    "run_worker_first": ["/", "/api/*", "/edge/*", "/health"]
   },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
-  "vars": { "ENVIRONMENT": "development" },
-  "d1_databases": [{ "binding": "DB", "database_name": "earth-world", "database_id": "440aa7a3-9418-49ab-90d2-7529c99a489a" }],
+  "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres" },
+  "send_email": [{ "name": "EMAIL" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
   "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],
   "triggers": { "crons": ["*/5 * * * *"] },
   "env": {
-    "staging": { "name": "earth-world-staging", "vars": { "ENVIRONMENT": "staging" } },
-    "production": { "name": "earth-world-production", "vars": { "ENVIRONMENT": "production" } }
+    "staging": {
+      "name": "earth-world-staging",
+      "vars": { "ENVIRONMENT": "staging", "PERSISTENCE_AUTHORITY": "postgres" },
+      "send_email": [{ "name": "EMAIL" }],
+      "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
+      "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] }
+    },
+    "production": {
+      "name": "earth-world-production",
+      "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres" },
+      "send_email": [{ "name": "EMAIL" }],
+      "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
+      "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] }
+    }
   }
 }

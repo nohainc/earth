@@ -4,14 +4,19 @@
   "private": true,
   "type": "module",
   "dependencies": {
-    "pg": "^8.12.0"
+    "pg": "^8.16.3"
   },
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js",
     "test": "node --test test/server.smoke.test.js test/simulation.test.js",
+    "cf:smoke": "node test/cloudflare.smoke.mjs",
     "cf:check": "wrangler deploy --dry-run",
-    "cf:types": "wrangler types"
+    "cf:types": "wrangler types",
+    "db:migrate:postgres": "node scripts/migrate-postgres.mjs",
+    "db:import:d1": "node scripts/import-d1-export.mjs",
+    "db:verify:d1-postgres": "node scripts/verify-d1-postgres.mjs",
+    "db:test:restore": "node scripts/test-backup-restore.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",

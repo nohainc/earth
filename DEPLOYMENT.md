@@ -12,10 +12,11 @@ DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm start
 
 ## Public preview
 
-- Primary virtual world: https://earthuc.com
-- Pages rollback client: https://earth-client.pages.dev
-- Immutable deployment: https://3b432e42.earth-client.pages.dev
+- Landing page: https://earthuc.com/landing
+- Authenticated Flutter application: https://earthuc.com/app
 - Worker API: https://earth-world.vitalii-e07.workers.dev
+
+The Worker serves the compiled Flutter web client from `flutter_client/build/web` at `/app`. The repository-root `index.html` and `landing.css` are the standalone marketing landing-page source; `/landing` is the public entry point and `/` redirects there.
 
 ## Cloudflare target
 
@@ -30,3 +31,13 @@ The current `server.js` remains the local PostgreSQL reference implementation. T
 ## Secrets
 
 Never commit `DATABASE_URL` or Cloudflare credentials. Use `.env` locally and Wrangler secrets in deployed environments.
+
+## Remote D1 verification
+
+```bash
+npx wrangler d1 migrations list earth-world --remote
+npx wrangler d1 execute earth-world --remote --command "SELECT 1 AS ok;"
+npm run cf:smoke
+```
+
+The Flutter web build is tested against the deployed API with `--dart-define=EARTH_API_URL=https://earthuc.com`; production uses the same Worker and remote D1 path.
