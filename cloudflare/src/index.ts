@@ -404,10 +404,21 @@ async function advanceWorldFromPostgres(request: Request, env: Env): Promise<Res
   }
 }
 
+async function productionEventsFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
+  const result = await withRepository(env, (repository) => repository.query('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = $1 ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT $2', [viewer.id, limit]));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ events: result.rows, persistence: 'planetscale-postgres' });
+}
+
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
+    if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);
     if (url.pathname === '/api/auth/me' && request.method === 'GET') {
       const human = await currentHuman(request, env);
       return Response.json({ authenticated: Boolean(human), human, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
