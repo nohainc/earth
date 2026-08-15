@@ -1229,10 +1229,11 @@ const worker = {
         { id: 'housing', name: 'Housing', output: 'components', machineTypes: ['housing-fabricator'], acquisition: MACHINE_CATALOG['housing-fabricator'] },
         { id: 'compute', name: 'Compute', output: 'compute', machineTypes: ['compute-node'], acquisition: MACHINE_CATALOG['compute-node'] },
         { id: 'r-and-d', name: 'R&D', output: 'compute', machineTypes: ['research-cluster'], acquisition: MACHINE_CATALOG['research-cluster'] },
-      ], rules: { serverAuthoritative: true, productionRequiresUtilization: true, depreciationApplied: true }, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
+      ], rules: { serverAuthoritative: true, productionRequiresUtilization: true, depreciationApplied: true }, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/technology' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listTechnologyPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/technology/projects' && request.method === 'POST') {
@@ -1242,88 +1243,42 @@ const worker = {
       const name = body.name?.trim();
       const budget = Math.round(Number(body.budget ?? 240) * 100) / 100;
       const focus = body.focus?.trim() ?? 'efficiency';
-      if (!name || name.length < 3 || name.length > 120 || !Number.isFinite(budget) || budget < 240 || budget > 100000 || !['efficiency','durability','safety','cost'].includes(focus)) return Response.json({ ok: false, error: 'Research name, focus, or initial budget is invalid' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createResearchProjectPostgres(repository, { ownerId: viewer.id, name, budget, focus, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Research project creation failed' }, { status: 409 });
-        }
+      if (!name || name.length < 3 || name.length > 120 || !Number.isFinite(budget) || budget < 240 || budget > 100000 || !['efficiency','durability','safety','cost'].includes(focus) || correlationId.length > 120) return Response.json({ ok: false, error: 'Research parameters are invalid' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => createResearchProjectPostgres(repository, { ownerId: viewer.id, name, budget, focus, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Research project creation failed' }, { status: 409 });
       }
-      const priorProject = await env.DB.prepare("SELECT reason_id FROM ledger_entries WHERE reason_type = 'research_project_funding' AND correlation_id = ?").bind(correlationId).first<{ reason_id: string }>();
-      if (priorProject) return Response.json({ ok: true, alreadyProcessed: true, project: await env.DB.prepare('SELECT * FROM research_projects WHERE id = ?').bind(priorProject.reason_id).first(), correlationId, persistence: 'cloudflare-d1' });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      if (!account || Number(account.balance) < budget) return Response.json({ ok: false, error: 'Insufficient Credits for research funding' }, { status: 409 });
-      const technologyId = `TECH-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const projectId = `PROJECT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(budget, account.account_id, budget),
-        env.DB.prepare("INSERT INTO technologies (id, name, owner_id, progress, version, metadata) VALUES (?, ?, ?, 0, 1, '{}')").bind(technologyId, name, viewer.id),
-        env.DB.prepare('INSERT INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day, focus) VALUES (?, ?, ?, ?, 0, \'active\', ?, ?)').bind(projectId, technologyId, viewer.id, budget, day, focus),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, account.account_id, projectId, budget, 'CREDIT', 'research_project_funding', projectId, 'research-v1', correlationId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'technology', 'Research project started', `${name} is now active with ${budget} Credits of funding.`, projectId),
-      ]);
-      return Response.json({ ok: true, project: await env.DB.prepare('SELECT * FROM research_projects WHERE id = ?').bind(projectId).first(), technology: await env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind(technologyId).first(), persistence: 'cloudflare-d1' }, { status: 201 });
     }
     if ((url.pathname === '/api/technology/TECH-001/fund' || url.pathname === '/api/technology/me/fund') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ amount?: number; correlationId?: string }>();
       const amount = Number(body.amount ?? 240);
-      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Funding amount must be positive' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => fundResearchProjectPostgres(repository, { ownerId: viewer.id, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Research funding failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
+      if (!Number.isFinite(amount) || amount <= 0 || correlationId.length > 120) return Response.json({ ok: false, error: 'Funding parameters are invalid' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => fundResearchProjectPostgres(repository, { ownerId: viewer.id, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Research funding failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
-      const priorFunding = await env.DB.prepare("SELECT reason_id, amount, game_day FROM ledger_entries WHERE reason_type = 'research_project_funding_increment' AND correlation_id = ?").bind(correlationId).first<{ reason_id: string; amount: number; game_day: number }>();
-      if (priorFunding) return Response.json({ ok: true, alreadyProcessed: true, amount: priorFunding.amount, gameDay: priorFunding.game_day, project: await env.DB.prepare('SELECT * FROM research_projects WHERE id = ?').bind(priorFunding.reason_id).first(), correlationId, persistence: 'cloudflare-d1' });
-      const project = await env.DB.prepare('SELECT * FROM research_projects WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewer.id).first<Record<string, unknown>>();
-      if (!project) return Response.json({ ok: false, error: 'Research project not found' }, { status: 404 });
-      if (project.owner_id !== viewer.id) return Response.json({ ok: false, error: 'This research project belongs to another Human' }, { status: 403 });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      if (!account || Number(account.balance) < amount) return Response.json({ ok: false, error: 'Insufficient Credits for research funding' }, { status: 409 });
-      const progress = Math.min(100, Number(project.progress) + Math.min(10, amount / 60));
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(amount, account.account_id, amount),
-        env.DB.prepare('UPDATE research_projects SET budget = budget + ?, progress = ? WHERE id = ?').bind(amount, progress, project.id),
-        env.DB.prepare('UPDATE technologies SET progress = ? WHERE id = ?').bind(progress, project.technology_id),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, account.account_id, project.id, amount, 'CREDIT', 'research_project_funding_increment', project.id, 'research-v2', correlationId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'technology', 'Research funding added', `${amount} Credits added to research project ${project.id}.`, project.id),
-      ]);
-      return Response.json({ ok: true, project: await env.DB.prepare('SELECT * FROM research_projects WHERE id = ?').bind(project.id).first(), technology: await env.DB.prepare('SELECT * FROM technologies WHERE id = ?').bind(project.technology_id).first(), correlationId, persistence: 'cloudflare-d1' });
     }
     if ((url.pathname === '/api/technology/TECH-001/patent' || url.pathname === '/api/technology/me/patent') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => grantPatentPostgres(repository, { ownerId: viewer.id }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Patent grant failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => grantPatentPostgres(repository, { ownerId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Patent grant failed' }, { status: 409 });
       }
-      const project = await env.DB.prepare('SELECT * FROM research_projects WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewer.id).first<Record<string, unknown>>();
-      if (!project || Number(project.progress) < 100) return Response.json({ ok: false, error: 'Research must reach 100% before patent grant' }, { status: 409 });
-      if (project.owner_id !== viewer.id) return Response.json({ ok: false, error: 'This research project belongs to another Human' }, { status: 403 });
-      const existing = await env.DB.prepare('SELECT * FROM patents WHERE technology_id = ? AND status = ?').bind(project.technology_id, 'active').first();
-      if (existing) return Response.json({ ok: true, patent: existing, persistence: 'cloudflare-d1' });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const patentId = `PAT-${project.technology_id}`;
-      await env.DB.prepare('INSERT INTO patents (id, technology_id, owner_id, granted_game_day, expiry_game_day) VALUES (?, ?, ?, ?, ?)').bind(patentId, project.technology_id, project.owner_id, day, day + 3650).run();
-      return Response.json({ ok: true, patent: await env.DB.prepare('SELECT * FROM patents WHERE id = ?').bind(patentId).first(), persistence: 'cloudflare-d1' });
     }
     if ((url.pathname === '/api/technology/TECH-001/license' || url.pathname === '/api/technology/me/license') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1331,45 +1286,19 @@ const worker = {
       const body = await request.json<{ licenseeId?: string; royaltyRate?: number; licenseFee?: number; otp?: string }>();
       const licenseeId = body.licenseeId || viewer.id;
       const royaltyRate = Number(body.royaltyRate ?? 0.05);
-      if (authorityMode(env) === 'postgres') {
-        const licenseFee = Math.round(Number(body.licenseFee ?? (licenseeId === viewer.id ? 0 : 100)) * 100) / 100;
-        const correlationId = crypto.randomUUID();
-        if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0 || licenseFee > 100000 || (licenseeId !== viewer.id && licenseFee < 50)) return Response.json({ ok: false, error: 'License terms are invalid' }, { status: 400 });
-        if (licenseeId !== viewer.id && !(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for external IP licensing' }, { status: 401 });
-        try {
-          const result = await withRepository(env, (repository) => licenseTechnologyPostgres(repository, { ownerId: viewer.id, licenseeId, royaltyRate, licenseFee, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Technology license failed' }, { status: 409 });
-        }
-      }
-      const patent = await env.DB.prepare('SELECT * FROM patents WHERE owner_id = ? AND status = ? ORDER BY granted_game_day DESC LIMIT 1').bind(viewer.id, 'active').first<Record<string, unknown>>();
-      if (!patent) return Response.json({ ok: false, error: 'An active patent is required' }, { status: 409 });
-      if (patent.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the patent owner can issue a license' }, { status: 403 });
-      if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1) return Response.json({ ok: false, error: 'Royalty rate must be between 0 and 1' }, { status: 400 });
-      const licensee = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(licenseeId).first();
-      if (!licensee) return Response.json({ ok: false, error: 'Licensee not found' }, { status: 404 });
       const licenseFee = Math.round(Number(body.licenseFee ?? (licenseeId === viewer.id ? 0 : 100)) * 100) / 100;
-      if (!Number.isFinite(licenseFee) || licenseFee < 0 || licenseFee > 100000 || (licenseeId !== viewer.id && licenseFee < 50)) return Response.json({ ok: false, error: 'External licenses require a fee between 50 and 100,000 Credits' }, { status: 400 });
-      if (licenseeId !== viewer.id && !(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for external IP licensing' }, { status: 401 });
-      const licenseId = `LIC-${patent.id}-${licenseeId}`;
-      const buyerAccount = licenseeId === viewer.id ? null : await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(licenseeId).first<{ account_id: string; balance: number }>();
-      const ownerAccount = licenseeId === viewer.id ? null : await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string }>();
-      if (licenseeId !== viewer.id && (!buyerAccount || !ownerAccount || Number(buyerAccount.balance) < licenseFee)) return Response.json({ ok: false, error: 'Licensee has insufficient Credits' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>)?.game_day ?? 184;
       const correlationId = crypto.randomUUID();
-      await env.DB.batch([
-        ...(licenseeId !== viewer.id ? [
-          env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(licenseFee, buyerAccount!.account_id, licenseFee),
-          env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(licenseFee, ownerAccount!.account_id),
-          env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, buyerAccount!.account_id, ownerAccount!.account_id, licenseFee, 'CREDIT', 'technology_license_fee', licenseId, 'technology-v2', correlationId),
-          env.DB.prepare("UPDATE business_financials SET operating_costs = operating_costs + ?, profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(licenseFee, licenseFee, day, licenseeId),
-          env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), licenseeId, 'technology', 'Technology license acquired', `You licensed patent ${patent.id} for ${licenseFee} Credits.`, licenseId),
-        ] : []),
-        env.DB.prepare('INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, royalty_rate) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET royalty_rate = excluded.royalty_rate, status = \'active\'').bind(licenseId, patent.id, patent.owner_id, licenseeId, royaltyRate),
-      ]);
-      return Response.json({ ok: true, license: await env.DB.prepare('SELECT * FROM technology_licenses WHERE id = ?').bind(licenseId).first(), licenseFee, correlationId, persistence: 'cloudflare-d1' });
+      if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0 || licenseFee > 100000 || (licenseeId !== viewer.id && licenseFee < 50)) return Response.json({ ok: false, error: 'License terms are invalid' }, { status: 400 });
+      if (licenseeId !== viewer.id && !(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for external IP licensing' }, { status: 401 });
+      try {
+        const result = await withRepository(env, (repository) => licenseTechnologyPostgres(repository, { ownerId: viewer.id, licenseeId, royaltyRate, licenseFee, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Technology license failed' }, { status: 409 });
+      }
     }
+
     if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
