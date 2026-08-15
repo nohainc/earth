@@ -110,6 +110,68 @@ For every slice, run:
 The authority flag is `postgres` after the completed cutover. Never switch only
 one side of a multi-command domain without recording the boundary.
 
+## Change and release procedure
+
+Use this order for every production change. Keep the change within one
+vertical slice when possible.
+
+### Flutter UI changes
+
+1. Edit `flutter_client/lib/main.dart` or the relevant Flutter feature files.
+2. Keep API calls in the client API/repository layer; do not put PostgreSQL or
+   Cloudflare logic in widgets.
+3. Add or update a widget test for the visible state and a client-side loading,
+   empty, success, and error state where applicable.
+4. Run `flutter analyze`, `flutter test`, and
+   `flutter build web --release --dart-define=EARTH_API_URL=https://earthuc.com`.
+5. Deploy the generated `flutter_client/build/web` assets together with the
+   Worker. If an app-shell change is not visible on the custom domain, check
+   the Worker custom-domain target and the `WEB_ASSET_VERSION` cache key before
+   changing application logic.
+
+### Worker/API changes
+
+1. Add the route at the Worker boundary and keep the response contract stable.
+2. Put authorization before loading private state; use the authenticated
+   Human ID from the server session, never a client-supplied owner ID.
+3. Put PostgreSQL state changes in a `*-postgres.ts` adapter and use one
+   transaction for related writes. Add idempotency and audit/correlation data.
+4. Add route tests plus transaction, rollback, replay, and authorization tests.
+5. Run `npm test`, `npm run cf:assert-postgres`, and
+   `npm run cf:check -- --env production` before deployment.
+
+### Database changes
+
+1. Add the next numbered SQL migration under `db/migrations/`.
+2. Update `db/schema-manifest.json` when schema or indexes change.
+3. Run `npm run db:migrate:postgres`, `npm run db:verify:manifest`, and the
+   normalized D1/PostgreSQL parity check where a backup comparison is relevant.
+4. Confirm `/api/health` reports PostgreSQL authority, schema readiness, data
+   readiness, non-negative balances, bounded machine conditions, and shadow
+   parity.
+5. Never reintroduce D1 as a fallback. D1 is deleted and is migration-history
+   evidence only.
+
+### Production promotion
+
+1. Review `git diff --check`, run all applicable gates, commit the slice, and
+   push the branch.
+2. Deploy with `npx wrangler deploy --env production --keep-vars`.
+3. Confirm the custom domain `earthuc.com` is attached to
+   `earth-world-production`, not the legacy `earth-world` service.
+4. Run `npm run cf:smoke` and verify `/api/health` on `https://earthuc.com`.
+5. Test the changed user journey in the browser using the public URL. Record
+   the Worker version ID and any migration version in the handoff.
+
+### Authentication-specific checks
+
+- Registration requires display name, email, password, and repeated password.
+- Verification-required login errors must expose a resend-verification action.
+- Verification and recovery responses remain generic for unknown addresses.
+- Verification resend is throttled server-side and uses `earth@nohainc.com`.
+- Session cookies are issued and cleared only by the Worker; Flutter never
+  stores or constructs an authentication token itself.
+
 ## Current PostgreSQL inventory
 
 PostgreSQL transaction slices currently live in production:

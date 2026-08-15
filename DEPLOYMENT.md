@@ -14,9 +14,13 @@ DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm start
 
 - Landing page: https://earthuc.com/landing
 - Authenticated Flutter application: https://earthuc.com/app
-- Worker API: https://earth-world.vitalii-e07.workers.dev
+- Worker API: https://earth-world-production.vitalii-e07.workers.dev
 
 The Worker serves the compiled Flutter web client from `flutter_client/build/web` at `/app`. The repository-root `index.html` and `landing.css` are the standalone marketing landing-page source; `/landing` is the public entry point and `/` redirects there.
+
+The `earthuc.com` custom domain is attached to the `earth-world-production`
+Worker. If the direct Worker URL and custom domain ever show different UI
+versions, inspect the custom-domain attachment before debugging Flutter code.
 
 ## Cloudflare target
 
