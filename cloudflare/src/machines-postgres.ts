@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
 
 type MachineInput = { id: string; owner_id: string; condition: string; maintenance_due: string; name: string; productive_capacity: string; utilization: string };
 
@@ -72,13 +73,23 @@ export async function upgradeMachine(repository: PostgresRepository, input: { ma
     const capacityAfter = Math.min(5, Math.round((capacityBefore + 0.2) * 100) / 100);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const debitedCredits = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.creditCost, account.rows[0].account_id]);
+    const transfer = await transferCredits(tx, {
+      ledgerId: crypto.randomUUID(),
+      gameDay: day,
+      debitAccount: account.rows[0].account_id,
+      creditAccount: 'account-ouc-treasury',
+      amount: input.creditCost,
+      reasonType: 'machine_upgrade',
+      reasonId: input.machineId,
+      ruleVersion: 'machine-v3',
+      correlationId: input.correlationId,
+    });
+    if (transfer.status === 'already_processed') return { ok: true, alreadyProcessed: true, eventId: prior.rows[0]?.id ?? transfer.ledgerId, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: input.correlationId };
     const debitedComponents = await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components' AND amount >= $1", [input.componentsCost, input.ownerId]);
-    if (debitedCredits.rowCount !== 1 || debitedComponents.rowCount !== 1) throw new Error('Machine upgrade resource reservation failed');
+    if (debitedComponents.rowCount !== 1) throw new Error('Machine upgrade resource reservation failed');
     await tx.query('UPDATE machines SET productive_capacity = $1, condition = GREATEST(0, condition - 5) WHERE id = $2 AND owner_id = $3', [capacityAfter, input.machineId, input.ownerId]);
     const eventId = crypto.randomUUID();
     await tx.query('INSERT INTO machine_upgrade_events (id, machine_id, owner_id, credit_cost, components_cost, capacity_before, capacity_after, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [eventId, input.machineId, input.ownerId, input.creditCost, input.componentsCost, capacityBefore, capacityAfter, day]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, account.rows[0].account_id, 'account-ouc-treasury', input.creditCost, 'CREDIT', 'machine_upgrade', input.machineId, 'machine-v3', input.correlationId]);
     return { ok: true, eventId, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], creditCost: input.creditCost, componentsCost: input.componentsCost, correlationId: input.correlationId };
   });
 }
