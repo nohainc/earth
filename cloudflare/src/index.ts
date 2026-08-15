@@ -1373,26 +1373,18 @@ const worker = {
     if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => {
-          const [account, state, machines, businesses] = await Promise.all([
-            repository.query("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
-            repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-            repository.query("SELECT id, machine_type, condition FROM machines WHERE owner_id = $1 AND machine_type != 'service-robot'", [viewer.id]),
-            repository.query('SELECT id, name, status FROM businesses WHERE owner_id = $1', [viewer.id]),
-          ]);
-          const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
-          return { account: account.rows[0] ?? null, state: stateRow, liquidatableAssets: { machines: machines.rows, businesses: businesses.rows }, protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100), basicServiceRobot: true } };
-        });
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [account, state, machines, businesses] = await Promise.all([
-        env.DB.prepare("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first(),
-        env.DB.prepare('SELECT * FROM personal_financial_states WHERE human_id = ?').bind(viewer.id).first(),
-        env.DB.prepare("SELECT id, machine_type, condition FROM machines WHERE owner_id = ? AND machine_type != 'service-robot'").bind(viewer.id).all(),
-        env.DB.prepare('SELECT id, name, status FROM businesses WHERE owner_id = ?').bind(viewer.id).all(),
-      ]);
-      return Response.json({ account, state: state ?? { status: 'active', protected_credits: 100 }, liquidatableAssets: { machines: machines.results, businesses: businesses.results }, protectedMinimum: { credits: Number(state?.protected_credits ?? 100), basicServiceRobot: true }, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => {
+        const [account, state, machines, businesses] = await Promise.all([
+          repository.query("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
+          repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
+          repository.query("SELECT id, machine_type, condition FROM machines WHERE owner_id = $1 AND machine_type != 'service-robot'", [viewer.id]),
+          repository.query('SELECT id, name, status FROM businesses WHERE owner_id = $1', [viewer.id]),
+        ]);
+        const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
+        return { account: account.rows[0] ?? null, state: stateRow, liquidatableAssets: { machines: machines.rows, businesses: businesses.rows }, protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100), basicServiceRobot: true } };
+      });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/finance/personal/declare' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1433,30 +1425,23 @@ const worker = {
     if (url.pathname === '/api/finance' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => {
-          const [account, rules] = await Promise.all([
-            repository.query("SELECT account_id, owner_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
-            repository.query('SELECT scope, category, rate, version FROM tax_rules WHERE active = true ORDER BY id'),
-          ]);
-          return { account: account.rows[0] ?? null, taxRules: rules.rows };
-        });
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [account, rules] = await Promise.all([
-        env.DB.prepare('SELECT account_id, owner_id, balance, currency FROM account_balances WHERE owner_id = ? AND currency = ?').bind(viewer.id, 'CREDIT').first(),
-        env.DB.prepare('SELECT scope, category, rate, version FROM tax_rules WHERE active = 1 ORDER BY id').all(),
-      ]);
-      return Response.json({ account, taxRules: rules.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => {
+        const [account, rules] = await Promise.all([
+          repository.query("SELECT account_id, owner_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
+          repository.query('SELECT scope, category, rate, version FROM tax_rules WHERE active = true ORDER BY id'),
+        ]);
+        return { account: account.rows[0] ?? null, taxRules: rules.rows };
+      });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
+
     if (url.pathname === '/api/contracts' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = $1 OR negotiated_contracts.counterparty_id = $1 ORDER BY negotiated_contracts.created_at DESC LIMIT 50", [viewer.id]));
-        if (result) return Response.json({ contracts: result.rows, persistence: 'planetscale-postgres' });
-      }
-      return Response.json({ contracts: (await env.DB.prepare("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = ? OR negotiated_contracts.counterparty_id = ? ORDER BY negotiated_contracts.created_at DESC LIMIT 50").bind(viewer.id, viewer.id).all()).results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => repository.query("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = $1 OR negotiated_contracts.counterparty_id = $1 ORDER BY negotiated_contracts.created_at DESC LIMIT 50", [viewer.id]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ contracts: result.rows, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/contracts' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
