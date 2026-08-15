@@ -6,17 +6,17 @@ export async function createResearchProject(repository: PostgresRepository, inpu
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ reason_id: string }>("SELECT reason_id FROM ledger_entries WHERE reason_type = 'research_project_funding' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [prior.rows[0].reason_id])).rows[0], correlationId: input.correlationId };
-    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
-    if (!account.rows[0] || Number(account.rows[0].balance) < input.budget) throw new Error('Insufficient Credits for research funding');
+    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.ownerId]);
+    const budgetCents = moneyToCents(input.budget);
+    const budget = centsToMoney(budgetCents);
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < budgetCents) throw new Error('Insufficient Credits for research funding');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const debited = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.budget, account.rows[0].account_id]);
-    if (debited.rowCount !== 1) throw new Error('Research funding reservation failed');
     const technologyId = `TECH-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const projectId = `PROJECT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-research-registry', amount: budget, reasonType: 'research_project_funding', reasonId: projectId, ruleVersion: 'research-v3', correlationId: input.correlationId });
     await tx.query("INSERT INTO technologies (id, name, owner_id, progress, version, metadata) VALUES ($1,$2,$3,0,1,'{}')", [technologyId, input.name, input.ownerId]);
-    await tx.query("INSERT INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day, focus) VALUES ($1,$2,$3,$4,0,'active',$5,$6)", [projectId, technologyId, input.ownerId, input.budget, day, input.focus]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, account.rows[0].account_id, projectId, input.budget, 'CREDIT', 'research_project_funding', projectId, 'research-v1', input.correlationId]);
+    await tx.query("INSERT INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day, focus) VALUES ($1,$2,$3,$4,0,'active',$5,$6)", [projectId, technologyId, input.ownerId, budget, day, input.focus]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Research project started', `${input.name} is now active with ${input.budget} Credits of funding.`, projectId]);
     return { ok: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [projectId])).rows[0], technology: (await tx.query('SELECT * FROM technologies WHERE id = $1', [technologyId])).rows[0], correlationId: input.correlationId };
   });
@@ -28,18 +28,18 @@ export async function fundResearchProject(repository: PostgresRepository, input:
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, amount: Number(prior.rows[0].amount), gameDay: prior.rows[0].game_day, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [prior.rows[0].reason_id])).rows[0], correlationId: input.correlationId };
     const project = await tx.query<{ id: string; technology_id: string; owner_id: string; budget: string; progress: string }>('SELECT id, technology_id, owner_id, budget, progress FROM research_projects WHERE owner_id = $1 ORDER BY id LIMIT 1 FOR UPDATE', [input.ownerId]);
     if (!project.rows[0]) throw new Error('Research project not found');
-    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
-    if (!account.rows[0] || Number(account.rows[0].balance) < input.amount) throw new Error('Insufficient Credits for research funding');
+    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.ownerId]);
+    const amountCents = moneyToCents(input.amount);
+    const amount = centsToMoney(amountCents);
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < amountCents) throw new Error('Insufficient Credits for research funding');
     const progress = Math.min(100, Number(project.rows[0].progress) + Math.min(10, input.amount / 60));
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const debited = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.amount, account.rows[0].account_id]);
-    if (debited.rowCount !== 1) throw new Error('Research funding reservation failed');
-    await tx.query('UPDATE research_projects SET budget = budget + $1, progress = $2 WHERE id = $3', [input.amount, progress, project.rows[0].id]);
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-research-registry', amount, reasonType: 'research_project_funding_increment', reasonId: project.rows[0].id, ruleVersion: 'research-v3', correlationId: input.correlationId });
+    await tx.query('UPDATE research_projects SET budget = budget + $1, progress = $2 WHERE id = $3', [amount, progress, project.rows[0].id]);
     await tx.query('UPDATE technologies SET progress = $1 WHERE id = $2', [progress, project.rows[0].technology_id]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, account.rows[0].account_id, project.rows[0].id, input.amount, 'CREDIT', 'research_project_funding_increment', project.rows[0].id, 'research-v2', input.correlationId]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Research funding added', `${input.amount} Credits added to research project ${project.rows[0].id}.`, project.rows[0].id]);
-    return { ok: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [project.rows[0].id])).rows[0], technology: (await tx.query('SELECT * FROM technologies WHERE id = $1', [project.rows[0].technology_id])).rows[0], amount: input.amount, correlationId: input.correlationId };
+    return { ok: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [project.rows[0].id])).rows[0], technology: (await tx.query('SELECT * FROM technologies WHERE id = $1', [project.rows[0].technology_id])).rows[0], amount: Number(amount), correlationId: input.correlationId };
   });
 }
 

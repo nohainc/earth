@@ -8,21 +8,21 @@ export async function acquireMachine(repository: PostgresRepository, input: { ow
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ reason_id: string }>("SELECT reason_id FROM ledger_entries WHERE reason_type = 'machine_acquisition' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [prior.rows[0].reason_id])).rows[0], acquisitionId: input.correlationId };
-    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
+    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.ownerId]);
     const material = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'material' FOR UPDATE", [input.ownerId]);
-    if (!account.rows[0] || Number(account.rows[0].balance) < input.credit) throw new Error('Insufficient Credits for machine acquisition');
+    const creditCents = moneyToCents(input.credit);
+    const credit = centsToMoney(creditCents);
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCents) throw new Error('Insufficient Credits for machine acquisition');
     if (!material.rows[0] || Number(material.rows[0].amount) < input.material) throw new Error('Insufficient Material for machine acquisition');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     const machineId = `M-${input.ownerId}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    const debitedAccount = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.credit, account.rows[0].account_id]);
-    if (debitedAccount.rowCount !== 1) throw new Error('Machine acquisition credit reservation failed');
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-machine-registry', amount: credit, reasonType: 'machine_acquisition', reasonId: machineId, ruleVersion: 'machine-v3', correlationId: input.correlationId });
     const debitedMaterial = await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'material' AND amount >= $1", [input.material, input.ownerId]);
     if (debitedMaterial.rowCount !== 1) throw new Error('Machine acquisition material reservation failed');
     await tx.query('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity, output_resource, input_resource) VALUES ($1,$2,$3,$4,100,25,0,$5,$6,$7)', [machineId, input.ownerId, input.name, input.machineType, input.capacity, input.output, input.inputResource]);
     await tx.query("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, $1, $2, 'machine-acquisition' FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1", [machineId, day, input.ownerId]);
-    await tx.query('INSERT INTO machine_acquisitions (id, machine_id, owner_id, machine_type, credit_cost, material_cost, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7)', [input.correlationId, machineId, input.ownerId, input.machineType, input.credit, input.material, day]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, account.rows[0].account_id, 'machine-registry', input.credit, 'CREDIT', 'machine_acquisition', machineId, 'machine-v2', input.correlationId]);
+    await tx.query('INSERT INTO machine_acquisitions (id, machine_id, owner_id, machine_type, credit_cost, material_cost, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7)', [input.correlationId, machineId, input.ownerId, input.machineType, credit, input.material, day]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'MACHINE', machineId, null, input.ownerId, 1, 'machine_acquisition', input.correlationId, day]);
     return { ok: true, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [machineId])).rows[0], acquisitionId: input.correlationId };
   });

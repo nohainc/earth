@@ -103,6 +103,11 @@ existing treasury/shared-credit columns are synchronized read projections for
 API compatibility; contributions, public spending, recovery, and inter-
 institution funding move credits through those accounts first.
 
+Research and machine acquisition use explicit registry accounts as the credit
+destination for committed funding. This keeps asset funding in the money
+ledger without pretending that a research project or machine row is itself a
+spendable credit account.
+
 Such a function must have explicit parameters, deterministic lock ordering,
 idempotency behavior, a small result shape, migration coverage, and a focused
 integration test.
