@@ -37,6 +37,7 @@ jobs:
           npm run db:migrate:postgres
           PGPASSWORD=earth_ci psql -h localhost -U earth -d earth -f db/seed.sql
       - run: npm run check
+      - run: npm run cf:assert-postgres
       - run: npm test
         env:
           DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth
