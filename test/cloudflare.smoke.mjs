@@ -54,6 +54,20 @@ assert.ok(['below-corridor', 'inside-corridor', 'above-corridor'].includes(liqui
 const marketBook = await get('/api/market/book');
 assert.equal(marketBook.response.status, 200);
 assert.equal(typeof marketBook.body.feeRate, 'number');
+for (const path of [
+  '/api/institutions',
+  '/api/governance/roles',
+  '/api/governance/rules',
+  '/api/rankings',
+  '/api/history',
+  '/api/cities',
+  '/api/corporations',
+  '/api/technology',
+]) {
+  const read = await get(path);
+  assert.equal(read.response.status, 200, `${path} should be public`);
+  assert.equal(read.body.persistence, 'planetscale-postgres', `${path} must use PostgreSQL`);
+}
 
 const catalog = await get('/api/production/catalog');
 assert.equal(catalog.response.status, 200);
