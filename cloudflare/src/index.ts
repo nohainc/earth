@@ -18,7 +18,7 @@ import { changeDelegation as changeDelegationPostgres, changeRole as changeRoleP
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
-import { auditWorld as auditWorldPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres } from './read-postgres';
+import { auditWorld as auditWorldPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres } from './read-postgres';
 
 const SESSION_DAYS = 7;
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
@@ -2710,13 +2710,7 @@ const worker = {
     if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
       if (authorityMode(env) === 'postgres') {
         await withRepository(env, (repository) => resolveProposalsPostgres(repository));
-        const result = await withRepository(env, async (repository) => {
-          const [proposals, ballots] = await Promise.all([
-            repository.query('SELECT * FROM proposals ORDER BY closes_at ASC'),
-            repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
-          ]);
-          return { proposals: proposals.rows, voteCounts: ballots.rows };
-        });
+        const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
         if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
       }
       await resolveGovernanceProposals(env);
@@ -2726,8 +2720,8 @@ const worker = {
     }
     if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
       if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC"));
-        if (result) return Response.json({ rules: result.rows, persistence: 'planetscale-postgres' });
+        const result = await withRepository(env, (repository) => listGovernanceRulesPostgres(repository));
+        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
       }
       const rules = await env.DB.prepare("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC").all();
       return Response.json({ rules: rules.results, persistence: 'cloudflare-d1' });

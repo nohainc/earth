@@ -94,6 +94,19 @@ export async function listTechnology(repository: PostgresRepository): Promise<Re
   return { projects: projects.rows, patents: patents.rows, licenses: licenses.rows };
 }
 
+export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const [proposals, ballots] = await Promise.all([
+    repository.query('SELECT * FROM proposals ORDER BY closes_at ASC'),
+    repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
+  ]);
+  return { proposals: proposals.rows, voteCounts: ballots.rows };
+}
+
+export async function listGovernanceRules(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const rules = await repository.query("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC");
+  return { rules: rules.rows };
+}
+
 export async function readBusiness(repository: PostgresRepository, businessId: string, viewerId: string): Promise<Record<string, unknown>> {
   const business = await repository.query("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, business_financials.revenue, business_financials.operating_costs, business_financials.profit, business_financials.taxed_revenue, business_financials.last_game_day, business_financials.updated_at FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))", [businessId, viewerId]);
   return business.rows[0] ? { business: business.rows[0] } : { error: 'Business financial statement is not available to this Human' };
