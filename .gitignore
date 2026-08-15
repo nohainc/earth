@@ -7,3 +7,4 @@ build/
 .idea/
 .vscode/
 *.log
+backups/earth-d1-cutover-backup.sql

@@ -9,6 +9,7 @@ dependencies:
   flutter:
     sdk: flutter
   http: ^1.2.0
+  web_socket_channel: ^3.0.3
   cupertino_icons: ^1.0.6
 dev_dependencies:
   flutter_test:
