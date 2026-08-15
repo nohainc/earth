@@ -37,6 +37,7 @@ database.
 | Notifications, audit, activity, SSE/WebSocket | Implemented | Read-model rebuild and event ordering verification |
 | Transactional side effects and retry delivery | Implemented | PostgreSQL outbox, row-lock claiming, retry delay, and post-publish acknowledgement |
 | Game-time governance windows | Implemented | Migration 007 stores proposal close and implementation boundaries as game day/minute |
+| Atomic credit transfer | Implemented | Migration 008 keeps balance mutation, idempotency replay, and ledger insertion inside one PostgreSQL primitive |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 
 ## Required migration gates
