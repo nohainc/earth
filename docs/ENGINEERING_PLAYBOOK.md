@@ -118,10 +118,9 @@ For every slice, run:
 
 1. pure domain tests;
 2. repository transaction tests, including rollback and replay;
-3. D1/PostgreSQL normalized parity checks;
-4. `npm test` and `npm run cf:check`;
-5. production smoke test and `/api/health` shadow parity;
-6. one monitored game-day before promoting authority.
+3. `npm test`, `npm run cf:assert-postgres`, and `npm run cf:check`;
+4. production smoke test and `/api/health` persistence/readiness checks;
+5. one monitored game-day after each scheduled-simulation change.
 
 The authority flag is `postgres` after the completed cutover. Never switch only
 one side of a multi-command domain without recording the boundary.
@@ -161,8 +160,7 @@ vertical slice when possible.
 
 1. Add the next numbered SQL migration under `db/migrations/`.
 2. Update `db/schema-manifest.json` when schema or indexes change.
-3. Run `npm run db:migrate:postgres`, `npm run db:verify:manifest`, and the
-   normalized D1/PostgreSQL parity check where a backup comparison is relevant.
+3. Run `npm run db:migrate:postgres` and `npm run db:verify:manifest`.
 4. Confirm `/api/health` reports PostgreSQL authority, schema readiness, data
    readiness, non-negative balances, bounded machine conditions, and shadow
    parity.
@@ -208,6 +206,8 @@ PostgreSQL transaction slices currently live in production:
 - governance, research, licensing, and scheduled world advancement;
 - scheduled depreciation, taxation, basic levy, AI maintenance, contract
   completion, financial-state transitions, and ranking snapshots.
+- starter-package onboarding with live market, production, governance, and
+  Community opportunity signals in the authenticated command center.
 
 The remaining entries are feature-completion slices, not persistence-authority
 promotion gates.
