@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL feature schema.
--- This is the reviewed PostgreSQL equivalent of D1 migrations 0003–0050.
--- Apply only after 001_initial.sql and only through a reviewed migration runner.
+-- Reviewed PostgreSQL feature schema. Apply after 001_initial.sql through the
+-- migration runner; this migration is additive and preserves live data.
 -- It is intentionally additive and does not drop or rewrite existing data.
 
 create table if not exists communities (

@@ -31,7 +31,7 @@ export type PostgresProbe = {
   dataReady: boolean;
 };
 
-/** Read-only connectivity check used during the staged D1 → PostgreSQL migration. */
+/** Read-only connectivity check used by the PostgreSQL readiness endpoint. */
 export async function probePostgres(binding?: HyperdriveBinding): Promise<PostgresProbe> {
   if (!binding?.connectionString) return { configured: false, reachable: false, schemaReady: false, dataReady: false };
 

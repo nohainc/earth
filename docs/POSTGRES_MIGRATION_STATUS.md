@@ -40,13 +40,13 @@ database.
 
 ## Required migration gates
 
-1. Translate all 50 D1 migrations into reviewed PostgreSQL migrations. Preserve
-   the existing identifiers, correlation IDs, and game-day semantics.
+1. Maintain the reviewed PostgreSQL migrations. Preserve existing identifiers,
+   correlation IDs, and game-day semantics as the schema evolves.
 2. Add and continuously verify `db/schema-manifest.json` with expected tables,
    columns, unique constraints, and indexes. CI and the release checklist run
    `npm run db:verify:manifest` before PostgreSQL is treated as deployable.
-3. Copy data in dependency order using checksums and row counts. Do not mutate
-   D1 during the first verification pass.
+3. Apply schema and data changes in dependency order using checksums and row
+   counts against PostgreSQL backups or isolated staging databases.
 4. Introduce repository boundaries for reads, writes, transactions, and batch
    operations. Keep provider-specific SQL inside the adapter.
 5. Verify invariants: credits conserved, balances non-negative, ledger entries

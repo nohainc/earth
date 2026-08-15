@@ -1,4 +1,4 @@
--- Compatibility structures discovered during the non-destructive D1 export review.
+-- Compatibility structures retained during the initial PostgreSQL cutover.
 -- Kept separate so migration 002 remains checksum-stable after application.
 create table if not exists resource_balances (
   owner_id text not null,
