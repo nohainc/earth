@@ -123,7 +123,8 @@ vertical slice when possible.
 3. Add or update a widget test for the visible state and a client-side loading,
    empty, success, and error state where applicable.
 4. Run `flutter analyze`, `flutter test`, and
-   `flutter build web --release --dart-define=EARTH_API_URL=https://earthuc.com`.
+   `flutter build web --release --dart-define=EARTH_API_URL=https://earthuc.com`,
+   followed by `npm run flutter:prepare:web`.
 5. Deploy the generated `flutter_client/build/web` assets together with the
    Worker. If an app-shell change is not visible on the custom domain, check
    the Worker custom-domain target and the `WEB_ASSET_VERSION` cache key before

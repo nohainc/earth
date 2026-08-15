@@ -13,6 +13,7 @@
     "cf:smoke": "node test/cloudflare.smoke.mjs",
     "cf:check": "wrangler deploy --dry-run",
     "cf:assert-postgres": "node scripts/assert-postgres-authority.mjs",
+    "flutter:prepare:web": "node scripts/prepare-flutter-assets.mjs",
     "cf:types": "wrangler types",
     "db:migrate:postgres": "node scripts/migrate-postgres.mjs",
     "db:import:d1": "node scripts/import-d1-export.mjs",
