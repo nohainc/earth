@@ -84,7 +84,7 @@ npm test
 - macro liquidity corridor reporting and essential-service lifecycle effects
 - simulated day advancement
 - authoritative prototype API with ledger entries and auditable command outcomes
-- aurora/night and daylight themes
+- aurora/night futuristic visual system with a consistent command-center UI
 
 ## PostgreSQL and Flutter verification
 

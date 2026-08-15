@@ -23,6 +23,10 @@ The domain and application layers must not import Cloudflare bindings. Cloudflar
 bindings belong in infrastructure adapters. Durable Objects coordinate live
 events and market presence; they do not own authoritative economic state.
 
+The client uses one coherent futuristic visual system for the current release;
+theme preferences are intentionally deferred so gameplay information hierarchy
+and accessibility remain consistent across Humans.
+
 ## Vertical slices
 
 Build one complete feature at a time:
