@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { centsToMoney, marketValueToCents, moneyToCents, rateAmountToCents, rateToMicros, taxToCents } from '../cloudflare/src/money.ts';
+import { centsToMoney, compoundRateAmountToCents, marketValueToCents, moneyToCents, rateAmountToCents, rateToMicros, taxToCents } from '../cloudflare/src/money.ts';
 
 test('parses and formats money without floating-point drift', () => {
   assert.equal(moneyToCents('0.10'), 10n);
@@ -19,6 +19,11 @@ test('calculates market totals and fees with exact cents', () => {
   assert.equal(total, 3003n);
   assert.equal(rateAmountToCents(total, '0.0125'), 38n);
   assert.equal(centsToMoney(total + rateAmountToCents(total, '0.0125')), '30.41');
+});
+
+test('calculates compounded scheduler rates deterministically', () => {
+  assert.equal(compoundRateAmountToCents(10000n, '1.25', '0.10'), 1250n);
+  assert.equal(rateAmountToCents(1250n, '0.20', 1), 250n);
 });
 
 test('rejects invalid or out-of-bounds financial values', () => {

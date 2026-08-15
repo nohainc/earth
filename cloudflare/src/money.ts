@@ -43,8 +43,21 @@ export function marketValueToCents(quantity: number, unitPrice: unknown): bigint
   return BigInt(quantity) * cents;
 }
 
-export function rateAmountToCents(amountCents: bigint, rate: unknown): bigint {
+export function rateAmountToCents(amountCents: bigint, rate: unknown, maximumRate = 0.05): bigint {
   const micros = rateToMicros(rate);
-  if (amountCents < 0n || micros < 0n || micros > 50_000n) throw new Error('Market fee inputs are outside engine bounds');
+  if (amountCents < 0n || micros < 0n || micros > BigInt(Math.round(maximumRate * 1_000_000))) throw new Error('Rate inputs are outside engine bounds');
   return (amountCents * micros + RATE_SCALE / 2n) / RATE_SCALE;
+}
+
+export function compoundRateAmountToCents(amountCents: bigint, ...rates: unknown[]): bigint {
+  if (amountCents < 0n) throw new Error('Rate base must not be negative');
+  let numerator = amountCents;
+  let denominator = 1n;
+  for (const rate of rates) {
+    const micros = rateToMicros(rate);
+    if (micros < 0n || micros > 3_000_000n) throw new Error('Compound rate is outside engine bounds');
+    numerator *= micros;
+    denominator *= RATE_SCALE;
+  }
+  return (numerator + denominator / 2n) / denominator;
 }
