@@ -15,6 +15,13 @@ export function moneyToCents(value: unknown): bigint {
   return parts.negative ? -cents : cents;
 }
 
+export function quantityToCents(value: unknown): bigint {
+  const parts = decimalParts(value, RATE_PATTERN);
+  const micros = parts.whole * RATE_SCALE + BigInt(parts.fraction.padEnd(6, '0').slice(0, 6));
+  const cents = (micros + 5_000n) / 10_000n;
+  return parts.negative ? -cents : cents;
+}
+
 export function centsToMoney(cents: bigint): string {
   const negative = cents < 0n;
   const absolute = negative ? -cents : cents;

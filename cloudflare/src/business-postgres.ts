@@ -1,4 +1,6 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, marketValueToCents, moneyToCents } from './money';
 
 const sectors = new Set(['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d']);
 
@@ -10,22 +12,21 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
     const nameConflict = await tx.query('SELECT id FROM institutions WHERE name = $1', [input.name]);
     if (nameConflict.rows[0]) throw new Error('Business name already exists');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
-    const fee = 250;
-    if (!account.rows[0] || Number(account.rows[0].balance) < fee) throw new Error('Business registration requires 250 Credits');
+    const feeCents = 25000n;
+    const fee = centsToMoney(feeCents);
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < feeCents) throw new Error('Business registration requires 250 Credits');
     const businessId = `B-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [fee, account.rows[0].account_id]);
-    await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [fee]);
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-ouc-treasury', amount: fee, reasonType: 'business_registration', reasonId: businessId, ruleVersion: 'business-v2', correlationId: input.correlationId });
     await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, input.name]);
     await tx.query("INSERT INTO businesses (id, owner_id, name, policy, condition, sector) VALUES ($1,$2,$3,'reliability',100,$4)", [businessId, input.ownerId, input.name, input.sector]);
     await tx.query('INSERT INTO business_financials (business_id, last_game_day) VALUES ($1,$2)', [businessId, day]);
     await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,100)', [businessId, input.ownerId]);
     await tx.query('INSERT INTO business_constitutions (business_id, updated_by, updated_game_day) VALUES ($1,$2,$3)', [businessId, input.ownerId, day]);
     await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, input.ownerId, day]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [input.correlationId, day, account.rows[0].account_id, 'account-ouc-treasury', fee, 'CREDIT', 'business_registration', businessId, 'business-v2', input.correlationId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.formed', `${input.name} was registered`, JSON.stringify({ businessId, sector: input.sector, founder: input.ownerId })]);
-    return { ok: true, business: (await tx.query('SELECT * FROM businesses WHERE id = $1', [businessId])).rows[0], shares: 100, fee, correlationId: input.correlationId };
+    return { ok: true, business: (await tx.query('SELECT * FROM businesses WHERE id = $1', [businessId])).rows[0], shares: 100, fee: Number(fee), correlationId: input.correlationId };
   });
 }
 
@@ -57,20 +58,18 @@ export async function issueShares(repository: PostgresRepository, input: { owner
     if (!business.rows[0] || business.rows[0].owner_id !== input.ownerId) throw new Error('Only the Business owner may issue shares');
     const recipient = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [input.recipientId]);
     if (!recipient.rows[0]) throw new Error('Recipient Human not found');
-    const total = Math.round(input.shares * input.pricePerShare * 100) / 100;
+    const totalCents = marketValueToCents(input.shares, input.pricePerShare);
+    const total = centsToMoney(totalCents);
     const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id FOR UPDATE", [input.recipientId, input.ownerId]);
     const buyer = accounts.rows.find((row) => row.owner_id === input.recipientId);
     const owner = accounts.rows.find((row) => row.owner_id === input.ownerId);
-    if (!buyer || !owner || Number(buyer.balance) < total) throw new Error('Recipient has insufficient Credits');
+    if (!buyer || !owner || moneyToCents(buyer.balance) < totalCents) throw new Error('Recipient has insufficient Credits');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const debited = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [total, buyer.account_id]);
-    if (debited.rowCount !== 1) throw new Error('Share issuance payment reservation failed');
-    await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [total, owner.account_id]);
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: total, reasonType: 'share_issuance', reasonId: input.businessId, ruleVersion: 'shares-v2', correlationId: input.correlationId });
     await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,$3) ON CONFLICT(business_id, holder_id) DO UPDATE SET shares = business_shares.shares + excluded.shares, updated_at = CURRENT_TIMESTAMP', [input.businessId, input.recipientId, input.shares]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, buyer.account_id, owner.account_id, total, 'CREDIT', 'share_issuance', input.businessId, 'shares-v2', input.correlationId]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'BUSINESS_SHARES', input.businessId, input.ownerId, input.recipientId, input.shares, 'share_issuance', input.correlationId, day]);
-    return { ok: true, businessId: input.businessId, recipientId: input.recipientId, shares: input.shares, pricePerShare: input.pricePerShare, total, correlationId: input.correlationId, holdings: (await tx.query('SELECT holder_id, shares FROM business_shares WHERE business_id = $1 ORDER BY shares DESC', [input.businessId])).rows };
+    return { ok: true, businessId: input.businessId, recipientId: input.recipientId, shares: input.shares, pricePerShare: input.pricePerShare, total: Number(total), correlationId: input.correlationId, holdings: (await tx.query('SELECT holder_id, shares FROM business_shares WHERE business_id = $1 ORDER BY shares DESC', [input.businessId])).rows };
   });
 }
 
