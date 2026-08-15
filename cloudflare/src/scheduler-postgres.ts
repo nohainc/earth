@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository';
 import { settleMarket } from './market-postgres';
+import { processMortality } from './lifecycle-postgres';
 
 const products = ['material', 'components', 'energy', 'compute'];
 
@@ -166,6 +167,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
       await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [day]);
       await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
+      if (day % 365 === 0) await processMortality(tx, day);
       await settleBusinessDepreciation(tx, day);
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
