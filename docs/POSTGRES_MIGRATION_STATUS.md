@@ -12,7 +12,7 @@ successful D1-free production deployment.
 - Current live authority: PlanetScale PostgreSQL through Hyperdrive binding `HYPERDRIVE`
 - Retired authority: Cloudflare D1 database `earth-world` (deleted after cutover)
 - Coordination only: Durable Object `MARKET_COORDINATOR`
-- Side effects: email binding and future outbox/queue processing
+- Side effects: email binding and PostgreSQL transactional outbox delivery
 
 The Hyperdrive connection is configured as `planetscale-earth-main-2eh5` and
 is verified by `/api/health` as the authoritative gameplay store.
@@ -35,6 +35,7 @@ database.
 | Businesses, shares, constitutions, managers, statements, taxes | Implemented | Share ownership and financial statement reconciliation |
 | AI assistants and service effects | Implemented | Policy/authority boundaries and cost ledger parity |
 | Notifications, audit, activity, SSE/WebSocket | Implemented | Read-model rebuild and event ordering verification |
+| Transactional side effects and retry delivery | Implemented | PostgreSQL outbox, row-lock claiming, retry delay, and post-publish acknowledgement |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 
 ## Required migration gates

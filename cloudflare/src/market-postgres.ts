@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { enqueueOutbox } from './outbox-postgres';
 
 type MarketOrderInput = {
   humanId: string;
@@ -78,6 +79,13 @@ export async function settleMarket(repository: PostgresRepository, product: stri
     await tx.query('INSERT INTO market_trades (id, order_id, product, quantity, clearing_price, game_day) VALUES ($1,$2,$3,$4,$5,$6)', [tradeId, buyOrder.id, product, fill, clearingPrice, gameDay]);
     await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [tradeId, gameDay, buyOrder.human_id, sellOrder.human_id, total, 'CREDIT', 'market_trade', buyOrder.id, 'market-v3', tradeId]);
     if (fee > 0) await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), gameDay, buyOrder.human_id, 'account-ouc-treasury', fee, 'CREDIT', 'market_fee', buyOrder.id, 'market-v3', tradeId]);
+    await enqueueOutbox(tx, {
+      eventKey: `market-trade:${tradeId}`,
+      topic: 'world_activity',
+      aggregateType: 'market_trade',
+      aggregateId: tradeId,
+      payload: { type: 'world_activity', gameDay, category: 'market', tradeId, product, quantity: fill },
+    });
     return { ok: true, filled: true, buyOrderId: buyOrder.id, sellOrderId: sellOrder.id, tradeId, product, quantity: fill, clearingPrice, total, fee, payable };
   });
 }

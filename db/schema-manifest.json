@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 5,
+  "migrationVersion": 6,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -28,6 +28,7 @@
     "corporations": ["id", "institution_id", "treasury"],
     "deceased_profiles": ["human_id", "death_game_day"],
     "earth_schema_migrations": ["version", "name", "checksum"],
+    "event_outbox": ["id", "event_key", "topic", "payload", "processed_at"],
     "financial_states": ["institution_id", "status", "since_game_day"],
     "governance_rules": ["id", "institution_id", "category"],
     "humans": ["id", "account_id", "life_status"],

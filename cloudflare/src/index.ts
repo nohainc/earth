@@ -16,6 +16,7 @@ import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
 import { changeDelegation as changeDelegationPostgres, changeRole as changeRolePostgres, listRoles as listRolesPostgres } from './roles-postgres';
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
+import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres } from './read-postgres';
 
@@ -3199,7 +3200,9 @@ const worker = {
     if (authorityMode(env) === 'postgres') {
       const result = await withRepository(env, async (repository) => {
         await resolveProposalsPostgres(repository);
-        return advanceWorldPostgres(repository);
+        const world = await advanceWorldPostgres(repository);
+        const delivered = await deliverOutbox(repository, (event) => env.MARKET_COORDINATOR.getByName('events-global').broadcast(event.payload));
+        return { ...world, outboxDelivered: delivered };
       });
       if (result) {
         await env.MARKET_COORDINATOR.getByName('events-global').broadcast({ type: result.newDay ? 'world_day_started' : 'world_tick', gameDay: result.day, gameMinute: result.minute, productionEvents: result.productionEvents, marketSettlements: result.marketSettlements, at: new Date().toISOString() });
