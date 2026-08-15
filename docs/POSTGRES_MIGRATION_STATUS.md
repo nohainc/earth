@@ -41,8 +41,9 @@ database.
 
 1. Translate all 50 D1 migrations into reviewed PostgreSQL migrations. Preserve
    the existing identifiers, correlation IDs, and game-day semantics.
-2. Add a schema manifest with expected tables, columns, unique constraints, and
-   indexes. The Worker must report parity before PostgreSQL becomes authoritative.
+2. Add and continuously verify `db/schema-manifest.json` with expected tables,
+   columns, unique constraints, and indexes. CI and the release checklist run
+   `npm run db:verify:manifest` before PostgreSQL is treated as deployable.
 3. Copy data in dependency order using checksums and row counts. Do not mutate
    D1 during the first verification pass.
 4. Introduce repository boundaries for reads, writes, transactions, and batch
