@@ -300,19 +300,12 @@ async function currentHuman(request: Request, env: Env, allowEstate = false): Pr
   const token = cookieValue(request, 'earth_session');
   if (!token) return null;
   const tokenHash = await digest(token);
-  if (authorityMode(env) === 'postgres') {
-    const result = await withRepository(env, (repository) => repository.query<{ id: string; display_name: string; life_status: string; email: string }>("SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email FROM auth_sessions JOIN humans ON humans.id = auth_sessions.human_id JOIN auth_credentials ON auth_credentials.human_id = humans.id WHERE auth_sessions.token_hash = $1 AND auth_sessions.revoked_at IS NULL AND auth_sessions.expires_at > CURRENT_TIMESTAMP AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status = 'estate'))", [tokenHash, allowEstate ? 1 : 0]));
-    return result?.rows[0] ?? null;
-  }
-  return env.DB.prepare("SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email, auth_credentials.email_verified_at FROM auth_sessions JOIN humans ON humans.id = auth_sessions.human_id JOIN auth_credentials ON auth_credentials.human_id = humans.id WHERE auth_sessions.token_hash = ? AND auth_sessions.revoked_at IS NULL AND auth_sessions.expires_at > CURRENT_TIMESTAMP AND (humans.life_status = 'active' OR (? = 1 AND humans.life_status = 'estate'))").bind(tokenHash, allowEstate ? 1 : 0).first();
+  const result = await withRepository(env, (repository) => repository.query<{ id: string; display_name: string; life_status: string; email: string }>("SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email FROM auth_sessions JOIN humans ON humans.id = auth_sessions.human_id JOIN auth_credentials ON auth_credentials.human_id = humans.id WHERE auth_sessions.token_hash = $1 AND auth_sessions.revoked_at IS NULL AND auth_sessions.expires_at > CURRENT_TIMESTAMP AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status = 'estate'))", [tokenHash, allowEstate ? 1 : 0]));
+  return result?.rows[0] ?? null;
 }
 async function sensitiveActionAllowed(env: Env, humanId: string, otp?: string): Promise<boolean> {
-  if (authorityMode(env) === 'postgres') {
-    const result = await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean; mfa_secret: string | null }>('SELECT mfa_enabled, mfa_secret FROM auth_credentials WHERE human_id = $1', [humanId]));
-    const credential = result?.rows[0];
-    return !credential?.mfa_enabled || Boolean(credential.mfa_secret && await validTotp(credential.mfa_secret, otp ?? ''));
-  }
-  const credential = await env.DB.prepare('SELECT mfa_enabled, mfa_secret FROM auth_credentials WHERE human_id = ?').bind(humanId).first<{ mfa_enabled: number; mfa_secret: string | null }>();
+  const result = await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean; mfa_secret: string | null }>('SELECT mfa_enabled, mfa_secret FROM auth_credentials WHERE human_id = $1', [humanId]));
+  const credential = result?.rows[0];
   return !credential?.mfa_enabled || Boolean(credential.mfa_secret && await validTotp(credential.mfa_secret, otp ?? ''));
 }
 function sessionCookie(token: string, maxAge: number): string {
@@ -323,12 +316,8 @@ async function issueActionToken(env: Env, humanId: string, action: 'verify_email
   const tokenHash = await digest(token);
   const id = crypto.randomUUID();
   const expires = new Date(Date.now() + (action === 'verify_email' ? 24 : 1) * 3600000).toISOString();
-  if (authorityMode(env) === 'postgres') {
-    const result = await withRepository(env, (repository) => repository.query('INSERT INTO auth_action_tokens (id, human_id, token_hash, action, expires_at) VALUES ($1,$2,$3,$4,$5)', [id, humanId, tokenHash, action, expires]));
-    if (!result) throw new Error('PostgreSQL authentication repository is unavailable');
-  } else {
-    await env.DB.prepare('INSERT INTO auth_action_tokens (id, human_id, token_hash, action, expires_at) VALUES (?, ?, ?, ?, ?)').bind(id, humanId, tokenHash, action, expires).run();
-  }
+  const result = await withRepository(env, (repository) => repository.query('INSERT INTO auth_action_tokens (id, human_id, token_hash, action, expires_at) VALUES ($1,$2,$3,$4,$5)', [id, humanId, tokenHash, action, expires]));
+  if (!result) throw new Error('PostgreSQL authentication repository is unavailable');
   if (!env.EMAIL || !env.EMAIL_FROM) {
     throw new Error('Transactional email is not configured');
   }
@@ -342,9 +331,7 @@ async function issueActionToken(env: Env, humanId: string, action: 'verify_email
     const details = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : {};
     console.error(JSON.stringify({ event: 'transactional_email_failed', action, code: String(details.code ?? 'unknown'), message: String(details.message ?? 'unknown') }));
     // Do not let a failed delivery consume the resend throttle window.
-    if (authorityMode(env) === 'postgres') {
-      await withRepository(env, (repository) => repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]));
-    }
+    await withRepository(env, (repository) => repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]));
     throw error;
   }
 }
@@ -558,43 +545,32 @@ const worker = {
     if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);
     if (url.pathname === '/api/auth/me' && request.method === 'GET') {
       const human = await currentHuman(request, env);
-      return Response.json({ authenticated: Boolean(human), human, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
+      return Response.json({ authenticated: Boolean(human), human, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/auth/mfa/enroll' && request.method === 'POST') {
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const secret = bytesToBase32(crypto.getRandomValues(new Uint8Array(20)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_secret = $1, mfa_enabled = false WHERE human_id = $2', [secret, human.id]));
-        if (result) return Response.json({ ok: true, secret, otpauth: `otpauth://totp/EARTH:${encodeURIComponent(human.email)}?secret=${secret}&issuer=EARTH`, message: 'Scan or enter this secret in an authenticator, then confirm with a six-digit code.' });
-      }
-      await env.DB.prepare('UPDATE auth_credentials SET mfa_secret = ?, mfa_enabled = 0 WHERE human_id = ?').bind(secret, human.id).run();
+      const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_secret = $1, mfa_enabled = false WHERE human_id = $2', [secret, human.id]));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return Response.json({ ok: true, secret, otpauth: `otpauth://totp/EARTH:${encodeURIComponent(human.email)}?secret=${secret}&issuer=EARTH`, message: 'Scan or enter this secret in an authenticator, then confirm with a six-digit code.' });
     }
     if (url.pathname === '/api/auth/mfa/confirm' && request.method === 'POST') {
       const human = await currentHuman(request, env); if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ code?: string }>(); const credential = authorityMode(env) === 'postgres' ? null : await env.DB.prepare('SELECT mfa_secret FROM auth_credentials WHERE human_id = ?').bind(human.id).first<{ mfa_secret: string | null }>();
-      if (authorityMode(env) === 'postgres') {
-        const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null }>('SELECT mfa_secret FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
-        if (!credential?.mfa_secret || !(await validTotp(credential.mfa_secret, body.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
-        const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = true WHERE human_id = $1', [human.id]));
-        if (result) return Response.json({ ok: true, enabled: true });
-      }
+      const body = await request.json<{ code?: string }>();
+      const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null }>('SELECT mfa_secret FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
       if (!credential?.mfa_secret || !(await validTotp(credential.mfa_secret, body.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
-      await env.DB.prepare('UPDATE auth_credentials SET mfa_enabled = 1 WHERE human_id = ?').bind(human.id).run();
+      const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = true WHERE human_id = $1', [human.id]));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return Response.json({ ok: true, enabled: true });
     }
     if (url.pathname === '/api/auth/mfa/disable' && request.method === 'POST') {
       const human = await currentHuman(request, env); if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ code?: string }>(); const credential = authorityMode(env) === 'postgres' ? null : await env.DB.prepare('SELECT mfa_secret, mfa_enabled FROM auth_credentials WHERE human_id = ?').bind(human.id).first<{ mfa_secret: string | null; mfa_enabled: number }>();
-      if (authorityMode(env) === 'postgres') {
-        const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null; mfa_enabled: boolean }>('SELECT mfa_secret, mfa_enabled FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
-        if (!credential?.mfa_enabled || !credential.mfa_secret || !(await validTotp(credential.mfa_secret, body.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
-        const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = false, mfa_secret = NULL WHERE human_id = $1', [human.id]));
-        if (result) return Response.json({ ok: true, enabled: false });
-      }
+      const body = await request.json<{ code?: string }>();
+      const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null; mfa_enabled: boolean }>('SELECT mfa_secret, mfa_enabled FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
       if (!credential?.mfa_enabled || !credential.mfa_secret || !(await validTotp(credential.mfa_secret, body.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
-      await env.DB.prepare('UPDATE auth_credentials SET mfa_enabled = 0, mfa_secret = NULL WHERE human_id = ?').bind(human.id).run();
+      const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = false, mfa_secret = NULL WHERE human_id = $1', [human.id]));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return Response.json({ ok: true, enabled: false });
     }
     if (url.pathname === '/api/auth/sessions' && request.method === 'GET') {
@@ -602,32 +578,23 @@ const worker = {
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const token = cookieValue(request, 'earth_session');
       const currentHash = token ? await digest(token) : '';
-      if (authorityMode(env) === 'postgres') {
-        const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = $1 ORDER BY created_at DESC', [human.id]));
-        if (sessions) return Response.json({ sessions: sessions.rows.map(({ token_hash: _tokenHash, ...session }) => ({ ...session, current: _tokenHash === currentHash })), persistence: 'planetscale-postgres' });
-      }
-      const sessions = await env.DB.prepare('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = ? ORDER BY created_at DESC').bind(human.id).all();
-      return Response.json({ sessions: (sessions.results as Array<Record<string, unknown>>).map(({ token_hash, ...session }) => ({ ...session, current: token_hash === currentHash })), persistence: 'cloudflare-d1' });
+      const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = $1 ORDER BY created_at DESC', [human.id]));
+      if (!sessions) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
+      return Response.json({ sessions: sessions.rows.map(({ token_hash: _tokenHash, ...session }) => ({ ...session, current: _tokenHash === currentHash })), persistence: 'planetscale-postgres' });
     }
     const revokeSessionMatch = url.pathname.match(/^\/api\/auth\/sessions\/([^/]+)$/);
     if (revokeSessionMatch && request.method === 'DELETE') {
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND human_id = $2 AND revoked_at IS NULL', [revokeSessionMatch[1], human.id]));
-        if (result) return Response.json({ ok: result.rowCount === 1, persistence: 'planetscale-postgres' });
-      }
-      const result = await env.DB.prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = ? AND human_id = ? AND revoked_at IS NULL').bind(revokeSessionMatch[1], human.id).run();
-      return Response.json({ ok: Number(result.meta?.changes ?? 0) === 1, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND human_id = $2 AND revoked_at IS NULL', [revokeSessionMatch[1], human.id]));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
+      return Response.json({ ok: result.rowCount === 1, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/auth/sessions' && request.method === 'DELETE') {
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [human.id]));
-        if (result) return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
-      }
-      await env.DB.prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = ? AND revoked_at IS NULL').bind(human.id).run();
+      const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [human.id]));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
     }
     if (url.pathname === '/api/auth/register' && request.method === 'POST') {
@@ -656,70 +623,20 @@ const worker = {
           return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });
         }
       }
-      if (await env.DB.prepare('SELECT human_id FROM auth_credentials WHERE email = ?').bind(email).first()) return Response.json({ ok: false, error: 'Email is already registered' }, { status: 409 });
-      const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const accountId = `account-${humanId.toLowerCase()}`;
-      const worldDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const businessId = `B-${humanId.slice(2)}`;
-      const technologyId = `TECH-${humanId.slice(2)}`;
-      const machineId = `M-${humanId.slice(2)}-01`;
-      const researchId = `R-${humanId.slice(2)}`;
-      const assistantId = `AI-${humanId.slice(2)}-01`;
-      const salt = crypto.getRandomValues(new Uint8Array(16));
-      // Cloudflare Workers WebCrypto supports PBKDF2 iteration counts up to 100,000.
-      // Keep the stored count explicit so login and future migrations remain compatible.
-      const iterations = 100000;
-      const passwordHash = await derivePassword(password, salt, iterations);
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO humans (id, account_id, display_name, age_years, standing, legacy, political_eligibility_game_day) VALUES (?, ?, ?, 31, 0, 0, ?)').bind(humanId, accountId, displayName, worldDay + 3),
-        env.DB.prepare('INSERT INTO auth_credentials (human_id, email, password_hash, password_salt, password_iterations) VALUES (?, ?, ?, ?, ?)').bind(humanId, email, passwordHash, bytesToBase64(salt), iterations),
-        env.DB.prepare('INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES (?, ?, ?, ?)').bind(accountId, humanId, 18420, 'CREDIT'),
-        env.DB.prepare("INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, 'material', 420), (?, 'components', 86), (?, 'energy', 92), (?, 'compute', 64)").bind(humanId, humanId, humanId, humanId),
-        env.DB.prepare('INSERT INTO businesses (id, owner_id, name, policy, condition) VALUES (?, ?, ?, ?, ?)').bind(businessId, humanId, `${displayName} Works`, 'reliability', 100),
-        env.DB.prepare('INSERT INTO business_financials (business_id, last_game_day) VALUES (?, ?)').bind(businessId, worldDay),
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, ?)').bind(businessId, humanId, 100),
-        env.DB.prepare('INSERT INTO technologies (id, name, owner_id, progress) VALUES (?, ?, ?, ?)').bind(technologyId, `${displayName} Adaptive System`, humanId, 0),
-        env.DB.prepare('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(machineId, humanId, `${displayName} Service Unit`, 'service-robot', 100, 25, 0, 1),
-        env.DB.prepare("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) VALUES (?, ?, ?, 'starter-package')").bind(businessId, machineId, worldDay),
-        env.DB.prepare('INSERT INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day) VALUES (?, ?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?))').bind(researchId, technologyId, humanId, 0, 0, 'active', 'WORLD'),
-        env.DB.prepare("INSERT INTO ai_assistants (id, owner_id, tier, policy, enabled) VALUES (?, ?, 'basic', 'recommend', 1)").bind(assistantId, humanId),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?))').bind(crypto.randomUUID(), 'BUSINESS', businessId, null, humanId, 1, 'starter_package', humanId, 'WORLD'),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?))').bind(crypto.randomUUID(), 'BUSINESS_SHARES', businessId, null, humanId, 100, 'starter_package', humanId, 'WORLD'),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?))').bind(crypto.randomUUID(), 'MACHINE', machineId, null, humanId, 1, 'starter_package', humanId, 'WORLD'),
-      ]);
-      try {
-        await issueActionToken(env, humanId, 'verify_email', email);
-      } catch {
-        return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
-      }
-      return Response.json({ ok: true, human: { id: humanId, displayName, email }, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     if (url.pathname === '/api/auth/verify-email/resend' && request.method === 'POST') {
       const body = await request.json<{ email?: string }>();
       const email = body.email?.trim().toLowerCase();
-      if (authorityMode(env) === 'postgres') {
-        if (email) {
-          const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
-          if (credential && !credential.email_verified_at) {
-            const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
-            if (!recentlySent) {
-              try {
-                await issueActionToken(env, credential.human_id, 'verify_email', credential.email);
-              } catch {
-                return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 });
-              }
-            }
-          }
-        }
-        return Response.json({ ok: true, message: 'If that identity exists and needs verification, a new email has been sent.' });
-      }
       if (email) {
-        const credential = await env.DB.prepare('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = ?').bind(email).first<{ human_id: string; email: string; email_verified_at: string | null }>();
+        const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
         if (credential && !credential.email_verified_at) {
-          try {
-            await issueActionToken(env, credential.human_id, 'verify_email', credential.email);
-          } catch {
-            return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 });
+          const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
+          if (!recentlySent) {
+            try {
+              await issueActionToken(env, credential.human_id, 'verify_email', credential.email);
+            } catch {
+              return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 });
+            }
           }
         }
       }
@@ -729,37 +646,22 @@ const worker = {
       const token = url.searchParams.get('token');
       if (!token) return Response.json({ ok: false, error: 'Verification token is required' }, { status: 400 });
       const tokenHash = await digest(token);
-      if (authorityMode(env) === 'postgres') {
-        const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'verify_email' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
-        if (!action) return Response.json({ ok: false, error: 'Verification link is invalid or expired' }, { status: 400 });
-        const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-          await tx.query('UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1', [action.human_id]);
-          await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
-          return true;
-        }));
-        if (updated) return Response.json({ ok: true, message: 'Email verified. You can now sign in.' });
-      }
-      const action = await env.DB.prepare("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = ? AND action = 'verify_email' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP").bind(tokenHash).first<{ id: string; human_id: string }>();
+      const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'verify_email' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
       if (!action) return Response.json({ ok: false, error: 'Verification link is invalid or expired' }, { status: 400 });
-      await env.DB.batch([
-        env.DB.prepare('UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = ?').bind(action.human_id),
-        env.DB.prepare('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?').bind(action.id),
-      ]);
+      const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
+        await tx.query('UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1', [action.human_id]);
+        await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
+        return true;
+      }));
+      if (!updated) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return Response.json({ ok: true, message: 'Email verified. You can now sign in.' });
     }
     if (url.pathname === '/api/auth/password-reset/request' && request.method === 'POST') {
       const body = await request.json<{ email?: string }>();
       const email = body.email?.trim().toLowerCase();
-      if (authorityMode(env) === 'postgres') {
-        const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [email])))?.rows[0] : null;
-        if (credential) {
-          try { await issueActionToken(env, credential.human_id, 'reset_password', credential.email); } catch { /* Keep recovery responses generic. */ }
-        }
-        return Response.json({ ok: true, message: 'If that identity exists, recovery instructions have been sent.' });
-      }
-      const credential = email ? await env.DB.prepare('SELECT human_id, email FROM auth_credentials WHERE email = ?').bind(email).first<{ human_id: string; email: string }>() : null;
+      const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [email])))?.rows[0] : null;
       if (credential) {
-        try { await issueActionToken(env, credential.human_id, 'reset_password', credential.email); } catch { /* Keep recovery responses generic and JSON-safe. */ }
+        try { await issueActionToken(env, credential.human_id, 'reset_password', credential.email); } catch { /* Keep recovery responses generic. */ }
       }
       return Response.json({ ok: true, message: 'If that identity exists, recovery instructions have been sent.' });
     }
@@ -767,78 +669,37 @@ const worker = {
       const body = await request.json<{ token?: string; password?: string }>();
       if (!body.token || (body.password ?? '').length < 12) return Response.json({ ok: false, error: 'A valid token and 12-character password are required' }, { status: 400 });
       const tokenHash = await digest(body.token);
-      if (authorityMode(env) === 'postgres') {
-        const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
-        if (!action) return Response.json({ ok: false, error: 'Recovery link is invalid or expired' }, { status: 400 });
-        const salt = crypto.getRandomValues(new Uint8Array(16));
-        const iterations = 100000;
-        const passwordHash = await derivePassword(body.password, salt, iterations);
-        const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-          await tx.query('UPDATE auth_credentials SET password_hash = $1, password_salt = $2, password_iterations = $3 WHERE human_id = $4', [passwordHash, bytesToBase64(salt), iterations, action.human_id]);
-          await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
-          await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [action.human_id]);
-          return true;
-        }));
-        if (updated) return Response.json({ ok: true, message: 'Password reset. All previous sessions were revoked.' });
-      }
-      const action = await env.DB.prepare("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = ? AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP").bind(tokenHash).first<{ id: string; human_id: string }>();
+      const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
       if (!action) return Response.json({ ok: false, error: 'Recovery link is invalid or expired' }, { status: 400 });
       const salt = crypto.getRandomValues(new Uint8Array(16));
       const iterations = 100000;
       const passwordHash = await derivePassword(body.password, salt, iterations);
-      await env.DB.batch([
-        env.DB.prepare('UPDATE auth_credentials SET password_hash = ?, password_salt = ?, password_iterations = ? WHERE human_id = ?').bind(passwordHash, bytesToBase64(salt), iterations, action.human_id),
-        env.DB.prepare('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = ?').bind(action.id),
-        env.DB.prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = ? AND revoked_at IS NULL').bind(action.human_id),
-      ]);
+      const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
+        await tx.query('UPDATE auth_credentials SET password_hash = $1, password_salt = $2, password_iterations = $3 WHERE human_id = $4', [passwordHash, bytesToBase64(salt), iterations, action.human_id]);
+        await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
+        await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [action.human_id]);
+        return true;
+      }));
+      if (!updated) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return Response.json({ ok: true, message: 'Password reset. All previous sessions were revoked.' });
     }
     if (url.pathname === '/api/auth/login' && request.method === 'POST') {
       const body = await request.json<{ email?: string; password?: string; otp?: string }>();
       const email = body.email?.trim().toLowerCase();
-      if (authorityMode(env) === 'postgres') {
-        if (!email || !body.password) return Response.json({ ok: false, error: 'Invalid email or password' }, { status: 401 });
-        try {
-          const result = await withRepository(env, (repository) => loginIdentityPostgres(repository, { email, password: body.password ?? '', otp: body.otp ?? '', validTotp }));
-          if (result) return new Response(JSON.stringify({ ok: result.ok, human: result.human, expiresAt: result.expiresAt }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Invalid email or password';
-          const status = /too many/i.test(message) ? 429 : /verify|active/i.test(message) ? 403 : 401;
-          return Response.json({ ok: false, error: message }, { status });
-        }
+      if (!email || !body.password) return Response.json({ ok: false, error: 'Invalid email or password' }, { status: 401 });
+      try {
+        const result = await withRepository(env, (repository) => loginIdentityPostgres(repository, { email, password: body.password ?? '', otp: body.otp ?? '', validTotp }));
+        if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
+        return new Response(JSON.stringify({ ok: result.ok, human: result.human, expiresAt: result.expiresAt }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Invalid email or password';
+        const status = /too many/i.test(message) ? 429 : /verify|active/i.test(message) ? 403 : 401;
+        return Response.json({ ok: false, error: message }, { status });
       }
-      const attempt = email ? await env.DB.prepare('SELECT * FROM auth_login_attempts WHERE email = ?').bind(email).first<{ window_started_at: string; attempt_count: number; blocked_until: string | null }>() : null;
-      if (attempt?.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) return Response.json({ ok: false, error: 'Too many login attempts. Try again later.' }, { status: 429 });
-      const credential = email ? await env.DB.prepare("SELECT auth_credentials.*, humans.life_status FROM auth_credentials JOIN humans ON humans.id = auth_credentials.human_id WHERE auth_credentials.email = ?").bind(email).first<{ human_id: string; password_hash: string; password_salt: string; password_iterations: number; email_verified_at: string | null; mfa_enabled: number; mfa_secret: string | null; life_status: string }>() : null;
-      if (credential?.life_status !== 'active') return Response.json({ ok: false, error: 'This Human is not currently active' }, { status: 403 });
-      if (credential && !credential.email_verified_at) return Response.json({ ok: false, error: 'Verify your email before signing in' }, { status: 403 });
-      const passwordMatches = Boolean(credential && (body.password ?? '').length && await derivePassword(body.password ?? '', base64ToBytes(credential.password_salt), Number(credential.password_iterations)) === credential.password_hash);
-      if (!passwordMatches) {
-        if (email) {
-          const withinWindow = attempt && Date.now() - new Date(attempt.window_started_at).getTime() < 15 * 60 * 1000;
-          const count = withinWindow ? Number(attempt?.attempt_count ?? 0) + 1 : 1;
-          const blockedUntil = count >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
-          await env.DB.prepare('INSERT INTO auth_login_attempts (email, window_started_at, attempt_count, blocked_until) VALUES (?, CURRENT_TIMESTAMP, ?, ?) ON CONFLICT(email) DO UPDATE SET window_started_at = CASE WHEN ? THEN auth_login_attempts.window_started_at ELSE CURRENT_TIMESTAMP END, attempt_count = ?, blocked_until = ?').bind(email, count, blockedUntil, Boolean(withinWindow), count, blockedUntil).run();
-        }
-        return Response.json({ ok: false, error: 'Invalid email or password' }, { status: 401 });
-      }
-      if (credential?.mfa_enabled && (!credential.mfa_secret || !(await validTotp(credential.mfa_secret, body.otp ?? '')))) return Response.json({ ok: false, error: 'Authenticator code required' }, { status: 401 });
-      await env.DB.prepare('DELETE FROM auth_login_attempts WHERE email = ?').bind(email).run();
-      const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
-      const tokenHash = await digest(token);
-      const sessionId = crypto.randomUUID();
-      const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
-      await env.DB.prepare('INSERT INTO auth_sessions (id, human_id, token_hash, expires_at) VALUES (?, ?, ?, ?)').bind(sessionId, credential.human_id, tokenHash, expires).run();
-      const human = await env.DB.prepare('SELECT id, display_name FROM humans WHERE id = ?').bind(credential.human_id).first();
-      return new Response(JSON.stringify({ ok: true, human, expiresAt: expires }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(token, SESSION_DAYS * 86400) } });
     }
     if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
       const token = cookieValue(request, 'earth_session');
-      if (authorityMode(env) === 'postgres') {
-        if (token) await withRepository(env, async (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1', [await digest(token)]));
-        return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
-      }
-      if (token) await env.DB.prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = ?').bind(await digest(token)).run();
+      if (token) await withRepository(env, async (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1', [await digest(token)]));
       return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
     }
     const publicMutation = url.pathname === '/api/auth/register' || url.pathname === '/api/auth/login' || url.pathname === '/api/auth/logout' || url.pathname === '/api/auth/verify-email/resend' || url.pathname === '/api/auth/password-reset/request' || url.pathname === '/api/auth/password-reset/complete';
