@@ -1320,37 +1320,15 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ otp?: string; reason?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for personal insolvency' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => declarePersonalInsolvencyPostgres(repository, viewer.id, (body.reason?.trim() || 'Human-requested insolvency restructuring').slice(0, 240)));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Personal insolvency failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => declarePersonalInsolvencyPostgres(repository, viewer.id, (body.reason?.trim() || 'Human-requested insolvency restructuring').slice(0, 240)));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Personal insolvency failed' }, { status: 409 });
       }
-      const prior = await env.DB.prepare("SELECT * FROM personal_financial_states WHERE human_id = ? AND status = 'bankrupt'").bind(viewer.id).first();
-      if (prior) return Response.json({ ok: true, alreadyProcessed: true, state: prior, persistence: 'cloudflare-d1' });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      const machines = (await env.DB.prepare("SELECT id, machine_type FROM machines WHERE owner_id = ? AND machine_type != 'service-robot'").bind(viewer.id).all<{ id: string; machine_type: string }>()).results;
-      const businesses = (await env.DB.prepare('SELECT id FROM businesses WHERE owner_id = ?').bind(viewer.id).all<{ id: string }>()).results;
-      const liquidationValue = Math.round(machines.length * 50 + businesses.length * 100);
-      const reason = (body.reason?.trim() || 'Human-requested insolvency restructuring').slice(0, 240);
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare("UPDATE account_balances SET balance = MAX(100, balance) WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id),
-        env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE owner_id = ? AND currency = 'CREDIT'").bind(liquidationValue, viewer.id),
-        env.DB.prepare("DELETE FROM business_assets WHERE machine_id IN (SELECT id FROM machines WHERE owner_id = ? AND machine_type != 'service-robot')").bind(viewer.id),
-        env.DB.prepare('DELETE FROM machines WHERE owner_id = ? AND machine_type != \'service-robot\'').bind(viewer.id),
-        ...businesses.map((business) => env.DB.prepare('DELETE FROM business_shares WHERE business_id = ?').bind(business.id)),
-        env.DB.prepare('DELETE FROM businesses WHERE owner_id = ?').bind(viewer.id),
-        ...businesses.map((business) => env.DB.prepare("DELETE FROM institutions WHERE id = ? AND kind = 'BUSINESS'").bind(business.id)),
-        env.DB.prepare('INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES (?, \'bankrupt\', ?, 100, ?) ON CONFLICT(human_id) DO UPDATE SET status = excluded.status, since_game_day = excluded.since_game_day, last_reason = excluded.last_reason, updated_at = CURRENT_TIMESTAMP').bind(viewer.id, day, reason),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(`PERSONAL-BANKRUPTCY-${viewer.id}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', JSON.stringify({ humanId: viewer.id, liquidationValue, reason })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'finance', 'Personal insolvency recorded', 'Non-protected productive assets were liquidated. Your basic service robot and 100 Credit protected minimum remain.', eventId),
-      ]);
-      return Response.json({ ok: true, state: await env.DB.prepare('SELECT * FROM personal_financial_states WHERE human_id = ?').bind(viewer.id).first(), protectedCredits: 100, liquidated: { machines: machines.length, businesses: businesses.length, estimatedValue: liquidationValue }, persistence: 'cloudflare-d1' });
     }
+
     if (url.pathname === '/api/finance' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
