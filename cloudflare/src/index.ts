@@ -1001,59 +1001,33 @@ const worker = {
     if (url.pathname === '/api/ai' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listAssistantsPostgres(repository, viewer.id));
-        if (result) return Response.json({ ...result, constraints: { governance: false, authority: false, allowedPolicies: ['recommend', 'maintenance'] }, persistence: 'planetscale-postgres' });
-      }
-      const assistants = await env.DB.prepare('SELECT id, tier, policy, enabled, created_at FROM ai_assistants WHERE owner_id = ? ORDER BY id').bind(viewer.id).all();
-      return Response.json({ assistants: assistants.results, constraints: { governance: false, authority: false, allowedPolicies: ['recommend', 'maintenance'] }, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listAssistantsPostgres(repository, viewer.id));
+      return Response.json({ ...result, constraints: { governance: false, authority: false, allowedPolicies: ['recommend', 'maintenance'] }, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/ai/policy' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ assistantId?: string; policy?: string; enabled?: boolean }>();
       if (!body.assistantId || !['recommend', 'maintenance'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Basic AI supports only recommend or maintenance policies' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => updateAssistantPolicyPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId, policy: body.policy ?? 'recommend', enabled: body.enabled !== false }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'AI assistant not found' }, { status: 404 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => updateAssistantPolicyPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId, policy: body.policy ?? 'recommend', enabled: body.enabled !== false }));
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'AI assistant not found' }, { status: 404 });
       }
-      const result = await env.DB.prepare("UPDATE ai_assistants SET policy = ?, enabled = ? WHERE id = ? AND owner_id = ? AND tier IN ('basic','business')").bind(body.policy, body.enabled === false ? 0 : 1, body.assistantId, viewer.id).run();
-      if (Number(result.meta?.changes ?? 0) !== 1) return Response.json({ ok: false, error: 'AI assistant not found' }, { status: 404 });
-      return Response.json({ ok: true, assistant: await env.DB.prepare('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = ?').bind(body.assistantId).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/ai/upgrade' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ assistantId?: string; otp?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for AI upgrade' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => upgradeAssistantPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId ?? '' }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'AI upgrade failed';
-          return Response.json({ ok: false, error: message }, { status: /insufficient/i.test(message) ? 409 : 404 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => upgradeAssistantPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId ?? '' }));
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'AI upgrade failed';
+        return Response.json({ ok: false, error: message }, { status: /insufficient/i.test(message) ? 409 : 404 });
       }
-      const assistant = await env.DB.prepare("SELECT id, tier FROM ai_assistants WHERE id = ? AND owner_id = ?").bind(body.assistantId ?? '', viewer.id).first<{ id: string; tier: string }>();
-      if (!assistant) return Response.json({ ok: false, error: 'AI assistant not found' }, { status: 404 });
-      if (assistant.tier === 'business') return Response.json({ ok: true, alreadyUpgraded: true, assistant, persistence: 'cloudflare-d1' });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      const cost = 2400;
-      if (!account || Number(account.balance) < cost) return Response.json({ ok: false, error: 'Insufficient Credits for Business AI upgrade' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const correlationId = `AI-UPGRADE-${assistant.id}`;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(cost, account.account_id, cost),
-        env.DB.prepare("UPDATE ai_assistants SET tier = 'business' WHERE id = ? AND owner_id = ?").bind(assistant.id, viewer.id),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, account.account_id, 'account-ouc-treasury', cost, 'CREDIT', 'ai_upgrade', assistant.id, 'ai-v1', correlationId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'technology', 'Business AI activated', 'Your AI assistant now supports bounded business maintenance automation and recommendation policies.', assistant.id),
-      ]);
-      return Response.json({ ok: true, cost, assistant: await env.DB.prepare('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = ?').bind(assistant.id).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/services/status' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
