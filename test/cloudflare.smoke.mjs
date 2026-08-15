@@ -85,6 +85,15 @@ const session = await get('/api/auth/me');
 assert.equal(session.response.status, 200);
 assert.equal(session.body.authenticated, false);
 
+const resendVerification = await get('/api/auth/verify-email/resend', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json' },
+  body: JSON.stringify({ email: `smoke-${Date.now()}@example.invalid` }),
+});
+assert.equal(resendVerification.response.status, 200);
+assert.equal(resendVerification.body.ok, true);
+assert.match(resendVerification.body.message, /If that identity exists and needs verification/);
+
 const world = await get('/api/world');
 assert.equal(world.response.status, 401);
 assert.equal(world.body.error, 'Authentication required');
