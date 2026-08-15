@@ -1409,106 +1409,60 @@ const worker = {
       if (!name || name.length < 3 || name.length > 80 || !sectors.includes(sector)) return Response.json({ ok: false, error: 'Business name or sector is invalid' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createBusinessPostgres(repository, { ownerId: viewer.id, name, sector, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Business registration failed';
-          return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /requires/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createBusinessPostgres(repository, { ownerId: viewer.id, name, sector, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Business registration failed';
+        return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /requires/i.test(message) ? 409 : 400 });
       }
-      const priorRegistration = await env.DB.prepare("SELECT reason_id FROM ledger_entries WHERE reason_type = 'business_registration' AND correlation_id = ?").bind(correlationId).first<{ reason_id: string }>();
-      if (priorRegistration) return Response.json({ ok: true, alreadyProcessed: true, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(priorRegistration.reason_id).first(), shares: 100, correlationId, persistence: 'cloudflare-d1' });
-      if (await env.DB.prepare('SELECT id FROM institutions WHERE name = ?').bind(name).first()) return Response.json({ ok: false, error: 'Business name already exists' }, { status: 409 });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      const fee = 250;
-      if (!account || Number(account.balance) < fee) return Response.json({ ok: false, error: 'Business registration requires 250 Credits' }, { status: 409 });
-      const businessId = `B-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(fee, account.account_id, fee),
-        env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE account_id = 'account-ouc-treasury'").bind(fee),
-        env.DB.prepare("INSERT INTO institutions (id, kind, name, status) VALUES (?, 'BUSINESS', ?, 'active')").bind(businessId, name),
-        env.DB.prepare('INSERT INTO businesses (id, owner_id, name, policy, condition, sector) VALUES (?, ?, ?, \'reliability\', 100, ?)').bind(businessId, viewer.id, name, sector),
-        env.DB.prepare('INSERT INTO business_financials (business_id, last_game_day) VALUES (?, ?)').bind(businessId, day),
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, 100)').bind(businessId, viewer.id),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, account.account_id, 'account-ouc-treasury', fee, 'CREDIT', 'business_registration', businessId, 'business-v1', correlationId),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.formed', `${name} was registered`, JSON.stringify({ businessId, sector, founder: viewer.id })),
-      ]);
-      return Response.json({ ok: true, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(businessId).first(), shares: 100, fee, correlationId, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     if ((url.pathname === '/api/businesses/kline-works/policy' || url.pathname === '/api/businesses/me/policy') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ policy?: string }>();
       if (!['reliability', 'margin', 'capacity'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Unknown business policy' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => setBusinessPolicyPostgres(repository, { humanId: viewer.id, policy: body.policy! }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business policy update failed' }, { status: 404 }); }
+      try {
+        const result = await withRepository(env, (repository) => setBusinessPolicyPostgres(repository, { humanId: viewer.id, policy: body.policy! }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business policy update failed' }, { status: 404 });
       }
-      const business = await env.DB.prepare("SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.owner_id = ? OR business_management.manager_id = ? ORDER BY businesses.id LIMIT 1").bind(viewer.id, viewer.id).first<{ id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'No managed business is available to this Human' }, { status: 404 });
-      await env.DB.prepare('UPDATE businesses SET policy = ? WHERE id = ?').bind(body.policy, business.id).run();
-      return Response.json({ ok: true, policy: body.policy, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(business.id).first(), persistence: 'cloudflare-d1' });
     }
     const managerMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/manager$/);
     if (managerMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ managerId?: string }>();
-        try {
-          const result = await withRepository(env, (repository) => appointManagerPostgres(repository, { ownerId: viewer.id, businessId: managerMatch[1], managerId: body.managerId?.trim() ?? '' }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Manager appointment failed' }, { status: 403 }); }
-      }
-      const business = await env.DB.prepare('SELECT id, owner_id FROM businesses WHERE id = ?').bind(managerMatch[1]).first<{ id: string; owner_id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      if (business.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the Business owner may appoint its manager' }, { status: 403 });
       const body = await request.json<{ managerId?: string }>();
-      const managerId = body.managerId?.trim() ?? '';
-      const manager = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(managerId).first();
-      if (!manager) return Response.json({ ok: false, error: 'Active manager Human not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 0;
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES (?, ?, ?, ?) ON CONFLICT(business_id) DO UPDATE SET manager_id = excluded.manager_id, appointed_by = excluded.appointed_by, appointed_game_day = excluded.appointed_game_day, updated_at = CURRENT_TIMESTAMP').bind(business.id, managerId, viewer.id, day),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.manager_appointed', `Manager appointed for ${business.id}`, JSON.stringify({ businessId: business.id, managerId, appointedBy: viewer.id })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), managerId, 'governance', 'Business management appointment', `You were appointed manager of ${business.id}.`, business.id),
-      ]);
-      return Response.json({ ok: true, management: await env.DB.prepare('SELECT * FROM business_management WHERE business_id = ?').bind(business.id).first(), persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => appointManagerPostgres(repository, { ownerId: viewer.id, businessId: managerMatch[1], managerId: body.managerId?.trim() ?? '' }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Manager appointment failed' }, { status: 403 });
+      }
     }
     const ownershipRegistryMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/ownership$/);
     if (ownershipRegistryMatch && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => ownershipRegistryPostgres(repository, ownershipRegistryMatch[1]));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business not found' }, { status: 404 }); }
+      try {
+        const result = await withRepository(env, (repository) => ownershipRegistryPostgres(repository, ownershipRegistryMatch[1]));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business not found' }, { status: 404 });
       }
-      const business = await env.DB.prepare('SELECT id, name, owner_id FROM businesses WHERE id = ?').bind(ownershipRegistryMatch[1]).first<{ id: string; name: string; owner_id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      const holders = await env.DB.prepare('SELECT business_shares.holder_id, humans.display_name, business_shares.shares FROM business_shares JOIN humans ON humans.id = business_shares.holder_id WHERE business_shares.business_id = ? ORDER BY business_shares.shares DESC, business_shares.holder_id').bind(business.id).all<{ holder_id: string; display_name: string; shares: number }>();
-      const total = holders.results.reduce((sum, holder) => sum + Number(holder.shares), 0);
-      const registry = holders.results.map((holder) => ({ ...holder, percentage: total > 0 ? Math.round(Number(holder.shares) / total * 10000) / 100 : 0 }));
-      return Response.json({ business, totalIssuedShares: total, controllingHumanId: registry[0]?.holder_id ?? null, holders: registry, ownershipAndManagementAreSeparate: true, persistence: 'cloudflare-d1' });
     }
     const financialsMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/financials$/);
     if (financialsMatch && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => readBusinessPostgres(repository, financialsMatch[1], viewer.id));
-        if (result?.business) return Response.json({ ...result, accounting: { revenue: 'market-cleared sales and accepted contract income', operatingCosts: 'production inputs, maintenance, depreciation, licensing, accepted contract costs, and business tax', profit: 'revenue minus operating costs' }, persistence: 'planetscale-postgres' });
-        return Response.json({ ok: false, error: result?.error ?? 'Business financial statement is not available to this Human' }, { status: 403 });
-      }
-      const business = await env.DB.prepare("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, business_financials.revenue, business_financials.operating_costs, business_financials.profit, business_financials.taxed_revenue, business_financials.last_game_day, business_financials.updated_at FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = ? AND (businesses.owner_id = ? OR business_management.manager_id = ? OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = ?))").bind(financialsMatch[1], viewer.id, viewer.id, viewer.id).first();
-      if (!business) return Response.json({ ok: false, error: 'Business financial statement is not available to this Human' }, { status: 403 });
-      return Response.json({ business, accounting: { revenue: 'market-cleared sales and accepted contract income', operatingCosts: 'production inputs, maintenance, depreciation, licensing, accepted contract costs, and business tax', profit: 'revenue minus operating costs' }, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => readBusinessPostgres(repository, financialsMatch[1], viewer.id));
+      if (result?.business) return Response.json({ ...result, accounting: { revenue: 'market-cleared sales and accepted contract income', operatingCosts: 'production inputs, maintenance, depreciation, licensing, accepted contract costs, and business tax', profit: 'revenue minus operating costs' }, persistence: 'planetscale-postgres' });
+      return Response.json({ ok: false, error: result?.error ?? 'Business financial statement is not available to this Human' }, { status: 403 });
     }
     const constitutionMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/constitution$/);
     if (constitutionMatch && request.method === 'GET') {
