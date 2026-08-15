@@ -112,6 +112,32 @@ async function updateFinancialStates(tx: PostgresRepository, day: number): Promi
   }
 }
 
+async function dissolveInstitutions(tx: PostgresRepository, day: number): Promise<void> {
+  const candidates = await tx.query<{ id: string; kind: string; name: string }>("SELECT institutions.id, institutions.kind, institutions.name FROM institutions JOIN financial_states ON financial_states.institution_id = institutions.id WHERE financial_states.status = 'insolvent' AND $1 - financial_states.since_game_day >= 30 FOR UPDATE", [day]);
+  for (const candidate of candidates.rows) {
+    const members = candidate.kind === 'CITY'
+      ? await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 FOR UPDATE', [candidate.id])
+      : candidate.kind === 'CORPORATION'
+        ? await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE corporation_id = $1 FOR UPDATE', [candidate.id])
+        : { rows: [] } as { rows: Array<{ human_id: string }> };
+    if (candidate.kind === 'CITY') {
+      await tx.query('UPDATE memberships SET city_id = NULL WHERE city_id = $1', [candidate.id]);
+      await tx.query('UPDATE cities SET residents = 0 WHERE id = $1', [candidate.id]);
+    } else if (candidate.kind === 'CORPORATION') {
+      await tx.query('UPDATE memberships SET corporation_id = NULL WHERE corporation_id = $1', [candidate.id]);
+      await tx.query('UPDATE corporations SET member_count = 0 WHERE id = $1', [candidate.id]);
+    } else if (candidate.kind === 'BUSINESS') {
+      await tx.query("UPDATE businesses SET status = 'bankrupt' WHERE id = $1", [candidate.id]);
+    }
+    await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [candidate.id]);
+    await tx.query("UPDATE financial_states SET status = 'dissolved', recovery_game_day = $1, last_reason = 'Institution remained insolvent beyond the engine resolution window', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND status = 'insolvent'", [day, candidate.id]);
+    const reason = 'Institution remained insolvent beyond the engine resolution window';
+    await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,\'insolvent\',\'dissolved\',$4,$5) ON CONFLICT (id) DO NOTHING', [`DISSOLVE-${candidate.id}-${day}`, candidate.id, candidate.kind, day, reason]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'institution.dissolved\',$3,$4) ON CONFLICT (id) DO NOTHING', [`DISSOLVE-${candidate.id}-${day}`, day, `${candidate.kind} ${candidate.name} was dissolved`, JSON.stringify({ institutionId: candidate.id, releasedMembers: members.rows.length })]);
+    for (const member of members.rows) await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'institution\',$3,$4,$5) ON CONFLICT DO NOTHING', [`DISSOLVE-${candidate.id}-${day}-${member.human_id}`, member.human_id, `${candidate.kind} dissolved`, `${candidate.kind} ${candidate.name} was dissolved after prolonged insolvency. Your institutional membership was released.`, candidate.id]);
+  }
+}
+
 async function snapshotRankings(tx: PostgresRepository, day: number): Promise<void> {
   const [cities, corporations] = await Promise.all([
     tx.query<{ id: string; treasury: string }>('SELECT id, treasury FROM cities ORDER BY treasury DESC LIMIT 10'),
@@ -177,6 +203,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
       await updateFinancialStates(tx, day);
+      await dissolveInstitutions(tx, day);
       await snapshotRankings(tx, day);
     }
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0)), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
