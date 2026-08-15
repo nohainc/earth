@@ -5,7 +5,7 @@ export type CreditTransferInput = {
   gameDay: number;
   debitAccount: string;
   creditAccount: string;
-  amount: number;
+  amount: number | string;
   reasonType: string;
   reasonId?: string | null;
   ruleVersion: string;

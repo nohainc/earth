@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
+import { centsToMoney, taxToCents } from './money';
 
 export async function publicSpending(
   repository: PostgresRepository,
@@ -36,22 +37,25 @@ export async function settleTax(repository: PostgresRepository, humanId: string,
     const legacyRule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true");
     if (!account.rows[0] || !legacyRule.rows[0]) throw new Error('Tax rule or account not found');
     const financeRule = await tx.query<{ value_json: unknown; version: number }>("SELECT value_json, version FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'finance' AND status = 'active' ORDER BY version DESC LIMIT 1");
-    let rate = Number(legacyRule.rows[0].rate);
+    let rate = String(legacyRule.rows[0].rate);
     let version = Number(legacyRule.rows[0].version);
     const configured = financeRule.rows[0]?.value_json;
     if (configured) {
       try {
         const value = typeof configured === 'string' ? JSON.parse(configured) : configured as { rate?: number };
-        if (typeof value.rate === 'number' && value.rate >= 0 && value.rate <= 0.25) { rate = value.rate; version = Number(financeRule.rows[0].version); }
+        if (typeof value.rate === 'number' && value.rate >= 0 && value.rate <= 0.25) { rate = String(value.rate); version = Number(financeRule.rows[0].version); }
       } catch { /* retain the canonical tax rule */ }
     }
-    const amount = Math.round(taxableAmount * rate * 100) / 100;
+    const amountCents = taxToCents(taxableAmount, rate);
+    const amount = centsToMoney(amountCents);
+    const rateNumber = Number(rate);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const gameDay = Number(world.rows[0]?.game_day ?? 0);
     const accountId = account.rows[0].account_id;
-    const correlationId = `TAX-${accountId}-${gameDay}-${amount.toFixed(2)}-${version}`;
+    const correlationId = `TAX-${accountId}-${gameDay}-${amount}-${version}`;
     const prior = await tx.query<{ id: string; amount: string; game_day: number; rule_version: string }>("SELECT id, amount, game_day, rule_version FROM ledger_entries WHERE reason_type = 'tax_settlement' AND correlation_id = $1", [correlationId]);
     if (prior.rows[0]) return { ok: true, alreadySettled: true, amount: Number(prior.rows[0].amount), gameDay: prior.rows[0].game_day, ruleVersion: prior.rows[0].rule_version, correlationId };
+    if (amountCents === 0n) return { ok: true, alreadySettled: true, amount: 0, rate: rateNumber, ruleVersion: version, correlationId };
     const transfer = await transferCredits(tx, {
       ledgerId: crypto.randomUUID(),
       gameDay,
@@ -64,8 +68,8 @@ export async function settleTax(repository: PostgresRepository, humanId: string,
       correlationId,
     });
     if (transfer.status === 'already_processed') return { ok: true, alreadySettled: true, amount: Number(transfer.amount), gameDay, ruleVersion: version, correlationId };
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING', [`TAX-SETTLED-${correlationId}`, humanId, 'finance', 'Tax settlement recorded', `${amount} Credits were settled to the OUC treasury at rate ${(rate * 100).toFixed(2)}% (rule v${version}).`, correlationId]);
-    return { ok: true, amount, rate, ruleVersion: version, correlationId };
+    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING', [`TAX-SETTLED-${correlationId}`, humanId, 'finance', 'Tax settlement recorded', `${amount} Credits were settled to the OUC treasury at rate ${(rateNumber * 100).toFixed(2)}% (rule v${version}).`, correlationId]);
+    return { ok: true, amount: Number(amount), rate: rateNumber, ruleVersion: version, correlationId };
   });
 }
 
