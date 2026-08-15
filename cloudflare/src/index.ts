@@ -1277,17 +1277,15 @@ const worker = {
       const name = body.name?.trim();
       const founderId = viewer.id;
       if (!name || name.length < 3 || name.length > 80) return Response.json({ ok: false, error: 'Community name must be 3–80 characters' }, { status: 400 });
-      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(founderId).first())) return Response.json({ ok: false, error: 'Founder not found' }, { status: 404 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createCommunityPostgres(repository, { founderId, name, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Community formation failed';
-          return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /founder/i.test(message) ? 404 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createCommunityPostgres(repository, { founderId, name, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Community formation failed';
+        return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /founder/i.test(message) ? 404 : 400 });
       }
       const priorFormation = await env.DB.prepare("SELECT institution_id FROM membership_events WHERE reason = 'community_formation' AND institution_type = 'COMMUNITY' AND human_id = ? AND id = ?").bind(founderId, correlationId).first<{ institution_id: string }>();
       if (priorFormation) return Response.json({ ok: true, alreadyProcessed: true, community: await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(priorFormation.institution_id).first(), correlationId, persistence: 'cloudflare-d1' });
@@ -1304,13 +1302,12 @@ const worker = {
     const communityMembersMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members$/);
     if (communityMembersMatch && request.method === 'GET') {
       const communityId = communityMembersMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => listCommunityMembersPostgres(repository, communityId));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community members could not be loaded' }, { status: 404 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => listCommunityMembersPostgres(repository, communityId));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community members could not be loaded' }, { status: 404 });
       }
       const community = await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(communityId).first();
       if (!community) return Response.json({ ok: false, error: 'Community not found' }, { status: 404 });
@@ -1323,14 +1320,13 @@ const worker = {
       const communityId = communityMembersMatch[1];
       const body = await request.json<{ humanId?: string }>();
       const humanId = viewer.id;
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => changeCommunityMembershipPostgres(repository, { communityId, humanId, action: request.method === 'POST' ? 'join' : 'leave' }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: request.method === 'POST' ? 201 : 200 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Community membership change failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member|active/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => changeCommunityMembershipPostgres(repository, { communityId, humanId, action: request.method === 'POST' ? 'join' : 'leave' }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: request.method === 'POST' ? 201 : 200 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Community membership change failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member|active/i.test(message) ? 409 : 400 });
       }
       const [community, human] = await Promise.all([
         env.DB.prepare('SELECT id, status FROM communities WHERE id = ?').bind(communityId).first<{ id: string; status: string }>(),
@@ -1361,13 +1357,12 @@ const worker = {
     const communityContributionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/contributions$/);
     if (communityContributionMatch && request.method === 'GET') {
       const communityId = communityContributionMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => listCommunityContributionsPostgres(repository, communityId));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community contributions could not be loaded' }, { status: 404 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => listCommunityContributionsPostgres(repository, communityId));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community contributions could not be loaded' }, { status: 404 });
       }
       const community = await env.DB.prepare('SELECT id, name, shared_credits FROM communities WHERE id = ?').bind(communityId).first();
       if (!community) return Response.json({ ok: false, error: 'Community not found' }, { status: 404 });
@@ -1384,14 +1379,13 @@ const worker = {
       const correlationId = body.correlationId || crypto.randomUUID();
       if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Contribution amount must be positive' }, { status: 400 });
       if (amount > 100000) return Response.json({ ok: false, error: 'Contribution exceeds the per-command limit' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => contributeToCommunityPostgres(repository, { communityId, humanId, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Community contribution failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /insufficient|member|active/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => contributeToCommunityPostgres(repository, { communityId, humanId, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Community contribution failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /insufficient|member|active/i.test(message) ? 409 : 400 });
       }
       const [community, human, account, membership, prior] = await Promise.all([
         env.DB.prepare('SELECT id, status, shared_credits FROM communities WHERE id = ?').bind(communityId).first<{ id: string; status: string; shared_credits: number }>(),
