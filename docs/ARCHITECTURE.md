@@ -98,6 +98,11 @@ are separate idempotent transfers within the market transaction. The escrow
 account is deleted after a fully settled or cancelled order; open legacy buy
 orders are backfilled by a reviewed migration.
 
+Cities, corporations, and communities also have explicit credit accounts. Their
+existing treasury/shared-credit columns are synchronized read projections for
+API compatibility; contributions, public spending, recovery, and inter-
+institution funding move credits through those accounts first.
+
 Such a function must have explicit parameters, deterministic lock ordering,
 idempotency behavior, a small result shape, migration coverage, and a focused
 integration test.

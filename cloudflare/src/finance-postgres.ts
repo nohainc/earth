@@ -1,6 +1,6 @@
 import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
-import { centsToMoney, taxToCents } from './money';
+import { centsToMoney, moneyToCents, taxToCents } from './money';
 
 export async function publicSpending(
   repository: PostgresRepository,
@@ -11,23 +11,26 @@ export async function publicSpending(
     if (!role.rows[0]) throw new Error('An active City Mayor or Infrastructure Planner term is required');
     const prior = await tx.query<{ amount: string; game_day: number }>("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'public_spending' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, amount: Number(prior.rows[0].amount), gameDay: prior.rows[0].game_day, correlationId: input.correlationId };
-    const treasury = await tx.query<{ balance: string }>("SELECT balance FROM account_balances WHERE account_id = 'account-ouc-treasury' FOR UPDATE");
-    if (!treasury.rows[0] || Number(treasury.rows[0].balance) < input.amount) throw new Error('OUC treasury cannot fund this spending');
+    const treasury = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE account_id = 'account-ouc-treasury'");
+    const amountCents = moneyToCents(input.amount);
+    const amount = centsToMoney(amountCents);
+    if (!treasury.rows[0] || moneyToCents(treasury.rows[0].balance) < amountCents) throw new Error('OUC treasury cannot fund this spending');
     const city = await tx.query<{ id: string }>('SELECT id FROM cities WHERE id = $1 FOR UPDATE', [input.cityId]);
     if (!city.rows[0]) throw new Error('City not found');
+    const cityAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE account_id = $1", [`account-city-${input.cityId}`]);
+    if (!cityAccount.rows[0]) throw new Error('City credit account not found');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    await tx.query("UPDATE account_balances SET balance = balance - $1 WHERE account_id = 'account-ouc-treasury' AND balance >= $1", [input.amount]);
-    await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [input.amount, input.cityId]);
-    await tx.query('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = budgets.amount + EXCLUDED.amount, game_day = EXCLUDED.game_day', [`SPEND-${input.cityId}-${input.category}`, input.cityId, input.category, input.amount, day]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [input.correlationId, day, 'account-ouc-treasury', input.cityId, input.amount, 'CREDIT', 'public_spending', input.cityId, 'finance-v1', input.correlationId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, JSON.stringify({ cityId: input.cityId, category: input.category, amount: input.amount, correlationId: input.correlationId, actorId: input.actorId })]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.actorId, 'finance', 'Public spending recorded', `${input.amount} Credits were routed from the OUC treasury to ${input.cityId} for ${input.category}.`, input.correlationId]);
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: treasury.rows[0].account_id, creditAccount: cityAccount.rows[0].account_id, amount, reasonType: 'public_spending', reasonId: input.cityId, ruleVersion: 'finance-v2', correlationId: input.correlationId });
+    await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [amount, input.cityId]);
+    await tx.query('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = budgets.amount + EXCLUDED.amount, game_day = EXCLUDED.game_day', [`SPEND-${input.cityId}-${input.category}`, input.cityId, input.category, amount, day]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, JSON.stringify({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId })]);
+    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.actorId, 'finance', 'Public spending recorded', `${amount} Credits were routed from the OUC treasury to ${input.cityId} for ${input.category}.`, input.correlationId]);
     const members = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 AND human_id <> $2', [input.cityId, input.actorId]);
     for (const member of members.rows) {
-      await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), member.human_id, 'finance', 'City funding received', `${input.amount} Credits were routed to ${input.cityId} for ${input.category}.`, input.correlationId]);
+      await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), member.human_id, 'finance', 'City funding received', `${amount} Credits were routed to ${input.cityId} for ${input.category}.`, input.correlationId]);
     }
-    return { ok: true, amount: input.amount, cityId: input.cityId, category: input.category, gameDay: day, correlationId: input.correlationId };
+    return { ok: true, amount: Number(amount), cityId: input.cityId, category: input.category, gameDay: day, correlationId: input.correlationId };
   });
 }
 
@@ -109,19 +112,21 @@ export async function recoverInstitution(repository: PostgresRepository, input: 
     if (!role.rows[0]) throw new Error('An active institutional finance role is required');
     const state = await tx.query<{ status: string }>("SELECT status FROM financial_states WHERE institution_id = $1 AND status IN ('distressed','insolvent') FOR UPDATE", [input.institutionId]);
     if (!state.rows[0]) throw new Error('Institution is not currently in a recoverable crisis state');
-    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.humanId]);
-    if (!account.rows[0] || Number(account.rows[0].balance) < input.amount) throw new Error('Insufficient Credits for recovery');
+    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.humanId]);
+    const amountCents = moneyToCents(input.amount);
+    const amount = centsToMoney(amountCents);
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < amountCents) throw new Error('Insufficient Credits for recovery');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const gameDay = Number(world.rows[0]?.game_day ?? 0);
-    const debit = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.amount, account.rows[0].account_id]);
-    if (debit.rowCount !== 1) throw new Error('Recovery payment reservation failed');
     const table = institution.rows[0].kind === 'CITY' ? 'cities' : 'corporations';
-    await tx.query(`UPDATE ${table} SET treasury = treasury + $1 WHERE id = $2`, [input.amount, input.institutionId]);
+    const institutionAccount = await tx.query<{ account_id: string }>('SELECT account_id FROM account_balances WHERE account_id = $1', [`account-${institution.rows[0].kind.toLowerCase()}-${input.institutionId}`]);
+    if (!institutionAccount.rows[0]) throw new Error('Institution credit account not found');
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: account.rows[0].account_id, creditAccount: institutionAccount.rows[0].account_id, amount, reasonType: 'institution_recovery', reasonId: input.institutionId, ruleVersion: 'finance-v3', correlationId: input.correlationId });
+    await tx.query(`UPDATE ${table} SET treasury = treasury + $1 WHERE id = $2`, [amount, input.institutionId]);
     await tx.query("UPDATE financial_states SET status = 'active', recovery_game_day = $1, last_reason = 'Player-authorized crisis recovery', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2", [gameDay, input.institutionId]);
     await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,$4,\'active\',$5,$6)', [crypto.randomUUID(), input.institutionId, institution.rows[0].kind, state.rows[0].status, gameDay, 'Player-authorized crisis recovery']);
     await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'financial_recovery', `${institution.rows[0].kind} ${input.institutionId} recovered`, JSON.stringify({ institutionId: input.institutionId, amount: input.amount, humanId: input.humanId })]);
-    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), gameDay, account.rows[0].account_id, input.institutionId, input.amount, 'CREDIT', 'institution_recovery', input.institutionId, 'finance-v2', input.correlationId]);
-    await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.humanId, 'finance', 'Institution recovered', `${institution.rows[0].kind} ${input.institutionId} returned to active status after your ${input.amount} Credit recovery contribution.`, input.institutionId]);
-    return { ok: true, institutionId: input.institutionId, amount: input.amount, status: 'active', correlationId: input.correlationId };
+    await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.humanId, 'finance', 'Institution recovered', `${institution.rows[0].kind} ${input.institutionId} returned to active status after your ${amount} Credit recovery contribution.`, input.institutionId]);
+    return { ok: true, institutionId: input.institutionId, amount: Number(amount), status: 'active', correlationId: input.correlationId };
   });
 }

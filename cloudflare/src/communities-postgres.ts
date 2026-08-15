@@ -1,4 +1,6 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, moneyToCents } from './money';
 
 const MAX_NAME_LENGTH = 80;
 
@@ -42,6 +44,7 @@ export async function createCommunity(repository: PostgresRepository, input: { f
     const day = await currentDay(tx);
     const communityId = `COMM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await tx.query('INSERT INTO communities (id, name, founder_id, shared_credits) VALUES ($1,$2,$3,0)', [communityId, name, input.founderId]);
+    await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $2, 0, 'CREDIT')", [`account-community-${communityId}`, communityId]);
     await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'founder',$3)", [communityId, input.founderId, day]);
     await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'community_formation')", [input.correlationId, input.founderId, communityId, day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [
@@ -99,13 +102,14 @@ export async function contributeToCommunity(repository: PostgresRepository, inpu
     const membership = await tx.query('SELECT human_id FROM community_members WHERE community_id = $1 AND human_id = $2', [input.communityId, input.humanId]);
     if (!membership.rows[0]) throw new Error('Contributor must be a community member');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.humanId]);
+    const amountCents = moneyToCents(input.amount);
+    const amount = centsToMoney(amountCents);
+    const communityAccount = `account-community-${input.communityId}`;
     if (!account.rows[0]) throw new Error('Contributor account not found');
-    if (Number(account.rows[0].balance) < input.amount) throw new Error('Insufficient Credits');
+    if (moneyToCents(account.rows[0].balance) < amountCents) throw new Error('Insufficient Credits');
     const day = await currentDay(tx);
-    const debit = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.amount, account.rows[0].account_id]);
-    if (debit.rowCount !== 1) throw new Error('Contribution reservation failed');
-    await tx.query('UPDATE communities SET shared_credits = shared_credits + $1 WHERE id = $2', [input.amount, input.communityId]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, account.rows[0].account_id, input.communityId, input.amount, 'CREDIT', 'community_contribution', input.communityId, 'community-v1', input.correlationId]);
-    return { ok: true, amount: input.amount, correlationId: input.correlationId, community: (await tx.query('SELECT id, name, shared_credits FROM communities WHERE id = $1', [input.communityId])).rows[0], account: (await tx.query('SELECT account_id, balance FROM account_balances WHERE account_id = $1', [account.rows[0].account_id])).rows[0] };
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: communityAccount, amount, reasonType: 'community_contribution', reasonId: input.communityId, ruleVersion: 'community-v2', correlationId: input.correlationId });
+    await tx.query('UPDATE communities SET shared_credits = shared_credits + $1 WHERE id = $2', [amount, input.communityId]);
+    return { ok: true, amount: Number(amount), correlationId: input.correlationId, community: (await tx.query('SELECT id, name, shared_credits FROM communities WHERE id = $1', [input.communityId])).rows[0], account: (await tx.query('SELECT account_id, balance FROM account_balances WHERE account_id = $1', [account.rows[0].account_id])).rows[0] };
   });
 }
