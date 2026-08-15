@@ -424,12 +424,69 @@ async function servicesStatusFromPostgres(request: Request, env: Env): Promise<R
   return Response.json({ cityId: city?.id ?? null, provider: city ? 'city-capacity' : 'ouc-independent-minimum', ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)), persistence: 'planetscale-postgres' });
 }
 
+async function worldActivityFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const result = await withRepository(env, async (repository) => {
+    const [world, technology] = await Promise.all([
+      repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
+      repository.query('SELECT progress FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewer.id]),
+    ]);
+    return { activity: [{ type: 'world_clock', day: world.rows[0]?.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 }] };
+  });
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function eventsFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+  const result = await withRepository(env, (repository) => listEventsPostgres(repository, viewer.id, limit));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function notificationsFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+  const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.id, limit));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function markNotificationReadFromPostgres(request: Request, env: Env, notificationId: string): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const result = await withRepository(env, (repository) => markNotificationReadPostgres(repository, viewer.id, notificationId));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function auditFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
     if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);
     if (url.pathname === '/api/services/status' && request.method === 'GET') return servicesStatusFromPostgres(request, env);
+    if (url.pathname === '/api/world/activity' && request.method === 'GET') return worldActivityFromPostgres(request, env);
+    if (url.pathname === '/api/events' && request.method === 'GET') return eventsFromPostgres(request, env);
+    if (url.pathname === '/api/notifications' && request.method === 'GET') return notificationsFromPostgres(request, env);
+    if (url.pathname === '/api/audit' && request.method === 'GET') return auditFromPostgres(request, env);
+    const notificationReadRoute = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
+    if (notificationReadRoute && request.method === 'POST') return markNotificationReadFromPostgres(request, env, notificationReadRoute[1]);
+    if (url.pathname === '/api/world/audit' && request.method === 'GET') return auditFromPostgres(request, env);
     if (url.pathname === '/api/auth/me' && request.method === 'GET') {
       const human = await currentHuman(request, env);
       return Response.json({ authenticated: Boolean(human), human, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
