@@ -819,92 +819,32 @@ const worker = {
       const result = await withRepository(env, (repository) => listRolesPostgres(repository));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
-    const roleClaimMatch = url.pathname.match(/^\/api\/governance\/roles\/([^/]+)\/(claim|resign)$/);
+    const roleClaimMatch = url.pathname.match(/^\\/api\\/governance\\/roles\\/([^/]+)\\/(claim|resign)$/);
     if (roleClaimMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => changeRolePostgres(repository, { humanId: viewer.id, roleId: roleClaimMatch[1], action: roleClaimMatch[2] as 'claim' | 'resign' }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Role operation failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /occupied|assignment|eligible|maturity/i.test(message) ? 409 : 403 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => changeRolePostgres(repository, { humanId: viewer.id, roleId: roleClaimMatch[1], action: roleClaimMatch[2] as 'claim' | 'resign' }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Role operation failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /occupied|assignment|eligible|maturity/i.test(message) ? 409 : 403 });
       }
-      const role = await env.DB.prepare("SELECT * FROM institution_roles WHERE id = ? AND status = 'active'").bind(roleClaimMatch[1]).first<{ id: string; institution_id: string; term_days: number; eligibility: string }>();
-      if (!role) return Response.json({ ok: false, error: 'Role not found' }, { status: 404 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const maturity = await env.DB.prepare('SELECT political_eligibility_game_day FROM humans WHERE id = ?').bind(viewer.id).first<{ political_eligibility_game_day: number }>();
-      if (roleClaimMatch[2] === 'claim' && day < Number(maturity?.political_eligibility_game_day ?? 0)) return Response.json({ ok: false, error: `Political maturity is reached on game day ${maturity?.political_eligibility_game_day}` }, { status: 403 });
-      await env.DB.prepare("UPDATE role_assignments SET status = 'expired' WHERE status = 'active' AND ends_game_day <= ?").bind(day).run();
-      if (roleClaimMatch[2] === 'resign') {
-        await env.DB.prepare("UPDATE role_assignments SET status = 'resigned' WHERE role_id = ? AND human_id = ? AND status = 'active'").bind(role.id, viewer.id).run();
-        await env.DB.batch([
-          env.DB.prepare('INSERT INTO authority_events (id, human_id, institution_id, role_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, role.institution_id, role.id, 'resigned', day, 'voluntary_resignation'),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`ROLE-RESIGNED-${viewer.id}-${role.id}-${day}`, viewer.id, 'governance', 'Role resigned', `You resigned from role ${role.id}.`, role.id),
-        ]);
-        return Response.json({ ok: true, status: 'resigned', persistence: 'cloudflare-d1' });
-      }
-      const eligible = role.eligibility === 'representative'
-        ? await env.DB.prepare('SELECT memberships.corporation_id FROM memberships JOIN corporations ON corporations.id = memberships.corporation_id WHERE memberships.human_id = ? AND (corporations.institution_id = ? OR memberships.corporation_id = ?)').bind(viewer.id, role.institution_id, role.institution_id).first()
-        : role.eligibility === 'city-representative'
-          ? await env.DB.prepare('SELECT memberships.city_id FROM memberships JOIN cities ON cities.id = memberships.city_id WHERE memberships.human_id = ? AND memberships.corporation_id IS NULL').bind(viewer.id).first()
-        : role.eligibility === 'resident'
-          ? await env.DB.prepare('SELECT memberships.human_id FROM memberships JOIN cities ON cities.id = memberships.city_id WHERE memberships.human_id = ? AND (cities.institution_id = ? OR memberships.city_id = ?)').bind(viewer.id, role.institution_id, role.institution_id).first()
-          : await env.DB.prepare('SELECT memberships.human_id FROM memberships JOIN corporations ON corporations.id = memberships.corporation_id WHERE memberships.human_id = ? AND (corporations.institution_id = ? OR memberships.corporation_id = ?)').bind(viewer.id, role.institution_id, role.institution_id).first();
-      if (!eligible) return Response.json({ ok: false, error: 'Human is not eligible for this role' }, { status: 403 });
-      if (await env.DB.prepare("SELECT id FROM role_assignments WHERE role_id = ? AND status = 'active'").bind(role.id).first()) return Response.json({ ok: false, error: 'Role is already occupied' }, { status: 409 });
-      const assignmentId = crypto.randomUUID();
-      await env.DB.prepare('INSERT INTO role_assignments (id, role_id, institution_id, human_id, started_game_day, ends_game_day) VALUES (?, ?, ?, ?, ?, ?)').bind(assignmentId, role.id, role.institution_id, viewer.id, day, day + Math.min(90, Math.max(7, Number(role.term_days)))).run();
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO authority_events (id, human_id, institution_id, role_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, role.institution_id, role.id, 'claimed', day, 'role_claim'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`ROLE-CLAIMED-${viewer.id}-${role.id}-${day}`, viewer.id, 'governance', 'Role claimed', `You now hold role ${role.id} until the end of your active term.`, role.id),
-      ]);
-      return Response.json({ ok: true, assignment: await env.DB.prepare('SELECT * FROM role_assignments WHERE id = ?').bind(assignmentId).first(), persistence: 'cloudflare-d1' });
     }
-    const delegationMatch = url.pathname.match(/^\/api\/governance\/roles\/([^/]+)\/(delegate|recall)$/);
+    const delegationMatch = url.pathname.match(/^\\/api\\/governance\\/roles\\/([^/]+)\\/(delegate|recall)$/);
     if (delegationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const roleId = delegationMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ delegateHumanId?: string }>();
-        try {
-          const result = await withRepository(env, (repository) => changeDelegationPostgres(repository, { humanId: viewer.id, roleId, action: delegationMatch[2] as 'delegate' | 'recall', delegateHumanId: body.delegateHumanId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Delegation operation failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /occupied|currently|eligible|holder/i.test(message) ? 409 : 403 });
-        }
-      }
-      const role = await env.DB.prepare("SELECT id, institution_id FROM institution_roles WHERE id = ? AND status = 'active'").bind(roleId).first<{ id: string; institution_id: string }>();
-      if (!role) return Response.json({ ok: false, error: 'Role not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      const assignment = await env.DB.prepare("SELECT id, human_id, ends_game_day FROM role_assignments WHERE role_id = ? AND status = 'active'").bind(roleId).first<{ id: string; human_id: string; ends_game_day: number }>();
-      if (!assignment) return Response.json({ ok: false, error: 'Role is not currently occupied' }, { status: 409 });
       const body = await request.json<{ delegateHumanId?: string }>();
-      if (delegationMatch[2] === 'delegate') {
-        if (assignment.human_id !== viewer.id) return Response.json({ ok: false, error: 'Only the current role holder may delegate authority' }, { status: 403 });
-        const delegateId = body.delegateHumanId?.trim() ?? '';
-        if (!delegateId || delegateId === viewer.id || !(await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(delegateId).first())) return Response.json({ ok: false, error: 'Delegate must be another active Human' }, { status: 400 });
-        await env.DB.prepare("UPDATE authority_delegations SET status = 'revoked' WHERE role_id = ? AND status = 'active'").bind(roleId).run();
-        const delegationId = crypto.randomUUID();
-        await env.DB.batch([
-          env.DB.prepare('INSERT INTO authority_delegations (id, institution_id, role_id, delegator_id, delegate_id, starts_game_day, ends_game_day) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(delegationId, role.institution_id, roleId, viewer.id, delegateId, day, assignment.ends_game_day),
-          env.DB.prepare('INSERT INTO authority_events (id, human_id, institution_id, role_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, role.institution_id, roleId, 'delegated', day, `delegated_to:${delegateId}`),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`ROLE-DELEGATED-${delegationId}`, delegateId, 'governance', 'Authority delegated', `You may exercise delegated authority for role ${roleId} until game day ${assignment.ends_game_day}.`, roleId),
-        ]);
-        return Response.json({ ok: true, delegation: await env.DB.prepare('SELECT * FROM authority_delegations WHERE id = ?').bind(delegationId).first(), persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => changeDelegationPostgres(repository, { humanId: viewer.id, roleId: delegationMatch[1], action: delegationMatch[2] as 'delegate' | 'recall', delegateHumanId: body.delegateHumanId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Delegation operation failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /occupied|currently|eligible|holder/i.test(message) ? 409 : 403 });
       }
-      if (!(await eligibleForInstitution(env, viewer.id, role.institution_id))) return Response.json({ ok: false, error: 'Human is not eligible to recall this role' }, { status: 403 });
-      await env.DB.batch([
-        env.DB.prepare("UPDATE role_assignments SET status = 'resigned' WHERE id = ? AND status = 'active'").bind(assignment.id),
-        env.DB.prepare("UPDATE authority_delegations SET status = 'revoked' WHERE role_id = ? AND status = 'active'").bind(roleId),
-        env.DB.prepare('INSERT INTO authority_events (id, human_id, institution_id, role_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, role.institution_id, roleId, 'recalled', day, `recalled_holder:${assignment.human_id}`),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`ROLE-RECALLED-${assignment.id}`, assignment.human_id, 'governance', 'Role recalled', `Your term for role ${roleId} was recalled on game day ${day}.`, roleId),
-      ]);
-      return Response.json({ ok: true, status: 'recalled', roleId, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/communities' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listCommunitiesPostgres(repository));
@@ -1118,39 +1058,6 @@ const worker = {
       if (await env.DB.prepare('SELECT id FROM institutions WHERE name = ?').bind(name).first()) return Response.json({ ok: false, error: 'Institution name already exists' }, { status: 409 });
       const cityId = `CITY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
       const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const residents = Number(population.count);
-      const foundingMembers = (await env.DB.prepare("SELECT community_members.human_id FROM community_members JOIN humans ON humans.id = community_members.human_id LEFT JOIN memberships ON memberships.human_id = community_members.human_id WHERE community_members.community_id = ? AND humans.life_status = 'active' AND memberships.city_id IS NULL").bind(communityId).all<{ human_id: string }>()).results;
-      await env.DB.batch([
-        env.DB.prepare("INSERT INTO institutions (id, kind, name, status) VALUES (?, 'CITY', ?, 'active')").bind(cityId, name),
-        env.DB.prepare('INSERT INTO cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity, treasury) VALUES (?, ?, 0, 0, 0, 0, 50, 0)').bind(cityId, cityId),
-        env.DB.prepare("INSERT INTO institution_roles (id, institution_id, name, term_days, eligibility) VALUES (?, ?, 'City Mayor', 90, 'resident'), (?, ?, 'Infrastructure Planner', 90, 'resident')").bind(`${cityId}-MAYOR`, cityId, `${cityId}-PLANNER`, cityId),
-        env.DB.prepare("UPDATE memberships SET city_id = ? WHERE human_id IN (SELECT community_members.human_id FROM community_members JOIN humans ON humans.id = community_members.human_id WHERE community_members.community_id = ? AND humans.life_status = 'active') AND city_id IS NULL").bind(cityId, communityId),
-        env.DB.prepare('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = ?), housing_capacity = (SELECT COUNT(*) FROM memberships WHERE city_id = ?), energy_capacity = (SELECT COUNT(*) FROM memberships WHERE city_id = ?), connectivity_capacity = (SELECT COUNT(*) FROM memberships WHERE city_id = ?) WHERE id = ?').bind(cityId, cityId, cityId, cityId, cityId),
-        ...foundingMembers.flatMap((member) => [
-          env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), member.human_id, 'CITY', cityId, 'joined', day, 'city_formation'),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`CITY-FORMED-${member.human_id}-${cityId}`, member.human_id, 'institution', 'City founded', `City ${cityId} was founded and you became a resident.`, cityId),
-        ]),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'city.formed', `${name} was founded`, JSON.stringify({ cityId, communityId, residents })),
-      ]);
-      return Response.json({ ok: true, city: await env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind(cityId).first(), persistence: 'cloudflare-d1' }, { status: 201 });
-    }
-    const cityQualificationMatch = url.pathname.match(/^\/api\/cities\/([^/]+)\/qualification$/);
-    if (cityQualificationMatch && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => cityQualificationPostgres(repository, cityQualificationMatch[1]));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'City qualification unavailable' }, { status: 404 });
-        }
-      }
-      const city = await env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind(cityQualificationMatch[1]).first<Record<string, unknown>>();
-      if (!city) return Response.json({ ok: false, error: 'City not found' }, { status: 404 });
-      const requirements = {
-        activePopulation: Number(city.residents ?? 0) >= 10,
-        housing: Number(city.housing_capacity ?? 0) >= Number(city.residents ?? 0),
-        energy: Number(city.energy_capacity ?? 0) >= Number(city.residents ?? 0),
-        connectivity: Number(city.connectivity_capacity ?? 0) >= Number(city.residents ?? 0),
         health: Number(city.health_capacity ?? 0) >= 50,
         treasury: Number(city.treasury ?? 0) >= 0,
         governance: Boolean(await env.DB.prepare("SELECT id FROM institution_roles WHERE institution_id = ? AND status = 'active'").bind(city.institution_id).first()),
