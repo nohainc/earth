@@ -1045,22 +1045,19 @@ const worker = {
     if (url.pathname === '/api/day/advance' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, async (repository) => {
-            const authority = await repository.query("SELECT 1 FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT 1 FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [viewer.id]);
-            if (!authority.rows[0]) throw new Error('Only an active OUC Delegate may advance the simulation clock manually');
-            await resolveProposalsPostgres(repository);
-            return advanceWorldPostgres(repository, 1440);
-          });
-          if (result) {
-            const state = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewer.id));
-            return Response.json({ ok: true, result, state, persistence: 'planetscale-postgres' });
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Unable to advance the simulation clock';
-          return Response.json({ ok: false, error: message }, { status: /delegate/i.test(message) ? 403 : 409 });
-        }
+      try {
+        const result = await withRepository(env, async (repository) => {
+          const authority = await repository.query("SELECT 1 FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT 1 FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [viewer.id]);
+          if (!authority.rows[0]) throw new Error('Only an active OUC Delegate may advance the simulation clock manually');
+          await resolveProposalsPostgres(repository);
+          return advanceWorldPostgres(repository, 1440);
+        });
+        if (!result) throw new Error('PostgreSQL persistence is unavailable');
+        const state = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewer.id));
+        return Response.json({ ok: true, result, state, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Unable to advance the simulation clock';
+        return Response.json({ ok: false, error: message }, { status: /delegate/i.test(message) ? 403 : 409 });
       }
       if (!(await hasActiveRole(env, viewer.id, ['ROLE-OUC-DELEGATE']))) return Response.json({ ok: false, error: 'Only an active OUC Delegate may advance the simulation clock manually' }, { status: 403 });
       await resolveGovernanceProposals(env);
@@ -1138,21 +1135,14 @@ const worker = {
     if (url.pathname === '/api/world/activity' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => {
-          const [world, technology] = await Promise.all([
-            repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
-            repository.query('SELECT progress FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewer.id]),
-          ]);
-          return { activity: [{ type: 'world_clock', day: world.rows[0]?.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 }] };
-        });
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [world, technology] = await Promise.all([
-        env.DB.prepare('SELECT game_day, market_batch_seconds FROM world_state WHERE id = ?').bind('WORLD').first(),
-        env.DB.prepare('SELECT progress FROM technologies WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewer.id).first(),
-      ]);
-      return Response.json({ activity: [{ type: 'world_clock', day: world?.game_day ?? 184 }, { type: 'research_progress', progress: technology?.progress ?? 0 }, { type: 'market_cycle', batch: world?.market_batch_seconds ?? 498 }], persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => {
+        const [world, technology] = await Promise.all([
+          repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
+          repository.query('SELECT progress FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewer.id]),
+        ]);
+        return { activity: [{ type: 'world_clock', day: world.rows[0]?.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 }] };
+      });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/events' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
