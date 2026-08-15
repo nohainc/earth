@@ -9,7 +9,7 @@
   "scripts": {
     "start": "node server.js",
     "check": "node --check server.js",
-    "test": "node --test test/server.smoke.test.js test/simulation.test.js && node --experimental-strip-types --test test/opportunities.test.mjs && node --test test/outbox.test.mjs",
+    "test": "node --test test/server.smoke.test.js test/simulation.test.js && node --experimental-strip-types --test test/opportunities.test.mjs test/game-clock.test.mjs && node --test test/outbox.test.mjs",
     "cf:smoke": "node test/cloudflare.smoke.mjs",
     "cf:check": "wrangler deploy --dry-run",
     "cf:assert-postgres": "node scripts/assert-postgres-authority.mjs",

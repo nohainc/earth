@@ -1185,6 +1185,7 @@ class _Dashboard extends StatelessWidget {
               Text(proposal['title']),
               Text('${proposal['status']} · ${proposal['outcome'] ?? 'pending'}', style: const TextStyle(color: _muted, fontSize: 11)),
               Text('Quorum ${(((proposal['quorum'] as num?)?.toDouble() ?? .25) * 100).round()}% · approval ${(((proposal['approval_threshold'] as num?)?.toDouble() ?? .5) * 100).round()}%', style: const TextStyle(color: _muted, fontSize: 11)),
+              if (proposal['deadline'] is Map) Text(_formatProposalDeadline(proposal['deadline'] as Map<String, dynamic>), style: const TextStyle(color: Colors.orangeAccent, fontSize: 11)),
               const SizedBox(height: 8),
               Text(
                   'Support ${votes['support']}  ·  Oppose ${votes['oppose']}  ·  Uncast ${votes['uncast']}'),
@@ -1706,6 +1707,20 @@ class _OpportunityPanel extends StatelessWidget {
 String _percent(dynamic value) {
   final number = value is num ? value.toDouble() : 0.0;
   return '${(number.clamp(0, 1) * 100).round()}%';
+}
+
+String _formatProposalDeadline(Map<String, dynamic> deadline) {
+  final day = deadline['gameDay'] ?? deadline['game_day'] ?? '—';
+  final minute = (deadline['gameMinute'] ?? deadline['game_minute']) as num?;
+  final remaining = (deadline['realSecondsRemaining'] ?? deadline['real_seconds_remaining']) as num?;
+  final clock = minute == null ? '—' : '${(minute.toInt() ~/ 60).toString().padLeft(2, '0')}:${(minute.toInt() % 60).toString().padLeft(2, '0')}';
+  final seconds = remaining?.toInt() ?? 0;
+  final duration = seconds >= 86400
+      ? '${seconds ~/ 86400}d ${(seconds % 86400) ~/ 3600}h'
+      : seconds >= 3600
+          ? '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m'
+          : '${seconds ~/ 60}m';
+  return 'Closes game day $day at $clock · in $duration real time';
 }
 
 class _RankingLine extends StatelessWidget {

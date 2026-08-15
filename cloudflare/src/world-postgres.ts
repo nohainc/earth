@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { projectGameDeadline } from './game-clock';
 import { rankOpportunities } from './opportunities';
 
 type Row = Record<string, any>;
@@ -34,6 +35,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   ]);
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};
+  const currentGameDay = Number(worldRow.game_day ?? 184);
+  const currentGameMinute = Number(worldRow.game_minute ?? 0);
   const city = cityMetrics.rows[0] as Row | undefined;
   const corporation = corporationMetrics.rows[0] as Row | undefined;
   const voteCounts = (ballots.rows as Row[]).reduce<Record<string, Record<string, number>>>((all, row) => {
@@ -89,8 +92,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     ...machineRows.filter((machine) => Number(machine.utilization ?? 0) > 0 && Number(machine.condition ?? 100) < 70).map((machine) => ({ type: 'utilization', priority: 'medium', subject: machine.id, message: `Reduce utilization for ${machine.name} until its condition improves.` })),
     ...(city && Number(city.health_capacity ?? 0) / 100 < 0.5 ? [{ type: 'services', priority: 'high', subject: 'CITY-HEALTH', message: 'Health service is critical; propose or fund additional city health capacity.' }] : []),
   ];
+  const proposalsWithDeadlines = (proposals.rows as Row[]).map((proposal) => ({
+    ...proposal,
+    deadline: projectGameDeadline({ gameDay: currentGameDay, gameMinute: currentGameMinute, closesAt: proposal.closes_at, nowMs: Date.now() }),
+  }));
   return {
-    clock: { day: worldRow.game_day ?? 184, minute: worldRow.game_minute ?? 0, realSecondsPerGameMinute: 1 },
+    clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 1 },
     world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
     human: { id: humanRow.id, name: humanRow.display_name, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
     life: { generation: 1, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
@@ -98,7 +105,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     institutions: { ouc: mapByKind(institutions.rows, 'OUC'), corporation: { ...mapByKind(institutions.rows, 'CORPORATION'), ...corporation }, city: { ...mapByKind(institutions.rows, 'CITY'), ...city }, business: mapByKind(institutions.rows, 'BUSINESS') },
     resources: Object.fromEntries((resources.rows as Row[]).map((row) => [row.resource, row.amount])), business: businessRow,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
-    governance: { proposals: (proposals.rows as Row[]).map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
+    governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
     technology: { research: technology.rows[0] ?? {}, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0) }, machines: machineRows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, rankings: { cities: rankings[0].rows, corporations: rankings[1].rows }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, roles: roles.rows, communities: communities.rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4].rows[0]?.invalid ?? 0) === 0 },
