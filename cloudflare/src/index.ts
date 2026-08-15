@@ -8,6 +8,7 @@ import { acceptContract as acceptContractPostgres, cancelContract as cancelContr
 import { resolveContractDispute as resolveContractDisputePostgres } from './arbitration-postgres';
 import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, issueShares as issueSharesPostgres, ownershipRegistry as ownershipRegistryPostgres, setPolicy as setBusinessPolicyPostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
 import { acquireMachine as acquireMachinePostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
+import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
@@ -2184,25 +2185,16 @@ const worker = {
     if (decommissionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ? AND owner_id = ?').bind(decommissionMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found for this Human' }, { status: 404 });
       const body = await request.json<{ otp?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for decommissioning an asset' }, { status: 401 });
-      const embeddedMaterial: Record<string, number> = { extractor: 80, 'energy-array': 60, 'compute-node': 100, fabricator: 90, 'housing-fabricator': 110, 'research-cluster': 140, 'service-robot': 45 };
-      const efficiency = Math.min(0.8, Math.max(0.2, 0.25 + Number(machine.condition ?? 0) / 200));
-      const materialReturned = Math.round((embeddedMaterial[String(machine.machine_type)] ?? 60) * efficiency * 100) / 100;
-      const componentsReturned = Math.round((Number(machine.productive_capacity ?? 1) * 25 * efficiency) * 100) / 100;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('DELETE FROM business_assets WHERE machine_id = ?').bind(machine.id),
-        env.DB.prepare('DELETE FROM machines WHERE id = ? AND owner_id = ?').bind(machine.id, viewer.id),
-        env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, \'material\', ?), (?, \'components\', ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(viewer.id, materialReturned, viewer.id, componentsReturned),
-        env.DB.prepare('INSERT INTO recycling_events (id, machine_id, owner_id, material_returned, components_returned, efficiency, game_day) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(eventId, machine.id, viewer.id, materialReturned, componentsReturned, efficiency, day),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', machine.id, viewer.id, null, 1, 'recycling', eventId, day),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'production', 'Machine recycled', `${materialReturned} Material and ${componentsReturned} Components returned at ${Math.round(efficiency * 100)}% efficiency.`, machine.id),
-      ]);
-      return Response.json({ ok: true, eventId, machineId: machine.id, materialReturned, componentsReturned, efficiency, persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => recycleMachinePostgres(repository, { machineId: decommissionMatch[1], ownerId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine recycling failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
     }
     const utilizationMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/utilization$/);
     if (utilizationMatch && request.method === 'POST') {
