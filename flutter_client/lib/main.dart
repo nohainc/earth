@@ -99,6 +99,8 @@ class EarthState {
       (json['ledgerEntries'] as List<dynamic>?) ?? const [];
   List<dynamic> get publicActivity =>
       (json['publicActivity'] as List<dynamic>?) ?? const [];
+  List<dynamic> get opportunities =>
+      (json['opportunities'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
       (json['rankings'] as Map<String, dynamic>?) ?? const {};
   Map<String, dynamic> get history =>
@@ -1024,6 +1026,10 @@ class _Dashboard extends StatelessWidget {
           'DAY ${state.clock['day']}  ·  ${state.institutions['city']['name']}  ·  ${state.institutions['corporation']['name']}',
           style: const TextStyle(color: _muted, fontSize: 11, letterSpacing: .7)),
       const SizedBox(height: 24),
+      if (state.opportunities.isNotEmpty) ...[
+        _OpportunityPanel(opportunities: state.opportunities),
+        const SizedBox(height: 14),
+      ],
       Wrap(spacing: 14, runSpacing: 14, children: [
         _Metric(
             label: 'CREDITS',
@@ -1638,6 +1644,55 @@ class _Dashboard extends StatelessWidget {
       ]),
     ]);
   }
+}
+
+class _OpportunityPanel extends StatelessWidget {
+  final List<dynamic> opportunities;
+  const _OpportunityPanel({required this.opportunities});
+
+  @override
+  Widget build(BuildContext context) => _Panel(
+        title: 'LIVE OPPORTUNITIES',
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: opportunities.map((raw) {
+            final opportunity = Map<String, dynamic>.from(raw as Map);
+            final signal = opportunity['signal']?.toString() ?? 'world';
+            final priority = opportunity['priority']?.toString() ?? 'medium';
+            final color = priority == 'high'
+                ? Colors.orangeAccent
+                : priority == 'low'
+                    ? Colors.tealAccent
+                    : _violet;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    width: 7,
+                    height: 7,
+                    margin: const EdgeInsets.only(top: 5, right: 10),
+                    decoration: BoxDecoration(color: color, shape: BoxShape.circle),
+                  ),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(opportunity['title']?.toString() ?? 'World signal', style: const TextStyle(fontWeight: FontWeight.w700)),
+                        const SizedBox(height: 3),
+                        Text(opportunity['detail']?.toString() ?? '', style: const TextStyle(color: _muted, fontSize: 11)),
+                        const SizedBox(height: 3),
+                        Text(signal.toUpperCase(), style: TextStyle(color: color, fontSize: 9, letterSpacing: 1.1)),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      );
 }
 
 String _percent(dynamic value) {
