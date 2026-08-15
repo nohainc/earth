@@ -1335,184 +1335,72 @@ const worker = {
       const amount = Math.round(Number(body.amount ?? 0) * 100) / 100;
       const durationDays = Number(body.durationDays ?? 30);
       if (!['employment', 'intellectual_service', 'capacity', 'strategic'].includes(kind)) return Response.json({ ok: false, error: 'Unsupported contract kind' }, { status: 400 });
-      if (!counterpartyId || counterpartyId === viewer.id || !(await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(counterpartyId).first())) return Response.json({ ok: false, error: 'An active counterparty Human is required' }, { status: 400 });
+      const counterparty = await withRepository(env, (repository) => repository.query("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [counterpartyId]));
+      if (!counterpartyId || counterpartyId === viewer.id || !counterparty?.rows[0]) return Response.json({ ok: false, error: 'An active counterparty Human is required' }, { status: 400 });
       if (title.length < 3 || title.length > 140 || !Number.isFinite(amount) || amount < 0 || amount > 100000 || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) return Response.json({ ok: false, error: 'Contract terms are outside engine bounds' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createContractPostgres(repository, { proposerId: viewer.id, kind, counterpartyId, title, terms: body.terms ?? {}, amount, durationDays, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract creation failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createContractPostgres(repository, { proposerId: viewer.id, kind, counterpartyId, title, terms: body.terms ?? {}, amount, durationDays, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract creation failed' }, { status: 409 });
       }
-      const prior = await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE proposer_id = ? AND correlation_id = ?').bind(viewer.id, correlationId).first();
-      if (prior) return Response.json({ ok: true, alreadyProcessed: true, contract: prior, correlationId, persistence: 'cloudflare-d1' });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      const contractId = `CON-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      await env.DB.prepare('INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, starts_game_day, ends_game_day, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(contractId, kind, viewer.id, counterpartyId, title, JSON.stringify(body.terms ?? {}), amount, day, day + durationDays, correlationId).run();
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'contract.proposed', 'A negotiated contract was proposed', JSON.stringify({ contractId, kind, proposer: viewer.id, counterparty: counterpartyId })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), counterpartyId, 'contract', 'Contract proposal received', `${title} was proposed for your acceptance.`, contractId),
-      ]);
-      return Response.json({ ok: true, contract: await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE id = ?').bind(contractId).first(), correlationId, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     const contractActionMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/(accept|cancel)$/);
     if (contractActionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = contractActionMatch[2] === 'cancel'
-            ? await withRepository(env, (repository) => cancelContractPostgres(repository, contractActionMatch[1], viewer.id))
-            : await withRepository(env, (repository) => acceptContractPostgres(repository, contractActionMatch[1], viewer.id));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract action failed' }, { status: 409 });
-        }
+      try {
+        const result = contractActionMatch[2] === 'cancel'
+          ? await withRepository(env, (repository) => cancelContractPostgres(repository, contractActionMatch[1], viewer.id))
+          : await withRepository(env, (repository) => acceptContractPostgres(repository, contractActionMatch[1], viewer.id));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Contract action failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /only .* may/i.test(message) ? 403 : 409 });
       }
-      const contract = await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE id = ?').bind(contractActionMatch[1]).first<{ id: string; proposer_id: string; counterparty_id: string; amount: number; status: string; title: string }>();
-      if (!contract) return Response.json({ ok: false, error: 'Contract not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      if (contractActionMatch[2] === 'cancel') {
-        if (contract.proposer_id !== viewer.id && contract.counterparty_id !== viewer.id) return Response.json({ ok: false, error: 'Only a contract party may cancel' }, { status: 403 });
-        if (contract.status !== 'proposed') return Response.json({ ok: false, error: 'Only a proposed contract can be cancelled' }, { status: 409 });
-        await env.DB.prepare("UPDATE negotiated_contracts SET status = 'cancelled' WHERE id = ? AND status = 'proposed'").bind(contract.id).run();
-        return Response.json({ ok: true, status: 'cancelled', contractId: contract.id, persistence: 'cloudflare-d1' });
-      }
-      if (contract.counterparty_id !== viewer.id) return Response.json({ ok: false, error: 'Only the counterparty may accept this contract' }, { status: 403 });
-      if (contract.status !== 'proposed') return Response.json({ ok: true, alreadyProcessed: contract.status === 'accepted', status: contract.status, contractId: contract.id, persistence: 'cloudflare-d1' });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => acceptContractPostgres(repository, contract.id, viewer.id));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract settlement failed' }, { status: 409 });
-        }
-      }
-      const payer = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.proposer_id).first<{ account_id: string; balance: number }>();
-      const receiver = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.counterparty_id).first<{ account_id: string }>();
-      if (!payer || !receiver || Number(payer.balance) < Number(contract.amount)) return Response.json({ ok: false, error: 'Proposer has insufficient Credits to settle this contract' }, { status: 409 });
-      const correlationId = `CONTRACT-${contract.id}`;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(contract.amount, payer.account_id, contract.amount),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(contract.amount, receiver.account_id),
-        env.DB.prepare("UPDATE negotiated_contracts SET status = 'accepted', accepted_game_day = ? WHERE id = ? AND status = 'proposed'").bind(day, contract.id),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, payer.account_id, receiver.account_id, contract.amount, 'CREDIT', 'contract_payment', contract.id, 'contracts-v1', correlationId),
-        env.DB.prepare("UPDATE business_financials SET operating_costs = operating_costs + ?, profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.proposer_id),
-        env.DB.prepare("UPDATE business_financials SET revenue = revenue + ?, profit = profit + ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.counterparty_id),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'contract.accepted', 'A negotiated contract was accepted', JSON.stringify({ contractId: contract.id, amount: contract.amount })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), contract.proposer_id, 'contract', 'Contract accepted', `${contract.title} was accepted and ${contract.amount} Credits were settled.`, contract.id),
-      ]);
-      return Response.json({ ok: true, status: 'accepted', contract: await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE id = ?').bind(contract.id).first(), persistence: 'cloudflare-d1' });
     }
     const contractDisputeMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/(dispute|resolve)$/);
     if (contractDisputeMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres' && contractDisputeMatch[2] === 'dispute') {
-        const body = await request.json<{ reason?: string }>();
-        const reason = body.reason?.trim() ?? '';
-        if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
-        try {
+      try {
+        if (contractDisputeMatch[2] === 'dispute') {
+          const body = await request.json<{ reason?: string }>();
+          const reason = body.reason?.trim() ?? '';
+          if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
           const result = await withRepository(env, (repository) => openDisputePostgres(repository, { contractId: contractDisputeMatch[1], claimantId: viewer.id, reason }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyOpen ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Dispute opening failed' }, { status: 409 });
+          if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+          return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyOpen ? 200 : 201 });
         }
-      }
-      if (authorityMode(env) === 'postgres' && contractDisputeMatch[2] === 'resolve') {
         const body = await request.json<{ outcome?: string; resolution?: string }>();
         if (!['uphold', 'void'].includes(body.outcome ?? '') || (body.resolution?.trim().length ?? 0) < 10) return Response.json({ ok: false, error: 'A bounded arbitration outcome and resolution are required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contractDisputeMatch[1], resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Arbitration resolution failed' }, { status: 409 });
-        }
+        const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contractDisputeMatch[1], resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Contract dispute operation failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /authority|required|only/i.test(message) ? 403 : 409 });
       }
-      const contract = await env.DB.prepare('SELECT id, proposer_id, counterparty_id, amount, status, title FROM negotiated_contracts WHERE id = ?').bind(contractDisputeMatch[1]).first<{ id: string; proposer_id: string; counterparty_id: string; amount: number; status: string; title: string }>();
-      if (!contract) return Response.json({ ok: false, error: 'Contract not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      if (contractDisputeMatch[2] === 'dispute') {
-        if (viewer.id !== contract.proposer_id && viewer.id !== contract.counterparty_id) return Response.json({ ok: false, error: 'Only a contract party may open a dispute' }, { status: 403 });
-        if (!['accepted', 'completed'].includes(contract.status)) return Response.json({ ok: false, error: 'Only an accepted or completed contract can be disputed' }, { status: 409 });
-        const body = await request.json<{ reason?: string }>();
-        const reason = body.reason?.trim() ?? '';
-        if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
-        const existing = await env.DB.prepare("SELECT * FROM contract_disputes WHERE contract_id = ? AND status = 'open'").bind(contract.id).first();
-        if (existing) return Response.json({ ok: true, alreadyOpen: true, dispute: existing, persistence: 'cloudflare-d1' });
-        const disputeId = `DISPUTE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-        await env.DB.batch([
-          env.DB.prepare('INSERT INTO contract_disputes (id, contract_id, claimant_id, respondent_id, reason) VALUES (?, ?, ?, ?, ?)').bind(disputeId, contract.id, viewer.id, viewer.id === contract.proposer_id ? contract.counterparty_id : contract.proposer_id, reason),
-          env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'arbitration.opened', 'A contract dispute was opened', JSON.stringify({ disputeId, contractId: contract.id })),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), contract.proposer_id, 'arbitration', 'Contract dispute opened', `${contract.title} is awaiting OUC arbitration.`, disputeId),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), contract.counterparty_id, 'arbitration', 'Contract dispute opened', `${contract.title} is awaiting OUC arbitration.`, disputeId),
-        ]);
-        return Response.json({ ok: true, dispute: await env.DB.prepare('SELECT * FROM contract_disputes WHERE id = ?').bind(disputeId).first(), persistence: 'cloudflare-d1' }, { status: 201 });
-      }
-      if (authorityMode(env) !== 'postgres' && !(await canExerciseDelegatedRole(env, viewer.id, 'OUC-001'))) return Response.json({ ok: false, error: 'OUC arbitration authority is required' }, { status: 403 });
-      const body = await request.json<{ outcome?: string; resolution?: string }>();
-      if (!['uphold', 'void'].includes(body.outcome ?? '') || (body.resolution?.trim().length ?? 0) < 10) return Response.json({ ok: false, error: 'A bounded arbitration outcome and resolution are required' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contract.id, resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Arbitration resolution failed' }, { status: 409 });
-        }
-      }
-      const dispute = await env.DB.prepare("SELECT * FROM contract_disputes WHERE contract_id = ? AND status = 'open'").bind(contract.id).first<{ id: string; claimant_id: string; respondent_id: string }>();
-      if (!dispute) return Response.json({ ok: false, error: 'Open dispute not found' }, { status: 404 });
-      const statements: D1PreparedStatement[] = [
-        env.DB.prepare("UPDATE contract_disputes SET status = 'resolved', outcome = ?, resolved_by = ?, resolved_game_day = ?, resolution = ? WHERE id = ? AND status = 'open'").bind(body.outcome, viewer.id, day, body.resolution!.trim().slice(0, 1000), dispute.id),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'arbitration.resolved', 'A contract dispute was resolved', JSON.stringify({ disputeId: dispute.id, contractId: contract.id, outcome: body.outcome, resolvedBy: viewer.id })),
-      ];
-      if (body.outcome === 'void') {
-        const payer = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.counterparty_id).first<{ account_id: string; balance: number }>();
-        const receiver = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.proposer_id).first<{ account_id: string }>();
-        if (!payer || !receiver || Number(payer.balance) < Number(contract.amount)) return Response.json({ ok: false, error: 'Counterparty cannot fund the arbitration refund' }, { status: 409 });
-        const refundId = `ARBITRATION-REFUND-${contract.id}`;
-        statements.push(
-          env.DB.prepare("UPDATE negotiated_contracts SET status = 'cancelled' WHERE id = ? AND status IN ('accepted','completed')").bind(contract.id),
-          env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(contract.amount, payer.account_id, contract.amount),
-          env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(contract.amount, receiver.account_id),
-          env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(refundId, day, payer.account_id, receiver.account_id, contract.amount, 'CREDIT', 'contract_arbitration_refund', contract.id, 'arbitration-v1', refundId),
-          env.DB.prepare("UPDATE business_financials SET operating_costs = MAX(0, operating_costs - ?), profit = profit + ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.proposer_id),
-          env.DB.prepare("UPDATE business_financials SET revenue = MAX(0, revenue - ?), profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.counterparty_id),
-        );
-      }
-      await env.DB.batch(statements);
-      return Response.json({ ok: true, outcome: body.outcome, dispute: await env.DB.prepare('SELECT * FROM contract_disputes WHERE id = ?').bind(dispute.id).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/finance/liquidity' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
-        const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
-        return Response.json({ activeHumans, moneySupply: supply, livingCostIndex, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'planetscale-postgres' });
-      }
-      const liquidity = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index").first<{ active_humans: number; money_supply: number; living_cost_index: number }>();
-      const target = Number(liquidity?.active_humans ?? 0) * Math.max(0.5, Number(liquidity?.living_cost_index ?? 1)) * 100;
-      const supply = Number(liquidity?.money_supply ?? 0);
-      return Response.json({ activeHumans: Number(liquidity?.active_humans ?? 0), moneySupply: supply, livingCostIndex: Number(liquidity?.living_cost_index ?? 1), target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'cloudflare-d1' });
+      const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
+      const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
+      return Response.json({ activeHumans, moneySupply: supply, livingCostIndex, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/finance/status' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => {
-          const [states, events] = await Promise.all([
-            repository.query('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id'),
-            repository.query('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50'),
-          ]);
-          return { states: states.rows, events: events.rows };
-        });
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [states, events] = await Promise.all([
-        env.DB.prepare('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id').all(),
-        env.DB.prepare('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50').all(),
-      ]);
-      return Response.json({ states: states.results, events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => {
+        const [states, events] = await Promise.all([
+          repository.query('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id'),
+          repository.query('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50'),
+        ]);
+        return { states: states.rows, events: events.rows };
+      });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
