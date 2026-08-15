@@ -97,10 +97,14 @@ assert.match(resendVerification.body.message, /If that identity exists and needs
 const world = await get('/api/world');
 assert.equal(world.response.status, 401);
 assert.equal(world.body.error, 'Authentication required');
+assert.equal(world.body.code, 'AUTHENTICATION_REQUIRED');
+assert.equal(typeof world.body.correlationId, 'string');
 
 const marketCommand = await get('/edge/market', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
 assert.equal(marketCommand.response.status, 401);
 assert.equal(marketCommand.body.error, 'Authentication required');
+assert.equal(marketCommand.body.code, 'AUTHENTICATION_REQUIRED');
+assert.equal(typeof marketCommand.body.correlationId, 'string');
 const marketOrder = await get('/api/market/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ product: 'energy', side: 'buy', quantity: 1, limitPrice: 1, correlationId: 'smoke-market-order' }) });
 assert.equal(marketOrder.response.status, 401);
 assert.equal(marketOrder.body.error, 'Authentication required');
