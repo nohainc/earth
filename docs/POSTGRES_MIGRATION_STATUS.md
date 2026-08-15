@@ -16,6 +16,9 @@ successful D1-free production deployment.
 
 The Hyperdrive connection is configured as `planetscale-earth-main-2eh5` and
 is verified by `/api/health` as the authoritative gameplay store.
+The repository boundary fails closed if the PostgreSQL authority flag or
+Hyperdrive binding is missing; it cannot silently fall back to the deleted D1
+database.
 
 ## Feature audit
 

@@ -1,9 +1,10 @@
 import { Client, type QueryResult, type QueryResultRow } from 'pg';
 
-export type AuthorityMode = 'd1' | 'postgres';
+export type AuthorityMode = 'postgres';
 
 export function authorityMode(env: Env): AuthorityMode {
-  return (env.PERSISTENCE_AUTHORITY as string) === 'postgres' && env.HYPERDRIVE?.connectionString ? 'postgres' : 'd1';
+  if ((env.PERSISTENCE_AUTHORITY as string) !== 'postgres') throw new Error('PostgreSQL persistence authority is required');
+  return 'postgres';
 }
 
 function bindPlaceholders(sql: string): string {
@@ -64,6 +65,7 @@ export async function withPostgresRepository<T>(env: Env, work: (repository: Pos
 }
 
 export async function withRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>): Promise<T | undefined> {
-  if (authorityMode(env) !== 'postgres') return undefined;
+  authorityMode(env);
+  if (!env.HYPERDRIVE?.connectionString) throw new Error('PostgreSQL Hyperdrive binding is required');
   return withPostgresRepository(env, work);
 }

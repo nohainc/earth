@@ -81,6 +81,8 @@ database, then test the repository transaction separately.
 
 - PostgreSQL is the live authority. Cloudflare D1 was a migration-only store
   and has been removed; new code must not add D1 access.
+- Persistence configuration must fail closed when PostgreSQL authority or the
+  Hyperdrive binding is absent; never restore a deleted-provider fallback.
 - Provider-specific SQL lives in `cloudflare/src/*-postgres.ts` adapters.
 - Multi-table economic changes use one PostgreSQL transaction and row locks
   where concurrent commands can compete.
