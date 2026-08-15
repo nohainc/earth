@@ -1229,20 +1229,8 @@ const worker = {
       return Response.json({ community: community.results, city: city.results, corporation: corporation.results, membership: membership.results, budgets: budgets.results, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/governance/roles' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listRolesPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const currentDay = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      const expiring = (await env.DB.prepare("SELECT id, human_id, institution_id, role_id FROM role_assignments WHERE status = 'active' AND ends_game_day <= ?").bind(currentDay).all<{ id: string; human_id: string; institution_id: string; role_id: string }>()).results;
-      await env.DB.prepare("UPDATE role_assignments SET status = 'expired' WHERE status = 'active' AND ends_game_day <= ?").bind(currentDay).run();
-      await env.DB.prepare("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= ?").bind(currentDay).run();
-      if (expiring.length) await env.DB.batch(expiring.flatMap((role) => [
-        env.DB.prepare('INSERT OR IGNORE INTO authority_events (id, human_id, institution_id, role_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), role.human_id, role.institution_id, role.role_id, 'expired', currentDay, 'term_completed'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`ROLE-EXPIRED-${role.human_id}-${role.role_id}-${currentDay}`, role.human_id, 'governance', 'Role term completed', `Your term for role ${role.role_id} has ended. You may claim an eligible role again when available.`, role.role_id),
-      ]));
-      const roles = await env.DB.prepare("SELECT institution_roles.*, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status, authority_delegations.delegate_id, authority_delegations.ends_game_day AS delegation_ends_game_day FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' LEFT JOIN authority_delegations ON authority_delegations.role_id = institution_roles.id AND authority_delegations.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id").all();
-      return Response.json({ roles: roles.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listRolesPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     const roleClaimMatch = url.pathname.match(/^\/api\/governance\/roles\/([^/]+)\/(claim|resign)$/);
     if (roleClaimMatch && request.method === 'POST') {
