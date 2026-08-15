@@ -20,6 +20,7 @@ import { changeCommunityMembership as changeCommunityMembershipPostgres, contrib
 import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
+import { parseJsonBody } from './request-validation';
 
 const SESSION_DAYS = 7;
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
@@ -373,7 +374,9 @@ const worker = {
       return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
     }
     if (url.pathname === '/api/auth/register' && request.method === 'POST') {
-      const body = await request.json<{ email?: string; password?: string; passwordConfirmation?: string; displayName?: string }>();
+      const parsed = await parseJsonBody<{ email?: string; password?: string; passwordConfirmation?: string; displayName?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const email = body.email?.trim().toLowerCase();
       const displayName = body.displayName?.trim();
       const password = body.password ?? '';
@@ -456,7 +459,9 @@ const worker = {
       return Response.json({ ok: true, message: 'Password reset. All previous sessions were revoked.' });
     }
     if (url.pathname === '/api/auth/login' && request.method === 'POST') {
-      const body = await request.json<{ email?: string; password?: string; otp?: string }>();
+      const parsed = await parseJsonBody<{ email?: string; password?: string; otp?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const email = body.email?.trim().toLowerCase();
       if (!email || !body.password) return Response.json({ ok: false, error: 'Invalid email or password' }, { status: 401 });
       try {
@@ -1154,7 +1159,9 @@ const worker = {
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ institutionId?: string; amount?: number; otp?: string }>();
+      const parsed = await parseJsonBody<{ institutionId?: string; amount?: number; otp?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for financial recovery' }, { status: 401 });
       const institutionId = body.institutionId?.trim() ?? '';
       const amount = Math.round(Number(body.amount) * 100) / 100;
@@ -1171,7 +1178,9 @@ const worker = {
     if (url.pathname === '/api/taxes/settle' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ taxableAmount?: number }>();
+      const parsed = await parseJsonBody<{ taxableAmount?: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const taxableAmount = Number(body.taxableAmount);
       if (!Number.isFinite(taxableAmount) || taxableAmount <= 0) return Response.json({ ok: false, error: 'Taxable amount must be positive' }, { status: 400 });
       try {
@@ -1186,7 +1195,9 @@ const worker = {
     if (url.pathname === '/api/finance/public-spending' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ cityId?: string; category?: string; amount?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ cityId?: string; category?: string; amount?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const cityId = body.cityId || 'CITY-0084';
       const category = body.category?.trim() || 'public-services';
       const amount = Number(body.amount);
@@ -1260,7 +1271,9 @@ const worker = {
       }
     }
     if (url.pathname === '/api/market/settle' && request.method === 'POST') {
-      const body = await request.json<{ product?: string }>();
+      const parsed = await parseJsonBody<{ product?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const product = body.product;
       if (!['material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
       try {
@@ -1285,7 +1298,9 @@ const worker = {
     if (url.pathname === '/api/governance/proposals' && request.method === 'POST') {
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ institutionId?: string; title?: string; body?: string; durationHours?: number; ruleVersionId?: string; target?: { category?: string; value?: Record<string, unknown> }; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ institutionId?: string; title?: string; body?: string; durationHours?: number; ruleVersionId?: string; target?: { category?: string; value?: Record<string, unknown> }; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const institutionId = body.institutionId?.trim() || 'OUC-001';
       const title = body.title?.trim();
       const proposalBody = body.body?.trim();
@@ -1309,7 +1324,9 @@ const worker = {
     if (voteMatch && request.method === 'POST') {
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ vote?: string }>();
+      const parsed = await parseJsonBody<{ vote?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => castVotePostgres(repository, { proposalId: voteMatch[1], humanId: human.id, choice: body.vote! }));

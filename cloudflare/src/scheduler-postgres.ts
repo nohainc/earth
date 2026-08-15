@@ -1,14 +1,17 @@
 import type { PostgresRepository } from './repository';
 import { settleMarket } from './market-postgres';
 import { processMortality } from './lifecycle-postgres';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money';
 
 const products = ['material', 'components', 'energy', 'compute'];
 
 async function settleBusinessDepreciation(tx: PostgresRepository, day: number): Promise<void> {
   const assets = await tx.query<{ business_id: string; machine_id: string; book_value: string }>('SELECT business_assets.business_id, business_assets.machine_id, COALESCE(machine_acquisitions.credit_cost, 0) AS book_value FROM business_assets LEFT JOIN machine_acquisitions ON machine_acquisitions.machine_id = business_assets.machine_id');
   for (const asset of assets.rows) {
-    const amount = Math.round(Math.max(0, Number(asset.book_value) * 0.01) * 100) / 100;
-    if (amount <= 0) continue;
+    const amountCents = rateAmountToCents(moneyToCents(asset.book_value), '0.01', 1);
+    if (amountCents <= 0n) continue;
+    const amount = centsToMoney(amountCents);
     const correlationId = `DEPRECIATION-${asset.business_id}-${asset.machine_id}-${day}`;
     const prior = await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'business_depreciation\' AND correlation_id = $1', [correlationId]);
     if (prior.rows[0]) continue;
@@ -22,18 +25,17 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
   if (!rule.rows[0]) return;
   const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id WHERE businesses.status = 'active'");
   for (const business of businesses.rows) {
-    const taxable = Math.max(0, Number(business.revenue) - Number(business.taxed_revenue));
-    const tax = Math.round(taxable * Number(rule.rows[0].rate) * 100) / 100;
-    if (tax <= 0) { await tx.query('UPDATE business_financials SET taxed_revenue = GREATEST(taxed_revenue, revenue), last_game_day = $1 WHERE business_id = $2', [day, business.id]); continue; }
+    const taxableCents = moneyToCents(business.revenue) - moneyToCents(business.taxed_revenue);
+    const taxCents = taxableCents > 0n ? rateAmountToCents(taxableCents, rule.rows[0].rate, 1) : 0n;
+    if (taxCents <= 0n) { await tx.query('UPDATE business_financials SET taxed_revenue = GREATEST(taxed_revenue, revenue), last_game_day = $1 WHERE business_id = $2', [day, business.id]); continue; }
+    const tax = centsToMoney(taxCents);
     const correlationId = `BUSINESS-TAX-${business.id}-${day}`;
     const prior = await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'business_tax\' AND correlation_id = $1', [correlationId]);
     if (prior.rows[0]) continue;
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [business.owner_id]);
-    if (!account.rows[0] || Number(account.rows[0].balance) < tax) continue;
-    await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [tax, account.rows[0].account_id]);
-    await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [tax]);
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < taxCents) continue;
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-ouc-treasury', amount: tax, reasonType: 'business_tax', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId });
     await tx.query('UPDATE business_financials SET taxed_revenue = revenue, operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [tax, day, business.id]);
-    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,\'account-ouc-treasury\',$4,\'CREDIT\',\'business_tax\',$5,$6,$7)', [crypto.randomUUID(), day, account.rows[0].account_id, tax, business.id, `business-tax-v${rule.rows[0].version}`, correlationId]);
   }
 }
 
@@ -41,15 +43,14 @@ async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<voi
   const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true");
   const world = await tx.query<{ living_cost_index: string }>("SELECT living_cost_index FROM world_state WHERE id = 'WORLD'");
   if (!rule.rows[0]) return;
-  const levyBase = Math.max(0, Number(world.rows[0]?.living_cost_index ?? 1) * 100);
+  const levyBaseCents = compoundRateAmountToCents(10000n, String(world.rows[0]?.living_cost_index ?? '1'));
   const humans = await tx.query<{ id: string; account_id: string; balance: string }>("SELECT humans.id, account_balances.account_id, account_balances.balance FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.life_status = 'active'");
   for (const human of humans.rows) {
-    const levy = Math.round(levyBase * Number(rule.rows[0].rate) * 100) / 100;
+    const levyCents = rateAmountToCents(levyBaseCents, rule.rows[0].rate, 1);
+    const levy = centsToMoney(levyCents);
     const correlationId = `BASIC-LEVY-${human.id}-${day}-v${rule.rows[0].version}`;
-    if (levy <= 0 || Number(human.balance) < levy || (await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'basic_levy\' AND correlation_id = $1', [correlationId])).rows[0]) continue;
-    await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [levy, human.account_id]);
-    await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [levy]);
-    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,\'account-ouc-treasury\',$4,\'CREDIT\',\'basic_levy\',$5,$6,$7)', [crypto.randomUUID(), day, human.account_id, levy, human.id, `tax-v${rule.rows[0].version}`, correlationId]);
+    if (levyCents <= 0n || moneyToCents(human.balance) < levyCents || (await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'basic_levy\' AND correlation_id = $1', [correlationId])).rows[0]) continue;
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: levy, reasonType: 'basic_levy', reasonId: human.id, ruleVersion: `tax-v${rule.rows[0].version}`, correlationId });
   }
 }
 
@@ -78,20 +79,19 @@ async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): P
   const licenses = await tx.query<{ id: string; licensor_id: string; licensee_id: string; royalty_rate: string }>("SELECT technology_licenses.id, licensor_id, licensee_id, royalty_rate FROM technology_licenses JOIN patents ON patents.id = technology_licenses.patent_id WHERE technology_licenses.status = 'active' AND patents.status = 'active' AND licensor_id <> licensee_id");
   for (const license of licenses.rows) {
     const usage = await tx.query<{ amount: string }>('SELECT COALESCE(SUM(amount), 0) AS amount FROM production_events WHERE owner_id = $1 AND game_day = $2', [license.licensee_id, day]);
-    const royalty = Math.round(Number(usage.rows[0]?.amount ?? 0) * Math.max(0, Number(license.royalty_rate)) * 0.1 * 100) / 100;
-    if (royalty <= 0) continue;
+    const royaltyCents = compoundRateAmountToCents(quantityToCents(usage.rows[0]?.amount ?? '0'), String(license.royalty_rate), '0.1');
+    const royalty = centsToMoney(royaltyCents);
+    if (royaltyCents <= 0n) continue;
     const correlationId = `ROYALTY-${license.id}-${day}`;
     if ((await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1 AND reason_type = 'technology_royalty'", [correlationId])).rows[0]) continue;
     const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id FOR UPDATE", [license.licensee_id, license.licensor_id]);
     const buyer = accounts.rows.find((row) => row.owner_id === license.licensee_id);
     const owner = accounts.rows.find((row) => row.owner_id === license.licensor_id);
-    if (!buyer || !owner || Number(buyer.balance) < royalty) {
+    if (!buyer || !owner || moneyToCents(buyer.balance) < royaltyCents) {
       await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Royalty payment pending\',$3,$4) ON CONFLICT DO NOTHING', [`ROYALTY-PENDING-${license.id}-${day}`, license.licensee_id, `The ${royalty} Credit royalty for license ${license.id} is pending until your balance is sufficient.`, license.id]);
       continue;
     }
-    if ((await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [royalty, buyer.account_id])).rowCount !== 1) continue;
-    await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [royalty, owner.account_id]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,\'CREDIT\',\'technology_royalty\',$6,\'technology-v3\',$7)', [crypto.randomUUID(), day, buyer.account_id, owner.account_id, royalty, license.id, correlationId]);
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: royalty, reasonType: 'technology_royalty', reasonId: license.id, ruleVersion: 'technology-v3', correlationId });
     await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [royalty, day, license.licensee_id]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Technology royalty paid\',$3,$4), ($5,$6,\'technology\',\'Technology royalty received\',$7,$4)', [crypto.randomUUID(), license.licensee_id, `${royalty} Credits paid for licensed technology usage.`, license.id, crypto.randomUUID(), license.licensor_id, `${royalty} Credits received from licensed technology usage.`]);
   }
@@ -197,7 +197,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'governance','Role term completed',$3,$4) ON CONFLICT DO NOTHING", [`ROLE-EXPIRED-${role.human_id}-${role.role_id}-${day}`, role.human_id, `Your term for role ${role.role_id} has ended. You may claim an eligible role again when available.`, role.role_id]);
     }
     await tx.query("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
-    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP");
+    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
     await tx.query("UPDATE machines SET condition = GREATEST(0, condition - GREATEST(0.05, utilization * 0.005 * CASE COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC LIMIT 1), 'efficiency') WHEN 'durability' THEN 0.7 WHEN 'safety' THEN 0.8 ELSE 1 END)), maintenance_due = maintenance_due + GREATEST(1, utilization * 0.25)");
     await tx.query("UPDATE market_prices SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)), game_day = $1", [day]);
     if (newDay) {

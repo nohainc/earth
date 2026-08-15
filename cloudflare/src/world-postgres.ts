@@ -94,10 +94,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   ];
   const proposalsWithDeadlines = (proposals.rows as Row[]).map((proposal) => ({
     ...proposal,
-    deadline: projectGameDeadline({ gameDay: currentGameDay, gameMinute: currentGameMinute, closesAt: proposal.closes_at, nowMs: Date.now() }),
+    deadline: projectGameDeadline({
+      gameDay: currentGameDay,
+      gameMinute: currentGameMinute,
+      deadlineGameDay: Number(proposal.closes_game_day),
+      deadlineGameMinute: Number(proposal.closes_game_minute),
+      closesAt: proposal.closes_at,
+      nowMs: Date.now(),
+      realSecondsPerGameMinute: 60,
+    }),
   }));
   return {
-    clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 1 },
+    clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 60 },
     world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
     human: { id: humanRow.id, name: humanRow.display_name, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
     life: { generation: 1, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },

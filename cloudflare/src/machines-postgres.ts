@@ -1,4 +1,6 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, moneyToCents } from './money';
 
 type MachineInput = { id: string; owner_id: string; condition: string; maintenance_due: string; name: string; productive_capacity: string; utilization: string };
 
@@ -72,13 +74,23 @@ export async function upgradeMachine(repository: PostgresRepository, input: { ma
     const capacityAfter = Math.min(5, Math.round((capacityBefore + 0.2) * 100) / 100);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const debitedCredits = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.creditCost, account.rows[0].account_id]);
+    const transfer = await transferCredits(tx, {
+      ledgerId: crypto.randomUUID(),
+      gameDay: day,
+      debitAccount: account.rows[0].account_id,
+      creditAccount: 'account-ouc-treasury',
+      amount: input.creditCost,
+      reasonType: 'machine_upgrade',
+      reasonId: input.machineId,
+      ruleVersion: 'machine-v3',
+      correlationId: input.correlationId,
+    });
+    if (transfer.status === 'already_processed') return { ok: true, alreadyProcessed: true, eventId: prior.rows[0]?.id ?? transfer.ledgerId, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: input.correlationId };
     const debitedComponents = await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components' AND amount >= $1", [input.componentsCost, input.ownerId]);
-    if (debitedCredits.rowCount !== 1 || debitedComponents.rowCount !== 1) throw new Error('Machine upgrade resource reservation failed');
+    if (debitedComponents.rowCount !== 1) throw new Error('Machine upgrade resource reservation failed');
     await tx.query('UPDATE machines SET productive_capacity = $1, condition = GREATEST(0, condition - 5) WHERE id = $2 AND owner_id = $3', [capacityAfter, input.machineId, input.ownerId]);
     const eventId = crypto.randomUUID();
     await tx.query('INSERT INTO machine_upgrade_events (id, machine_id, owner_id, credit_cost, components_cost, capacity_before, capacity_after, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [eventId, input.machineId, input.ownerId, input.creditCost, input.componentsCost, capacityBefore, capacityAfter, day]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, account.rows[0].account_id, 'account-ouc-treasury', input.creditCost, 'CREDIT', 'machine_upgrade', input.machineId, 'machine-v3', input.correlationId]);
     return { ok: true, eventId, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], creditCost: input.creditCost, componentsCost: input.componentsCost, correlationId: input.correlationId };
   });
 }
@@ -92,23 +104,22 @@ export async function sellMachine(repository: PostgresRepository, input: { machi
     if (!buyer.rows[0]) throw new Error('Active buyer not found');
     const machine = await tx.query<{ id: string; owner_id: string; name: string }>('SELECT id, owner_id, name FROM machines WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.machineId, input.sellerId]);
     if (!machine.rows[0]) throw new Error('Machine not found for this Human');
-    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id FOR UPDATE", [input.sellerId, input.buyerId]);
+    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id", [input.sellerId, input.buyerId]);
     const buyerAccount = accounts.rows.find((row) => row.owner_id === input.buyerId);
     const sellerAccount = accounts.rows.find((row) => row.owner_id === input.sellerId);
+    const priceCents = moneyToCents(input.price);
+    const price = centsToMoney(priceCents);
     if (!buyerAccount || !sellerAccount) throw new Error('Active buyer and seller accounts are required');
-    if (Number(buyerAccount.balance) < input.price) throw new Error('Buyer has insufficient Credits');
+    if (moneyToCents(buyerAccount.balance) < priceCents) throw new Error('Buyer has insufficient Credits');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const debited = await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [input.price, buyerAccount.account_id]);
-    if (debited.rowCount !== 1) throw new Error('Machine sale payment reservation failed');
-    await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [input.price, sellerAccount.account_id]);
+    const saleId = input.correlationId;
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyerAccount.account_id, creditAccount: sellerAccount.account_id, amount: price, reasonType: 'machine_sale', reasonId: input.machineId, ruleVersion: 'machine-v4', correlationId: saleId });
     await tx.query('UPDATE machines SET owner_id = $1 WHERE id = $2 AND owner_id = $3', [input.buyerId, input.machineId, input.sellerId]);
     await tx.query('DELETE FROM business_assets WHERE machine_id = $1', [input.machineId]);
     await tx.query("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, $1, $2, 'secondary-sale' FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1", [input.machineId, day, input.buyerId]);
-    const saleId = input.correlationId;
-    await tx.query('INSERT INTO machine_sales (id, machine_id, seller_id, buyer_id, price, game_day) VALUES ($1,$2,$3,$4,$5,$6)', [saleId, input.machineId, input.sellerId, input.buyerId, input.price, day]);
+    await tx.query('INSERT INTO machine_sales (id, machine_id, seller_id, buyer_id, price, game_day) VALUES ($1,$2,$3,$4,$5,$6)', [saleId, input.machineId, input.sellerId, input.buyerId, price, day]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'MACHINE', input.machineId, input.sellerId, input.buyerId, 1, 'secondary_sale', saleId, day]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, buyerAccount.account_id, sellerAccount.account_id, input.price, 'CREDIT', 'machine_sale', input.machineId, 'machine-v3', saleId]);
-    return { ok: true, saleId, machineId: input.machineId, buyerId: input.buyerId, price: input.price, day, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: saleId };
+    return { ok: true, saleId, machineId: input.machineId, buyerId: input.buyerId, price: Number(price), day, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: saleId };
   });
 }
