@@ -1468,135 +1468,62 @@ const worker = {
     if (constitutionMatch && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query('SELECT business_constitutions.*, businesses.name, businesses.owner_id FROM business_constitutions JOIN businesses ON businesses.id = business_constitutions.business_id WHERE business_constitutions.business_id = $1', [constitutionMatch[1]]));
-        if (result?.rows[0]) return Response.json({ constitution: result.rows[0], management: { ownerId: result.rows[0].owner_id, ownershipAndManagementAreSeparate: true }, persistence: 'planetscale-postgres' });
-        return Response.json({ ok: false, error: 'Business constitution not found' }, { status: 404 });
-      }
-      const constitution = await env.DB.prepare('SELECT business_constitutions.*, businesses.name, businesses.owner_id FROM business_constitutions JOIN businesses ON businesses.id = business_constitutions.business_id WHERE business_constitutions.business_id = ?').bind(constitutionMatch[1]).first<Record<string, unknown>>();
-      if (!constitution) return Response.json({ ok: false, error: 'Business constitution not found' }, { status: 404 });
-      return Response.json({ constitution, management: { ownerId: constitution.owner_id, ownershipAndManagementAreSeparate: true }, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => repository.query('SELECT business_constitutions.*, businesses.name, businesses.owner_id FROM business_constitutions JOIN businesses ON businesses.id = business_constitutions.business_id WHERE business_constitutions.business_id = $1', [constitutionMatch[1]]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      if (!result.rows[0]) return Response.json({ ok: false, error: 'Business constitution not found' }, { status: 404 });
+      return Response.json({ constitution: result.rows[0], management: { ownerId: result.rows[0].owner_id, ownershipAndManagementAreSeparate: true }, persistence: 'planetscale-postgres' });
     }
     if (constitutionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ shareholderVoteThreshold?: number; boardApprovalThreshold?: number; dilutionNoticeDays?: number }>();
-        const shareholderVoteThreshold = Number(body.shareholderVoteThreshold); const boardApprovalThreshold = Number(body.boardApprovalThreshold); const dilutionNoticeDays = Number(body.dilutionNoticeDays);
-        if (!(shareholderVoteThreshold > 0 && shareholderVoteThreshold <= 1) || !(boardApprovalThreshold > 0 && boardApprovalThreshold <= 1) || !Number.isInteger(dilutionNoticeDays) || dilutionNoticeDays < 0 || dilutionNoticeDays > 30) return Response.json({ ok: false, error: 'Constitution thresholds or notice period are invalid' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => updateConstitutionPostgres(repository, { ownerId: viewer.id, businessId: constitutionMatch[1], shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Constitution update failed' }, { status: 403 }); }
-      }
-      const business = await env.DB.prepare('SELECT id, owner_id FROM businesses WHERE id = ?').bind(constitutionMatch[1]).first<{ id: string; owner_id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      if (business.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the Business owner may update its constitution' }, { status: 403 });
       const body = await request.json<{ shareholderVoteThreshold?: number; boardApprovalThreshold?: number; dilutionNoticeDays?: number }>();
-      const shareholderVoteThreshold = Number(body.shareholderVoteThreshold);
-      const boardApprovalThreshold = Number(body.boardApprovalThreshold);
-      const dilutionNoticeDays = Number(body.dilutionNoticeDays);
-      if (!(shareholderVoteThreshold > 0 && shareholderVoteThreshold <= 1) || !(boardApprovalThreshold > 0 && boardApprovalThreshold <= 1) || !Number.isInteger(dilutionNoticeDays) || dilutionNoticeDays < 0 || dilutionNoticeDays > 30) return Response.json({ ok: false, error: 'Constitution thresholds or notice period are invalid' }, { status: 400 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 0;
-      const current = await env.DB.prepare('SELECT version FROM business_constitutions WHERE business_id = ?').bind(business.id).first<{ version: number }>();
-      const version = Number(current?.version ?? 0) + 1;
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO business_constitutions (business_id, version, shareholder_vote_threshold, board_approval_threshold, dilution_notice_days, updated_by, updated_game_day) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(business_id) DO UPDATE SET version = excluded.version, shareholder_vote_threshold = excluded.shareholder_vote_threshold, board_approval_threshold = excluded.board_approval_threshold, dilution_notice_days = excluded.dilution_notice_days, updated_by = excluded.updated_by, updated_game_day = excluded.updated_game_day, updated_at = CURRENT_TIMESTAMP').bind(business.id, version, shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays, viewer.id, day),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.constitution_changed', `Business Constitution updated for ${business.id}`, JSON.stringify({ businessId: business.id, version, shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays, updatedBy: viewer.id })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'governance', 'Business Constitution updated', `${business.id} now operates under Constitution version ${version}.`, business.id),
-      ]);
-      return Response.json({ ok: true, constitution: await env.DB.prepare('SELECT * FROM business_constitutions WHERE business_id = ?').bind(business.id).first(), persistence: 'cloudflare-d1' });
+      const shareholderVoteThreshold = Number(body.shareholderVoteThreshold ?? 0.5);
+      const boardApprovalThreshold = Number(body.boardApprovalThreshold ?? 0.5);
+      const dilutionNoticeDays = Number(body.dilutionNoticeDays ?? 3);
+      if (![shareholderVoteThreshold, boardApprovalThreshold].every((value) => Number.isFinite(value) && value >= 0.5 && value <= 1) || !Number.isInteger(dilutionNoticeDays) || dilutionNoticeDays < 1 || dilutionNoticeDays > 30) return Response.json({ ok: false, error: 'Constitution thresholds are invalid' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => updateConstitutionPostgres(repository, { ownerId: viewer.id, businessId: constitutionMatch[1], shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business constitution update failed' }, { status: 403 });
+      }
     }
     const shareTransferMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/shares\/transfer$/);
     if (shareTransferMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ recipientId?: string; shares?: number; otp?: string; correlationId?: string }>();
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for ownership transfers' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const recipientId = body.recipientId?.trim() ?? '';
-        const shares = Number(body.shares);
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares <= 0 || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid recipient, positive whole-share amount, and correlation ID are required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => transferSharesPostgres(repository, { holderId: viewer.id, businessId: shareTransferMatch[1] === 'me' ? null : shareTransferMatch[1], recipientId, shares, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share transfer failed' }, { status: 409 });
-        }
-      }
-      const businessId = shareTransferMatch[1] === 'me'
-        ? (await env.DB.prepare('SELECT id FROM businesses WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewer.id).first<{ id: string }>())?.id
-        : shareTransferMatch[1];
-      const recipientId = body.recipientId?.trim();
+      const body = await request.json<{ businessId?: string; recipientId?: string; shares?: number; correlationId?: string }>();
+      const recipientId = body.recipientId?.trim() ?? '';
       const shares = Number(body.shares);
-      if (!businessId || !recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares <= 0) return Response.json({ ok: false, error: 'A valid recipient and positive whole-share amount are required' }, { status: 400 });
-      const [business, recipient, holding] = await Promise.all([
-        env.DB.prepare('SELECT id FROM businesses WHERE id = ?').bind(businessId).first(),
-        env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(recipientId).first(),
-        env.DB.prepare('SELECT shares FROM business_shares WHERE business_id = ? AND holder_id = ?').bind(businessId, viewer.id).first<{ shares: number }>(),
-      ]);
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      if (!recipient) return Response.json({ ok: false, error: 'Recipient Human not found' }, { status: 404 });
-      if (!holding || Number(holding.shares) < shares) return Response.json({ ok: false, error: 'Insufficient shares' }, { status: 409 });
-      const transferDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const senderUpdate = Number(holding.shares) === shares
-        ? env.DB.prepare('DELETE FROM business_shares WHERE business_id = ? AND holder_id = ?').bind(businessId, viewer.id)
-        : env.DB.prepare('UPDATE business_shares SET shares = shares - ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND holder_id = ?').bind(shares, businessId, viewer.id);
-      await env.DB.batch([
-        senderUpdate,
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, ?) ON CONFLICT(business_id, holder_id) DO UPDATE SET shares = shares + excluded.shares, updated_at = CURRENT_TIMESTAMP').bind(businessId, recipientId, shares),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS_SHARES', businessId, viewer.id, recipientId, shares, 'share_transfer', businessId, transferDay),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'ownership', 'Business shares transferred', `${shares} shares in ${businessId} were transferred to ${recipientId}.`, businessId, crypto.randomUUID(), recipientId, 'ownership', 'Business shares received', `${shares} shares in ${businessId} were transferred to you by ${viewer.id}.`, businessId),
-      ]);
-      return Response.json({ ok: true, businessId, from: viewer.id, to: recipientId, shares, holdings: (await env.DB.prepare('SELECT holder_id, shares FROM business_shares WHERE business_id = ? ORDER BY shares DESC').bind(businessId).all()).results, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share transfer terms' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => transferSharesPostgres(repository, { holderId: viewer.id, businessId: body.businessId?.trim() || null, recipientId, shares, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Share transfer failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
     }
     const shareIssueMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/shares\/issue$/);
     if (shareIssueMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ recipientId?: string; shares?: number; pricePerShare?: number; otp?: string; correlationId?: string }>();
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for share issuance' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const recipientId = body.recipientId?.trim() ?? '';
-        const shares = Number(body.shares);
-        const pricePerShare = Math.round(Number(body.pricePerShare) * 100) / 100;
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => issueSharesPostgres(repository, { ownerId: viewer.id, businessId: shareIssueMatch[1], recipientId, shares, pricePerShare, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share issuance failed' }, { status: 409 });
-        }
-      }
-      const business = await env.DB.prepare('SELECT id, owner_id FROM businesses WHERE id = ?').bind(shareIssueMatch[1]).first<{ id: string; owner_id: string }>();
-      const recipientId = body.recipientId?.trim();
+      const body = await request.json<{ recipientId?: string; shares?: number; pricePerShare?: number; correlationId?: string }>();
+      const recipientId = body.recipientId?.trim() ?? '';
       const shares = Number(body.shares);
       const pricePerShare = Math.round(Number(body.pricePerShare) * 100) / 100;
-      if (!business || business.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the Business owner may issue shares' }, { status: 403 });
-      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
-      const recipient = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(recipientId).first();
-      if (!recipient) return Response.json({ ok: false, error: 'Recipient Human not found' }, { status: 404 });
-      const buyerAccount = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(recipientId).first<{ account_id: string; balance: number }>();
-      const total = Math.round(shares * pricePerShare * 100) / 100;
-      if (!buyerAccount || Number(buyerAccount.balance) < total) return Response.json({ ok: false, error: 'Recipient has insufficient Credits' }, { status: 409 });
-      const ownerAccount = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string }>();
-      if (!ownerAccount) return Response.json({ ok: false, error: 'Owner account not found' }, { status: 404 });
-      const existingHolders = (await env.DB.prepare('SELECT holder_id FROM business_shares WHERE business_id = ? AND holder_id != ?').bind(business.id, recipientId).all<{ holder_id: string }>()).results;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const correlationId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(total, buyerAccount.account_id, total),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(total, ownerAccount.account_id),
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, ?) ON CONFLICT(business_id, holder_id) DO UPDATE SET shares = shares + excluded.shares, updated_at = CURRENT_TIMESTAMP').bind(business.id, recipientId, shares),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, buyerAccount.account_id, ownerAccount.account_id, total, 'CREDIT', 'share_issuance', business.id, 'shares-v1', correlationId),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS_SHARES', business.id, business.owner_id, recipientId, shares, 'share_issuance', correlationId, day),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.shares_issued', `Shares issued by ${business.id}`, JSON.stringify({ businessId: business.id, recipientId, shares, pricePerShare, total })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), recipientId, 'ownership', 'Business shares received', `You acquired ${shares} shares in ${business.id}.`, business.id),
-        ...existingHolders.map((holder) => env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), holder.holder_id, 'ownership', 'Business share issuance notice', `${shares} new shares were issued in ${business.id} at ${pricePerShare} Credits per share. Review your ownership percentage.`, business.id)),
-      ]);
-      return Response.json({ ok: true, businessId: business.id, recipientId, shares, pricePerShare, total, correlationId, holdings: (await env.DB.prepare('SELECT holder_id, shares FROM business_shares WHERE business_id = ? ORDER BY shares DESC').bind(business.id).all()).results, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => issueSharesPostgres(repository, { ownerId: viewer.id, businessId: shareIssueMatch[1], recipientId, shares, pricePerShare, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share issuance failed' }, { status: 409 });
+      }
     }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
