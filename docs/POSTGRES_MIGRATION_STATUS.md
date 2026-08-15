@@ -1,20 +1,21 @@
 # EARTH PostgreSQL migration status
 
 This document records the safe migration boundary for the current EARTH game.
-The live gameplay authority remains D1 until every PostgreSQL migration gate is
-green. No production schema reset or destructive copy is permitted.
+PostgreSQL is the live gameplay authority. The former Cloudflare D1 database
+was removed only after parity verification, a rollback rehearsal, and a
+successful D1-free production deployment.
 
 ## Current architecture
 
 - Flutter Web client: `flutter_client/`
 - Cloudflare Worker API and edge event endpoints: `cloudflare/src/index.ts`
-- Current live authority: Cloudflare D1 binding `DB`
-- Target authority: PlanetScale PostgreSQL through Hyperdrive binding `HYPERDRIVE`
+- Current live authority: PlanetScale PostgreSQL through Hyperdrive binding `HYPERDRIVE`
+- Retired authority: Cloudflare D1 database `earth-world` (deleted after cutover)
 - Coordination only: Durable Object `MARKET_COORDINATOR`
 - Side effects: email binding and future outbox/queue processing
 
 The Hyperdrive connection is configured as `planetscale-earth-main-2eh5` and
-is verified by `/api/health` without changing gameplay reads or writes.
+is verified by `/api/health` as the authoritative gameplay store.
 
 ## Feature audit
 
@@ -64,13 +65,12 @@ is verified by `/api/health` without changing gameplay reads or writes.
 - Validate API payloads at the boundary and keep Flutter models generated from
   the versioned API contract as the client surface grows.
 
-## Current decision
+## Cutover result
 
-The connection, schema, and initial data gates are green: the reviewed schema
-is applied, the D1 export has been imported, and row counts plus core economic
-invariants reconcile. D1 remains authoritative until the Worker persistence
-coupling is refactored behind a PostgreSQL transaction repository and shadow
-reads have passed for a complete game-day cycle. The repository tools are
-`npm run db:migrate:postgres`, `npm run db:import:d1`, and
-`npm run db:verify:d1-postgres`; all require explicit credentials and never use
-the Worker Hyperdrive binding implicitly.
+The connection, schema, initial data, rollback rehearsal, and economic
+invariant gates passed. Production was deployed with PostgreSQL authority, the
+D1 binding was removed, and the remote `earth-world` D1 database was deleted.
+The repository tools are `npm run db:migrate:postgres`,
+`npm run db:import:d1`, `npm run db:verify:d1-postgres`, and
+`npm run db:test:restore`; all require explicit credentials and never use the
+Worker Hyperdrive binding implicitly.

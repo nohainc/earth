@@ -3,6 +3,100 @@ import { settleMarket } from './market-postgres';
 
 const products = ['material', 'components', 'energy', 'compute'];
 
+async function settleBusinessDepreciation(tx: PostgresRepository, day: number): Promise<void> {
+  const assets = await tx.query<{ business_id: string; machine_id: string; book_value: string }>('SELECT business_assets.business_id, business_assets.machine_id, COALESCE(machine_acquisitions.credit_cost, 0) AS book_value FROM business_assets LEFT JOIN machine_acquisitions ON machine_acquisitions.machine_id = business_assets.machine_id');
+  for (const asset of assets.rows) {
+    const amount = Math.round(Math.max(0, Number(asset.book_value) * 0.01) * 100) / 100;
+    if (amount <= 0) continue;
+    const correlationId = `DEPRECIATION-${asset.business_id}-${asset.machine_id}-${day}`;
+    const prior = await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'business_depreciation\' AND correlation_id = $1', [correlationId]);
+    if (prior.rows[0]) continue;
+    await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, asset.business_id]);
+    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,$4,$5,\'CREDIT\',\'business_depreciation\',$6,\'business-finance-v1\',$7)', [crypto.randomUUID(), day, `business-${asset.business_id}`, 'account-depreciation-expense', amount, asset.machine_id, correlationId]);
+  }
+}
+
+async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise<void> {
+  const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true");
+  if (!rule.rows[0]) return;
+  const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id WHERE businesses.status = 'active'");
+  for (const business of businesses.rows) {
+    const taxable = Math.max(0, Number(business.revenue) - Number(business.taxed_revenue));
+    const tax = Math.round(taxable * Number(rule.rows[0].rate) * 100) / 100;
+    if (tax <= 0) { await tx.query('UPDATE business_financials SET taxed_revenue = GREATEST(taxed_revenue, revenue), last_game_day = $1 WHERE business_id = $2', [day, business.id]); continue; }
+    const correlationId = `BUSINESS-TAX-${business.id}-${day}`;
+    const prior = await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'business_tax\' AND correlation_id = $1', [correlationId]);
+    if (prior.rows[0]) continue;
+    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [business.owner_id]);
+    if (!account.rows[0] || Number(account.rows[0].balance) < tax) continue;
+    await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [tax, account.rows[0].account_id]);
+    await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [tax]);
+    await tx.query('UPDATE business_financials SET taxed_revenue = revenue, operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [tax, day, business.id]);
+    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,\'account-ouc-treasury\',$4,\'CREDIT\',\'business_tax\',$5,$6,$7)', [crypto.randomUUID(), day, account.rows[0].account_id, tax, business.id, `business-tax-v${rule.rows[0].version}`, correlationId]);
+  }
+}
+
+async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<void> {
+  const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true");
+  const world = await tx.query<{ living_cost_index: string }>("SELECT living_cost_index FROM world_state WHERE id = 'WORLD'");
+  if (!rule.rows[0]) return;
+  const levyBase = Math.max(0, Number(world.rows[0]?.living_cost_index ?? 1) * 100);
+  const humans = await tx.query<{ id: string; account_id: string; balance: string }>("SELECT humans.id, account_balances.account_id, account_balances.balance FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.life_status = 'active'");
+  for (const human of humans.rows) {
+    const levy = Math.round(levyBase * Number(rule.rows[0].rate) * 100) / 100;
+    const correlationId = `BASIC-LEVY-${human.id}-${day}-v${rule.rows[0].version}`;
+    if (levy <= 0 || Number(human.balance) < levy || (await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'basic_levy\' AND correlation_id = $1', [correlationId])).rows[0]) continue;
+    await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [levy, human.account_id]);
+    await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [levy]);
+    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,\'account-ouc-treasury\',$4,\'CREDIT\',\'basic_levy\',$5,$6,$7)', [crypto.randomUUID(), day, human.account_id, levy, human.id, `tax-v${rule.rows[0].version}`, correlationId]);
+  }
+}
+
+async function runAiMaintenance(tx: PostgresRepository, day: number): Promise<void> {
+  const assistants = await tx.query<{ owner_id: string; machine_id: string }>("SELECT ai_assistants.owner_id, machines.id AS machine_id FROM ai_assistants JOIN machines ON machines.owner_id = ai_assistants.owner_id WHERE ai_assistants.enabled = true AND ai_assistants.policy = 'maintenance' AND machines.maintenance_due > 0 AND machines.condition < 100");
+  for (const assistant of assistants.rows) {
+    const components = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE", [assistant.owner_id]);
+    const amount = Math.min(5, Number(components.rows[0]?.amount ?? 0));
+    if (amount <= 0) continue;
+    await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components' AND amount >= $1", [amount, assistant.owner_id]);
+    await tx.query('UPDATE machines SET condition = LEAST(100, condition + $1 * 0.8), maintenance_due = GREATEST(0, maintenance_due - $1) WHERE id = $2 AND owner_id = $3', [amount, assistant.machine_id, assistant.owner_id]);
+    await tx.query("INSERT INTO maintenance_events (id,machine_id,owner_id,resource,amount,condition_before,condition_after,game_day) SELECT $1,id,owner_id,'components',$2,condition,LEAST(100,condition + $2 * 0.8),$3 FROM machines WHERE id = $4", [crypto.randomUUID(), amount, day, assistant.machine_id]);
+  }
+}
+
+async function completeContracts(tx: PostgresRepository, day: number): Promise<void> {
+  const contracts = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; title: string }>("SELECT id, proposer_id, counterparty_id, title FROM negotiated_contracts WHERE status = 'accepted' AND ends_game_day <= $1 FOR UPDATE", [day]);
+  for (const contract of contracts.rows) {
+    await tx.query("UPDATE negotiated_contracts SET status = 'completed' WHERE id = $1 AND status = 'accepted'", [contract.id]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'contract.completed\',\'A negotiated contract completed\',$3) ON CONFLICT (id) DO NOTHING', [`CONTRACT-COMPLETED-${contract.id}`, day, JSON.stringify({ contractId: contract.id })]);
+    for (const humanId of [contract.proposer_id, contract.counterparty_id]) await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'contract\',\'Contract completed\',$3,$4) ON CONFLICT DO NOTHING', [`CONTRACT-COMPLETE-${contract.id}-${humanId}`, humanId, `${contract.title} completed on game day ${day}.`, contract.id]);
+  }
+}
+
+async function updateFinancialStates(tx: PostgresRepository, day: number): Promise<void> {
+  const candidates = await tx.query<{ id: string; kind: string; value: string; current: string }>("SELECT id, 'BUSINESS' AS kind, condition AS value, status AS current FROM businesses UNION ALL SELECT id, 'CITY', treasury, 'active' FROM cities UNION ALL SELECT id, 'CORPORATION', treasury, 'active' FROM corporations");
+  for (const candidate of candidates.rows) {
+    const existing = await tx.query<{ status: string; since_game_day: number }>('SELECT status, since_game_day FROM financial_states WHERE institution_id = $1 FOR UPDATE', [candidate.id]);
+    const current = existing.rows[0]?.status ?? candidate.current;
+    const numeric = Number(candidate.value);
+    const target = numeric <= 0 ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed') : 'active';
+    if (target === current && existing.rows[0]) continue;
+    const reason = target === 'active' ? 'Positive operating position restored' : 'Operating reserve is depleted';
+    await tx.query('INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,recovery_game_day,last_reason) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(institution_id) DO UPDATE SET status=EXCLUDED.status,recovery_game_day=EXCLUDED.recovery_game_day,last_reason=EXCLUDED.last_reason,updated_at=CURRENT_TIMESTAMP', [candidate.id, candidate.kind, target, existing.rows[0]?.since_game_day ?? day, target === 'active' ? day : null, reason]);
+    await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,$4,$5,$6,$7)', [crypto.randomUUID(), candidate.id, candidate.kind, current, target, day, reason]);
+    if (candidate.kind === 'BUSINESS') await tx.query('UPDATE businesses SET status = $1 WHERE id = $2', [target === 'active' ? 'active' : 'distressed', candidate.id]);
+  }
+}
+
+async function snapshotRankings(tx: PostgresRepository, day: number): Promise<void> {
+  const [cities, corporations] = await Promise.all([
+    tx.query<{ id: string; treasury: string }>('SELECT id, treasury FROM cities ORDER BY treasury DESC LIMIT 10'),
+    tx.query<{ id: string; treasury: string }>('SELECT id, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10'),
+  ]);
+  for (const [index, row] of cities.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'city_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CITY-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
+  for (const [index, row] of corporations.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'corporation_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CORP-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
+}
+
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
   const machines = await tx.query<{ id: string; owner_id: string; business_id: string | null; productive_capacity: string; utilization: string; condition: string; output_resource: string; input_resource: string; input_per_output: string; focus: string }>("SELECT machines.id, machines.owner_id, business_assets.business_id, machines.productive_capacity, machines.utilization, machines.condition, machines.output_resource, machines.input_resource, machines.input_per_output, COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC, started_game_day DESC LIMIT 1), 'efficiency') AS focus FROM machines LEFT JOIN business_assets ON business_assets.machine_id = machines.id WHERE machines.condition > 0 AND machines.utilization > 0");
   let events = 0;
@@ -40,6 +134,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await tx.query('UPDATE world_state SET game_day = $1, game_minute = $2 WHERE id = \'WORLD\'', [day, minute]);
     await tx.query("UPDATE role_assignments SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
     await tx.query("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
+    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP");
     await tx.query("UPDATE machines SET condition = GREATEST(0, condition - GREATEST(0.05, utilization * 0.005 * CASE COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC LIMIT 1), 'efficiency') WHEN 'durability' THEN 0.7 WHEN 'safety' THEN 0.8 ELSE 1 END)), maintenance_due = maintenance_due + GREATEST(1, utilization * 0.25)");
     await tx.query("UPDATE market_prices SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)), game_day = $1", [day]);
     if (newDay) {
@@ -48,11 +143,18 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
       await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [day]);
       await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
+      await settleBusinessDepreciation(tx, day);
+      await settleBusinessTaxes(tx, day);
+      await settleBasicLevy(tx, day);
+      await updateFinancialStates(tx, day);
+      await snapshotRankings(tx, day);
     }
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0)), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
     await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM machines) * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'world_clock','A new game tick begins',$3) ON CONFLICT (id) DO NOTHING", [`CLOCK-${day}-${minute}`, day, JSON.stringify({ newDay })]);
     const productionEvents = await settleProduction(tx, day);
+    await runAiMaintenance(tx, day);
+    await completeContracts(tx, day);
     return { day, minute, newDay, productionEvents };
   });
   let marketSettlements = 0;

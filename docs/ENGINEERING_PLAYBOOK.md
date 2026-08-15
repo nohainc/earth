@@ -79,8 +79,8 @@ database, then test the repository transaction separately.
 
 ## Persistence rules
 
-- PostgreSQL is the target authority and D1 is the controlled fallback during
-  migration only.
+- PostgreSQL is the live authority. Cloudflare D1 was a migration-only store
+  and has been removed; new code must not add D1 access.
 - Provider-specific SQL lives in `cloudflare/src/*-postgres.ts` adapters.
 - Multi-table economic changes use one PostgreSQL transaction and row locks
   where concurrent commands can compete.
@@ -101,13 +101,12 @@ For every slice, run:
 5. production smoke test and `/api/health` shadow parity;
 6. one monitored game-day before promoting authority.
 
-The authority flag remains `d1` until all economic commands in the current
-slice have passed these gates. Never switch only one side of a multi-command
-domain without recording the boundary.
+The authority flag is `postgres` after the completed cutover. Never switch only
+one side of a multi-command domain without recording the boundary.
 
-## Current migration inventory
+## Current PostgreSQL inventory
 
-PostgreSQL transaction slices currently implemented behind the flag:
+PostgreSQL transaction slices currently live in production:
 
 - market order submission and settlement;
 - OUC public spending;
@@ -116,24 +115,22 @@ PostgreSQL transaction slices currently implemented behind the flag:
 - expired-estate liquidation;
 - contract acceptance.
 - contract arbitration and refunds;
-- business creation with shares, constitution, management, and financials.
+- business creation with shares, constitution, management, and financials;
 - machine acquisition, maintenance, and utilization updates.
-
-Still required before global authority promotion:
-
-- business share transfers, constitutions, management, and financial statement
-  writes;
 - production settlement, machine upgrades, recycling, and machine sales;
 - succession inheritance;
-- governance, research, licensing, and scheduled world advancement.
+- governance, research, licensing, and scheduled world advancement;
+- scheduled depreciation, taxation, basic levy, AI maintenance, contract
+  completion, financial-state transitions, and ranking snapshots.
 
-### Migration boundary rule
+The remaining entries are feature-completion slices, not persistence-authority
+promotion gates.
 
-The PostgreSQL path is intentionally dormant while `PERSISTENCE_AUTHORITY=d1`.
-Production machine routes must be tested through the same repository contract
-before the flag changes. A route is not considered migrated merely because its
-schema exists or its read path is shadowed: every state-changing branch must
-have an idempotent PostgreSQL transaction, stable error behavior, and a
-rollback/replay test. The current machine boundary covers acquisition,
-maintenance, and utilization; upgrade, recycling, sales, and scheduled
-production remain separate slices.
+### Feature boundary rule
+
+The PostgreSQL path is authoritative while `PERSISTENCE_AUTHORITY=postgres`.
+A route is not considered complete merely because its schema exists: every
+state-changing branch must have an idempotent PostgreSQL transaction, stable
+error behavior, and a rollback/replay test. Continue adding gameplay features
+as vertical slices, with the full route, Flutter surface, and verification
+before moving to the next slice.
