@@ -86,13 +86,15 @@ npm test
 - authoritative prototype API with ledger entries and auditable command outcomes
 - aurora/night and daylight themes
 
-## Cloudflare D1 and Flutter verification
+## PostgreSQL and Flutter verification
 
-The authoritative production schema is tracked in `db/d1/` and is configured as the Wrangler migration directory. Verify the remote database before deploying:
+The authoritative production schema is tracked in `db/migrations/` and runs in
+PlanetScale PostgreSQL through the Hyperdrive binding. Verify the database
+before deploying:
 
 ```bash
-npx wrangler d1 migrations list earth-world --remote
-npx wrangler d1 execute earth-world --remote --command "SELECT 1 AS ok;"
+DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres
+DATABASE_URL="$DATABASE_URL" D1_EXPORT=backups/earth-d1-cutover-backup.sql npm run db:verify:d1-postgres
 npm run cf:smoke
 ```
 
@@ -102,4 +104,4 @@ The Flutter client is the primary production/test client; local Node/PostgreSQL 
 
 ## Architectural direction
 
-The implementation follows the specification's decision-first, server-authoritative model: the player submits intent, while settlement, governance outcomes, ledger changes, and simulation results remain canonical D1/Worker outcomes. Durable Objects currently coordinate market commands; the next scale steps are queued side effects, richer live events, and a PostgreSQL/Hyperdrive migration only when D1 scale and relational requirements justify it.
+The implementation follows the specification's decision-first, server-authoritative model: the player submits intent, while settlement, governance outcomes, ledger changes, and simulation results remain canonical PostgreSQL/Worker outcomes. Durable Objects coordinate market commands and live events; PostgreSQL remains the authoritative economic state.

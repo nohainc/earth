@@ -115,7 +115,7 @@ PostgreSQL transaction slices currently live in production:
 - tax settlement;
 - personal insolvency and liquidation;
 - expired-estate liquidation;
-- contract acceptance.
+- contract acceptance;
 - contract arbitration and refunds;
 - business creation with shares, constitution, management, and financials;
 - machine acquisition, maintenance, and utilization updates.
