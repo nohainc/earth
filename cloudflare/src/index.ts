@@ -58,69 +58,6 @@ async function validTotp(secret: string, code: string): Promise<boolean> {
   for (const drift of [-30000, 0, 30000]) if (code === await totp(secret, Date.now() + drift)) return true;
   return false;
 }
-async function votingWeight(env: Env, humanId: string, institutionId: string): Promise<number> {
-  const institution = await env.DB.prepare('SELECT kind FROM institutions WHERE id = ?').bind(institutionId).first<{ kind: string }>();
-  if (institution?.kind !== 'OUC') return 1;
-  const delegated = await env.DB.prepare("SELECT delegator_id FROM authority_delegations WHERE institution_id = ? AND delegate_id = ? AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1").bind(institutionId, humanId).first<{ delegator_id: string }>();
-  const representation = await env.DB.prepare('SELECT corporations.member_count, cities.residents FROM memberships LEFT JOIN corporations ON corporations.id = memberships.corporation_id LEFT JOIN cities ON cities.id = memberships.city_id WHERE memberships.human_id = ?').bind(delegated?.delegator_id ?? humanId).first<{ member_count: number | null; residents: number | null }>();
-  const population = Number(representation?.member_count ?? representation?.residents ?? 0);
-  return Math.round((1 + Math.min(2, population / 100)) * 1000) / 1000;
-}
-async function resolveGovernanceProposals(env: Env): Promise<void> {
-  await env.DB.prepare("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP").run();
-  const open = await env.DB.prepare("SELECT id, institution_id, quorum, approval_threshold, implementation_delay_days FROM proposals WHERE status = 'closed' AND outcome = 'pending'").all<{ id: string; institution_id: string; quorum: number; approval_threshold: number; implementation_delay_days: number }>();
-  for (const proposal of open.results) {
-    const counts = await env.DB.prepare('SELECT choice, COALESCE(SUM(weight), 0) AS weight FROM ballots WHERE proposal_id = ? GROUP BY choice').bind(proposal.id).all<{ choice: string; weight: number }>();
-    const totals = Object.fromEntries(counts.results.map((row) => [row.choice, Number(row.weight)]));
-    const eligible = await env.DB.prepare("SELECT COUNT(*) AS count FROM humans WHERE life_status = 'active'").first<{ count: number }>();
-    const representation = await env.DB.prepare("SELECT COALESCE(SUM(1 + CASE WHEN memberships.corporation_id IS NOT NULL THEN MIN(2, corporations.member_count / 100.0) WHEN memberships.city_id IS NOT NULL THEN MIN(2, cities.residents / 100.0) ELSE 0 END), 0) AS weight FROM humans LEFT JOIN memberships ON memberships.human_id = humans.id LEFT JOIN corporations ON corporations.id = memberships.corporation_id LEFT JOIN cities ON cities.id = memberships.city_id WHERE humans.life_status = 'active'").first<{ weight: number }>();
-    const eligibleWeight = Math.max(Number(eligible?.count ?? 0), Number(representation?.weight ?? 0));
-    const cast = (totals.support ?? 0) + (totals.oppose ?? 0) + (totals.abstain ?? 0);
-    const decisive = (totals.support ?? 0) + (totals.oppose ?? 0);
-    const quorumMet = eligibleWeight > 0 && cast / eligibleWeight >= Number(proposal.quorum);
-    const passed = quorumMet && decisive > 0 && (totals.support ?? 0) / decisive >= Number(proposal.approval_threshold);
-    const outcome = !quorumMet ? 'no_quorum' : passed ? 'passed' : 'rejected';
-    const implementationAt = passed ? `+${Math.max(0, Number(proposal.implementation_delay_days))} days` : null;
-    await env.DB.prepare("UPDATE proposals SET outcome = ?, resolved_at = CURRENT_TIMESTAMP, implementation_at = CASE WHEN ? = 'passed' THEN datetime(CURRENT_TIMESTAMP, ?) ELSE NULL END WHERE id = ?").bind(outcome, outcome, implementationAt ?? '+0 days', proposal.id).run();
-  }
-}
-async function hasActiveRole(env: Env, humanId: string, roleIds: string[]): Promise<boolean> {
-  if (!roleIds.length) return false;
-  const placeholders = roleIds.map(() => '?').join(',');
-  const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-  const row = await env.DB.prepare(`SELECT id FROM role_assignments WHERE (human_id = ? OR role_id IN (SELECT role_id FROM authority_delegations WHERE delegate_id = ? AND status = 'active' AND ends_game_day > ?)) AND status = 'active' AND ends_game_day > ? AND role_id IN (${placeholders}) LIMIT 1`).bind(humanId, humanId, day, day, ...roleIds).first();
-  return Boolean(row);
-}
-async function eligibleForInstitution(env: Env, humanId: string, institutionId: string): Promise<boolean> {
-  const world = await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>();
-  const human = await env.DB.prepare('SELECT political_eligibility_game_day FROM humans WHERE id = ?').bind(humanId).first<{ political_eligibility_game_day: number }>();
-  if (Number(world?.game_day ?? 0) < Number(human?.political_eligibility_game_day ?? 0)) return false;
-  const institution = await env.DB.prepare('SELECT kind FROM institutions WHERE id = ?').bind(institutionId).first<{ kind: string }>();
-  if (!institution) return false;
-  if (institution.kind === 'OUC') return Boolean(await env.DB.prepare("SELECT id FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = ? AND status = 'active' UNION ALL SELECT id FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = ? AND status = 'active' LIMIT 1").bind(humanId, humanId).first());
-  if (institution.kind === 'CORPORATION') return Boolean(await env.DB.prepare('SELECT human_id FROM memberships WHERE human_id = ? AND corporation_id = ?').bind(humanId, institutionId).first());
-  if (institution.kind === 'CITY') return Boolean(await env.DB.prepare('SELECT human_id FROM memberships WHERE human_id = ? AND city_id = ?').bind(humanId, institutionId).first());
-  return false;
-}
-async function canExerciseDelegatedRole(env: Env, humanId: string, institutionId: string): Promise<boolean> {
-  return Boolean(await env.DB.prepare("SELECT id FROM authority_delegations WHERE institution_id = ? AND delegate_id = ? AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1").bind(institutionId, humanId).first()) || await eligibleForInstitution(env, humanId, institutionId);
-}
-async function marketFeeRate(env: Env): Promise<number> {
-  const rule = await env.DB.prepare("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1").first<{ value_json: string }>();
-  if (!rule?.value_json) return 0;
-  try {
-    const value = JSON.parse(rule.value_json) as { feeRate?: number };
-    return typeof value.feeRate === 'number' && value.feeRate >= 0 && value.feeRate <= 0.05 ? value.feeRate : 0;
-  } catch (_error) { return 0; }
-}
-async function marketFairAllocation(env: Env): Promise<boolean> {
-  const rule = await env.DB.prepare("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1").first<{ value_json: string }>();
-  if (!rule?.value_json) return true;
-  try {
-    const value = JSON.parse(rule.value_json) as { fairAllocation?: boolean };
-    return value.fairAllocation !== false;
-  } catch (_error) { return true; }
-}
 async function derivePassword(password: string, salt: Uint8Array, iterations: number): Promise<string> {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
   const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
@@ -444,22 +381,19 @@ const worker = {
       if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
       if (password.length < 12) return Response.json({ ok: false, error: 'Password must be at least 12 characters' }, { status: 400 });
       if (password !== (body.passwordConfirmation ?? '')) return Response.json({ ok: false, error: 'Passwords do not match' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
+      try {
+        const result = await withRepository(env, (repository) => registerIdentityPostgres(repository, { email, displayName, password }));
+        if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
         try {
-          const result = await withRepository(env, (repository) => registerIdentityPostgres(repository, { email, displayName, password }));
-          if (result) {
-            try {
-              const identity = result.human as { id: string; email: string };
-              await issueActionToken(env, identity.id, 'verify_email', identity.email);
-            } catch {
-              return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
-            }
-            return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Identity creation failed';
-          return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });
+          const identity = result.human as { id: string; email: string };
+          await issueActionToken(env, identity.id, 'verify_email', identity.email);
+        } catch {
+          return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
         }
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Identity creation failed';
+        return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });
       }
     }
     if (url.pathname === '/api/auth/verify-email/resend' && request.method === 'POST') {
@@ -1548,63 +1482,22 @@ const worker = {
       if (!successorName || successorName.length < 2) return Response.json({ ok: false, error: 'Successor name is required' }, { status: 400 });
       if (!Number.isInteger(estatePeriodDays) || estatePeriodDays < 7 || estatePeriodDays > 90) return Response.json({ ok: false, error: 'Estate period must be between 7 and 90 days' }, { status: 400 });
       const successorHumanId = body.successorHumanId?.trim() || null;
-      if (authorityMode(env) === 'postgres') {
-        try {
-          if (viewer.life_status === 'estate') {
-            if (!successorHumanId) return Response.json({ ok: false, error: 'An Estate Period requires an existing active Successor Human' }, { status: 400 });
-            const world = await withRepository(env, (repository) => repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'"));
-            const day = Number(world?.rows[0]?.game_day ?? 0);
-            const result = await withRepository(env, (repository) => settleInheritancePostgres(repository, { predecessorId: viewer.id, successorId: successorHumanId, successorName, day }));
-            if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-          }
-          const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName, estatePeriodDays, successorHumanId, currentLifeStatus: viewer.life_status }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Successor registration failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('another active') ? 400 : 409 });
+      try {
+        if (viewer.life_status === 'estate') {
+          if (!successorHumanId) return Response.json({ ok: false, error: 'An Estate Period requires an existing active Successor Human' }, { status: 400 });
+          const world = await withRepository(env, (repository) => repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'"));
+          const day = Number(world?.rows[0]?.game_day ?? 0);
+          const result = await withRepository(env, (repository) => settleInheritancePostgres(repository, { predecessorId: viewer.id, successorId: successorHumanId, successorName, day }));
+          if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+          return Response.json({ ...result, persistence: 'planetscale-postgres' });
         }
+        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName, estatePeriodDays, successorHumanId, currentLifeStatus: viewer.life_status }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Successor registration failed';
+        return Response.json({ ok: false, error: message }, { status: /another active/i.test(message) ? 400 : 409 });
       }
-      if (successorHumanId && (successorHumanId === viewer.id || !(await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(successorHumanId).first()))) return Response.json({ ok: false, error: 'Successor Human must be another active Human' }, { status: 400 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      if (viewer.life_status === 'estate') {
-        if (!successorHumanId) return Response.json({ ok: false, error: 'An Estate Period requires an existing active Successor Human' }, { status: 400 });
-        const [account, machines, businesses, shares, resources] = await Promise.all([
-          env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>(),
-          env.DB.prepare('SELECT id FROM machines WHERE owner_id = ?').bind(viewer.id).all<{ id: string }>(),
-          env.DB.prepare('SELECT id FROM businesses WHERE owner_id = ?').bind(viewer.id).all<{ id: string }>(),
-          env.DB.prepare('SELECT business_id, shares FROM business_shares WHERE holder_id = ?').bind(viewer.id).all<{ business_id: string; shares: number }>(),
-          env.DB.prepare('SELECT resource, amount FROM resource_balances WHERE owner_id = ?').bind(viewer.id).all<{ resource: string; amount: number }>(),
-        ]);
-        const gross = Math.max(0, Number(account?.balance ?? 0));
-        const tax = Math.round(gross * 0.2 * 100) / 100;
-        const inherited = Math.max(0, gross - tax);
-        const eventId = crypto.randomUUID();
-        await env.DB.batch([
-          env.DB.prepare("UPDATE account_balances SET balance = 0 WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id),
-          env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE owner_id = ? AND currency = 'CREDIT'").bind(inherited, successorHumanId),
-          ...(tax > 0 ? [env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE account_id = 'account-ouc-treasury'").bind(tax)] : []),
-          env.DB.prepare('UPDATE humans SET standing = 0, legacy = legacy + 1 WHERE id = ?').bind(successorHumanId),
-          env.DB.prepare('UPDATE machines SET owner_id = ? WHERE owner_id = ?').bind(successorHumanId, viewer.id),
-          env.DB.prepare('UPDATE businesses SET owner_id = ? WHERE owner_id = ?').bind(successorHumanId, viewer.id),
-          env.DB.prepare('UPDATE business_shares SET holder_id = ? WHERE holder_id = ?').bind(successorHumanId, viewer.id),
-          ...resources.results.map((row) => env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, ?, ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(successorHumanId, row.resource, row.amount)),
-          env.DB.prepare('DELETE FROM resource_balances WHERE owner_id = ?').bind(viewer.id),
-          env.DB.prepare("UPDATE humans SET life_status = 'deceased' WHERE id = ?").bind(viewer.id),
-          env.DB.prepare('INSERT OR REPLACE INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, ? FROM humans WHERE id = ?').bind(successorName, viewer.id),
-          env.DB.prepare('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES (?, ?, ?, ?, ?, ?)').bind(eventId, successorHumanId, 'inheritance', day, successorName, inherited),
-          env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, viewer.id, successorHumanId, inherited, 'CREDIT', 'late_inheritance', eventId, 'life-v2', eventId),
-          ...(tax > 0 ? [env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, viewer.id, 'account-ouc-treasury', tax, 'CREDIT', 'late_inheritance_tax', eventId, 'life-v2', eventId)] : []),
-          ...machines.results.map((asset) => env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', asset.id, viewer.id, successorHumanId, 1, 'late_inheritance', eventId, day)),
-          ...businesses.results.map((asset) => env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS', asset.id, viewer.id, successorHumanId, 1, 'late_inheritance', eventId, day)),
-          ...shares.results.map((asset) => env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS_SHARES', asset.business_id, viewer.id, successorHumanId, asset.shares, 'late_inheritance', eventId, day)),
-          env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), successorHumanId, 'life', 'Late inheritance received', `${inherited} Credits and your predecessor’s registered assets were transferred after the Estate Period.`, eventId),
-          env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(`LATE-INHERITANCE-${viewer.id}-${day}`, day, 'human.life_event', 'An Estate completed late succession', JSON.stringify({ predecessor: viewer.id, successor: successorHumanId, tax })),
-          env.DB.prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = ? AND revoked_at IS NULL').bind(viewer.id),
-        ]);
-        return Response.json({ ok: true, lateSuccession: true, successorHumanId, inherited, tax, eventId, persistence: 'cloudflare-d1' });
-      }
-      await env.DB.prepare('INSERT INTO succession_plans (human_id, successor_name, registered_game_day, estate_period_days, successor_human_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(human_id) DO UPDATE SET successor_name = excluded.successor_name, registered_game_day = excluded.registered_game_day, estate_period_days = excluded.estate_period_days, successor_human_id = excluded.successor_human_id').bind(viewer.id, successorName, day, estatePeriodDays, successorHumanId).run();
-      return Response.json({ ok: true, successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewer.id).first(), persistence: 'cloudflare-d1' });
     }
     const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
     if (maintenanceMatch && request.method === 'POST') {
@@ -1728,9 +1621,6 @@ export default {
     }
     const url = new URL(request.url);
     const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health';
-    // The handler still contains historical D1 compatibility branches. Keep
-    // the provider boundary at the edge so no data request can reach one when
-    // PostgreSQL is not explicitly configured as the authority.
     if (isDataRequest) authorityMode(env);
     const response = isDataRequest
       ? await worker.fetch(request, env, ctx)
