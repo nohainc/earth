@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 6,
+  "migrationVersion": 7,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -52,7 +52,7 @@
     "patents": ["id", "technology_id", "owner_id"],
     "personal_financial_states": ["human_id", "status", "protected_credits"],
     "production_events": ["id", "machine_id", "amount"],
-    "proposals": ["id", "institution_id", "status", "execution_status"],
+    "proposals": ["id", "institution_id", "status", "execution_status", "closes_game_day", "closes_game_minute", "implementation_game_day", "implementation_game_minute"],
     "rankings_snapshots": ["id", "game_day", "ranking_type", "rank"],
     "recycling_events": ["id", "machine_id", "material_returned"],
     "research_projects": ["id", "technology_id", "owner_id", "progress"],
@@ -87,6 +87,7 @@
     "production_events_owner_idx",
     "market_orders_reserved_idx",
     "event_outbox_pending_idx",
-    "event_outbox_aggregate_idx"
+    "event_outbox_aggregate_idx",
+    "proposals_game_deadline_idx"
   ]
 }

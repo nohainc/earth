@@ -96,7 +96,7 @@ export async function listTechnology(repository: PostgresRepository): Promise<Re
 
 export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {
   const [proposals, ballots] = await Promise.all([
-    repository.query('SELECT * FROM proposals ORDER BY closes_at ASC'),
+    repository.query('SELECT * FROM proposals ORDER BY closes_game_day ASC NULLS LAST, closes_game_minute ASC NULLS LAST, closes_at ASC'),
     repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
   ]);
   return { proposals: proposals.rows, voteCounts: ballots.rows };

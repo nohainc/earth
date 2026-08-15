@@ -8,6 +8,7 @@ test('projects a governance deadline into game and real time', () => {
     gameMinute: 120,
     closesAt: '2026-08-15T00:01:40.000Z',
     nowMs: Date.parse('2026-08-15T00:00:00.000Z'),
+    realSecondsPerGameMinute: 1,
   });
   assert.deepEqual(deadline, {
     gameDay: 100,
@@ -15,6 +16,21 @@ test('projects a governance deadline into game and real time', () => {
     realSecondsRemaining: 100,
     closesAt: '2026-08-15T00:01:40.000Z',
   });
+});
+
+test('projects an authoritative game-time deadline without using wall-clock time', () => {
+  const deadline = projectGameDeadline({
+    gameDay: 100,
+    gameMinute: 120,
+    deadlineGameDay: 100,
+    deadlineGameMinute: 220,
+    closesAt: null,
+    nowMs: Date.parse('2026-08-15T00:00:00.000Z'),
+    realSecondsPerGameMinute: 60,
+  });
+  assert.equal(deadline?.gameDay, 100);
+  assert.equal(deadline?.gameMinute, 220);
+  assert.equal(deadline?.realSecondsRemaining, 6000);
 });
 
 test('clamps expired deadlines without moving the game clock backwards', () => {
