@@ -35,3 +35,16 @@ export function taxToCents(taxableAmount: unknown, rate: unknown): bigint {
   if (cents < 0n || micros < 0n || micros > 250_000n) throw new Error('Tax inputs are outside engine bounds');
   return (cents * micros + RATE_SCALE / 2n) / RATE_SCALE;
 }
+
+export function marketValueToCents(quantity: number, unitPrice: unknown): bigint {
+  if (!Number.isInteger(quantity) || quantity <= 0) throw new Error('Market quantity must be a positive integer');
+  const cents = moneyToCents(unitPrice);
+  if (cents <= 0n) throw new Error('Market price must be positive');
+  return BigInt(quantity) * cents;
+}
+
+export function rateAmountToCents(amountCents: bigint, rate: unknown): bigint {
+  const micros = rateToMicros(rate);
+  if (amountCents < 0n || micros < 0n || micros > 50_000n) throw new Error('Market fee inputs are outside engine bounds');
+  return (amountCents * micros + RATE_SCALE / 2n) / RATE_SCALE;
+}
