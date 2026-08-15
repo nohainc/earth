@@ -819,7 +819,7 @@ const worker = {
       const result = await withRepository(env, (repository) => listRolesPostgres(repository));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
-    const roleClaimMatch = url.pathname.match(/^\\/api\\/governance\\/roles\\/([^/]+)\\/(claim|resign)$/);
+    const roleClaimMatch = url.pathname.match(/^\/api\/governance\/roles\/([^/]+)\/(claim|resign)$/);
     if (roleClaimMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -832,7 +832,7 @@ const worker = {
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /occupied|assignment|eligible|maturity/i.test(message) ? 409 : 403 });
       }
     }
-    const delegationMatch = url.pathname.match(/^\\/api\\/governance\\/roles\\/([^/]+)\\/(delegate|recall)$/);
+    const delegationMatch = url.pathname.match(/^\/api\/governance\/roles\/([^/]+)\/(delegate|recall)$/);
     if (delegationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -1002,37 +1002,29 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listOwnershipEventsPostgres(repository, viewer.id, limit));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const events = await env.DB.prepare('SELECT id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day, created_at FROM ownership_events WHERE from_owner_id = ? OR to_owner_id = ? ORDER BY game_day DESC, created_at DESC LIMIT ?').bind(viewer.id, viewer.id, limit).all();
-      return Response.json({ events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listOwnershipEventsPostgres(repository, viewer.id, limit));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/membership/events' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const events = await env.DB.prepare('SELECT id, institution_type, institution_id, action, game_day, reason, created_at FROM membership_events WHERE human_id = ? ORDER BY game_day DESC, created_at DESC LIMIT ?').bind(viewer.id, limit).all();
-      return Response.json({ events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listAuthorityEventsPostgres(repository, viewer.id, limit));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const events = await env.DB.prepare('SELECT id, institution_id, role_id, action, game_day, reason, created_at FROM authority_events WHERE human_id = ? ORDER BY game_day DESC, created_at DESC LIMIT ?').bind(viewer.id, limit).all();
-      return Response.json({ events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listAuthorityEventsPostgres(repository, viewer.id, limit));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/cities' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listCitiesPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/cities' && request.method === 'POST') {
@@ -1042,30 +1034,28 @@ const worker = {
       const name = body.name?.trim();
       const communityId = body.communityId?.trim();
       if (!name || name.length < 3 || name.length > 80 || !communityId) return Response.json({ ok: false, error: 'City name and founding Community are required' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createCityPostgres(repository, { founderId: viewer.id, communityId, name }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'City formation failed';
-          return Response.json({ ok: false, error: message }, { status: /founder|not found/i.test(message) ? 403 : /requires|exists/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createCityPostgres(repository, { founderId: viewer.id, communityId, name }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'City formation failed';
+        return Response.json({ ok: false, error: message }, { status: /founder|not found/i.test(message) ? 403 : /requires|exists/i.test(message) ? 409 : 400 });
       }
-      const founder = await env.DB.prepare('SELECT human_id FROM community_members WHERE community_id = ? AND human_id = ?').bind(communityId, viewer.id).first();
-      const population = await env.DB.prepare("SELECT COUNT(*) AS count FROM community_members JOIN humans ON humans.id = community_members.human_id LEFT JOIN memberships ON memberships.human_id = community_members.human_id WHERE community_id = ? AND humans.life_status = 'active' AND memberships.city_id IS NULL").bind(communityId).first<{ count: number }>();
-      if (!founder) return Response.json({ ok: false, error: 'Founder must belong to the Community' }, { status: 403 });
-      if (Number(population?.count ?? 0) < 10) return Response.json({ ok: false, error: 'A City requires at least 10 active Community members' }, { status: 409 });
-      if (await env.DB.prepare('SELECT id FROM institutions WHERE name = ?').bind(name).first()) return Response.json({ ok: false, error: 'Institution name already exists' }, { status: 409 });
-      const cityId = `CITY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-        health: Number(city.health_capacity ?? 0) >= 50,
-        treasury: Number(city.treasury ?? 0) >= 0,
-        governance: Boolean(await env.DB.prepare("SELECT id FROM institution_roles WHERE institution_id = ? AND status = 'active'").bind(city.institution_id).first()),
-      };
-      return Response.json({ ok: true, city, requirements, qualified: Object.values(requirements).every(Boolean), persistence: 'cloudflare-d1' });
+    }
+    const cityQualificationMatch = url.pathname.match(/^\/api\/cities\/([^/]+)\/qualification$/);
+    if (cityQualificationMatch && request.method === 'GET') {
+      try {
+        const result = await withRepository(env, (repository) => cityQualificationPostgres(repository, cityQualificationMatch[1]));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'City qualification unavailable' }, { status: 404 });
+      }
     }
     if (url.pathname === '/api/corporations' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listCorporationsPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/corporations' && request.method === 'POST') {
@@ -1075,59 +1065,26 @@ const worker = {
       const name = body.name?.trim();
       const cityId = body.cityId?.trim();
       if (!name || name.length < 3 || name.length > 80 || !cityId) return Response.json({ ok: false, error: 'Corporation name and founding City are required' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createCorporationPostgres(repository, { founderId: viewer.id, cityId, name }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Corporation formation failed';
-          return Response.json({ ok: false, error: message }, { status: /founder|not found/i.test(message) ? 403 : /requires|exists/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createCorporationPostgres(repository, { founderId: viewer.id, cityId, name }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Corporation formation failed';
+        return Response.json({ ok: false, error: message }, { status: /founder|not found/i.test(message) ? 403 : /requires|exists/i.test(message) ? 409 : 400 });
       }
-      const city = await env.DB.prepare('SELECT id, residents FROM cities WHERE id = ?').bind(cityId).first<{ id: string; residents: number }>();
-      const founder = await env.DB.prepare('SELECT human_id FROM memberships WHERE human_id = ? AND city_id = ?').bind(viewer.id, cityId).first();
-      if (!city || !founder) return Response.json({ ok: false, error: 'Founder must be a resident of the founding City' }, { status: 403 });
-      if (Number(city.residents) < 30) return Response.json({ ok: false, error: 'A Corporation requires at least 30 active City residents' }, { status: 409 });
-      if (await env.DB.prepare('SELECT id FROM institutions WHERE name = ?').bind(name).first()) return Response.json({ ok: false, error: 'Institution name already exists' }, { status: 409 });
-      const corporationId = `CORP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const foundingMembers = (await env.DB.prepare('SELECT human_id FROM memberships WHERE city_id = ? AND corporation_id IS NULL').bind(cityId).all<{ human_id: string }>()).results;
-      await env.DB.batch([
-        env.DB.prepare("INSERT INTO institutions (id, kind, name, status) VALUES (?, 'CORPORATION', ?, 'active')").bind(corporationId, name),
-        env.DB.prepare('INSERT INTO corporations (id, institution_id, member_count, treasury, constitution_version) VALUES (?, ?, 0, 0, 1)').bind(corporationId, corporationId),
-        env.DB.prepare("INSERT INTO institution_roles (id, institution_id, name, term_days, eligibility) VALUES (?, ?, 'Corporation Executive', 90, 'member'), (?, ?, 'Corporation Treasurer', 90, 'member'), (?, ?, 'OUC Delegate', 90, 'representative')").bind(`${corporationId}-EXECUTIVE`, corporationId, `${corporationId}-TREASURER`, corporationId, `${corporationId}-DELEGATE`, corporationId),
-        env.DB.prepare('UPDATE memberships SET corporation_id = ? WHERE city_id = ? AND corporation_id IS NULL').bind(corporationId, cityId),
-        env.DB.prepare('UPDATE corporations SET member_count = (SELECT COUNT(*) FROM memberships WHERE corporation_id = ?) WHERE id = ?').bind(corporationId, corporationId),
-        ...foundingMembers.flatMap((member) => [
-          env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), member.human_id, 'CORPORATION', corporationId, 'joined', day, 'corporation_formation'),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`CORP-FORMED-${member.human_id}-${corporationId}`, member.human_id, 'institution', 'Corporation formed', `Corporation ${corporationId} was formed and you became a member.`, corporationId),
-        ]),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'corporation.formed', `${name} was formed`, JSON.stringify({ corporationId, cityId, members: Number(city.residents) })),
-      ]);
-      return Response.json({ ok: true, corporation: await env.DB.prepare('SELECT * FROM corporations WHERE id = ?').bind(corporationId).first(), persistence: 'cloudflare-d1' }, { status: 201 });
     }
     const corporationQualificationMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/qualification$/);
     if (corporationQualificationMatch && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => corporationQualificationPostgres(repository, corporationQualificationMatch[1]));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation qualification unavailable' }, { status: 404 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => corporationQualificationPostgres(repository, corporationQualificationMatch[1]));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Corporation qualification unavailable' }, { status: 404 });
       }
-      const corporation = await env.DB.prepare('SELECT * FROM corporations WHERE id = ?').bind(corporationQualificationMatch[1]).first<Record<string, unknown>>();
-      if (!corporation) return Response.json({ ok: false, error: 'Corporation not found' }, { status: 404 });
-      const city = await env.DB.prepare('SELECT * FROM cities WHERE id = (SELECT city_id FROM memberships WHERE corporation_id = ? AND city_id IS NOT NULL LIMIT 1)').bind(corporationQualificationMatch[1]).first<Record<string, unknown>>();
-      const requirements = {
-        activeMembership: Number(corporation.member_count ?? 0) >= 30,
-        recognizedCity: Boolean(city),
-        treasury: Number(corporation.treasury ?? 0) >= 1000,
-        constitution: Number(corporation.constitution_version ?? 0) >= 1,
-        governance: Boolean(await env.DB.prepare("SELECT id FROM institution_roles WHERE institution_id = ? AND status = 'active'").bind(corporation.institution_id).first()),
-      };
-      return Response.json({ ok: true, corporation, city, requirements, qualified: Object.values(requirements).every(Boolean), persistence: 'cloudflare-d1' });
     }
+
     const cityBudgetMatch = url.pathname.match(/^\/api\/cities\/([^/]+)\/budget$/);
     if (cityBudgetMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
