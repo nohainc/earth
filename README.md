@@ -96,7 +96,7 @@ npx wrangler d1 execute earth-world --remote --command "SELECT 1 AS ok;"
 npm run cf:smoke
 ```
 
-The production smoke suite also verifies that `/app` serves the compiled Flutter shell, protected API and event endpoints reject unauthenticated access, and the remote D1 feature schema is present.
+The production smoke suite also verifies that `/app` serves the compiled Flutter shell, protected API and event endpoints reject unauthenticated access, and the remote PostgreSQL feature schema is present.
 
 The Flutter client is the primary production/test client; local Node/PostgreSQL code remains a reference simulator and compatibility test harness, not the deployed game authority.
 
