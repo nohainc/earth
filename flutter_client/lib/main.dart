@@ -744,7 +744,8 @@ class _AuthScreenState extends State<AuthScreen> {
                   if (error != null) ...[const SizedBox(height: 12), Text(error!, style: const TextStyle(color: Colors.redAccent))],
                   const SizedBox(height: 20),
                   FilledButton(onPressed: busy ? null : submit, child: Text(busy ? 'Connecting…' : recoveryMode ? 'Send recovery email' : registerMode ? 'Create identity' : 'Enter EARTH')),
-                  if (verificationPending && !registerMode && !recoveryMode)
+                  if (!registerMode && !recoveryMode &&
+                      (verificationPending || (error?.toLowerCase().contains('verify your email') ?? false)))
                     TextButton(onPressed: busy ? null : resendVerification, child: const Text('Resend verification email')),
                   if (!registerMode && !recoveryMode) TextButton(onPressed: busy ? null : () => setState(() { recoveryMode = true; error = null; }), child: const Text('Forgot password?')),
                   TextButton(onPressed: busy ? null : () => setState(() { recoveryMode = false; registerMode = !registerMode; verificationPending = false; error = null; }), child: Text(recoveryMode || registerMode ? 'Back to sign in' : 'New to EARTH? Create an identity')),
