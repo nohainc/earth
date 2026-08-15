@@ -94,7 +94,7 @@ before deploying:
 
 ```bash
 DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres
-DATABASE_URL="$DATABASE_URL" D1_EXPORT=backups/earth-d1-cutover-backup.sql npm run db:verify:d1-postgres
+DATABASE_URL="$DATABASE_URL" npm run db:verify:manifest
 npm run cf:smoke
 ```
 

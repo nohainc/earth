@@ -75,7 +75,7 @@ database.
 The connection, schema, initial data, rollback rehearsal, and economic
 invariant gates passed. Production was deployed with PostgreSQL authority, the
 D1 binding was removed, and the remote `earth-world` D1 database was deleted.
-The repository tools are `npm run db:migrate:postgres`,
-`npm run db:import:d1`, `npm run db:verify:d1-postgres`, and
-`npm run db:test:restore`; all require explicit credentials and never use the
-Worker Hyperdrive binding implicitly.
+The active repository tools are `npm run db:migrate:postgres` and
+`npm run db:verify:manifest`; both require explicit credentials and never use
+the Worker Hyperdrive binding implicitly. The retired D1 import, parity, and
+restore-rehearsal scripts are no longer part of the application toolchain.

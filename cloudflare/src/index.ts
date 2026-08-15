@@ -8,6 +8,7 @@ import { acceptContract as acceptContractPostgres, cancelContract as cancelContr
 import { resolveContractDispute as resolveContractDisputePostgres } from './arbitration-postgres';
 import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, issueShares as issueSharesPostgres, ownershipRegistry as ownershipRegistryPostgres, setPolicy as setBusinessPolicyPostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
 import { acquireMachine as acquireMachinePostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
+import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
@@ -56,69 +57,6 @@ async function validTotp(secret: string, code: string): Promise<boolean> {
   if (!/^\d{6}$/.test(code)) return false;
   for (const drift of [-30000, 0, 30000]) if (code === await totp(secret, Date.now() + drift)) return true;
   return false;
-}
-async function votingWeight(env: Env, humanId: string, institutionId: string): Promise<number> {
-  const institution = await env.DB.prepare('SELECT kind FROM institutions WHERE id = ?').bind(institutionId).first<{ kind: string }>();
-  if (institution?.kind !== 'OUC') return 1;
-  const delegated = await env.DB.prepare("SELECT delegator_id FROM authority_delegations WHERE institution_id = ? AND delegate_id = ? AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1").bind(institutionId, humanId).first<{ delegator_id: string }>();
-  const representation = await env.DB.prepare('SELECT corporations.member_count, cities.residents FROM memberships LEFT JOIN corporations ON corporations.id = memberships.corporation_id LEFT JOIN cities ON cities.id = memberships.city_id WHERE memberships.human_id = ?').bind(delegated?.delegator_id ?? humanId).first<{ member_count: number | null; residents: number | null }>();
-  const population = Number(representation?.member_count ?? representation?.residents ?? 0);
-  return Math.round((1 + Math.min(2, population / 100)) * 1000) / 1000;
-}
-async function resolveGovernanceProposals(env: Env): Promise<void> {
-  await env.DB.prepare("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND closes_at <= CURRENT_TIMESTAMP").run();
-  const open = await env.DB.prepare("SELECT id, institution_id, quorum, approval_threshold, implementation_delay_days FROM proposals WHERE status = 'closed' AND outcome = 'pending'").all<{ id: string; institution_id: string; quorum: number; approval_threshold: number; implementation_delay_days: number }>();
-  for (const proposal of open.results) {
-    const counts = await env.DB.prepare('SELECT choice, COALESCE(SUM(weight), 0) AS weight FROM ballots WHERE proposal_id = ? GROUP BY choice').bind(proposal.id).all<{ choice: string; weight: number }>();
-    const totals = Object.fromEntries(counts.results.map((row) => [row.choice, Number(row.weight)]));
-    const eligible = await env.DB.prepare("SELECT COUNT(*) AS count FROM humans WHERE life_status = 'active'").first<{ count: number }>();
-    const representation = await env.DB.prepare("SELECT COALESCE(SUM(1 + CASE WHEN memberships.corporation_id IS NOT NULL THEN MIN(2, corporations.member_count / 100.0) WHEN memberships.city_id IS NOT NULL THEN MIN(2, cities.residents / 100.0) ELSE 0 END), 0) AS weight FROM humans LEFT JOIN memberships ON memberships.human_id = humans.id LEFT JOIN corporations ON corporations.id = memberships.corporation_id LEFT JOIN cities ON cities.id = memberships.city_id WHERE humans.life_status = 'active'").first<{ weight: number }>();
-    const eligibleWeight = Math.max(Number(eligible?.count ?? 0), Number(representation?.weight ?? 0));
-    const cast = (totals.support ?? 0) + (totals.oppose ?? 0) + (totals.abstain ?? 0);
-    const decisive = (totals.support ?? 0) + (totals.oppose ?? 0);
-    const quorumMet = eligibleWeight > 0 && cast / eligibleWeight >= Number(proposal.quorum);
-    const passed = quorumMet && decisive > 0 && (totals.support ?? 0) / decisive >= Number(proposal.approval_threshold);
-    const outcome = !quorumMet ? 'no_quorum' : passed ? 'passed' : 'rejected';
-    const implementationAt = passed ? `+${Math.max(0, Number(proposal.implementation_delay_days))} days` : null;
-    await env.DB.prepare("UPDATE proposals SET outcome = ?, resolved_at = CURRENT_TIMESTAMP, implementation_at = CASE WHEN ? = 'passed' THEN datetime(CURRENT_TIMESTAMP, ?) ELSE NULL END WHERE id = ?").bind(outcome, outcome, implementationAt ?? '+0 days', proposal.id).run();
-  }
-}
-async function hasActiveRole(env: Env, humanId: string, roleIds: string[]): Promise<boolean> {
-  if (!roleIds.length) return false;
-  const placeholders = roleIds.map(() => '?').join(',');
-  const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-  const row = await env.DB.prepare(`SELECT id FROM role_assignments WHERE (human_id = ? OR role_id IN (SELECT role_id FROM authority_delegations WHERE delegate_id = ? AND status = 'active' AND ends_game_day > ?)) AND status = 'active' AND ends_game_day > ? AND role_id IN (${placeholders}) LIMIT 1`).bind(humanId, humanId, day, day, ...roleIds).first();
-  return Boolean(row);
-}
-async function eligibleForInstitution(env: Env, humanId: string, institutionId: string): Promise<boolean> {
-  const world = await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>();
-  const human = await env.DB.prepare('SELECT political_eligibility_game_day FROM humans WHERE id = ?').bind(humanId).first<{ political_eligibility_game_day: number }>();
-  if (Number(world?.game_day ?? 0) < Number(human?.political_eligibility_game_day ?? 0)) return false;
-  const institution = await env.DB.prepare('SELECT kind FROM institutions WHERE id = ?').bind(institutionId).first<{ kind: string }>();
-  if (!institution) return false;
-  if (institution.kind === 'OUC') return Boolean(await env.DB.prepare("SELECT id FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = ? AND status = 'active' UNION ALL SELECT id FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = ? AND status = 'active' LIMIT 1").bind(humanId, humanId).first());
-  if (institution.kind === 'CORPORATION') return Boolean(await env.DB.prepare('SELECT human_id FROM memberships WHERE human_id = ? AND corporation_id = ?').bind(humanId, institutionId).first());
-  if (institution.kind === 'CITY') return Boolean(await env.DB.prepare('SELECT human_id FROM memberships WHERE human_id = ? AND city_id = ?').bind(humanId, institutionId).first());
-  return false;
-}
-async function canExerciseDelegatedRole(env: Env, humanId: string, institutionId: string): Promise<boolean> {
-  return Boolean(await env.DB.prepare("SELECT id FROM authority_delegations WHERE institution_id = ? AND delegate_id = ? AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1").bind(institutionId, humanId).first()) || await eligibleForInstitution(env, humanId, institutionId);
-}
-async function marketFeeRate(env: Env): Promise<number> {
-  const rule = await env.DB.prepare("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1").first<{ value_json: string }>();
-  if (!rule?.value_json) return 0;
-  try {
-    const value = JSON.parse(rule.value_json) as { feeRate?: number };
-    return typeof value.feeRate === 'number' && value.feeRate >= 0 && value.feeRate <= 0.05 ? value.feeRate : 0;
-  } catch (_error) { return 0; }
-}
-async function marketFairAllocation(env: Env): Promise<boolean> {
-  const rule = await env.DB.prepare("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1").first<{ value_json: string }>();
-  if (!rule?.value_json) return true;
-  try {
-    const value = JSON.parse(rule.value_json) as { fairAllocation?: boolean };
-    return value.fairAllocation !== false;
-  } catch (_error) { return true; }
 }
 async function derivePassword(password: string, salt: Uint8Array, iterations: number): Promise<string> {
   const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
@@ -443,22 +381,19 @@ const worker = {
       if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
       if (password.length < 12) return Response.json({ ok: false, error: 'Password must be at least 12 characters' }, { status: 400 });
       if (password !== (body.passwordConfirmation ?? '')) return Response.json({ ok: false, error: 'Passwords do not match' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
+      try {
+        const result = await withRepository(env, (repository) => registerIdentityPostgres(repository, { email, displayName, password }));
+        if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
         try {
-          const result = await withRepository(env, (repository) => registerIdentityPostgres(repository, { email, displayName, password }));
-          if (result) {
-            try {
-              const identity = result.human as { id: string; email: string };
-              await issueActionToken(env, identity.id, 'verify_email', identity.email);
-            } catch {
-              return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
-            }
-            return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Identity creation failed';
-          return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });
+          const identity = result.human as { id: string; email: string };
+          await issueActionToken(env, identity.id, 'verify_email', identity.email);
+        } catch {
+          return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
         }
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Identity creation failed';
+        return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });
       }
     }
     if (url.pathname === '/api/auth/verify-email/resend' && request.method === 'POST') {
@@ -566,135 +501,14 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const viewerId = viewer.id;
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const snapshot = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewerId));
-          if (snapshot) return Response.json(snapshot);
-        } catch (error) {
-          console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
-          return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
-        }
+      try {
+        const snapshot = await withRepository(env, (repository) => worldSnapshotPostgres(repository, viewerId));
+        if (!snapshot) return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
+        return Response.json(snapshot);
+      } catch (error) {
+        console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
+        return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
       }
-      const [world, human, institutions, resources, business, technology, proposals, machines, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts] = await Promise.all([
-        env.DB.prepare('SELECT * FROM world_state WHERE id = ?').bind('WORLD').first(),
-        env.DB.prepare('SELECT * FROM humans WHERE id = ?').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM institutions').all(),
-        env.DB.prepare('SELECT resource, amount FROM resource_balances WHERE owner_id = ?').bind(viewerId).all(),
-        env.DB.prepare("SELECT businesses.*, COALESCE((SELECT SUM(shares) FROM business_shares WHERE business_id = businesses.id AND holder_id = ?), 0) AS owned_shares, COALESCE((SELECT SUM(shares) FROM business_shares WHERE business_id = businesses.id), 0) AS total_issued_shares, (SELECT holder_id FROM business_shares WHERE business_id = businesses.id ORDER BY shares DESC, holder_id LIMIT 1) AS controlling_human_id, COALESCE(business_constitutions.version, 1) AS constitution_version, COALESCE(business_constitutions.shareholder_vote_threshold, 0.5) AS shareholder_vote_threshold, COALESCE(business_constitutions.board_approval_threshold, 0.5) AS board_approval_threshold, COALESCE(business_constitutions.dilution_notice_days, 3) AS dilution_notice_days, COALESCE(business_management.manager_id, businesses.owner_id) AS manager_id, COALESCE(business_financials.revenue, 0) AS revenue, COALESCE(business_financials.operating_costs, 0) AS operating_costs, COALESCE(business_financials.profit, 0) AS profit FROM businesses LEFT JOIN business_constitutions ON business_constitutions.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id LEFT JOIN business_financials ON business_financials.business_id = businesses.id WHERE businesses.owner_id = ? OR business_management.manager_id = ? OR EXISTS (SELECT 1 FROM business_shares viewer_shares WHERE viewer_shares.business_id = businesses.id AND viewer_shares.holder_id = ?) ORDER BY businesses.id LIMIT 1").bind(viewerId, viewerId, viewerId, viewerId).first(),
-        env.DB.prepare('SELECT * FROM technologies WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM proposals ORDER BY closes_at ASC LIMIT 20').all(),
-        env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind(viewerId).all(),
-        env.DB.prepare('SELECT balance FROM account_balances WHERE owner_id = ? AND currency = ?').bind(viewerId, 'CREDIT').first<{ balance: number }>(),
-        env.DB.prepare('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice').all(),
-        env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM memberships WHERE human_id = ?').bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM market_prices ORDER BY product').all(),
-        env.DB.prepare('SELECT * FROM ledger_entries ORDER BY created_at DESC LIMIT 25').all(),
-        env.DB.prepare("SELECT * FROM cities WHERE id = COALESCE((SELECT city_id FROM memberships WHERE human_id = ? AND city_id IS NOT NULL), 'CITY-0084')").bind(viewerId).first(),
-        env.DB.prepare("SELECT * FROM corporations WHERE id = COALESCE((SELECT corporation_id FROM memberships WHERE human_id = ? AND corporation_id IS NOT NULL), 'CORP-001')").bind(viewerId).first(),
-        env.DB.prepare('SELECT * FROM personal_financial_states WHERE human_id = ?').bind(viewerId).first(),
-        env.DB.prepare("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = ? OR negotiated_contracts.counterparty_id = ? ORDER BY negotiated_contracts.created_at DESC LIMIT 30").bind(viewerId, viewerId).all(),
-      ]);
-      const institutionRows = institutions.results as Array<Record<string, unknown>>;
-      const byKind = (kind: string) => institutionRows.find((item) => item.kind === kind) ?? {};
-      const resourceMap = Object.fromEntries((resources.results as Array<Record<string, unknown>>).map((item) => [item.resource, item.amount]));
-      const voteCounts = (ballots.results as Array<Record<string, unknown>>).reduce<Record<string, Record<string, number>>>((all, item) => {
-        const proposalId = String(item.proposal_id);
-        all[proposalId] ??= {};
-        all[proposalId][String(item.choice)] = Number(item.count);
-        return all;
-      }, {});
-      const marketProducts = Object.fromEntries((prices.results as Array<Record<string, unknown>>).map((item) => [item.product, { price: item.price, supply: item.supply, demand: item.demand }]));
-      const marketFee = await marketFeeRate(env);
-      const rankings = await Promise.all([
-        env.DB.prepare('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10').all(),
-        env.DB.prepare('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10').all(),
-      ]);
-      const [book, trades] = await Promise.all([
-        env.DB.prepare("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product").all(),
-        env.DB.prepare('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product').all(),
-      ]);
-      const ownOrders = await env.DB.prepare("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = ? AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50").bind(viewerId).all();
-      const productionEvents = await env.DB.prepare('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = ? ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT 30').bind(viewerId).all();
-      const aiAssistants = await env.DB.prepare('SELECT id, tier, policy, enabled FROM ai_assistants WHERE owner_id = ? ORDER BY id').bind(viewerId).all();
-      const aiRecommendations = [
-        ...(machines.results as Array<Record<string, unknown>>).filter((machine) => Number(machine.condition ?? 100) < 40).map((machine) => ({ type: 'maintenance', priority: 'high', subject: machine.id, message: `${machine.name} is below 40% condition; allocate Components or enable maintenance automation.` })),
-        ...(machines.results as Array<Record<string, unknown>>).filter((machine) => Number(machine.utilization ?? 0) > 0 && Number(machine.condition ?? 100) < 70).map((machine) => ({ type: 'utilization', priority: 'medium', subject: machine.id, message: `Reduce utilization for ${machine.name} until its condition improves.` })),
-        ...(Number(cityMetrics?.health_capacity ?? 0) / 100 < 0.5 ? [{ type: 'services', priority: 'high', subject: 'CITY-HEALTH', message: 'Health service is critical; propose or fund additional city health capacity.' }] : []),
-      ];
-      const communities = await env.DB.prepare('SELECT id, name, status FROM communities ORDER BY name LIMIT 20').all();
-      const technologyRegistry = await Promise.all([
-        env.DB.prepare('SELECT COUNT(*) AS count FROM patents WHERE technology_id = ? AND status = ?').bind(technology?.id ?? '', 'active').first(),
-        env.DB.prepare('SELECT COUNT(*) AS count FROM technology_licenses WHERE patent_id IN (SELECT id FROM patents WHERE technology_id = ?) AND status = ?').bind(technology?.id ?? '', 'active').first(),
-      ]);
-      const finance = await env.DB.prepare('SELECT scope, category, rate, version FROM tax_rules WHERE active = 1 ORDER BY id').all();
-      const liquidity = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index").first<{ active_humans: number; money_supply: number; living_cost_index: number }>();
-      const liquidityTarget = Number(liquidity?.active_humans ?? 0) * Math.max(0.5, Number(liquidity?.living_cost_index ?? 1)) * 100;
-      const liquiditySupply = Number(liquidity?.money_supply ?? 0);
-      const liquidityStatus = liquiditySupply < liquidityTarget * 0.8 ? 'below-corridor' : liquiditySupply > liquidityTarget * 1.2 ? 'above-corridor' : 'inside-corridor';
-      const audit = await Promise.all([
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM account_balances WHERE balance < 0').first<{ invalid: number }>(),
-        env.DB.prepare("SELECT COUNT(*) AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account").first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM machines WHERE condition < 0 OR condition > 100').first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)').first<{ invalid: number }>(),
-        env.DB.prepare('SELECT COUNT(*) AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)').first<{ invalid: number }>(),
-      ]);
-      const financialStates = await env.DB.prepare('SELECT institution_id, institution_kind, status, since_game_day, recovery_game_day FROM financial_states ORDER BY institution_kind, institution_id').all();
-      const roles = await env.DB.prepare("SELECT institution_roles.id, institution_roles.name, institution_roles.institution_id, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id").all();
-      const serviceRatios = cityMetrics ? {
-        housing: Math.min(1, Number(cityMetrics.housing_capacity ?? 0) / Math.max(1, Number(cityMetrics.residents ?? 0))),
-        energy: Math.min(1, Number(cityMetrics.energy_capacity ?? 0) / Math.max(1, Number(cityMetrics.residents ?? 0))),
-        connectivity: Math.min(1, Number(cityMetrics.connectivity_capacity ?? 0) / Math.max(1, Number(cityMetrics.residents ?? 0))),
-        health: Math.min(1, Number(cityMetrics.health_capacity ?? 0) / 100),
-      } : { housing: 0.75, energy: 0.75, connectivity: 0.75, health: 0.5 };
-      const serviceStatus = {
-        housing: serviceRatios.housing >= 1 ? 'normal' : serviceRatios.housing >= 0.75 ? 'basic' : 'critical',
-        utilities: serviceRatios.energy >= 1 ? 'normal' : serviceRatios.energy >= 0.75 ? 'basic' : 'critical',
-        connectivity: serviceRatios.connectivity >= 1 ? 'normal' : serviceRatios.connectivity >= 0.75 ? 'basic' : 'critical',
-        health: serviceRatios.health >= 0.8 ? 'normal' : serviceRatios.health >= 0.5 ? 'basic' : 'critical',
-      };
-      const cityQualification = cityMetrics ? {
-        activePopulation: Number(cityMetrics.residents ?? 0) >= 10,
-        housing: Number(cityMetrics.housing_capacity ?? 0) >= Number(cityMetrics.residents ?? 0),
-        energy: Number(cityMetrics.energy_capacity ?? 0) >= Number(cityMetrics.residents ?? 0),
-        connectivity: Number(cityMetrics.connectivity_capacity ?? 0) >= Number(cityMetrics.residents ?? 0),
-        health: Number(cityMetrics.health_capacity ?? 0) >= 50,
-        treasury: Number(cityMetrics.treasury ?? 0) >= 0,
-        governance: true,
-      } : {};
-      const corporationQualification = corporationMetrics ? {
-        activeMembership: Number(corporationMetrics.member_count ?? 0) >= 30,
-        recognizedCity: Boolean(await env.DB.prepare('SELECT id FROM cities WHERE id = (SELECT city_id FROM memberships WHERE corporation_id = ? AND city_id IS NOT NULL LIMIT 1)').bind(corporationMetrics.id).first()),
-        treasury: Number(corporationMetrics.treasury ?? 0) >= 1000,
-        constitution: Number(corporationMetrics.constitution_version ?? 0) >= 1,
-        governance: true,
-      } : {};
-      const history = await Promise.all([
-        env.DB.prepare('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12').all(),
-        env.DB.prepare('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20').all(),
-      ]);
-      return Response.json({
-        clock: { day: world?.game_day ?? 184, minute: world?.game_minute ?? 0, realSecondsPerGameMinute: 1 },
-        world: { health: world?.health ?? 68, batch: world?.market_batch_seconds ?? 498, livingCostIndex: world?.living_cost_index ?? 1, essentialServicesIndex: world?.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
-        human: { id: human?.id, name: human?.display_name, credits: account?.balance ?? 0, standing: human?.standing ?? 0, legacy: human?.legacy ?? 0, ageYears: human?.age_years ?? 31, politicalEligibilityGameDay: human?.political_eligibility_game_day ?? 0, politicalMaturity: Number(world?.game_day ?? 0) >= Number(human?.political_eligibility_game_day ?? 0) },
-        life: { generation: 1, status: human?.life_status ?? 'active', ageYears: human?.age_years ?? 31, successor: succession ?? null, estatePeriodDays: succession?.estate_period_days ?? 30 },
-        membership: membership ?? null,
-        institutions: { ouc: byKind('OUC'), corporation: { ...byKind('CORPORATION'), ...corporationMetrics }, city: { ...byKind('CITY'), ...cityMetrics }, business: byKind('BUSINESS') },
-        resources: resourceMap, business: business ?? {}, market: { products: marketProducts, book: book.results, trades: trades.results, orders: ownOrders.results, feeRate: marketFee, lastSettlement: null },
-        governance: { proposals: (proposals.results as Array<Record<string, unknown>>).map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
-        technology: { research: technology ?? {}, activePatents: Number(technologyRegistry[0]?.count ?? 0), activeLicenses: Number(technologyRegistry[1]?.count ?? 0) }, machines: machines.results, productionEvents: productionEvents.results, aiAssistants: aiAssistants.results, aiRecommendations, ledgerEntries: ledger.results,
-        publicActivity: [{ type: 'world_clock', day: world?.game_day ?? 184 }, { type: 'research_progress', progress: technology?.progress ?? 0 }, { type: 'market_cycle', batch: world?.market_batch_seconds ?? 498 }],
-        rankings: { cities: rankings[0].results, corporations: rankings[1].results },
-        history: { events: history[0].results, rankings: history[1].results },
-        financeStatus: financialStates.results,
-        personalFinance: personalFinance ?? { status: 'active', protected_credits: 100 },
-        contracts: contracts.results,
-        roles: roles.results,
-        communities: communities.results,
-        audit: { balancesNonNegative: Number(audit[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4]?.invalid ?? 0) === 0 },
-        finance: { taxRules: finance.results, liquidity: { activeHumans: Number(liquidity?.active_humans ?? 0), moneySupply: liquiditySupply, target: liquidityTarget, corridor: { low: liquidityTarget * 0.8, high: liquidityTarget * 1.2 }, status: liquidityStatus } },
-        persistence: 'cloudflare-d1'
-      });
     }
     if (url.pathname === '/api/ai' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
@@ -867,17 +681,6 @@ const worker = {
         const message = error instanceof Error ? error.message : 'Community formation failed';
         return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /founder/i.test(message) ? 404 : 400 });
       }
-      const priorFormation = await env.DB.prepare("SELECT institution_id FROM membership_events WHERE reason = 'community_formation' AND institution_type = 'COMMUNITY' AND human_id = ? AND id = ?").bind(founderId, correlationId).first<{ institution_id: string }>();
-      if (priorFormation) return Response.json({ ok: true, alreadyProcessed: true, community: await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(priorFormation.institution_id).first(), correlationId, persistence: 'cloudflare-d1' });
-      const communityId = `COMM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO communities (id, name, founder_id, shared_credits) VALUES (?, ?, ?, 0)').bind(communityId, name, founderId),
-        env.DB.prepare('INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES (?, ?, ?, ?)').bind(communityId, founderId, 'founder', day),
-        env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(correlationId, founderId, 'COMMUNITY', communityId, 'joined', day, 'community_formation'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`COMMUNITY-FOUNDED-${founderId}-${communityId}`, founderId, 'community', 'Community founded', `You founded community ${communityId}.`, communityId),
-      ]);
-      return Response.json({ ok: true, community: await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(communityId).first(), persistence: 'cloudflare-d1' });
     }
     const communityMembersMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members$/);
     if (communityMembersMatch && request.method === 'GET') {
@@ -889,10 +692,6 @@ const worker = {
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community members could not be loaded' }, { status: 404 });
       }
-      const community = await env.DB.prepare('SELECT * FROM communities WHERE id = ?').bind(communityId).first();
-      if (!community) return Response.json({ ok: false, error: 'Community not found' }, { status: 404 });
-      const members = await env.DB.prepare('SELECT community_id, human_id, role, joined_game_day FROM community_members WHERE community_id = ? ORDER BY joined_game_day, human_id').bind(communityId).all();
-      return Response.json({ community, members: members.results, persistence: 'cloudflare-d1' });
     }
     if (communityMembersMatch && (request.method === 'POST' || request.method === 'DELETE')) {
       const viewer = await currentHuman(request, env);
@@ -908,31 +707,6 @@ const worker = {
         const message = error instanceof Error ? error.message : 'Community membership change failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member|active/i.test(message) ? 409 : 400 });
       }
-      const [community, human] = await Promise.all([
-        env.DB.prepare('SELECT id, status FROM communities WHERE id = ?').bind(communityId).first<{ id: string; status: string }>(),
-        env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first(),
-      ]);
-      if (!community) return Response.json({ ok: false, error: 'Community not found' }, { status: 404 });
-      if (community.status !== 'active') return Response.json({ ok: false, error: 'Community is not active' }, { status: 409 });
-      if (!human) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
-      const existing = await env.DB.prepare('SELECT community_id FROM community_members WHERE community_id = ? AND human_id = ?').bind(communityId, humanId).first();
-      if (request.method === 'DELETE') {
-        if (!existing) return Response.json({ ok: false, error: 'Human is not a community member' }, { status: 409 });
-        await env.DB.batch([
-          env.DB.prepare('DELETE FROM community_members WHERE community_id = ? AND human_id = ?').bind(communityId, humanId),
-          env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, (SELECT game_day FROM world_state WHERE id = ?), ?)').bind(crypto.randomUUID(), humanId, 'COMMUNITY', communityId, 'left', 'WORLD', 'voluntary_departure'),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`COMMUNITY-LEFT-${humanId}-${communityId}`, humanId, 'community', 'Community left', `You left community ${communityId}.`, communityId),
-        ]);
-        return Response.json({ ok: true, membership: null, persistence: 'cloudflare-d1' });
-      }
-      if (existing) return Response.json({ ok: false, error: 'Human is already a community member' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES (?, ?, ?, ?)').bind(communityId, humanId, 'member', day),
-        env.DB.prepare('INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), humanId, 'COMMUNITY', communityId, 'joined', day, 'voluntary_membership'),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`COMMUNITY-JOINED-${humanId}-${communityId}`, humanId, 'community', 'Community joined', `You joined community ${communityId}.`, communityId),
-      ]);
-      return Response.json({ ok: true, member: await env.DB.prepare('SELECT * FROM community_members WHERE community_id = ? AND human_id = ?').bind(communityId, humanId).first(), persistence: 'cloudflare-d1' });
     }
     const communityContributionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/contributions$/);
     if (communityContributionMatch && request.method === 'GET') {
@@ -944,10 +718,6 @@ const worker = {
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community contributions could not be loaded' }, { status: 404 });
       }
-      const community = await env.DB.prepare('SELECT id, name, shared_credits FROM communities WHERE id = ?').bind(communityId).first();
-      if (!community) return Response.json({ ok: false, error: 'Community not found' }, { status: 404 });
-      const entries = await env.DB.prepare("SELECT id, game_day, debit_account, credit_account, amount, reason_id, correlation_id, created_at FROM ledger_entries WHERE reason_type = 'community_contribution' AND credit_account = ? ORDER BY created_at DESC LIMIT 100").bind(communityId).all();
-      return Response.json({ community, contributions: entries.results, persistence: 'cloudflare-d1' });
     }
     if (communityContributionMatch && request.method === 'POST') {
       const communityId = communityContributionMatch[1];
@@ -967,27 +737,6 @@ const worker = {
         const message = error instanceof Error ? error.message : 'Community contribution failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /insufficient|member|active/i.test(message) ? 409 : 400 });
       }
-      const [community, human, account, membership, prior] = await Promise.all([
-        env.DB.prepare('SELECT id, status, shared_credits FROM communities WHERE id = ?').bind(communityId).first<{ id: string; status: string; shared_credits: number }>(),
-        env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first(),
-        env.DB.prepare('SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = ?').bind(humanId, 'CREDIT').first<{ account_id: string; balance: number }>(),
-        env.DB.prepare('SELECT human_id FROM community_members WHERE community_id = ? AND human_id = ?').bind(communityId, humanId).first(),
-        env.DB.prepare("SELECT id, amount, game_day FROM ledger_entries WHERE reason_type = 'community_contribution' AND correlation_id = ?").bind(correlationId).first<{ id: string; amount: number; game_day: number }>(),
-      ]);
-      if (!community) return Response.json({ ok: false, error: 'Community not found' }, { status: 404 });
-      if (community.status !== 'active') return Response.json({ ok: false, error: 'Community is not active' }, { status: 409 });
-      if (!human || !account) return Response.json({ ok: false, error: 'Contributor account not found' }, { status: 404 });
-      if (!membership) return Response.json({ ok: false, error: 'Contributor must be a community member' }, { status: 403 });
-      if (prior) return Response.json({ ok: true, alreadyProcessed: true, amount: prior.amount, gameDay: prior.game_day, correlationId, community, persistence: 'cloudflare-d1' });
-      if (Number(account.balance) < amount) return Response.json({ ok: false, error: 'Insufficient Credits' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const ledgerId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(amount, account.account_id, amount),
-        env.DB.prepare('UPDATE communities SET shared_credits = shared_credits + ? WHERE id = ?').bind(amount, communityId),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(ledgerId, day, account.account_id, communityId, amount, 'CREDIT', 'community_contribution', communityId, 'community-v1', correlationId),
-      ]);
-      return Response.json({ ok: true, amount, correlationId, community: await env.DB.prepare('SELECT id, name, shared_credits FROM communities WHERE id = ?').bind(communityId).first(), account: await env.DB.prepare('SELECT account_id, balance FROM account_balances WHERE account_id = ?').bind(account.account_id).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/rankings' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
@@ -1173,11 +922,9 @@ const worker = {
     if (url.pathname === '/api/machines' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => repository.query('SELECT * FROM machines WHERE owner_id = $1 ORDER BY id', [viewer.id]));
-        if (result) return Response.json({ machines: result.rows, persistence: 'planetscale-postgres' });
-      }
-      return Response.json({ machines: (await env.DB.prepare('SELECT * FROM machines WHERE owner_id = ? ORDER BY id').bind(viewer.id).all()).results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => repository.query('SELECT * FROM machines WHERE owner_id = $1 ORDER BY id', [viewer.id]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ machines: result.rows, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/machines/acquire' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1188,36 +935,13 @@ const worker = {
       if (!spec) return Response.json({ ok: false, error: 'Unsupported machine type' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: 'energy', correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine acquisition failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: 'energy', correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine acquisition failed' }, { status: 409 });
       }
-      const priorAcquisition = await env.DB.prepare("SELECT reason_id FROM ledger_entries WHERE reason_type = 'machine_acquisition' AND correlation_id = ?").bind(correlationId).first<{ reason_id: string }>();
-      if (priorAcquisition) return Response.json({ ok: true, alreadyProcessed: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(priorAcquisition.reason_id).first(), acquisitionId: correlationId, persistence: 'cloudflare-d1' });
-      const [account, material] = await Promise.all([
-        env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>(),
-        env.DB.prepare("SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = 'material'").bind(viewer.id).first<{ amount: number }>(),
-      ]);
-      if (!account || Number(account.balance) < spec.credit) return Response.json({ ok: false, error: 'Insufficient Credits for machine acquisition' }, { status: 409 });
-      if (!material || Number(material.amount) < spec.material) return Response.json({ ok: false, error: 'Insufficient Material for machine acquisition' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const machineId = `M-${viewer.id}-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const acquisitionId = correlationId;
-      const ledgerId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(spec.credit, account.account_id, spec.credit),
-        env.DB.prepare("UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = 'material' AND amount >= ?").bind(spec.material, viewer.id, spec.material),
-        env.DB.prepare('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity, output_resource, input_resource) VALUES (?, ?, ?, ?, 100, 25, 0, ?, ?, ?)').bind(machineId, viewer.id, `${type.replaceAll('-', ' ')} ${machineId.slice(-4)}`, type, spec.capacity, spec.output, 'energy'),
-        env.DB.prepare("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, ?, ?, 'machine-acquisition' FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1").bind(machineId, day, viewer.id),
-        env.DB.prepare('INSERT INTO machine_acquisitions (id, machine_id, owner_id, machine_type, credit_cost, material_cost, game_day) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(acquisitionId, machineId, viewer.id, type, spec.credit, spec.material, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(ledgerId, day, account.account_id, 'machine-registry', spec.credit, 'CREDIT', 'machine_acquisition', machineId, 'machine-v1', acquisitionId),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', machineId, null, viewer.id, 1, 'machine_acquisition', acquisitionId, day),
-      ]);
-      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), acquisitionId, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     if (url.pathname === '/api/production/catalog' && request.method === 'GET') {
       return Response.json({ sectors: [
@@ -1360,184 +1084,72 @@ const worker = {
       const amount = Math.round(Number(body.amount ?? 0) * 100) / 100;
       const durationDays = Number(body.durationDays ?? 30);
       if (!['employment', 'intellectual_service', 'capacity', 'strategic'].includes(kind)) return Response.json({ ok: false, error: 'Unsupported contract kind' }, { status: 400 });
-      if (!counterpartyId || counterpartyId === viewer.id || !(await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(counterpartyId).first())) return Response.json({ ok: false, error: 'An active counterparty Human is required' }, { status: 400 });
+      const counterparty = await withRepository(env, (repository) => repository.query("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [counterpartyId]));
+      if (!counterpartyId || counterpartyId === viewer.id || !counterparty?.rows[0]) return Response.json({ ok: false, error: 'An active counterparty Human is required' }, { status: 400 });
       if (title.length < 3 || title.length > 140 || !Number.isFinite(amount) || amount < 0 || amount > 100000 || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) return Response.json({ ok: false, error: 'Contract terms are outside engine bounds' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createContractPostgres(repository, { proposerId: viewer.id, kind, counterpartyId, title, terms: body.terms ?? {}, amount, durationDays, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract creation failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createContractPostgres(repository, { proposerId: viewer.id, kind, counterpartyId, title, terms: body.terms ?? {}, amount, durationDays, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract creation failed' }, { status: 409 });
       }
-      const prior = await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE proposer_id = ? AND correlation_id = ?').bind(viewer.id, correlationId).first();
-      if (prior) return Response.json({ ok: true, alreadyProcessed: true, contract: prior, correlationId, persistence: 'cloudflare-d1' });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      const contractId = `CON-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      await env.DB.prepare('INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, starts_game_day, ends_game_day, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(contractId, kind, viewer.id, counterpartyId, title, JSON.stringify(body.terms ?? {}), amount, day, day + durationDays, correlationId).run();
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'contract.proposed', 'A negotiated contract was proposed', JSON.stringify({ contractId, kind, proposer: viewer.id, counterparty: counterpartyId })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), counterpartyId, 'contract', 'Contract proposal received', `${title} was proposed for your acceptance.`, contractId),
-      ]);
-      return Response.json({ ok: true, contract: await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE id = ?').bind(contractId).first(), correlationId, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     const contractActionMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/(accept|cancel)$/);
     if (contractActionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = contractActionMatch[2] === 'cancel'
-            ? await withRepository(env, (repository) => cancelContractPostgres(repository, contractActionMatch[1], viewer.id))
-            : await withRepository(env, (repository) => acceptContractPostgres(repository, contractActionMatch[1], viewer.id));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract action failed' }, { status: 409 });
-        }
+      try {
+        const result = contractActionMatch[2] === 'cancel'
+          ? await withRepository(env, (repository) => cancelContractPostgres(repository, contractActionMatch[1], viewer.id))
+          : await withRepository(env, (repository) => acceptContractPostgres(repository, contractActionMatch[1], viewer.id));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Contract action failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /only .* may/i.test(message) ? 403 : 409 });
       }
-      const contract = await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE id = ?').bind(contractActionMatch[1]).first<{ id: string; proposer_id: string; counterparty_id: string; amount: number; status: string; title: string }>();
-      if (!contract) return Response.json({ ok: false, error: 'Contract not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      if (contractActionMatch[2] === 'cancel') {
-        if (contract.proposer_id !== viewer.id && contract.counterparty_id !== viewer.id) return Response.json({ ok: false, error: 'Only a contract party may cancel' }, { status: 403 });
-        if (contract.status !== 'proposed') return Response.json({ ok: false, error: 'Only a proposed contract can be cancelled' }, { status: 409 });
-        await env.DB.prepare("UPDATE negotiated_contracts SET status = 'cancelled' WHERE id = ? AND status = 'proposed'").bind(contract.id).run();
-        return Response.json({ ok: true, status: 'cancelled', contractId: contract.id, persistence: 'cloudflare-d1' });
-      }
-      if (contract.counterparty_id !== viewer.id) return Response.json({ ok: false, error: 'Only the counterparty may accept this contract' }, { status: 403 });
-      if (contract.status !== 'proposed') return Response.json({ ok: true, alreadyProcessed: contract.status === 'accepted', status: contract.status, contractId: contract.id, persistence: 'cloudflare-d1' });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => acceptContractPostgres(repository, contract.id, viewer.id));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract settlement failed' }, { status: 409 });
-        }
-      }
-      const payer = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.proposer_id).first<{ account_id: string; balance: number }>();
-      const receiver = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.counterparty_id).first<{ account_id: string }>();
-      if (!payer || !receiver || Number(payer.balance) < Number(contract.amount)) return Response.json({ ok: false, error: 'Proposer has insufficient Credits to settle this contract' }, { status: 409 });
-      const correlationId = `CONTRACT-${contract.id}`;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(contract.amount, payer.account_id, contract.amount),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(contract.amount, receiver.account_id),
-        env.DB.prepare("UPDATE negotiated_contracts SET status = 'accepted', accepted_game_day = ? WHERE id = ? AND status = 'proposed'").bind(day, contract.id),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, payer.account_id, receiver.account_id, contract.amount, 'CREDIT', 'contract_payment', contract.id, 'contracts-v1', correlationId),
-        env.DB.prepare("UPDATE business_financials SET operating_costs = operating_costs + ?, profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.proposer_id),
-        env.DB.prepare("UPDATE business_financials SET revenue = revenue + ?, profit = profit + ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.counterparty_id),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'contract.accepted', 'A negotiated contract was accepted', JSON.stringify({ contractId: contract.id, amount: contract.amount })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), contract.proposer_id, 'contract', 'Contract accepted', `${contract.title} was accepted and ${contract.amount} Credits were settled.`, contract.id),
-      ]);
-      return Response.json({ ok: true, status: 'accepted', contract: await env.DB.prepare('SELECT * FROM negotiated_contracts WHERE id = ?').bind(contract.id).first(), persistence: 'cloudflare-d1' });
     }
     const contractDisputeMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/(dispute|resolve)$/);
     if (contractDisputeMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres' && contractDisputeMatch[2] === 'dispute') {
-        const body = await request.json<{ reason?: string }>();
-        const reason = body.reason?.trim() ?? '';
-        if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
-        try {
+      try {
+        if (contractDisputeMatch[2] === 'dispute') {
+          const body = await request.json<{ reason?: string }>();
+          const reason = body.reason?.trim() ?? '';
+          if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
           const result = await withRepository(env, (repository) => openDisputePostgres(repository, { contractId: contractDisputeMatch[1], claimantId: viewer.id, reason }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyOpen ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Dispute opening failed' }, { status: 409 });
+          if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+          return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyOpen ? 200 : 201 });
         }
-      }
-      if (authorityMode(env) === 'postgres' && contractDisputeMatch[2] === 'resolve') {
         const body = await request.json<{ outcome?: string; resolution?: string }>();
         if (!['uphold', 'void'].includes(body.outcome ?? '') || (body.resolution?.trim().length ?? 0) < 10) return Response.json({ ok: false, error: 'A bounded arbitration outcome and resolution are required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contractDisputeMatch[1], resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Arbitration resolution failed' }, { status: 409 });
-        }
+        const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contractDisputeMatch[1], resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Contract dispute operation failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /authority|required|only/i.test(message) ? 403 : 409 });
       }
-      const contract = await env.DB.prepare('SELECT id, proposer_id, counterparty_id, amount, status, title FROM negotiated_contracts WHERE id = ?').bind(contractDisputeMatch[1]).first<{ id: string; proposer_id: string; counterparty_id: string; amount: number; status: string; title: string }>();
-      if (!contract) return Response.json({ ok: false, error: 'Contract not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 184;
-      if (contractDisputeMatch[2] === 'dispute') {
-        if (viewer.id !== contract.proposer_id && viewer.id !== contract.counterparty_id) return Response.json({ ok: false, error: 'Only a contract party may open a dispute' }, { status: 403 });
-        if (!['accepted', 'completed'].includes(contract.status)) return Response.json({ ok: false, error: 'Only an accepted or completed contract can be disputed' }, { status: 409 });
-        const body = await request.json<{ reason?: string }>();
-        const reason = body.reason?.trim() ?? '';
-        if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
-        const existing = await env.DB.prepare("SELECT * FROM contract_disputes WHERE contract_id = ? AND status = 'open'").bind(contract.id).first();
-        if (existing) return Response.json({ ok: true, alreadyOpen: true, dispute: existing, persistence: 'cloudflare-d1' });
-        const disputeId = `DISPUTE-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-        await env.DB.batch([
-          env.DB.prepare('INSERT INTO contract_disputes (id, contract_id, claimant_id, respondent_id, reason) VALUES (?, ?, ?, ?, ?)').bind(disputeId, contract.id, viewer.id, viewer.id === contract.proposer_id ? contract.counterparty_id : contract.proposer_id, reason),
-          env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'arbitration.opened', 'A contract dispute was opened', JSON.stringify({ disputeId, contractId: contract.id })),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), contract.proposer_id, 'arbitration', 'Contract dispute opened', `${contract.title} is awaiting OUC arbitration.`, disputeId),
-          env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), contract.counterparty_id, 'arbitration', 'Contract dispute opened', `${contract.title} is awaiting OUC arbitration.`, disputeId),
-        ]);
-        return Response.json({ ok: true, dispute: await env.DB.prepare('SELECT * FROM contract_disputes WHERE id = ?').bind(disputeId).first(), persistence: 'cloudflare-d1' }, { status: 201 });
-      }
-      if (authorityMode(env) !== 'postgres' && !(await canExerciseDelegatedRole(env, viewer.id, 'OUC-001'))) return Response.json({ ok: false, error: 'OUC arbitration authority is required' }, { status: 403 });
-      const body = await request.json<{ outcome?: string; resolution?: string }>();
-      if (!['uphold', 'void'].includes(body.outcome ?? '') || (body.resolution?.trim().length ?? 0) < 10) return Response.json({ ok: false, error: 'A bounded arbitration outcome and resolution are required' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contract.id, resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Arbitration resolution failed' }, { status: 409 });
-        }
-      }
-      const dispute = await env.DB.prepare("SELECT * FROM contract_disputes WHERE contract_id = ? AND status = 'open'").bind(contract.id).first<{ id: string; claimant_id: string; respondent_id: string }>();
-      if (!dispute) return Response.json({ ok: false, error: 'Open dispute not found' }, { status: 404 });
-      const statements: D1PreparedStatement[] = [
-        env.DB.prepare("UPDATE contract_disputes SET status = 'resolved', outcome = ?, resolved_by = ?, resolved_game_day = ?, resolution = ? WHERE id = ? AND status = 'open'").bind(body.outcome, viewer.id, day, body.resolution!.trim().slice(0, 1000), dispute.id),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'arbitration.resolved', 'A contract dispute was resolved', JSON.stringify({ disputeId: dispute.id, contractId: contract.id, outcome: body.outcome, resolvedBy: viewer.id })),
-      ];
-      if (body.outcome === 'void') {
-        const payer = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.counterparty_id).first<{ account_id: string; balance: number }>();
-        const receiver = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(contract.proposer_id).first<{ account_id: string }>();
-        if (!payer || !receiver || Number(payer.balance) < Number(contract.amount)) return Response.json({ ok: false, error: 'Counterparty cannot fund the arbitration refund' }, { status: 409 });
-        const refundId = `ARBITRATION-REFUND-${contract.id}`;
-        statements.push(
-          env.DB.prepare("UPDATE negotiated_contracts SET status = 'cancelled' WHERE id = ? AND status IN ('accepted','completed')").bind(contract.id),
-          env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(contract.amount, payer.account_id, contract.amount),
-          env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(contract.amount, receiver.account_id),
-          env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(refundId, day, payer.account_id, receiver.account_id, contract.amount, 'CREDIT', 'contract_arbitration_refund', contract.id, 'arbitration-v1', refundId),
-          env.DB.prepare("UPDATE business_financials SET operating_costs = MAX(0, operating_costs - ?), profit = profit + ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.proposer_id),
-          env.DB.prepare("UPDATE business_financials SET revenue = MAX(0, revenue - ?), profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(contract.amount, contract.amount, day, contract.counterparty_id),
-        );
-      }
-      await env.DB.batch(statements);
-      return Response.json({ ok: true, outcome: body.outcome, dispute: await env.DB.prepare('SELECT * FROM contract_disputes WHERE id = ?').bind(dispute.id).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/finance/liquidity' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
-        const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
-        return Response.json({ activeHumans, moneySupply: supply, livingCostIndex, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'planetscale-postgres' });
-      }
-      const liquidity = await env.DB.prepare("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index").first<{ active_humans: number; money_supply: number; living_cost_index: number }>();
-      const target = Number(liquidity?.active_humans ?? 0) * Math.max(0.5, Number(liquidity?.living_cost_index ?? 1)) * 100;
-      const supply = Number(liquidity?.money_supply ?? 0);
-      return Response.json({ activeHumans: Number(liquidity?.active_humans ?? 0), moneySupply: supply, livingCostIndex: Number(liquidity?.living_cost_index ?? 1), target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'cloudflare-d1' });
+      const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
+      const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
+      return Response.json({ activeHumans, moneySupply: supply, livingCostIndex, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/finance/status' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, async (repository) => {
-          const [states, events] = await Promise.all([
-            repository.query('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id'),
-            repository.query('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50'),
-          ]);
-          return { states: states.rows, events: events.rows };
-        });
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [states, events] = await Promise.all([
-        env.DB.prepare('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id').all(),
-        env.DB.prepare('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50').all(),
-      ]);
-      return Response.json({ states: states.results, events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, async (repository) => {
+        const [states, events] = await Promise.all([
+          repository.query('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id'),
+          repository.query('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50'),
+        ]);
+        return { states: states.rows, events: events.rows };
+      });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1547,39 +1159,14 @@ const worker = {
       const institutionId = body.institutionId?.trim() ?? '';
       const amount = Math.round(Number(body.amount) * 100) / 100;
       if (!institutionId || !Number.isFinite(amount) || amount <= 0 || amount > 100000) return Response.json({ ok: false, error: 'Recovery amount must be between 0 and 100,000 Credits' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => recoverInstitutionPostgres(repository, { humanId: viewer.id, institutionId, amount, correlationId: crypto.randomUUID() }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Institution recovery failed';
-          return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : /insufficient|crisis/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => recoverInstitutionPostgres(repository, { humanId: viewer.id, institutionId, amount, correlationId: crypto.randomUUID() }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Institution recovery failed';
+        return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : /insufficient|crisis/i.test(message) ? 409 : 400 });
       }
-      const institution = await env.DB.prepare('SELECT id, kind FROM institutions WHERE id = ? AND kind IN (\'CITY\', \'CORPORATION\')').bind(institutionId).first<{ id: string; kind: string }>();
-      if (!institution) return Response.json({ ok: false, error: 'Recoverable institution not found' }, { status: 404 });
-      const eligible = institution.kind === 'CITY'
-        ? await hasActiveRole(env, viewer.id, ['ROLE-CITY-MAYOR', 'ROLE-CITY-PLANNER'])
-        : await hasActiveRole(env, viewer.id, ['ROLE-CORP-EXECUTIVE', 'ROLE-CORP-TREASURER']);
-      if (!eligible) return Response.json({ ok: false, error: 'An active institutional finance role is required' }, { status: 403 });
-      const state = await env.DB.prepare("SELECT status FROM financial_states WHERE institution_id = ? AND status IN ('distressed','insolvent')").bind(institutionId).first<{ status: string }>();
-      if (!state) return Response.json({ ok: false, error: 'Institution is not currently in a recoverable crisis state' }, { status: 409 });
-      const account = await env.DB.prepare('SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = \'CREDIT\'').bind(viewer.id).first<{ account_id: string; balance: number }>();
-      if (!account || Number(account.balance) < amount) return Response.json({ ok: false, error: 'Insufficient Credits for recovery' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = \'WORLD\'').first<{ game_day: number }>())?.game_day ?? 184;
-      const correlationId = crypto.randomUUID();
-      const ledgerId = crypto.randomUUID();
-      const targetTable = institution.kind === 'CITY' ? 'cities' : 'corporations';
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(amount, account.account_id, amount),
-        env.DB.prepare(`UPDATE ${targetTable} SET treasury = treasury + ? WHERE id = ?`).bind(amount, institutionId),
-        env.DB.prepare("UPDATE financial_states SET status = 'active', recovery_game_day = ?, last_reason = 'Player-authorized crisis recovery', updated_at = CURRENT_TIMESTAMP WHERE institution_id = ?").bind(day, institutionId),
-        env.DB.prepare('INSERT INTO bankruptcy_events (id, institution_id, institution_kind, from_status, to_status, game_day, reason) VALUES (?, ?, ?, ?, \'active\', ?, ?)').bind(crypto.randomUUID(), institutionId, institution.kind, state.status, day, 'Player-authorized crisis recovery'),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'financial_recovery', `${institution.kind} ${institutionId} recovered`, JSON.stringify({ institutionId, amount, humanId: viewer.id })),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(ledgerId, day, account.account_id, institutionId, amount, 'CREDIT', 'institution_recovery', institutionId, 'finance-v2', correlationId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'finance', 'Institution recovered', `${institution.kind} ${institutionId} returned to active status after your ${amount} Credit recovery contribution.`, institutionId),
-      ]);
-      return Response.json({ ok: true, institutionId, amount, status: 'active', correlationId, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/taxes/settle' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1587,51 +1174,18 @@ const worker = {
       const body = await request.json<{ taxableAmount?: number }>();
       const taxableAmount = Number(body.taxableAmount);
       if (!Number.isFinite(taxableAmount) || taxableAmount <= 0) return Response.json({ ok: false, error: 'Taxable amount must be positive' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => settleTaxPostgres(repository, viewer.id, taxableAmount));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Tax settlement failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => settleTaxPostgres(repository, viewer.id, taxableAmount));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Tax settlement failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
-      const account = await env.DB.prepare('SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id = ? AND currency = ?').bind(viewer.id, 'CREDIT').first<{ account_id: string; owner_id: string; balance: number }>();
-      const accountId = account?.account_id ?? '';
-      const [legacyRule, activeFinanceRule] = await Promise.all([
-        env.DB.prepare('SELECT * FROM tax_rules WHERE id = ? AND active = 1').bind('TAX-OUC-BASIC').first<{ rate: number; version: number }>(),
-        env.DB.prepare("SELECT value_json, version FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'finance' AND status = 'active' ORDER BY version DESC LIMIT 1").first<{ value_json: string; version: number }>(),
-      ]);
-      if (!legacyRule || !account) return Response.json({ ok: false, error: 'Tax rule or account not found' }, { status: 404 });
-      let effectiveRate = Number(legacyRule.rate);
-      let effectiveVersion = Number(legacyRule.version);
-      if (activeFinanceRule?.value_json) {
-        try {
-          const configured = JSON.parse(activeFinanceRule.value_json) as { rate?: number };
-          if (typeof configured.rate === 'number' && configured.rate >= 0 && configured.rate <= 0.25) {
-            effectiveRate = configured.rate;
-            effectiveVersion = Number(activeFinanceRule.version);
-          }
-        } catch (_error) { /* retain the safe legacy rate */ }
-      }
-      const amount = Math.round(taxableAmount * effectiveRate * 100) / 100;
-      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const correlationId = `TAX-${accountId}-${gameDay}-${amount.toFixed(2)}-${effectiveVersion}`;
-      const priorSettlement = await env.DB.prepare("SELECT id, amount, game_day, rule_version FROM ledger_entries WHERE reason_type = 'tax_settlement' AND correlation_id = ?").bind(correlationId).first<{ id: string; amount: number; game_day: number; rule_version: string }>();
-      if (priorSettlement) return Response.json({ ok: true, alreadySettled: true, amount: priorSettlement.amount, gameDay: priorSettlement.game_day, ruleVersion: priorSettlement.rule_version, correlationId, persistence: 'cloudflare-d1' });
-      if (Number(account.balance) < amount) return Response.json({ ok: false, error: 'Insufficient Credits for tax settlement' }, { status: 409 });
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(amount, accountId, amount),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(amount, 'account-ouc-treasury'),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, gameDay, accountId, 'account-ouc-treasury', amount, 'CREDIT', 'tax_settlement', accountId, `tax-v${effectiveVersion}`, correlationId),
-        env.DB.prepare('INSERT OR IGNORE INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(`TAX-SETTLED-${correlationId}`, viewer.id, 'finance', 'Tax settlement recorded', `${amount} Credits were settled to the OUC treasury at rate ${(effectiveRate * 100).toFixed(2)}% (rule v${effectiveVersion}).`, correlationId),
-      ]);
-      return Response.json({ ok: true, amount, rate: effectiveRate, ruleVersion: effectiveVersion, correlationId, accounts: (await env.DB.prepare('SELECT * FROM account_balances WHERE account_id IN (?, ?)').bind(accountId, 'account-ouc-treasury').all()).results, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/finance/public-spending' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) !== 'postgres' && !(await hasActiveRole(env, viewer.id, ['ROLE-CITY-MAYOR', 'ROLE-CITY-PLANNER']))) return Response.json({ ok: false, error: 'An active City Mayor or Infrastructure Planner term is required' }, { status: 403 });
       const body = await request.json<{ cityId?: string; category?: string; amount?: number; correlationId?: string }>();
       const cityId = body.cityId || 'CITY-0084';
       const category = body.category?.trim() || 'public-services';
@@ -1639,35 +1193,17 @@ const worker = {
       if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Public spending amount must be positive' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => publicSpendingPostgres(repository, { actorId: viewer.id, cityId, category, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Public spending failed';
-          return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => publicSpendingPostgres(repository, { actorId: viewer.id, cityId, category, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Public spending failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
-      const priorSpending = await env.DB.prepare("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'public_spending' AND correlation_id = ?").bind(correlationId).first<{ amount: number; game_day: number }>();
-      if (priorSpending) return Response.json({ ok: true, alreadyProcessed: true, amount: priorSpending.amount, gameDay: priorSpending.game_day, correlationId, persistence: 'cloudflare-d1' });
-      const treasury = await env.DB.prepare('SELECT balance FROM account_balances WHERE account_id = ?').bind('account-ouc-treasury').first<{ balance: number }>();
-      const city = await env.DB.prepare('SELECT id FROM cities WHERE id = ?').bind(cityId).first();
-      if (!city) return Response.json({ ok: false, error: 'City not found' }, { status: 404 });
-      if (!treasury || Number(treasury.balance) < amount) return Response.json({ ok: false, error: 'OUC treasury cannot fund this spending' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ?').bind(amount, 'account-ouc-treasury'),
-        env.DB.prepare('UPDATE cities SET treasury = treasury + ? WHERE id = ?').bind(amount, cityId),
-        env.DB.prepare('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES (?, ?, ?, ?, ?) ON CONFLICT(id) DO UPDATE SET amount = amount + excluded.amount, game_day = excluded.game_day').bind(`SPEND-${cityId}-${category}`, cityId, category, amount, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, 'account-ouc-treasury', cityId, amount, 'CREDIT', 'public_spending', cityId, 'finance-v1', correlationId),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${cityId}`, JSON.stringify({ cityId, category, amount, correlationId, actorId: viewer.id })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'finance', 'Public spending recorded', `${amount} Credits were routed from the OUC treasury to ${cityId} for ${category}.`, correlationId),
-        env.DB.prepare("INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) SELECT lower(hex(randomblob(16))), human_id, 'finance', 'City funding received', ? || ' Credits were routed to ' || ? || ' for ' || ? || '.', ? FROM memberships WHERE city_id = ? AND human_id != ?").bind(amount, cityId, category, correlationId, cityId, viewer.id),
-      ]);
-      return Response.json({ ok: true, amount, city: await env.DB.prepare('SELECT * FROM cities WHERE id = ?').bind(cityId).first(), treasury: await env.DB.prepare('SELECT * FROM account_balances WHERE account_id = ?').bind('account-ouc-treasury').first(), correlationId, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/market/book' && request.method === 'GET') {
-      const postgresBook = await withRepository(env, async (repository) => {
+      const result = await withRepository(env, async (repository) => {
         const [rows, trades, rule] = await Promise.all([
           repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
           repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
@@ -1679,29 +1215,22 @@ const worker = {
           try {
             const parsed = typeof value === 'string' ? JSON.parse(value) : value;
             if (typeof parsed?.feeRate === 'number' && parsed.feeRate >= 0 && parsed.feeRate <= 0.05) feeRate = parsed.feeRate;
-          } catch { /* invalid governance JSON keeps the safe zero fee */ }
+          } catch { /* safe zero fee */ }
         }
         return { book: rows.rows, trades: trades.rows, feeRate };
       });
-      if (postgresBook) return Response.json({ ...postgresBook, persistence: 'planetscale-postgres' });
-      const rows = await env.DB.prepare("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product").all();
-      const trades = await env.DB.prepare('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product').all();
-      return Response.json({ book: rows.results, trades: trades.results, feeRate: await marketFeeRate(env), persistence: 'cloudflare-d1' });
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/market/orders' && request.method === 'GET') {
-      const product = url.searchParams.get('product');
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listMarketOrdersPostgres(repository, product));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const query = product ? env.DB.prepare('SELECT * FROM market_orders WHERE product = ? ORDER BY created_at DESC LIMIT 100').bind(product) : env.DB.prepare('SELECT * FROM market_orders ORDER BY created_at DESC LIMIT 100');
-      return Response.json({ orders: (await query.all()).results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listMarketOrdersPostgres(repository, url.searchParams.get('product')));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/market/orders' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ humanId?: string; product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string }>();
-      const humanId = viewer.id;
+      const body = await request.json<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string }>();
       const product = body.product;
       const side = body.side === 'sell' ? 'sell' : 'buy';
       const quantity = Number(body.quantity);
@@ -1709,137 +1238,49 @@ const worker = {
       if (!['material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => submitMarketOrderPostgres(repository, { humanId, product: product!, side, quantity, limitPrice, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Market order failed';
-          const status = /not found/i.test(message) ? 404 : /insufficient|reservation/i.test(message) ? 409 : 400;
-          return Response.json({ ok: false, error: message }, { status });
-        }
+      try {
+        const result = await withRepository(env, (repository) => submitMarketOrderPostgres(repository, { humanId: viewer.id, product: product!, side, quantity, limitPrice, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Market order failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /insufficient|reservation/i.test(message) ? 409 : 400 });
       }
-      const priorOrder = await env.DB.prepare('SELECT * FROM market_orders WHERE human_id = ? AND correlation_id = ?').bind(humanId, correlationId).first();
-      if (priorOrder) return Response.json({ ok: true, alreadyProcessed: true, order: priorOrder, correlationId, persistence: 'cloudflare-d1' });
-      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first())) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
-      if (side === 'sell') {
-        const inventory = await env.DB.prepare('SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = ?').bind(humanId, product).first<{ amount: number }>();
-        if (!inventory || Number(inventory.amount) < quantity) return Response.json({ ok: false, error: `Insufficient ${product} inventory` }, { status: 409 });
-      }
-      const reservationFeeRate = side === 'buy' ? await marketFeeRate(env) : 0;
-      const reservedCredits = side === 'buy' ? Math.round(quantity * limitPrice * (1 + reservationFeeRate) * 100) / 100 : 0;
-      const account = side === 'buy' ? await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(humanId).first<{ account_id: string; balance: number }>() : null;
-      if (side === 'buy' && (!account || Number(account.balance) < reservedCredits)) return Response.json({ ok: false, error: 'Insufficient Credits to reserve this order' }, { status: 409 });
-      const orderId = crypto.randomUUID();
-      await env.DB.batch([
-        ...(side === 'sell' ? [env.DB.prepare('UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = ? AND amount >= ?').bind(quantity, humanId, product, quantity)] : [env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(reservedCredits, account!.account_id, reservedCredits)]),
-        env.DB.prepare('INSERT INTO market_orders (id, human_id, product, side, quantity, limit_price, reserved_credits, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(orderId, humanId, product, side, quantity, limitPrice, reservedCredits, correlationId),
-        env.DB.prepare(`UPDATE market_prices SET ${side === 'sell' ? 'supply' : 'demand'} = ${side === 'sell' ? 'supply' : 'demand'} + ? WHERE product = ?`).bind(quantity, product),
-      ]);
-      const coordinator = env.MARKET_COORDINATOR.getByName(`market-${product}`);
-      const coordination = await coordinator.submitCommand({ type: 'order.submitted', orderId, product, quantity });
-      return Response.json({ ok: true, order: await env.DB.prepare('SELECT * FROM market_orders WHERE id = ?').bind(orderId).first(), coordination, correlationId, persistence: 'cloudflare-d1' });
     }
     const cancelOrderMatch = url.pathname.match(/^\/api\/market\/orders\/([^/]+)$/);
     if (cancelOrderMatch && request.method === 'DELETE') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => cancelMarketOrderPostgres(repository, { orderId: cancelOrderMatch[1], humanId: viewer.id }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market order cancellation failed' }, { status: 404 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => cancelMarketOrderPostgres(repository, { orderId: cancelOrderMatch[1], humanId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market order cancellation failed' }, { status: 404 });
       }
-      const order = await env.DB.prepare("SELECT * FROM market_orders WHERE id = ? AND human_id = ? AND status IN ('open','partial')").bind(cancelOrderMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!order) return Response.json({ ok: false, error: 'Open order not found for this Human' }, { status: 404 });
-      const remaining = Number(order.quantity) - Number(order.filled_quantity);
-      const release = String(order.side) === 'sell'
-        ? env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, ?, ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(viewer.id, order.product, remaining)
-        : env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE owner_id = ? AND currency = 'CREDIT'").bind(Number(order.reserved_credits ?? 0), viewer.id);
-      const signal = String(order.side) === 'sell' ? 'supply' : 'demand';
-      await env.DB.batch([
-        release,
-        env.DB.prepare("UPDATE market_orders SET status = 'cancelled', reserved_credits = 0 WHERE id = ? AND human_id = ?").bind(order.id, viewer.id),
-        env.DB.prepare(`UPDATE market_prices SET ${signal} = MAX(0, ${signal} - ?) WHERE product = ?`).bind(remaining, order.product),
-      ]);
-      return Response.json({ ok: true, orderId: order.id, released: remaining, side: order.side, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/market/settle' && request.method === 'POST') {
       const body = await request.json<{ product?: string }>();
       const product = body.product;
       if (!['material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => settleMarketPostgres(repository, product!));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market settlement failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => settleMarketPostgres(repository, product!));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market settlement failed' }, { status: 409 });
       }
-      const price = await env.DB.prepare('SELECT * FROM market_prices WHERE product = ?').bind(product).first<{ price: number; supply: number }>();
-      const orderOrder = (await marketFairAllocation(env)) ? 'filled_quantity ASC, created_at ASC' : 'created_at ASC';
-      const buy = await env.DB.prepare(`SELECT * FROM market_orders WHERE product = ? AND side = 'buy' AND status IN ('open','partial') AND limit_price >= ? ORDER BY ${orderOrder} LIMIT 1`).bind(product, price?.price ?? 0).first<Record<string, unknown>>();
-      const sell = await env.DB.prepare(`SELECT * FROM market_orders WHERE product = ? AND side = 'sell' AND status IN ('open','partial') AND limit_price <= ? ORDER BY ${orderOrder} LIMIT 1`).bind(product, price?.price ?? 0).first<Record<string, unknown>>();
-      if (!price || !buy || !sell || String(buy.human_id) === String(sell.human_id)) return Response.json({ ok: true, filled: false, reason: 'No eligible matched orders or price', persistence: 'cloudflare-d1' });
-      const remaining = Math.min(Number(buy.quantity) - Number(buy.filled_quantity), Number(sell.quantity) - Number(sell.filled_quantity));
-      const fill = Math.min(remaining, Number(price.supply));
-      if (fill <= 0) return Response.json({ ok: true, filled: false, reason: 'No available supply', persistence: 'cloudflare-d1' });
-      const account = await env.DB.prepare('SELECT account_id, balance FROM account_balances WHERE owner_id = ?').bind(buy.human_id).first<{ account_id: string; balance: number }>();
-      const total = Math.round(fill * Number(price.price) * 100) / 100;
-      const feeRate = await marketFeeRate(env);
-      const fee = Math.round(total * feeRate * 100) / 100;
-      const payable = total + fee;
-      const reserved = Number(buy.reserved_credits ?? 0);
-      if (!account || (reserved <= 0 && Number(account.balance) < payable)) {
-        await env.DB.prepare("UPDATE market_orders SET status = 'rejected' WHERE id = ?").bind(buy.id).run();
-        return Response.json({ ok: false, error: 'Insufficient Credits', orderId: buy.id }, { status: 409 });
-      }
-      const reservationUsed = reserved > 0 ? Math.round(fill * Number(buy.limit_price) * (1 + feeRate) * 100) / 100 : payable;
-      const reservationRefund = Math.max(0, Math.round((reservationUsed - payable) * 100) / 100);
-      if (reserved > 0 && reserved < reservationUsed) return Response.json({ ok: false, error: 'Buy order reservation is inconsistent', orderId: buy.id }, { status: 409 });
-      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const tradeId = crypto.randomUUID();
-      const newBuyFilled = Number(buy.filled_quantity) + fill;
-      const newSellFilled = Number(sell.filled_quantity) + fill;
-      const buyStatus = newBuyFilled >= Number(buy.quantity) ? 'filled' : 'partial';
-      const sellStatus = newSellFilled >= Number(sell.quantity) ? 'filled' : 'partial';
-      await env.DB.batch([
-        ...(reserved > 0 ? [env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE owner_id = ? AND currency = 'CREDIT'").bind(reservationRefund, buy.human_id)] : [env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE owner_id = ? AND balance >= ?').bind(payable, buy.human_id, payable)]),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(fee, 'account-ouc-treasury'),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE owner_id = ?').bind(total, sell.human_id),
-        env.DB.prepare("UPDATE business_financials SET revenue = revenue + ?, profit = profit + ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1)").bind(total, total, gameDay, sell.human_id),
-        env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, ?, ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(buy.human_id, product, fill),
-        env.DB.prepare('UPDATE market_orders SET filled_quantity = ?, reserved_credits = MAX(0, reserved_credits - ?), status = ? WHERE id = ?').bind(newBuyFilled, reservationUsed, buyStatus, buy.id),
-        env.DB.prepare('UPDATE market_orders SET filled_quantity = ?, status = ? WHERE id = ?').bind(newSellFilled, sellStatus, sell.id),
-        env.DB.prepare('UPDATE market_prices SET supply = supply - ?, demand = MAX(0, demand - ?), game_day = ? WHERE product = ?').bind(fill, fill, gameDay, product),
-        env.DB.prepare('INSERT INTO market_trades (id, order_id, product, quantity, clearing_price, game_day) VALUES (?, ?, ?, ?, ?, ?)').bind(tradeId, buy.id, product, fill, price.price, gameDay),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), String(buy.human_id), 'market', 'Market purchase filled', `${fill} ${product} acquired at ${price.price} Credits.`, tradeId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), String(sell.human_id), 'market', 'Market sale filled', `${fill} ${product} sold at ${price.price} Credits.`, tradeId),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(tradeId, gameDay, buy.human_id, sell.human_id, total, 'CREDIT', 'market_trade', buy.id, 'market-v2', tradeId),
-        ...(fee > 0 ? [env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), gameDay, buy.human_id, 'account-ouc-treasury', fee, 'CREDIT', 'market_fee', buy.id, 'market-v2', tradeId)] : []),
-      ]);
-      return Response.json({ ok: true, filled: true, buyOrderId: buy.id, sellOrderId: sell.id, tradeId, product, quantity: fill, clearingPrice: price.price, total, fee, payable, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        await withRepository(env, (repository) => resolveProposalsPostgres(repository));
-        const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      await resolveGovernanceProposals(env);
-      const proposals = await env.DB.prepare('SELECT * FROM proposals ORDER BY closes_at ASC').all();
-      const ballots = await env.DB.prepare('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice').all();
-      return Response.json({ proposals: proposals.results, voteCounts: ballots.results, persistence: 'cloudflare-d1' });
+      await withRepository(env, (repository) => resolveProposalsPostgres(repository));
+      const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listGovernanceRulesPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const rules = await env.DB.prepare("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC").all();
-      return Response.json({ rules: rules.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listGovernanceRulesPostgres(repository));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'POST') {
       const human = await currentHuman(request, env);
@@ -1854,114 +1295,43 @@ const worker = {
       if (!Number.isInteger(durationHours) || durationHours < 24 || durationHours > 168) return Response.json({ ok: false, error: 'Decision window must be between 24 and 168 hours' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        const targetCategory = body.target?.category?.trim() || null;
-        const targetValue = body.target?.value ?? null;
-        if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal creation failed' }, { status: 409 });
-        }
-      }
-      const priorProposal = await env.DB.prepare('SELECT * FROM proposals WHERE institution_id = ? AND correlation_id = ?').bind(institutionId, correlationId).first();
-      if (priorProposal) return Response.json({ ok: true, alreadyProcessed: true, proposal: priorProposal, correlationId, persistence: 'cloudflare-d1' });
-      const institution = await env.DB.prepare("SELECT id, kind, status FROM institutions WHERE id = ? AND kind IN ('OUC','CITY','CORPORATION')").bind(institutionId).first<{ id: string; kind: string; status: string }>();
-      if (!institution) return Response.json({ ok: false, error: 'Governable institution not found' }, { status: 404 });
-      if (institution.status !== 'active') return Response.json({ ok: false, error: 'Institution is not active' }, { status: 409 });
-      if (!(await eligibleForInstitution(env, human.id, institutionId))) return Response.json({ ok: false, error: 'Human is not eligible to propose at this institution' }, { status: 403 });
-      const rule = body.ruleVersionId
-        ? await env.DB.prepare("SELECT id, status, value_json FROM governance_rules WHERE id = ? AND institution_id = ?").bind(body.ruleVersionId, institutionId).first<{ id: string; status: string; value_json: string }>()
-        : await env.DB.prepare("SELECT id, status, value_json FROM governance_rules WHERE institution_id = ? AND status = 'active' ORDER BY version DESC LIMIT 1").bind(institutionId).first<{ id: string; status: string; value_json: string }>();
-      if (!rule || rule.status !== 'active') return Response.json({ ok: false, error: 'An active governance rule version is required' }, { status: 409 });
-      const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      let ruleConfig: Record<string, unknown> = {};
-      try { ruleConfig = JSON.parse(rule.value_json ?? '{}') as Record<string, unknown>; } catch (_error) { /* use engine defaults */ }
-      const quorum = Number(ruleConfig.quorum ?? 0.25);
-      const approvalThreshold = Number(ruleConfig.approvalThreshold ?? 0.5);
-      const implementationDelay = Number(ruleConfig.implementationDelayDays ?? 1);
-      if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) return Response.json({ ok: false, error: 'Governance rule parameters are invalid' }, { status: 409 });
       const targetCategory = body.target?.category?.trim() || null;
-      const targetValue = body.target?.value ? JSON.stringify(body.target.value) : null;
       if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
-      if (targetValue && targetValue.length > 2000) return Response.json({ ok: false, error: 'Target rule payload is too large' }, { status: 400 });
-      await env.DB.prepare("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, target_category, target_value_json, correlation_id) VALUES (?, ?, ?, ?, 'open', CURRENT_TIMESTAMP, datetime('now', ?), ?, ?, ?, ?, datetime('now', ?), ?, ?, ?)").bind(proposalId, institutionId, title, proposalBody, `+${durationHours} hours`, rule.id, quorum, approvalThreshold, implementationDelay, `+${durationHours + implementationDelay * 24} hours`, targetCategory, targetValue, correlationId).run();
-      return Response.json({ ok: true, proposal: await env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(proposalId).first(), createdBy: human.id, correlationId, persistence: 'cloudflare-d1' }, { status: 201 });
+      try {
+        const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue: body.target?.value ?? null, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal creation failed' }, { status: 409 });
+      }
     }
     const voteMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
     if (voteMatch && request.method === 'POST') {
-      const proposalId = voteMatch[1];
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ vote?: string }>();
-        const human = await currentHuman(request, env);
-        if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-        if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => castVotePostgres(repository, { proposalId, humanId: human.id, choice: body.vote! }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Ballot failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('already') ? 409 : 403 });
-        }
-      }
-      await resolveGovernanceProposals(env);
-      const body = await request.json<{ vote?: string }>();
       const human = await currentHuman(request, env);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const humanId = human.id;
+      const body = await request.json<{ vote?: string }>();
       if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
-      if (!(await env.DB.prepare('SELECT id FROM proposals WHERE id = ? AND status = ?').bind(proposalId, 'open').first())) return Response.json({ ok: false, error: 'Open proposal not found' }, { status: 404 });
-      if (!(await env.DB.prepare('SELECT id FROM humans WHERE id = ?').bind(humanId).first())) return Response.json({ ok: false, error: 'Human not found' }, { status: 404 });
-      const proposal = await env.DB.prepare('SELECT institution_id FROM proposals WHERE id = ?').bind(proposalId).first<{ institution_id: string }>();
-      if (!(await canExerciseDelegatedRole(env, humanId, proposal?.institution_id ?? ''))) return Response.json({ ok: false, error: 'Human is not eligible to vote at this institution' }, { status: 403 });
-      const weight = await votingWeight(env, humanId, proposal?.institution_id ?? '');
       try {
-        await env.DB.prepare('INSERT INTO ballots (proposal_id, human_id, choice, weight) VALUES (?, ?, ?, ?)').bind(proposalId, humanId, body.vote, weight).run();
-      } catch (_error) {
-        return Response.json({ ok: false, error: 'Ballot already recorded' }, { status: 409 });
+        const result = await withRepository(env, (repository) => castVotePostgres(repository, { proposalId: voteMatch[1], humanId: human.id, choice: body.vote! }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Ballot failed';
+        return Response.json({ ok: false, error: message }, { status: /already/i.test(message) ? 409 : /not found/i.test(message) ? 404 : 403 });
       }
-      const counts = await env.DB.prepare('SELECT choice, ROUND(SUM(weight), 3) AS count FROM ballots WHERE proposal_id = ? GROUP BY choice').bind(proposalId).all();
-      return Response.json({ ok: true, proposalId, humanId, vote: body.vote, weight, counts: counts.results, persistence: 'cloudflare-d1' });
     }
     const executeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/execute$/);
     if (executeProposalMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => executeProposalPostgres(repository, { proposalId: executeProposalMatch[1], humanId: viewer.id }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal execution failed' }, { status: 409 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => executeProposalPostgres(repository, { proposalId: executeProposalMatch[1], humanId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Proposal execution failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
-      const proposal = await env.DB.prepare('SELECT * FROM proposals WHERE id = ?').bind(executeProposalMatch[1]).first<Record<string, unknown>>();
-      if (!proposal) return Response.json({ ok: false, error: 'Proposal not found' }, { status: 404 });
-      if (proposal.outcome !== 'passed') return Response.json({ ok: false, error: 'Only passed proposals can be executed' }, { status: 409 });
-      if (proposal.executed_at) return Response.json({ ok: true, executionStatus: 'executed', proposal, persistence: 'cloudflare-d1' });
-      if (new Date(String(proposal.implementation_at ?? '')).getTime() > Date.now()) return Response.json({ ok: false, error: 'Implementation delay has not elapsed' }, { status: 409 });
-      if (!(await canExerciseDelegatedRole(env, viewer.id, String(proposal.institution_id)))) return Response.json({ ok: false, error: 'Human is not authorized to execute this institution rule' }, { status: 403 });
-      const category = String(proposal.target_category ?? '').trim();
-      const valueJson = String(proposal.target_value_json ?? '');
-      if (!category || !valueJson) {
-        await env.DB.prepare("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = ?").bind(proposal.id).run();
-        return Response.json({ ok: true, executionStatus: 'skipped', reason: 'Proposal has no target rule payload', persistence: 'cloudflare-d1' });
-      }
-      if (!['market', 'finance', 'services', 'technology'].includes(category) || valueJson.length > 2000) return Response.json({ ok: false, error: 'Target rule is outside engine bounds' }, { status: 409 });
-      let targetValue: Record<string, unknown>;
-      try { targetValue = JSON.parse(valueJson) as Record<string, unknown>; } catch (_error) { return Response.json({ ok: false, error: 'Target rule payload is invalid JSON' }, { status: 409 }); }
-      if (category === 'finance' && targetValue.rate !== undefined && (!(typeof targetValue.rate === 'number') || Number(targetValue.rate) < 0 || Number(targetValue.rate) > 0.25)) return Response.json({ ok: false, error: 'Finance rule rate must be between 0 and 0.25' }, { status: 409 });
-      const prior = await env.DB.prepare("SELECT version FROM governance_rules WHERE institution_id = ? AND category = ? ORDER BY version DESC LIMIT 1").bind(proposal.institution_id, category).first<{ version: number }>();
-      const ruleId = `RULE-${String(proposal.institution_id)}-${category}-${Number(prior?.version ?? 0) + 1}`;
-      await env.DB.batch([
-        env.DB.prepare("INSERT INTO governance_rules (id, institution_id, name, category, value_json, version, status, created_by) VALUES (?, ?, ?, ?, ?, ?, 'active', ?)").bind(ruleId, proposal.institution_id, String(proposal.title), category, JSON.stringify(targetValue), Number(prior?.version ?? 0) + 1, viewer.id),
-        env.DB.prepare("UPDATE governance_rules SET status = 'superseded' WHERE institution_id = ? AND category = ? AND status = 'active'").bind(proposal.institution_id, category),
-        env.DB.prepare("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'executed' WHERE id = ?").bind(proposal.id),
-          env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, (SELECT game_day FROM world_state WHERE id = \'WORLD\'), ?, ?, ?)').bind(crypto.randomUUID(), 'rule.changed', `Rule ${category} changed`, JSON.stringify({ proposalId: proposal.id, ruleId })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'governance', 'Rule executed', `Your institution executed ${category}.`, ruleId),
-      ]);
-      return Response.json({ ok: true, executionStatus: 'executed', rule: await env.DB.prepare('SELECT * FROM governance_rules WHERE id = ?').bind(ruleId).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/businesses' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1973,263 +1343,135 @@ const worker = {
       if (!name || name.length < 3 || name.length > 80 || !sectors.includes(sector)) return Response.json({ ok: false, error: 'Business name or sector is invalid' }, { status: 400 });
       const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => createBusinessPostgres(repository, { ownerId: viewer.id, name, sector, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Business registration failed';
-          return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /requires/i.test(message) ? 409 : 400 });
-        }
+      try {
+        const result = await withRepository(env, (repository) => createBusinessPostgres(repository, { ownerId: viewer.id, name, sector, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Business registration failed';
+        return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /requires/i.test(message) ? 409 : 400 });
       }
-      const priorRegistration = await env.DB.prepare("SELECT reason_id FROM ledger_entries WHERE reason_type = 'business_registration' AND correlation_id = ?").bind(correlationId).first<{ reason_id: string }>();
-      if (priorRegistration) return Response.json({ ok: true, alreadyProcessed: true, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(priorRegistration.reason_id).first(), shares: 100, correlationId, persistence: 'cloudflare-d1' });
-      if (await env.DB.prepare('SELECT id FROM institutions WHERE name = ?').bind(name).first()) return Response.json({ ok: false, error: 'Business name already exists' }, { status: 409 });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      const fee = 250;
-      if (!account || Number(account.balance) < fee) return Response.json({ ok: false, error: 'Business registration requires 250 Credits' }, { status: 409 });
-      const businessId = `B-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(fee, account.account_id, fee),
-        env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE account_id = 'account-ouc-treasury'").bind(fee),
-        env.DB.prepare("INSERT INTO institutions (id, kind, name, status) VALUES (?, 'BUSINESS', ?, 'active')").bind(businessId, name),
-        env.DB.prepare('INSERT INTO businesses (id, owner_id, name, policy, condition, sector) VALUES (?, ?, ?, \'reliability\', 100, ?)').bind(businessId, viewer.id, name, sector),
-        env.DB.prepare('INSERT INTO business_financials (business_id, last_game_day) VALUES (?, ?)').bind(businessId, day),
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, 100)').bind(businessId, viewer.id),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, account.account_id, 'account-ouc-treasury', fee, 'CREDIT', 'business_registration', businessId, 'business-v1', correlationId),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.formed', `${name} was registered`, JSON.stringify({ businessId, sector, founder: viewer.id })),
-      ]);
-      return Response.json({ ok: true, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(businessId).first(), shares: 100, fee, correlationId, persistence: 'cloudflare-d1' }, { status: 201 });
     }
     if ((url.pathname === '/api/businesses/kline-works/policy' || url.pathname === '/api/businesses/me/policy') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ policy?: string }>();
       if (!['reliability', 'margin', 'capacity'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Unknown business policy' }, { status: 400 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => setBusinessPolicyPostgres(repository, { humanId: viewer.id, policy: body.policy! }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business policy update failed' }, { status: 404 }); }
+      try {
+        const result = await withRepository(env, (repository) => setBusinessPolicyPostgres(repository, { humanId: viewer.id, policy: body.policy! }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business policy update failed' }, { status: 404 });
       }
-      const business = await env.DB.prepare("SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.owner_id = ? OR business_management.manager_id = ? ORDER BY businesses.id LIMIT 1").bind(viewer.id, viewer.id).first<{ id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'No managed business is available to this Human' }, { status: 404 });
-      await env.DB.prepare('UPDATE businesses SET policy = ? WHERE id = ?').bind(body.policy, business.id).run();
-      return Response.json({ ok: true, policy: body.policy, business: await env.DB.prepare('SELECT * FROM businesses WHERE id = ?').bind(business.id).first(), persistence: 'cloudflare-d1' });
     }
     const managerMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/manager$/);
     if (managerMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ managerId?: string }>();
-        try {
-          const result = await withRepository(env, (repository) => appointManagerPostgres(repository, { ownerId: viewer.id, businessId: managerMatch[1], managerId: body.managerId?.trim() ?? '' }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Manager appointment failed' }, { status: 403 }); }
-      }
-      const business = await env.DB.prepare('SELECT id, owner_id FROM businesses WHERE id = ?').bind(managerMatch[1]).first<{ id: string; owner_id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      if (business.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the Business owner may appoint its manager' }, { status: 403 });
       const body = await request.json<{ managerId?: string }>();
-      const managerId = body.managerId?.trim() ?? '';
-      const manager = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(managerId).first();
-      if (!manager) return Response.json({ ok: false, error: 'Active manager Human not found' }, { status: 404 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 0;
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES (?, ?, ?, ?) ON CONFLICT(business_id) DO UPDATE SET manager_id = excluded.manager_id, appointed_by = excluded.appointed_by, appointed_game_day = excluded.appointed_game_day, updated_at = CURRENT_TIMESTAMP').bind(business.id, managerId, viewer.id, day),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.manager_appointed', `Manager appointed for ${business.id}`, JSON.stringify({ businessId: business.id, managerId, appointedBy: viewer.id })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), managerId, 'governance', 'Business management appointment', `You were appointed manager of ${business.id}.`, business.id),
-      ]);
-      return Response.json({ ok: true, management: await env.DB.prepare('SELECT * FROM business_management WHERE business_id = ?').bind(business.id).first(), persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => appointManagerPostgres(repository, { ownerId: viewer.id, businessId: managerMatch[1], managerId: body.managerId?.trim() ?? '' }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Manager appointment failed' }, { status: 403 });
+      }
     }
     const ownershipRegistryMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/ownership$/);
     if (ownershipRegistryMatch && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        try {
-          const result = await withRepository(env, (repository) => ownershipRegistryPostgres(repository, ownershipRegistryMatch[1]));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business not found' }, { status: 404 }); }
+      try {
+        const result = await withRepository(env, (repository) => ownershipRegistryPostgres(repository, ownershipRegistryMatch[1]));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business not found' }, { status: 404 });
       }
-      const business = await env.DB.prepare('SELECT id, name, owner_id FROM businesses WHERE id = ?').bind(ownershipRegistryMatch[1]).first<{ id: string; name: string; owner_id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      const holders = await env.DB.prepare('SELECT business_shares.holder_id, humans.display_name, business_shares.shares FROM business_shares JOIN humans ON humans.id = business_shares.holder_id WHERE business_shares.business_id = ? ORDER BY business_shares.shares DESC, business_shares.holder_id').bind(business.id).all<{ holder_id: string; display_name: string; shares: number }>();
-      const total = holders.results.reduce((sum, holder) => sum + Number(holder.shares), 0);
-      const registry = holders.results.map((holder) => ({ ...holder, percentage: total > 0 ? Math.round(Number(holder.shares) / total * 10000) / 100 : 0 }));
-      return Response.json({ business, totalIssuedShares: total, controllingHumanId: registry[0]?.holder_id ?? null, holders: registry, ownershipAndManagementAreSeparate: true, persistence: 'cloudflare-d1' });
     }
     const financialsMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/financials$/);
     if (financialsMatch && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => readBusinessPostgres(repository, financialsMatch[1], viewer.id));
-        if (result?.business) return Response.json({ ...result, accounting: { revenue: 'market-cleared sales and accepted contract income', operatingCosts: 'production inputs, maintenance, depreciation, licensing, accepted contract costs, and business tax', profit: 'revenue minus operating costs' }, persistence: 'planetscale-postgres' });
-        return Response.json({ ok: false, error: result?.error ?? 'Business financial statement is not available to this Human' }, { status: 403 });
-      }
-      const business = await env.DB.prepare("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, business_financials.revenue, business_financials.operating_costs, business_financials.profit, business_financials.taxed_revenue, business_financials.last_game_day, business_financials.updated_at FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = ? AND (businesses.owner_id = ? OR business_management.manager_id = ? OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = ?))").bind(financialsMatch[1], viewer.id, viewer.id, viewer.id).first();
-      if (!business) return Response.json({ ok: false, error: 'Business financial statement is not available to this Human' }, { status: 403 });
-      return Response.json({ business, accounting: { revenue: 'market-cleared sales and accepted contract income', operatingCosts: 'production inputs, maintenance, depreciation, licensing, accepted contract costs, and business tax', profit: 'revenue minus operating costs' }, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => readBusinessPostgres(repository, financialsMatch[1], viewer.id));
+      if (result?.business) return Response.json({ ...result, accounting: { revenue: 'market-cleared sales and accepted contract income', operatingCosts: 'production inputs, maintenance, depreciation, licensing, accepted contract costs, and business tax', profit: 'revenue minus operating costs' }, persistence: 'planetscale-postgres' });
+      return Response.json({ ok: false, error: result?.error ?? 'Business financial statement is not available to this Human' }, { status: 403 });
     }
     const constitutionMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/constitution$/);
     if (constitutionMatch && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => repository.query('SELECT business_constitutions.*, businesses.name, businesses.owner_id FROM business_constitutions JOIN businesses ON businesses.id = business_constitutions.business_id WHERE business_constitutions.business_id = $1', [constitutionMatch[1]]));
-        if (result?.rows[0]) return Response.json({ constitution: result.rows[0], management: { ownerId: result.rows[0].owner_id, ownershipAndManagementAreSeparate: true }, persistence: 'planetscale-postgres' });
-        return Response.json({ ok: false, error: 'Business constitution not found' }, { status: 404 });
-      }
-      const constitution = await env.DB.prepare('SELECT business_constitutions.*, businesses.name, businesses.owner_id FROM business_constitutions JOIN businesses ON businesses.id = business_constitutions.business_id WHERE business_constitutions.business_id = ?').bind(constitutionMatch[1]).first<Record<string, unknown>>();
-      if (!constitution) return Response.json({ ok: false, error: 'Business constitution not found' }, { status: 404 });
-      return Response.json({ constitution, management: { ownerId: constitution.owner_id, ownershipAndManagementAreSeparate: true }, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => repository.query('SELECT business_constitutions.*, businesses.name, businesses.owner_id FROM business_constitutions JOIN businesses ON businesses.id = business_constitutions.business_id WHERE business_constitutions.business_id = $1', [constitutionMatch[1]]));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      if (!result.rows[0]) return Response.json({ ok: false, error: 'Business constitution not found' }, { status: 404 });
+      return Response.json({ constitution: result.rows[0], management: { ownerId: result.rows[0].owner_id, ownershipAndManagementAreSeparate: true }, persistence: 'planetscale-postgres' });
     }
     if (constitutionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ shareholderVoteThreshold?: number; boardApprovalThreshold?: number; dilutionNoticeDays?: number }>();
-        const shareholderVoteThreshold = Number(body.shareholderVoteThreshold); const boardApprovalThreshold = Number(body.boardApprovalThreshold); const dilutionNoticeDays = Number(body.dilutionNoticeDays);
-        if (!(shareholderVoteThreshold > 0 && shareholderVoteThreshold <= 1) || !(boardApprovalThreshold > 0 && boardApprovalThreshold <= 1) || !Number.isInteger(dilutionNoticeDays) || dilutionNoticeDays < 0 || dilutionNoticeDays > 30) return Response.json({ ok: false, error: 'Constitution thresholds or notice period are invalid' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => updateConstitutionPostgres(repository, { ownerId: viewer.id, businessId: constitutionMatch[1], shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Constitution update failed' }, { status: 403 }); }
-      }
-      const business = await env.DB.prepare('SELECT id, owner_id FROM businesses WHERE id = ?').bind(constitutionMatch[1]).first<{ id: string; owner_id: string }>();
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      if (business.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the Business owner may update its constitution' }, { status: 403 });
       const body = await request.json<{ shareholderVoteThreshold?: number; boardApprovalThreshold?: number; dilutionNoticeDays?: number }>();
-      const shareholderVoteThreshold = Number(body.shareholderVoteThreshold);
-      const boardApprovalThreshold = Number(body.boardApprovalThreshold);
-      const dilutionNoticeDays = Number(body.dilutionNoticeDays);
-      if (!(shareholderVoteThreshold > 0 && shareholderVoteThreshold <= 1) || !(boardApprovalThreshold > 0 && boardApprovalThreshold <= 1) || !Number.isInteger(dilutionNoticeDays) || dilutionNoticeDays < 0 || dilutionNoticeDays > 30) return Response.json({ ok: false, error: 'Constitution thresholds or notice period are invalid' }, { status: 400 });
-      const day = (await env.DB.prepare("SELECT game_day FROM world_state WHERE id = 'WORLD'").first<{ game_day: number }>())?.game_day ?? 0;
-      const current = await env.DB.prepare('SELECT version FROM business_constitutions WHERE business_id = ?').bind(business.id).first<{ version: number }>();
-      const version = Number(current?.version ?? 0) + 1;
-      await env.DB.batch([
-        env.DB.prepare('INSERT INTO business_constitutions (business_id, version, shareholder_vote_threshold, board_approval_threshold, dilution_notice_days, updated_by, updated_game_day) VALUES (?, ?, ?, ?, ?, ?, ?) ON CONFLICT(business_id) DO UPDATE SET version = excluded.version, shareholder_vote_threshold = excluded.shareholder_vote_threshold, board_approval_threshold = excluded.board_approval_threshold, dilution_notice_days = excluded.dilution_notice_days, updated_by = excluded.updated_by, updated_game_day = excluded.updated_game_day, updated_at = CURRENT_TIMESTAMP').bind(business.id, version, shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays, viewer.id, day),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.constitution_changed', `Business Constitution updated for ${business.id}`, JSON.stringify({ businessId: business.id, version, shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays, updatedBy: viewer.id })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'governance', 'Business Constitution updated', `${business.id} now operates under Constitution version ${version}.`, business.id),
-      ]);
-      return Response.json({ ok: true, constitution: await env.DB.prepare('SELECT * FROM business_constitutions WHERE business_id = ?').bind(business.id).first(), persistence: 'cloudflare-d1' });
+      const shareholderVoteThreshold = Number(body.shareholderVoteThreshold ?? 0.5);
+      const boardApprovalThreshold = Number(body.boardApprovalThreshold ?? 0.5);
+      const dilutionNoticeDays = Number(body.dilutionNoticeDays ?? 3);
+      if (![shareholderVoteThreshold, boardApprovalThreshold].every((value) => Number.isFinite(value) && value >= 0.5 && value <= 1) || !Number.isInteger(dilutionNoticeDays) || dilutionNoticeDays < 1 || dilutionNoticeDays > 30) return Response.json({ ok: false, error: 'Constitution thresholds are invalid' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => updateConstitutionPostgres(repository, { ownerId: viewer.id, businessId: constitutionMatch[1], shareholderVoteThreshold, boardApprovalThreshold, dilutionNoticeDays }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Business constitution update failed' }, { status: 403 });
+      }
     }
     const shareTransferMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/shares\/transfer$/);
     if (shareTransferMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ recipientId?: string; shares?: number; otp?: string; correlationId?: string }>();
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for ownership transfers' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const recipientId = body.recipientId?.trim() ?? '';
-        const shares = Number(body.shares);
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares <= 0 || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid recipient, positive whole-share amount, and correlation ID are required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => transferSharesPostgres(repository, { holderId: viewer.id, businessId: shareTransferMatch[1] === 'me' ? null : shareTransferMatch[1], recipientId, shares, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share transfer failed' }, { status: 409 });
-        }
-      }
-      const businessId = shareTransferMatch[1] === 'me'
-        ? (await env.DB.prepare('SELECT id FROM businesses WHERE owner_id = ? ORDER BY id LIMIT 1').bind(viewer.id).first<{ id: string }>())?.id
-        : shareTransferMatch[1];
-      const recipientId = body.recipientId?.trim();
+      const body = await request.json<{ businessId?: string; recipientId?: string; shares?: number; correlationId?: string }>();
+      const recipientId = body.recipientId?.trim() ?? '';
       const shares = Number(body.shares);
-      if (!businessId || !recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares <= 0) return Response.json({ ok: false, error: 'A valid recipient and positive whole-share amount are required' }, { status: 400 });
-      const [business, recipient, holding] = await Promise.all([
-        env.DB.prepare('SELECT id FROM businesses WHERE id = ?').bind(businessId).first(),
-        env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(recipientId).first(),
-        env.DB.prepare('SELECT shares FROM business_shares WHERE business_id = ? AND holder_id = ?').bind(businessId, viewer.id).first<{ shares: number }>(),
-      ]);
-      if (!business) return Response.json({ ok: false, error: 'Business not found' }, { status: 404 });
-      if (!recipient) return Response.json({ ok: false, error: 'Recipient Human not found' }, { status: 404 });
-      if (!holding || Number(holding.shares) < shares) return Response.json({ ok: false, error: 'Insufficient shares' }, { status: 409 });
-      const transferDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const senderUpdate = Number(holding.shares) === shares
-        ? env.DB.prepare('DELETE FROM business_shares WHERE business_id = ? AND holder_id = ?').bind(businessId, viewer.id)
-        : env.DB.prepare('UPDATE business_shares SET shares = shares - ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = ? AND holder_id = ?').bind(shares, businessId, viewer.id);
-      await env.DB.batch([
-        senderUpdate,
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, ?) ON CONFLICT(business_id, holder_id) DO UPDATE SET shares = shares + excluded.shares, updated_at = CURRENT_TIMESTAMP').bind(businessId, recipientId, shares),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS_SHARES', businessId, viewer.id, recipientId, shares, 'share_transfer', businessId, transferDay),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'ownership', 'Business shares transferred', `${shares} shares in ${businessId} were transferred to ${recipientId}.`, businessId, crypto.randomUUID(), recipientId, 'ownership', 'Business shares received', `${shares} shares in ${businessId} were transferred to you by ${viewer.id}.`, businessId),
-      ]);
-      return Response.json({ ok: true, businessId, from: viewer.id, to: recipientId, shares, holdings: (await env.DB.prepare('SELECT holder_id, shares FROM business_shares WHERE business_id = ? ORDER BY shares DESC').bind(businessId).all()).results, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share transfer terms' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => transferSharesPostgres(repository, { holderId: viewer.id, businessId: body.businessId?.trim() || null, recipientId, shares, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Share transfer failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
     }
     const shareIssueMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/shares\/issue$/);
     if (shareIssueMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ recipientId?: string; shares?: number; pricePerShare?: number; otp?: string; correlationId?: string }>();
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for share issuance' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const recipientId = body.recipientId?.trim() ?? '';
-        const shares = Number(body.shares);
-        const pricePerShare = Math.round(Number(body.pricePerShare) * 100) / 100;
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => issueSharesPostgres(repository, { ownerId: viewer.id, businessId: shareIssueMatch[1], recipientId, shares, pricePerShare, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share issuance failed' }, { status: 409 });
-        }
-      }
-      const business = await env.DB.prepare('SELECT id, owner_id FROM businesses WHERE id = ?').bind(shareIssueMatch[1]).first<{ id: string; owner_id: string }>();
-      const recipientId = body.recipientId?.trim();
+      const body = await request.json<{ recipientId?: string; shares?: number; pricePerShare?: number; correlationId?: string }>();
+      const recipientId = body.recipientId?.trim() ?? '';
       const shares = Number(body.shares);
       const pricePerShare = Math.round(Number(body.pricePerShare) * 100) / 100;
-      if (!business || business.owner_id !== viewer.id) return Response.json({ ok: false, error: 'Only the Business owner may issue shares' }, { status: 403 });
-      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
-      const recipient = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(recipientId).first();
-      if (!recipient) return Response.json({ ok: false, error: 'Recipient Human not found' }, { status: 404 });
-      const buyerAccount = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(recipientId).first<{ account_id: string; balance: number }>();
-      const total = Math.round(shares * pricePerShare * 100) / 100;
-      if (!buyerAccount || Number(buyerAccount.balance) < total) return Response.json({ ok: false, error: 'Recipient has insufficient Credits' }, { status: 409 });
-      const ownerAccount = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string }>();
-      if (!ownerAccount) return Response.json({ ok: false, error: 'Owner account not found' }, { status: 404 });
-      const existingHolders = (await env.DB.prepare('SELECT holder_id FROM business_shares WHERE business_id = ? AND holder_id != ?').bind(business.id, recipientId).all<{ holder_id: string }>()).results;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const correlationId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(total, buyerAccount.account_id, total),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(total, ownerAccount.account_id),
-        env.DB.prepare('INSERT INTO business_shares (business_id, holder_id, shares) VALUES (?, ?, ?) ON CONFLICT(business_id, holder_id) DO UPDATE SET shares = shares + excluded.shares, updated_at = CURRENT_TIMESTAMP').bind(business.id, recipientId, shares),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(correlationId, day, buyerAccount.account_id, ownerAccount.account_id, total, 'CREDIT', 'share_issuance', business.id, 'shares-v1', correlationId),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS_SHARES', business.id, business.owner_id, recipientId, shares, 'share_issuance', correlationId, day),
-        env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, 'business.shares_issued', `Shares issued by ${business.id}`, JSON.stringify({ businessId: business.id, recipientId, shares, pricePerShare, total })),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), recipientId, 'ownership', 'Business shares received', `You acquired ${shares} shares in ${business.id}.`, business.id),
-        ...existingHolders.map((holder) => env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), holder.holder_id, 'ownership', 'Business share issuance notice', `${shares} new shares were issued in ${business.id} at ${pricePerShare} Credits per share. Review your ownership percentage.`, business.id)),
-      ]);
-      return Response.json({ ok: true, businessId: business.id, recipientId, shares, pricePerShare, total, correlationId, holdings: (await env.DB.prepare('SELECT holder_id, shares FROM business_shares WHERE business_id = ? ORDER BY shares DESC').bind(business.id).all()).results, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => issueSharesPostgres(repository, { ownerId: viewer.id, businessId: shareIssueMatch[1], recipientId, shares, pricePerShare, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share issuance failed' }, { status: 409 });
+      }
     }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => getSuccessorPostgres(repository, viewer.id));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewer.id).first(), persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => getSuccessorPostgres(repository, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/life/status' && request.method === 'GET') {
       const viewer = await currentHuman(request, env, true);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => getLifeStatusPostgres(repository, viewer.id));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [human, succession, events] = await Promise.all([
-        env.DB.prepare('SELECT id, display_name, age_years, life_status, death_game_day, standing, legacy FROM humans WHERE id = ?').bind(viewer.id).first(),
-        env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewer.id).first(),
-        env.DB.prepare('SELECT * FROM life_events WHERE human_id = ? ORDER BY game_day DESC LIMIT 20').bind(viewer.id).all(),
-      ]);
-      return Response.json({ ok: true, human, succession, events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => getLifeStatusPostgres(repository, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'POST') {
       const viewer = await currentHuman(request, env, true);
@@ -2240,248 +1482,108 @@ const worker = {
       if (!successorName || successorName.length < 2) return Response.json({ ok: false, error: 'Successor name is required' }, { status: 400 });
       if (!Number.isInteger(estatePeriodDays) || estatePeriodDays < 7 || estatePeriodDays > 90) return Response.json({ ok: false, error: 'Estate period must be between 7 and 90 days' }, { status: 400 });
       const successorHumanId = body.successorHumanId?.trim() || null;
-      if (authorityMode(env) === 'postgres') {
-        try {
-          if (viewer.life_status === 'estate') {
-            if (!successorHumanId) return Response.json({ ok: false, error: 'An Estate Period requires an existing active Successor Human' }, { status: 400 });
-            const world = await withRepository(env, (repository) => repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'"));
-            const day = Number(world?.rows[0]?.game_day ?? 0);
-            const result = await withRepository(env, (repository) => settleInheritancePostgres(repository, { predecessorId: viewer.id, successorId: successorHumanId, successorName, day }));
-            if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-          }
-          const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName, estatePeriodDays, successorHumanId, currentLifeStatus: viewer.life_status }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Successor registration failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('another active') ? 400 : 409 });
+      try {
+        if (viewer.life_status === 'estate') {
+          if (!successorHumanId) return Response.json({ ok: false, error: 'An Estate Period requires an existing active Successor Human' }, { status: 400 });
+          const world = await withRepository(env, (repository) => repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'"));
+          const day = Number(world?.rows[0]?.game_day ?? 0);
+          const result = await withRepository(env, (repository) => settleInheritancePostgres(repository, { predecessorId: viewer.id, successorId: successorHumanId, successorName, day }));
+          if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+          return Response.json({ ...result, persistence: 'planetscale-postgres' });
         }
+        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName, estatePeriodDays, successorHumanId, currentLifeStatus: viewer.life_status }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Successor registration failed';
+        return Response.json({ ok: false, error: message }, { status: /another active/i.test(message) ? 400 : 409 });
       }
-      if (successorHumanId && (successorHumanId === viewer.id || !(await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(successorHumanId).first()))) return Response.json({ ok: false, error: 'Successor Human must be another active Human' }, { status: 400 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      if (viewer.life_status === 'estate') {
-        if (!successorHumanId) return Response.json({ ok: false, error: 'An Estate Period requires an existing active Successor Human' }, { status: 400 });
-        const [account, machines, businesses, shares, resources] = await Promise.all([
-          env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>(),
-          env.DB.prepare('SELECT id FROM machines WHERE owner_id = ?').bind(viewer.id).all<{ id: string }>(),
-          env.DB.prepare('SELECT id FROM businesses WHERE owner_id = ?').bind(viewer.id).all<{ id: string }>(),
-          env.DB.prepare('SELECT business_id, shares FROM business_shares WHERE holder_id = ?').bind(viewer.id).all<{ business_id: string; shares: number }>(),
-          env.DB.prepare('SELECT resource, amount FROM resource_balances WHERE owner_id = ?').bind(viewer.id).all<{ resource: string; amount: number }>(),
-        ]);
-        const gross = Math.max(0, Number(account?.balance ?? 0));
-        const tax = Math.round(gross * 0.2 * 100) / 100;
-        const inherited = Math.max(0, gross - tax);
-        const eventId = crypto.randomUUID();
-        await env.DB.batch([
-          env.DB.prepare("UPDATE account_balances SET balance = 0 WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id),
-          env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE owner_id = ? AND currency = 'CREDIT'").bind(inherited, successorHumanId),
-          ...(tax > 0 ? [env.DB.prepare("UPDATE account_balances SET balance = balance + ? WHERE account_id = 'account-ouc-treasury'").bind(tax)] : []),
-          env.DB.prepare('UPDATE humans SET standing = 0, legacy = legacy + 1 WHERE id = ?').bind(successorHumanId),
-          env.DB.prepare('UPDATE machines SET owner_id = ? WHERE owner_id = ?').bind(successorHumanId, viewer.id),
-          env.DB.prepare('UPDATE businesses SET owner_id = ? WHERE owner_id = ?').bind(successorHumanId, viewer.id),
-          env.DB.prepare('UPDATE business_shares SET holder_id = ? WHERE holder_id = ?').bind(successorHumanId, viewer.id),
-          ...resources.results.map((row) => env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, ?, ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(successorHumanId, row.resource, row.amount)),
-          env.DB.prepare('DELETE FROM resource_balances WHERE owner_id = ?').bind(viewer.id),
-          env.DB.prepare("UPDATE humans SET life_status = 'deceased' WHERE id = ?").bind(viewer.id),
-          env.DB.prepare('INSERT OR REPLACE INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, ? FROM humans WHERE id = ?').bind(successorName, viewer.id),
-          env.DB.prepare('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES (?, ?, ?, ?, ?, ?)').bind(eventId, successorHumanId, 'inheritance', day, successorName, inherited),
-          env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, viewer.id, successorHumanId, inherited, 'CREDIT', 'late_inheritance', eventId, 'life-v2', eventId),
-          ...(tax > 0 ? [env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, viewer.id, 'account-ouc-treasury', tax, 'CREDIT', 'late_inheritance_tax', eventId, 'life-v2', eventId)] : []),
-          ...machines.results.map((asset) => env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', asset.id, viewer.id, successorHumanId, 1, 'late_inheritance', eventId, day)),
-          ...businesses.results.map((asset) => env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS', asset.id, viewer.id, successorHumanId, 1, 'late_inheritance', eventId, day)),
-          ...shares.results.map((asset) => env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'BUSINESS_SHARES', asset.business_id, viewer.id, successorHumanId, asset.shares, 'late_inheritance', eventId, day)),
-          env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), successorHumanId, 'life', 'Late inheritance received', `${inherited} Credits and your predecessor’s registered assets were transferred after the Estate Period.`, eventId),
-          env.DB.prepare('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES (?, ?, ?, ?, ?)').bind(`LATE-INHERITANCE-${viewer.id}-${day}`, day, 'human.life_event', 'An Estate completed late succession', JSON.stringify({ predecessor: viewer.id, successor: successorHumanId, tax })),
-          env.DB.prepare('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = ? AND revoked_at IS NULL').bind(viewer.id),
-        ]);
-        return Response.json({ ok: true, lateSuccession: true, successorHumanId, inherited, tax, eventId, persistence: 'cloudflare-d1' });
-      }
-      await env.DB.prepare('INSERT INTO succession_plans (human_id, successor_name, registered_game_day, estate_period_days, successor_human_id) VALUES (?, ?, ?, ?, ?) ON CONFLICT(human_id) DO UPDATE SET successor_name = excluded.successor_name, registered_game_day = excluded.registered_game_day, estate_period_days = excluded.estate_period_days, successor_human_id = excluded.successor_human_id').bind(viewer.id, successorName, day, estatePeriodDays, successorHumanId).run();
-      return Response.json({ ok: true, successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewer.id).first(), persistence: 'cloudflare-d1' });
     }
     const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
     if (maintenanceMatch && request.method === 'POST') {
       const machineId = maintenanceMatch[1];
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ amount?: number; correlationId?: string }>();
-        const amount = Number(body.amount ?? 10);
-        const correlationId = String(body.correlationId ?? '').trim();
-        if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
-        if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid maintenance correlationId is required' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => maintainMachinePostgres(repository, { machineId, ownerId: viewer.id, amount, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Machine maintenance failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
-      }
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found' }, { status: 404 });
-      if (machine.owner_id !== viewer.id) return Response.json({ ok: false, error: 'This machine belongs to another Human' }, { status: 403 });
       const body = await request.json<{ amount?: number; correlationId?: string }>();
       const amount = Number(body.amount ?? 10);
-      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
       const correlationId = String(body.correlationId ?? '').trim();
+      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
       if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid maintenance correlationId is required' }, { status: 400 });
-      const existing = await env.DB.prepare('SELECT id, amount, game_day FROM maintenance_events WHERE machine_id = ? AND correlation_id = ?').bind(machineId, correlationId).first<{ id: string; amount: number; game_day: number }>();
-      if (existing) return Response.json({ ok: true, alreadyProcessed: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), eventId: existing.id, amount: existing.amount, gameDay: existing.game_day, correlationId, persistence: 'cloudflare-d1' });
-      const before = Number(machine.condition);
-      const after = Math.min(100, before + amount * 0.8);
-      const components = await env.DB.prepare("SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = 'components'").bind(viewer.id).first<{ amount: number }>();
-      if (!components || Number(components.amount) < amount) return Response.json({ ok: false, error: 'Insufficient Components for maintenance' }, { status: 409 });
-      const gameDay = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const [componentPrice, asset] = await Promise.all([
-        env.DB.prepare("SELECT price FROM market_prices WHERE product = 'components'").first<{ price: number }>(),
-        env.DB.prepare('SELECT business_id FROM business_assets WHERE machine_id = ?').bind(machineId).first<{ business_id: string }>(),
-      ]);
-      const maintenanceCost = Math.round(amount * Number(componentPrice?.price ?? 0) * 100) / 100;
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare("UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = 'components' AND amount >= ?").bind(amount, viewer.id, amount),
-        env.DB.prepare('UPDATE machines SET condition = ?, maintenance_due = MAX(0, maintenance_due - ?) WHERE id = ?').bind(after, amount, machineId),
-        env.DB.prepare('INSERT INTO maintenance_events (id, machine_id, owner_id, resource, amount, condition_before, condition_after, game_day, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(eventId, machineId, machine.owner_id, 'components', amount, before, after, gameDay, correlationId),
-        ...(asset?.business_id ? [env.DB.prepare('UPDATE business_financials SET operating_costs = operating_costs + ?, profit = profit - ?, last_game_day = ?, updated_at = CURRENT_TIMESTAMP WHERE business_id = ?').bind(maintenanceCost, maintenanceCost, gameDay, asset.business_id)] : []),
-      ]);
-      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machineId).first(), eventId, amount, gameDay, correlationId, persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => maintainMachinePostgres(repository, { machineId, ownerId: viewer.id, amount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine maintenance failed';
+        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
+      }
     }
     const decommissionMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/decommission$/);
     if (decommissionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ? AND owner_id = ?').bind(decommissionMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found for this Human' }, { status: 404 });
       const body = await request.json<{ otp?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for decommissioning an asset' }, { status: 401 });
-      const embeddedMaterial: Record<string, number> = { extractor: 80, 'energy-array': 60, 'compute-node': 100, fabricator: 90, 'housing-fabricator': 110, 'research-cluster': 140, 'service-robot': 45 };
-      const efficiency = Math.min(0.8, Math.max(0.2, 0.25 + Number(machine.condition ?? 0) / 200));
-      const materialReturned = Math.round((embeddedMaterial[String(machine.machine_type)] ?? 60) * efficiency * 100) / 100;
-      const componentsReturned = Math.round((Number(machine.productive_capacity ?? 1) * 25 * efficiency) * 100) / 100;
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('DELETE FROM business_assets WHERE machine_id = ?').bind(machine.id),
-        env.DB.prepare('DELETE FROM machines WHERE id = ? AND owner_id = ?').bind(machine.id, viewer.id),
-        env.DB.prepare('INSERT INTO resource_balances (owner_id, resource, amount) VALUES (?, \'material\', ?), (?, \'components\', ?) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = amount + excluded.amount').bind(viewer.id, materialReturned, viewer.id, componentsReturned),
-        env.DB.prepare('INSERT INTO recycling_events (id, machine_id, owner_id, material_returned, components_returned, efficiency, game_day) VALUES (?, ?, ?, ?, ?, ?, ?)').bind(eventId, machine.id, viewer.id, materialReturned, componentsReturned, efficiency, day),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', machine.id, viewer.id, null, 1, 'recycling', eventId, day),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'production', 'Machine recycled', `${materialReturned} Material and ${componentsReturned} Components returned at ${Math.round(efficiency * 100)}% efficiency.`, machine.id),
-      ]);
-      return Response.json({ ok: true, eventId, machineId: machine.id, materialReturned, componentsReturned, efficiency, persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => recycleMachinePostgres(repository, { machineId: decommissionMatch[1], ownerId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine recycling failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
     }
     const utilizationMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/utilization$/);
     if (utilizationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ utilization?: number }>();
-        const utilization = Number(body.utilization);
-        if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) return Response.json({ ok: false, error: 'Utilization must be a whole percentage from 0 to 100' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => setMachineUtilizationPostgres(repository, { machineId: utilizationMatch[1], ownerId: viewer.id, utilization }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-        } catch (error) {
-          return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine utilization update failed' }, { status: 404 });
-        }
-      }
-      const machine = await env.DB.prepare('SELECT owner_id FROM machines WHERE id = ?').bind(utilizationMatch[1]).first<{ owner_id: string }>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found' }, { status: 404 });
-      if (machine.owner_id !== viewer.id) return Response.json({ ok: false, error: 'This machine belongs to another Human' }, { status: 403 });
       const body = await request.json<{ utilization?: number }>();
       const utilization = Number(body.utilization);
       if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) return Response.json({ ok: false, error: 'Utilization must be a whole percentage from 0 to 100' }, { status: 400 });
-      await env.DB.prepare('UPDATE machines SET utilization = ? WHERE id = ? AND owner_id = ?').bind(utilization, utilizationMatch[1], viewer.id).run();
-      return Response.json({ ok: true, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(utilizationMatch[1]).first(), persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => setMachineUtilizationPostgres(repository, { machineId: utilizationMatch[1], ownerId: viewer.id, utilization }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine utilization update failed' }, { status: 404 });
+      }
     }
     const upgradeMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/upgrade$/);
     if (upgradeMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ otp?: string; correlationId?: string }>();
-        if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-        try {
-          const result = await withRepository(env, (repository) => upgradeMachinePostgres(repository, { machineId: upgradeMatch[1], ownerId: viewer.id, correlationId, creditCost: 600, componentsCost: 20 }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Machine upgrade failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
-      }
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ? AND owner_id = ?').bind(upgradeMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found for this Human' }, { status: 404 });
-      const body = await request.json<{ otp?: string }>();
+      const body = await request.json<{ otp?: string; correlationId?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
-      const creditCost = 600;
-      const componentsCost = 20;
-      const capacityBefore = Number(machine.productive_capacity ?? 1);
-      if (capacityBefore >= 5) return Response.json({ ok: false, error: 'Machine has reached the engine upgrade ceiling' }, { status: 409 });
-      const account = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string; balance: number }>();
-      const components = await env.DB.prepare("SELECT amount FROM resource_balances WHERE owner_id = ? AND resource = 'components'").bind(viewer.id).first<{ amount: number }>();
-      if (!account || Number(account.balance) < creditCost) return Response.json({ ok: false, error: 'Insufficient Credits for machine upgrade' }, { status: 409 });
-      if (!components || Number(components.amount) < componentsCost) return Response.json({ ok: false, error: 'Insufficient Components for machine upgrade' }, { status: 409 });
-      const capacityAfter = Math.min(5, Math.round((capacityBefore + 0.2) * 100) / 100);
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const eventId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(creditCost, account.account_id, creditCost),
-        env.DB.prepare("UPDATE resource_balances SET amount = amount - ? WHERE owner_id = ? AND resource = 'components' AND amount >= ?").bind(componentsCost, viewer.id, componentsCost),
-        env.DB.prepare('UPDATE machines SET productive_capacity = ?, condition = MAX(0, condition - 5) WHERE id = ? AND owner_id = ?').bind(capacityAfter, machine.id, viewer.id),
-        env.DB.prepare('INSERT INTO machine_upgrade_events (id, machine_id, owner_id, credit_cost, components_cost, capacity_before, capacity_after, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?)').bind(eventId, machine.id, viewer.id, creditCost, componentsCost, capacityBefore, capacityAfter, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, account.account_id, 'account-ouc-treasury', creditCost, 'CREDIT', 'machine_upgrade', machine.id, 'machine-v2', eventId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'production', 'Machine upgraded', `${machine.name} capacity increased to ${capacityAfter}; condition requires maintenance after installation.`, machine.id),
-      ]);
-      return Response.json({ ok: true, eventId, machine: await env.DB.prepare('SELECT * FROM machines WHERE id = ?').bind(machine.id).first(), creditCost, componentsCost, persistence: 'cloudflare-d1' });
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => upgradeMachinePostgres(repository, { machineId: upgradeMatch[1], ownerId: viewer.id, correlationId, creditCost: 600, componentsCost: 20 }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine upgrade failed';
+        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
+      }
     }
     const saleMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/sell$/);
     if (saleMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const body = await request.json<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>();
-        const buyerId = body.buyerId?.trim();
-        const price = Math.round(Number(body.price) * 100) / 100;
-        const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-        if (!buyerId || buyerId === viewer.id || !Number.isFinite(price) || price <= 0 || price > 1000000) return Response.json({ ok: false, error: 'Buyer and sale price are invalid' }, { status: 400 });
-        if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
-        if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine sale' }, { status: 401 });
-        try {
-          const result = await withRepository(env, (repository) => sellMachinePostgres(repository, { machineId: saleMatch[1], sellerId: viewer.id, buyerId, price, correlationId }));
-          if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-        } catch (error) {
-          const message = error instanceof Error ? error.message : 'Machine sale failed';
-          return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-        }
-      }
-      const body = await request.json<{ buyerId?: string; price?: number; otp?: string }>();
+      const body = await request.json<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>();
       const buyerId = body.buyerId?.trim();
       const price = Math.round(Number(body.price) * 100) / 100;
+      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
       if (!buyerId || buyerId === viewer.id || !Number.isFinite(price) || price <= 0 || price > 1000000) return Response.json({ ok: false, error: 'Buyer and sale price are invalid' }, { status: 400 });
+      if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine sale' }, { status: 401 });
-      const machine = await env.DB.prepare('SELECT * FROM machines WHERE id = ? AND owner_id = ?').bind(saleMatch[1], viewer.id).first<Record<string, unknown>>();
-      if (!machine) return Response.json({ ok: false, error: 'Machine not found for this Human' }, { status: 404 });
-      const buyer = await env.DB.prepare("SELECT id FROM humans WHERE id = ? AND life_status = 'active'").bind(buyerId).first();
-      const buyerAccount = await env.DB.prepare("SELECT account_id, balance FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(buyerId).first<{ account_id: string; balance: number }>();
-      const sellerAccount = await env.DB.prepare("SELECT account_id FROM account_balances WHERE owner_id = ? AND currency = 'CREDIT'").bind(viewer.id).first<{ account_id: string }>();
-      if (!buyer || !buyerAccount || !sellerAccount) return Response.json({ ok: false, error: 'Active buyer account not found' }, { status: 404 });
-      if (Number(buyerAccount.balance) < price) return Response.json({ ok: false, error: 'Buyer has insufficient Credits' }, { status: 409 });
-      const day = (await env.DB.prepare('SELECT game_day FROM world_state WHERE id = ?').bind('WORLD').first<{ game_day: number }>())?.game_day ?? 184;
-      const saleId = crypto.randomUUID();
-      await env.DB.batch([
-        env.DB.prepare('UPDATE account_balances SET balance = balance - ? WHERE account_id = ? AND balance >= ?').bind(price, buyerAccount.account_id, price),
-        env.DB.prepare('UPDATE account_balances SET balance = balance + ? WHERE account_id = ?').bind(price, sellerAccount.account_id),
-        env.DB.prepare('UPDATE machines SET owner_id = ? WHERE id = ? AND owner_id = ?').bind(buyerId, machine.id, viewer.id),
-        env.DB.prepare('DELETE FROM business_assets WHERE machine_id = ?').bind(machine.id),
-        env.DB.prepare("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, ?, ?, 'secondary-sale' FROM businesses WHERE owner_id = ? AND status = 'active' ORDER BY id LIMIT 1").bind(machine.id, day, buyerId),
-        env.DB.prepare('INSERT INTO machine_sales (id, machine_id, seller_id, buyer_id, price, game_day) VALUES (?, ?, ?, ?, ?, ?)').bind(saleId, machine.id, viewer.id, buyerId, price, day),
-        env.DB.prepare('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), 'MACHINE', machine.id, viewer.id, buyerId, 1, 'secondary_sale', saleId, day),
-        env.DB.prepare('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), day, buyerAccount.account_id, sellerAccount.account_id, price, 'CREDIT', 'machine_sale', machine.id, 'machine-v2', saleId),
-        env.DB.prepare('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES (?, ?, ?, ?, ?, ?), (?, ?, ?, ?, ?, ?)').bind(crypto.randomUUID(), viewer.id, 'market', 'Machine sold', `${machine.name} sold for ${price} Credits.`, machine.id, crypto.randomUUID(), buyerId, 'market', 'Machine acquired', `${machine.name} acquired for ${price} Credits.`, machine.id),
-      ]);
-      return Response.json({ ok: true, saleId, machineId: machine.id, buyerId, price, persistence: 'cloudflare-d1' });
+      try {
+        const result = await withRepository(env, (repository) => sellMachinePostgres(repository, { machineId: saleMatch[1], sellerId: viewer.id, buyerId, price, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine sale failed';
+        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
+      }
     }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
   },
@@ -2519,9 +1621,6 @@ export default {
     }
     const url = new URL(request.url);
     const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health';
-    // The handler still contains historical D1 compatibility branches. Keep
-    // the provider boundary at the edge so no data request can reach one when
-    // PostgreSQL is not explicitly configured as the authority.
     if (isDataRequest) authorityMode(env);
     const response = isDataRequest
       ? await worker.fetch(request, env, ctx)
