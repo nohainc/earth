@@ -1,4 +1,6 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, moneyToCents, taxToCents } from './money';
 
 export async function registerSuccessor(repository: PostgresRepository, input: { humanId: string; successorName: string; estatePeriodDays: number; successorHumanId: string | null; currentLifeStatus: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -39,17 +41,19 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     if (!predecessor.rows[0] || predecessor.rows[0].life_status !== 'estate') throw new Error('Only an active Estate can be settled');
     if (!successor.rows[0] || input.successorId === input.predecessorId) throw new Error('Successor Human must be another active Human');
 
-    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' FOR UPDATE", [input.predecessorId, input.successorId]);
+    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT'", [input.predecessorId, input.successorId]);
     const predecessorAccount = accounts.rows.find((account) => account.owner_id === input.predecessorId);
     const successorAccount = accounts.rows.find((account) => account.owner_id === input.successorId);
     if (!predecessorAccount || !successorAccount) throw new Error('Predecessor and successor Credit accounts are required');
-    const gross = Math.max(0, Number(predecessorAccount.balance));
-    const tax = Math.round(gross * 0.2 * 100) / 100;
-    const inherited = Math.max(0, gross - tax);
-
-    await tx.query('UPDATE account_balances SET balance = 0 WHERE account_id = $1', [predecessorAccount.account_id]);
-    await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [inherited, successorAccount.account_id]);
-    if (tax > 0) await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [tax]);
+    const grossCents = moneyToCents(predecessorAccount.balance);
+    const taxCents = taxToCents(predecessorAccount.balance, '0.20');
+    const inheritedCents = grossCents - taxCents;
+    const gross = Number(centsToMoney(grossCents));
+    const tax = Number(centsToMoney(taxCents));
+    const inherited = Number(centsToMoney(inheritedCents));
+    const transferDay = input.day;
+    if (inheritedCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: transferDay, debitAccount: predecessorAccount.account_id, creditAccount: successorAccount.account_id, amount: centsToMoney(inheritedCents), reasonType: 'late_inheritance', reasonId: eventId, ruleVersion: 'life-v4', correlationId: eventId });
+    if (taxCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: transferDay, debitAccount: predecessorAccount.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(taxCents), reasonType: 'late_inheritance_tax', reasonId: eventId, ruleVersion: 'life-v4', correlationId: `TAX-${eventId}` });
     await tx.query('UPDATE humans SET standing = 0, legacy = legacy + 1 WHERE id = $1', [input.successorId]);
 
     const machines = await tx.query<{ id: string }>('SELECT id FROM machines WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
@@ -67,8 +71,6 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [input.predecessorId]);
     await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, $1 FROM humans WHERE id = $2 ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name', [input.successorName, input.predecessorId]);
     await tx.query('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES ($1,$2,\'inheritance\',$3,$4,$5)', [eventId, input.predecessorId, input.day, input.successorName, inherited]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,\'CREDIT\',\'late_inheritance\',$6,\'life-v3\',$7)', [crypto.randomUUID(), input.day, predecessorAccount.account_id, successorAccount.account_id, inherited, eventId, eventId]);
-    if (tax > 0) await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,\'account-ouc-treasury\',$4,\'CREDIT\',\'late_inheritance_tax\',$5,\'life-v3\',$6)', [crypto.randomUUID(), input.day, predecessorAccount.account_id, tax, eventId, `TAX-${eventId}`]);
     for (const machine of machines.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'MACHINE\',$2,$3,$4,1,\'late_inheritance\',$5,$6)', [crypto.randomUUID(), machine.id, input.predecessorId, input.successorId, eventId, input.day]);
     for (const business of businesses.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUSINESS\',$2,$3,$4,1,\'late_inheritance\',$5,$6)', [crypto.randomUUID(), business.id, input.predecessorId, input.successorId, eventId, input.day]);
     for (const share of shares.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUSINESS_SHARES\',$2,$3,$4,$5,\'late_inheritance\',$6,$7)', [crypto.randomUUID(), share.business_id, input.predecessorId, input.successorId, share.shares, eventId, input.day]);
@@ -82,7 +84,7 @@ export async function settleInheritance(repository: PostgresRepository, input: {
 export async function processMortality(tx: PostgresRepository, day: number): Promise<number> {
   const service = await tx.query<{ essential_services_index: string }>("SELECT essential_services_index FROM world_state WHERE id = 'WORLD'");
   const mortalityAge = Math.round(90 + Math.max(-5, Math.min(5, (Number(service.rows[0]?.essential_services_index ?? 0.68) - 0.68) * 10)));
-  const humans = await tx.query<{ id: string; display_name: string; standing: number; legacy: number; age_years: number; successor_name: string | null; successor_human_id: string | null; estate_period_days: number | null; balance: string }>('SELECT humans.id, humans.display_name, humans.standing, humans.legacy, humans.age_years, succession_plans.successor_name, succession_plans.successor_human_id, succession_plans.estate_period_days, COALESCE(account_balances.balance, 0) AS balance FROM humans LEFT JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = \'CREDIT\' WHERE humans.life_status = \'active\' AND humans.age_years >= $1 FOR UPDATE', [mortalityAge]);
+  const humans = await tx.query<{ id: string; account_id: string | null; display_name: string; standing: number; legacy: number; age_years: number; successor_name: string | null; successor_human_id: string | null; estate_period_days: number | null; balance: string }>('SELECT humans.id, account_balances.account_id, humans.display_name, humans.standing, humans.legacy, humans.age_years, succession_plans.successor_name, succession_plans.successor_human_id, succession_plans.estate_period_days, COALESCE(account_balances.balance, 0) AS balance FROM humans LEFT JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = \'CREDIT\' WHERE humans.life_status = \'active\' AND humans.age_years >= $1 FOR UPDATE', [mortalityAge]);
   let processed = 0;
   for (const human of humans.rows) {
     const eventId = `DEATH-${human.id}-${day}`;
@@ -94,14 +96,17 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
     const assets = successorRow ? await tx.query<{ id: string; type: string }>("SELECT id, 'MACHINE' AS type FROM machines WHERE owner_id = $1 UNION ALL SELECT id, 'BUSINESS' FROM businesses WHERE owner_id = $1", [human.id]) : { rows: [] } as { rows: Array<{ id: string; type: string }> };
     const shares = successorRow ? await tx.query<{ business_id: string; shares: string }>('SELECT business_id, shares FROM business_shares WHERE holder_id = $1 FOR UPDATE', [human.id]) : { rows: [] } as { rows: Array<{ business_id: string; shares: string }> };
     const resources = successorRow ? await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [human.id]) : { rows: [] } as { rows: Array<{ resource: string; amount: string }> };
-    const gross = Math.max(0, Number(human.balance));
-    const tax = successorRow ? Math.round(gross * 0.1 * 100) / 100 : 0;
-    const inherited = Math.max(0, gross - tax);
+    const grossCents = moneyToCents(human.balance);
+    const taxCents = successorRow ? taxToCents(human.balance, '0.10') : 0n;
+    const inheritedCents = grossCents - taxCents;
+    const gross = Number(centsToMoney(grossCents));
+    const tax = Number(centsToMoney(taxCents));
+    const inherited = Number(centsToMoney(inheritedCents));
 
     if (successorRow) {
-      await tx.query("UPDATE account_balances SET balance = 0 WHERE owner_id = $1 AND currency = 'CREDIT'", [human.id]);
-      await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [inherited, successorRow.account_id]);
-      if (tax > 0) await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [tax]);
+      if (!human.account_id) throw new Error('Deceased Human Credit account is required for inheritance');
+      if (inheritedCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: successorRow.account_id, amount: centsToMoney(inheritedCents), reasonType: 'inheritance', reasonId: eventId, ruleVersion: 'life-v4', correlationId: eventId });
+      if (taxCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(taxCents), reasonType: 'inheritance_tax', reasonId: eventId, ruleVersion: 'life-v4', correlationId: `TAX-${eventId}` });
       await tx.query('UPDATE humans SET legacy = legacy + $1 WHERE id = $2', [Number(human.legacy) + (gross > 0 ? 1 : 0), successorRow.id]);
       await tx.query('UPDATE machines SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
       await tx.query('UPDATE businesses SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
@@ -109,8 +114,6 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
       await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [human.id]);
       for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [successorRow.id, resource.resource, resource.amount]);
       await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [human.id]);
-      await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) SELECT $1,$2,source.account_id,target.account_id,$3,\'CREDIT\',\'inheritance\',$4,\'life-v3\',$4 FROM account_balances source JOIN account_balances target ON target.account_id = $5 WHERE source.owner_id = $6 AND source.currency = \'CREDIT\'', [crypto.randomUUID(), day, inherited, eventId, successorRow.account_id, human.id]);
-      if (tax > 0) await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) SELECT $1,$2,source.account_id,\'account-ouc-treasury\',$3,\'CREDIT\',\'inheritance_tax\',$4,\'life-v3\',$4 FROM account_balances source WHERE source.owner_id = $5 AND source.currency = \'CREDIT\'', [crypto.randomUUID(), day, tax, eventId, human.id]);
       for (const asset of assets.rows) await tx.query('INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,$2,$3,$4,$5,1,\'inheritance\',$6,$7)', [crypto.randomUUID(), asset.type, asset.id, human.id, successorRow.id, eventId, day]);
       for (const share of shares.rows) await tx.query('INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,\'BUSINESS_SHARES\',$2,$3,$4,$5,\'inheritance\',$6,$7)', [crypto.randomUUID(), share.business_id, human.id, successorRow.id, share.shares, eventId, day]);
       await tx.query('INSERT INTO life_events (id,human_id,event_type,game_day,successor_name,estate_credits) VALUES ($1,$2,\'inheritance\',$3,$4,$5)', [`INHERIT-${human.id}-${day}`, human.id, day, human.successor_name, inherited]);
@@ -142,16 +145,16 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
 }
 
 export async function liquidateExpiredEstates(repository: PostgresRepository, day: number): Promise<number> {
-  const estates = await repository.query<{ id: string; display_name: string; standing: number; legacy: number; balance: string }>("SELECT humans.id, humans.display_name, humans.standing, humans.legacy, COALESCE(account_balances.balance, 0) AS balance FROM humans JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.life_status = 'estate' AND humans.death_game_day + succession_plans.estate_period_days <= $1", [day]);
+  const estates = await repository.query<{ id: string; account_id: string | null; display_name: string; standing: number; legacy: number; balance: string }>("SELECT humans.id, account_balances.account_id, humans.display_name, humans.standing, humans.legacy, COALESCE(account_balances.balance, 0) AS balance FROM humans JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.life_status = 'estate' AND humans.death_game_day + succession_plans.estate_period_days <= $1", [day]);
   let processed = 0;
   for (const estate of estates.rows) {
     await repository.transaction(async (tx) => {
       const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [estate.id]);
-      const balance = Math.max(0, Number(estate.balance));
-      if (balance > 0) {
-        await tx.query("UPDATE account_balances SET balance = 0 WHERE owner_id = $1 AND currency = 'CREDIT'", [estate.id]);
-        await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE account_id = 'account-ouc-treasury'", [balance]);
-        await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), day, estate.id, 'account-ouc-treasury', balance, 'CREDIT', 'estate_liquidation', estate.id, 'life-v2', `ESTATE-LIQUIDATION-${estate.id}-${day}`]);
+      const balanceCents = moneyToCents(estate.balance);
+      const balance = Number(centsToMoney(balanceCents));
+      if (balanceCents > 0n) {
+        if (!estate.account_id) throw new Error('Estate Credit account is required for liquidation');
+        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: estate.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(balanceCents), reasonType: 'estate_liquidation', reasonId: estate.id, ruleVersion: 'life-v3', correlationId: `ESTATE-LIQUIDATION-${estate.id}-${day}` });
       }
       await tx.query('DELETE FROM business_assets WHERE machine_id IN (SELECT id FROM machines WHERE owner_id = $1)', [estate.id]);
       await tx.query('DELETE FROM machines WHERE owner_id = $1', [estate.id]);
