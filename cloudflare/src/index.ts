@@ -329,11 +329,24 @@ async function issueActionToken(env: Env, humanId: string, action: 'verify_email
   } else {
     await env.DB.prepare('INSERT INTO auth_action_tokens (id, human_id, token_hash, action, expires_at) VALUES (?, ?, ?, ?, ?)').bind(id, humanId, tokenHash, action, expires).run();
   }
-  if (!env.EMAIL) throw new Error('Transactional email is not configured');
+  if (!env.EMAIL || !env.EMAIL_FROM) {
+    throw new Error('Transactional email is not configured');
+  }
   const path = action === 'verify_email' ? '/api/auth/verify-email' : '/api/auth/reset-password';
   const subject = action === 'verify_email' ? 'Verify your EARTH identity' : 'Reset your EARTH password';
   const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}?token=${encodeURIComponent(token)}\n\nThis link expires soon and can only be used once.`;
-  await env.EMAIL.send({ to: email, from: { email: env.EMAIL_FROM, name: 'EARTH Identity' }, replyTo: env.EMAIL_REPLY_TO, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
+  try {
+    const delivery = await env.EMAIL.send({ to: email, from: { email: env.EMAIL_FROM, name: 'EARTH Identity' }, replyTo: env.EMAIL_REPLY_TO, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
+    console.info(JSON.stringify({ event: 'transactional_email_accepted', action, messageId: delivery?.messageId ?? null }));
+  } catch (error) {
+    const details = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : {};
+    console.error(JSON.stringify({ event: 'transactional_email_failed', action, code: String(details.code ?? 'unknown'), message: String(details.message ?? 'unknown') }));
+    // Do not let a failed delivery consume the resend throttle window.
+    if (authorityMode(env) === 'postgres') {
+      await withRepository(env, (repository) => repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]));
+    }
+    throw error;
+  }
 }
 
 export class MarketCoordinator extends DurableObject<Env> {
@@ -690,7 +703,11 @@ const worker = {
           if (credential && !credential.email_verified_at) {
             const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
             if (!recentlySent) {
-              try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email); } catch { /* Keep the response generic. */ }
+              try {
+                await issueActionToken(env, credential.human_id, 'verify_email', credential.email);
+              } catch {
+                return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 });
+              }
             }
           }
         }
@@ -699,7 +716,11 @@ const worker = {
       if (email) {
         const credential = await env.DB.prepare('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = ?').bind(email).first<{ human_id: string; email: string; email_verified_at: string | null }>();
         if (credential && !credential.email_verified_at) {
-          try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email); } catch { /* keep the response generic */ }
+          try {
+            await issueActionToken(env, credential.human_id, 'verify_email', credential.email);
+          } catch {
+            return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 });
+          }
         }
       }
       return Response.json({ ok: true, message: 'If that identity exists and needs verification, a new email has been sent.' });
