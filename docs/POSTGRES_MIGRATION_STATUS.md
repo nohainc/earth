@@ -41,6 +41,7 @@ database.
 | Market-order credit escrow | Implemented | Migrations 009–010 backfill open buy-order reservations, including legacy zero-reservation cleanup; new settlement, refund, and cancellation paths transfer through explicit escrow accounts |
 | Institution credit accounts | Implemented | Migration 011 backfills city, corporation, and community credit accounts; institutional contributions, spending, and recovery use atomic transfers |
 | Registry credit accounts | Implemented | Migration 012 adds research and machine registry accounts for atomic asset-funding transfers |
+| Insolvency accounting | Implemented | Protected-minimum and asset-liquidation credits are source-backed atomic transfers rather than balance creation |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 
 ## Required migration gates

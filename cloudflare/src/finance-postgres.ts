@@ -84,9 +84,22 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     const day = Number(world.rows[0]?.game_day ?? 0);
     const machines = await tx.query<{ id: string; machine_type: string }>("SELECT id, machine_type FROM machines WHERE owner_id = $1 AND machine_type <> 'service-robot' FOR UPDATE", [humanId]);
     const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [humanId]);
-    const liquidationValue = Math.round(machines.rows.length * 50 + businesses.rows.length * 100);
-    await tx.query("UPDATE account_balances SET balance = GREATEST(100, balance) WHERE owner_id = $1 AND currency = 'CREDIT'", [humanId]);
-    await tx.query("UPDATE account_balances SET balance = balance + $1 WHERE owner_id = $2 AND currency = 'CREDIT'", [liquidationValue, humanId]);
+    const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [humanId]);
+    if (!account.rows[0]) throw new Error('Human Credit account is required for insolvency');
+    const currentCents = moneyToCents(account.rows[0].balance);
+    const protectedTopUpCents = currentCents < 10000n ? 10000n - currentCents : 0n;
+    const machineValueCents = BigInt(machines.rows.length) * 5000n;
+    const machineRegistry = await tx.query<{ balance: string }>("SELECT balance FROM account_balances WHERE account_id = 'account-machine-registry'");
+    if (!machineRegistry.rows[0]) throw new Error('Machine registry Credit account is required for insolvency');
+    const machineRegistryCents = moneyToCents(machineRegistry.rows[0].balance);
+    const machineRegistryPaymentCents = machineValueCents < machineRegistryCents ? machineValueCents : machineRegistryCents;
+    const treasuryAssetPaymentCents = machineValueCents - machineRegistryPaymentCents + BigInt(businesses.rows.length) * 10000n;
+    const treasury = await tx.query<{ balance: string }>("SELECT balance FROM account_balances WHERE account_id = 'account-ouc-treasury'");
+    if (!treasury.rows[0] || moneyToCents(treasury.rows[0].balance) < protectedTopUpCents + treasuryAssetPaymentCents) throw new Error('OUC treasury cannot fund insolvency protection and liquidation');
+    if (protectedTopUpCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-ouc-treasury', creditAccount: account.rows[0].account_id, amount: centsToMoney(protectedTopUpCents), reasonType: 'insolvency_protection', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-PROTECTION-${humanId}-${day}` });
+    if (machineRegistryPaymentCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-machine-registry', creditAccount: account.rows[0].account_id, amount: centsToMoney(machineRegistryPaymentCents), reasonType: 'machine_liquidation', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-MACHINES-${humanId}-${day}` });
+    if (treasuryAssetPaymentCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-ouc-treasury', creditAccount: account.rows[0].account_id, amount: centsToMoney(treasuryAssetPaymentCents), reasonType: 'asset_liquidation', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-ASSETS-${humanId}-${day}` });
+    const liquidationValue = Number(centsToMoney(machineValueCents + BigInt(businesses.rows.length) * 10000n));
     await tx.query("DELETE FROM business_assets WHERE machine_id IN (SELECT id FROM machines WHERE owner_id = $1 AND machine_type <> 'service-robot')", [humanId]);
     await tx.query("DELETE FROM machines WHERE owner_id = $1 AND machine_type <> 'service-robot'", [humanId]);
     for (const business of businesses.rows) {
@@ -96,7 +109,7 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     await tx.query('DELETE FROM businesses WHERE owner_id = $1', [humanId]);
     for (const business of businesses.rows) await tx.query("DELETE FROM institutions WHERE id = $1 AND kind = 'BUSINESS'", [business.id]);
     await tx.query('INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1,\'bankrupt\',$2,100,$3) ON CONFLICT(human_id) DO UPDATE SET status = EXCLUDED.status, since_game_day = EXCLUDED.since_game_day, last_reason = EXCLUDED.last_reason, updated_at = CURRENT_TIMESTAMP', [humanId, day, reason]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', JSON.stringify({ humanId, liquidationValue, reason })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', JSON.stringify({ humanId, liquidationValue, protectedTopUp: Number(centsToMoney(protectedTopUpCents)), reason })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), humanId, 'finance', 'Personal insolvency recorded', 'Non-protected productive assets were liquidated. Your basic service robot and 100 Credit protected minimum remain.', `PERSONAL-BANKRUPTCY-${humanId}-${day}`]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [humanId]);
     return { ok: true, state: (await tx.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [humanId])).rows[0], protectedCredits: 100, liquidated: { machines: machines.rows.length, businesses: businesses.rows.length, estimatedValue: liquidationValue } };

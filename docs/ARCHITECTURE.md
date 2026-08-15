@@ -108,6 +108,11 @@ destination for committed funding. This keeps asset funding in the money
 ledger without pretending that a research project or machine row is itself a
 spendable credit account.
 
+Insolvency protection and asset liquidation are also source-backed transfers:
+the OUC treasury funds the protected minimum and business shortfall, while the
+machine registry funds machine recovery value when available. No insolvency
+command may create credits by overwriting a Human balance.
+
 Such a function must have explicit parameters, deterministic lock ordering,
 idempotency behavior, a small result shape, migration coverage, and a focused
 integration test.
