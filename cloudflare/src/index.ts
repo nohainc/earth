@@ -3532,7 +3532,7 @@ export default {
       : url.pathname === '/landing'
         ? await env.ASSETS.fetch(new Request(new URL(`/landing.html?v=${WEB_ASSET_VERSION}`, request.url), request))
       : url.pathname === '/app'
-          ? await env.ASSETS.fetch(new Request(new URL(`/index.html?v=${WEB_ASSET_VERSION}`, request.url), request))
+          ? await env.ASSETS.fetch(new Request(new URL(`/app.html?v=${WEB_ASSET_VERSION}`, request.url), request))
         : url.pathname.startsWith('/app/')
           ? await env.ASSETS.fetch(new Request(new URL(`${url.pathname.slice(4)}?v=${WEB_ASSET_VERSION}`, request.url), request))
           : await env.ASSETS.fetch(request);
