@@ -165,17 +165,20 @@ export async function setCityBudget(repository: PostgresRepository, input: { hum
     if (!city.rows[0]) throw new Error('City not found');
     const budgetId = `BUDGET-${input.cityId}-${input.category}`;
     const current = await tx.query<{ amount: string }>('SELECT amount FROM budgets WHERE id = $1 FOR UPDATE', [budgetId]);
-    const delta = Math.round((input.amount - Number(current.rows[0]?.amount ?? 0)) * 100) / 100;
-    if (delta > Number(city.rows[0].treasury)) throw new Error('Budget exceeds city treasury');
+    const targetCents = moneyToCents(input.amount);
+    const currentCents = moneyToCents(current.rows[0]?.amount ?? '0.00');
+    const deltaCents = targetCents - currentCents;
+    const delta = centsToMoney(deltaCents < 0n ? -deltaCents : deltaCents);
+    if (deltaCents > moneyToCents(city.rows[0].treasury)) throw new Error('Budget exceeds city treasury');
     const gameDay = await day(tx);
-    if (delta > 0) {
-      const debit = await tx.query('UPDATE cities SET treasury = treasury - $1 WHERE id = $2 AND treasury >= $1', [delta, input.cityId]);
-      if (debit.rowCount !== 1) throw new Error('City treasury reservation failed');
-    } else if (delta < 0) {
-      await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [-delta, input.cityId]);
-    }
-    await tx.query('INSERT INTO budgets (id,institution_id,category,amount,game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = excluded.amount, game_day = excluded.game_day', [budgetId, input.cityId, input.category, input.amount, gameDay]);
-    if (delta !== 0) await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [crypto.randomUUID(), gameDay, delta > 0 ? input.cityId : 'city-budget', delta > 0 ? 'city-budget' : input.cityId, Math.abs(delta), 'CREDIT', 'city_budget_allocation', budgetId, 'city-finance-v1', input.correlationId]);
+    const cityAccount = await tx.query<{ account_id: string }>('SELECT account_id FROM account_balances WHERE account_id = $1', [`account-city-${input.cityId}`]);
+    if (!cityAccount.rows[0]) throw new Error('City credit account not found');
+    await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $2, 0, 'CREDIT') ON CONFLICT (account_id) DO NOTHING", [`account-budget-${budgetId}`, budgetId]);
+    if (deltaCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: cityAccount.rows[0].account_id, creditAccount: `account-budget-${budgetId}`, amount: delta, reasonType: 'city_budget_allocation', reasonId: budgetId, ruleVersion: 'city-finance-v2', correlationId: input.correlationId });
+    if (deltaCents < 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: `account-budget-${budgetId}`, creditAccount: cityAccount.rows[0].account_id, amount: delta, reasonType: 'city_budget_release', reasonId: budgetId, ruleVersion: 'city-finance-v2', correlationId: input.correlationId });
+    const target = centsToMoney(targetCents);
+    if (deltaCents !== 0n) await tx.query('UPDATE cities SET treasury = treasury - $1 WHERE id = $2', [deltaCents > 0n ? delta : `-${delta}`, input.cityId]);
+    await tx.query('INSERT INTO budgets (id,institution_id,category,amount,game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = excluded.amount, game_day = excluded.game_day', [budgetId, input.cityId, input.category, target, gameDay]);
     return { ok: true, budget: (await tx.query('SELECT * FROM budgets WHERE id = $1', [budgetId])).rows[0], city: (await tx.query('SELECT id, treasury FROM cities WHERE id = $1', [input.cityId])).rows[0], correlationId: input.correlationId };
   });
 }

@@ -113,6 +113,11 @@ the OUC treasury funds the protected minimum and business shortfall, while the
 machine registry funds machine recovery value when available. No insolvency
 command may create credits by overwriting a Human balance.
 
+City budget amounts are earmarks held in budget credit accounts. Increasing a
+budget transfers credits from the city account into the budget account;
+reducing it reverses that transfer. The city treasury column remains an API
+projection of available city credits.
+
 Such a function must have explicit parameters, deterministic lock ordering,
 idempotency behavior, a small result shape, migration coverage, and a focused
 integration test.

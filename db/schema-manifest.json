@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 12,
+  "migrationVersion": 13,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],

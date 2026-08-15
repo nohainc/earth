@@ -42,6 +42,7 @@ database.
 | Institution credit accounts | Implemented | Migration 011 backfills city, corporation, and community credit accounts; institutional contributions, spending, and recovery use atomic transfers |
 | Registry credit accounts | Implemented | Migration 012 adds research and machine registry accounts for atomic asset-funding transfers |
 | Insolvency accounting | Implemented | Protected-minimum and asset-liquidation credits are source-backed atomic transfers rather than balance creation |
+| City budget accounts | Implemented | Migration 013 backfills BUDGET-* earmarks and budget increases/releases use atomic city-account transfers |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 
 ## Required migration gates
