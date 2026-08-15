@@ -1459,30 +1459,13 @@ const worker = {
       return Response.json({ ok: true, amount, correlationId, community: await env.DB.prepare('SELECT id, name, shared_credits FROM communities WHERE id = ?').bind(communityId).first(), account: await env.DB.prepare('SELECT account_id, balance FROM account_balances WHERE account_id = ?').bind(account.account_id).first(), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/rankings' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [wealth, cities, corporations, technologies] = await Promise.all([
-        env.DB.prepare('SELECT owner_id AS human_id, balance FROM account_balances WHERE currency = ? ORDER BY balance DESC').bind('CREDIT').all(),
-        env.DB.prepare('SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities ORDER BY treasury DESC').all(),
-        env.DB.prepare('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC').all(),
-        env.DB.prepare('SELECT id, name, owner_id, progress FROM technologies ORDER BY progress DESC').all(),
-      ]);
-      return Response.json({ wealth: wealth.results, cities: cities.results, corporations: corporations.results, technologies: technologies.results, generatedFrom: 'cloudflare-d1', persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/history' && request.method === 'GET') {
       const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 25)));
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [events, rankings, deceased] = await Promise.all([
-        env.DB.prepare('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT ?').bind(limit).all(),
-        env.DB.prepare('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT ?').bind(limit * 4).all(),
-        env.DB.prepare('SELECT human_id, display_name, death_game_day, final_standing, final_legacy, successor_name FROM deceased_profiles ORDER BY death_game_day DESC LIMIT ?').bind(limit).all(),
-      ]);
-      return Response.json({ events: events.results, rankings: rankings.results, deceased: deceased.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/ownership/events' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
@@ -1518,12 +1501,8 @@ const worker = {
       return Response.json({ events: events.results, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/cities' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listCitiesPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const cities = await env.DB.prepare('SELECT * FROM cities ORDER BY id').all();
-      return Response.json({ cities: cities.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listCitiesPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/cities' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1588,12 +1567,8 @@ const worker = {
       return Response.json({ ok: true, city, requirements, qualified: Object.values(requirements).every(Boolean), persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/corporations' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listCorporationsPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const corporations = await env.DB.prepare('SELECT * FROM corporations ORDER BY id').all();
-      return Response.json({ corporations: corporations.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listCorporationsPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/corporations' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
@@ -1931,16 +1906,8 @@ const worker = {
       ], rules: { serverAuthoritative: true, productionRequiresUtilization: true, depreciationApplied: true }, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
     }
     if (url.pathname === '/api/technology' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listTechnologyPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [projects, patents, licenses] = await Promise.all([
-        env.DB.prepare('SELECT * FROM research_projects ORDER BY id').all(),
-        env.DB.prepare('SELECT * FROM patents ORDER BY id').all(),
-        env.DB.prepare('SELECT * FROM technology_licenses ORDER BY id').all(),
-      ]);
-      return Response.json({ projects: projects.results, patents: patents.results, licenses: licenses.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listTechnologyPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/technology/projects' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
