@@ -1,4 +1,6 @@
 import type { PostgresRepository } from './repository';
+import { transferCredits } from './financial-postgres';
+import { centsToMoney, moneyToCents } from './money';
 
 export async function acceptContract(repository: PostgresRepository, contractId: string, actorId: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -7,17 +9,16 @@ export async function acceptContract(repository: PostgresRepository, contractId:
     const row = contract.rows[0];
     if (row.counterparty_id !== actorId) throw new Error('Only the counterparty may accept this contract');
     if (row.status !== 'proposed') return { ok: true, alreadyProcessed: row.status === 'accepted', status: row.status, contractId };
-    const payer = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [row.proposer_id]);
+    const payer = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.proposer_id]);
     const receiver = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.counterparty_id]);
-    const amount = Number(row.amount);
-    if (!payer.rows[0] || !receiver.rows[0] || Number(payer.rows[0].balance) < amount) throw new Error('Proposer has insufficient Credits to settle this contract');
+    const amountCents = moneyToCents(row.amount);
+    const amount = centsToMoney(amountCents);
+    if (!payer.rows[0] || !receiver.rows[0] || moneyToCents(payer.rows[0].balance) < amountCents) throw new Error('Proposer has insufficient Credits to settle this contract');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     const correlationId = `CONTRACT-${row.id}`;
-    await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [amount, payer.rows[0].account_id]);
-    await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [amount, receiver.rows[0].account_id]);
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.rows[0].account_id, creditAccount: receiver.rows[0].account_id, amount, reasonType: 'contract_payment', reasonId: row.id, ruleVersion: 'contracts-v2', correlationId });
     await tx.query("UPDATE negotiated_contracts SET status = 'accepted', accepted_game_day = $1 WHERE id = $2 AND status = 'proposed'", [day, row.id]);
-    await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [correlationId, day, payer.rows[0].account_id, receiver.rows[0].account_id, amount, 'CREDIT', 'contract_payment', row.id, 'contracts-v1', correlationId]);
     await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [amount, day, row.proposer_id]);
     await tx.query("UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [amount, day, row.counterparty_id]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.accepted', 'A negotiated contract was accepted', JSON.stringify({ contractId: row.id, amount })]);
