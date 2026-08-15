@@ -1601,25 +1601,16 @@ const worker = {
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => getSuccessorPostgres(repository, viewer.id));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      return Response.json({ successor: await env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewer.id).first(), persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => getSuccessorPostgres(repository, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/life/status' && request.method === 'GET') {
       const viewer = await currentHuman(request, env, true);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => getLifeStatusPostgres(repository, viewer.id));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [human, succession, events] = await Promise.all([
-        env.DB.prepare('SELECT id, display_name, age_years, life_status, death_game_day, standing, legacy FROM humans WHERE id = ?').bind(viewer.id).first(),
-        env.DB.prepare('SELECT * FROM succession_plans WHERE human_id = ?').bind(viewer.id).first(),
-        env.DB.prepare('SELECT * FROM life_events WHERE human_id = ? ORDER BY game_day DESC LIMIT 20').bind(viewer.id).all(),
-      ]);
-      return Response.json({ ok: true, human, succession, events: events.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => getLifeStatusPostgres(repository, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'POST') {
       const viewer = await currentHuman(request, env, true);
