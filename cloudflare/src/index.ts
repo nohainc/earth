@@ -1215,18 +1215,8 @@ const worker = {
       return Response.json({ ok: Object.values(checks).every(Boolean), checks, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/institutions' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      const [community, city, corporation, membership, budgets] = await Promise.all([
-        env.DB.prepare('SELECT * FROM communities ORDER BY id').all(),
-        env.DB.prepare('SELECT * FROM cities ORDER BY id').all(),
-        env.DB.prepare('SELECT * FROM corporations ORDER BY id').all(),
-        env.DB.prepare('SELECT * FROM memberships ORDER BY human_id').all(),
-        env.DB.prepare('SELECT * FROM budgets ORDER BY game_day DESC').all(),
-      ]);
-      return Response.json({ community: community.results, city: city.results, corporation: corporation.results, membership: membership.results, budgets: budgets.results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/governance/roles' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listRolesPostgres(repository));
@@ -1320,11 +1310,8 @@ const worker = {
       return Response.json({ ok: true, status: 'recalled', roleId, persistence: 'cloudflare-d1' });
     }
     if (url.pathname === '/api/communities' && request.method === 'GET') {
-      if (authorityMode(env) === 'postgres') {
-        const result = await withRepository(env, (repository) => listCommunitiesPostgres(repository));
-        if (result) return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      }
-      return Response.json({ communities: (await env.DB.prepare('SELECT * FROM communities ORDER BY id').all()).results, persistence: 'cloudflare-d1' });
+      const result = await withRepository(env, (repository) => listCommunitiesPostgres(repository));
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/communities' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
