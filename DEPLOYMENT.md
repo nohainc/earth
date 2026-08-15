@@ -40,8 +40,10 @@ Never commit `DATABASE_URL` or Cloudflare credentials. Use `.env` locally and Wr
 
 ```bash
 DATABASE_URL="$DATABASE_URL" npm run db:verify:manifest
-DATABASE_URL="$DATABASE_URL" D1_EXPORT=backups/earth-d1-cutover-backup.sql npm run db:verify:d1-postgres
 npm run cf:smoke
 ```
 
-The Flutter web build is tested against the deployed API with `--dart-define=EARTH_API_URL=https://earthuc.com`; production uses the same Worker and PlanetScale PostgreSQL authority.
+The Flutter web build is tested against the deployed API with
+`--dart-define=EARTH_API_URL=https://earthuc.com`; production uses the same
+Worker and PlanetScale PostgreSQL authority. Earth has no active D1 database
+or D1 runtime path.

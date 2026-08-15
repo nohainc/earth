@@ -1,7 +1,8 @@
-# D1 cutover backup record
+# Historical cutover record
 
-This record documents the latest remote D1 export used for the PostgreSQL
-cutover gate.
+This record documents the historical remote export used during the PostgreSQL
+cutover. It is retained as an audit note only; it is not an active runtime
+dependency or recovery procedure.
 
 - Source: Cloudflare remote database `earth-world`
 - Export: `backups/earth-d1-cutover-backup.sql` (local durable workspace copy; excluded from Git)
@@ -12,8 +13,7 @@ cutover gate.
 - Captured: 2026-08-15
 
 The export is intentionally excluded from Git because it contains user and
-authentication data. The parity verifier is `npm run db:verify:d1-postgres`
-with `D1_EXPORT=backups/earth-d1-cutover-backup.sql`; the rollback rehearsal is
-`node scripts/test-backup-restore.mjs`. The final restore rehearsal still
-requires an isolated PostgreSQL target or explicit approval for a temporary
-transactional schema on the shared database.
+authentication data. The Earth D1 database has since been removed and the
+application is PostgreSQL-only. Current recovery uses PlanetScale/PostgreSQL
+backups and the versioned schema in `db/migrations/`; the historical export is
+not used by deployment or application code.

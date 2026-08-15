@@ -16,10 +16,7 @@
     "flutter:prepare:web": "node scripts/prepare-flutter-assets.mjs",
     "cf:types": "wrangler types",
     "db:migrate:postgres": "node scripts/migrate-postgres.mjs",
-    "db:import:d1": "node scripts/import-d1-export.mjs",
-    "db:verify:d1-postgres": "node scripts/verify-d1-postgres.mjs",
-    "db:verify:manifest": "node scripts/verify-schema-manifest.mjs",
-    "db:test:restore": "node scripts/test-backup-restore.mjs"
+    "db:verify:manifest": "node scripts/verify-schema-manifest.mjs"
   },
   "devDependencies": {
     "@types/node": "^26.2.0",
