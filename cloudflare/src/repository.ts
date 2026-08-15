@@ -1,10 +1,22 @@
 import { Client, type QueryResult, type QueryResultRow } from 'pg';
 
+const MAX_TRANSACTION_ATTEMPTS = 3;
+const RETRY_BACKOFF_MS = 10;
+
 export type AuthorityMode = 'postgres';
 
 export function authorityMode(env: Env): AuthorityMode {
   if ((env.PERSISTENCE_AUTHORITY as string) !== 'postgres') throw new Error('PostgreSQL persistence authority is required');
   return 'postgres';
+}
+
+export function isRetryablePostgresError(error: unknown): boolean {
+  const code = error && typeof error === 'object' && 'code' in error ? String((error as { code?: unknown }).code) : '';
+  return code === '40001' || code === '40P01';
+}
+
+function waitForRetry(attempt: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, Math.min(100, RETRY_BACKOFF_MS * (2 ** (attempt - 1)))));
 }
 
 function bindPlaceholders(sql: string): string {
@@ -28,22 +40,32 @@ function bindPlaceholders(sql: string): string {
 }
 
 export class PostgresRepository {
-  constructor(private readonly client: Client) {}
+  private readonly client: Client;
+
+  constructor(client: Client) {
+    this.client = client;
+  }
 
   query<Row extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<QueryResult<Row>> {
     return this.client.query<Row>(bindPlaceholders(sql), params);
   }
 
   async transaction<T>(work: (repository: PostgresRepository) => Promise<T>): Promise<T> {
-    await this.client.query('BEGIN');
-    try {
-      const result = await work(this);
-      await this.client.query('COMMIT');
-      return result;
-    } catch (error) {
-      await this.client.query('ROLLBACK');
-      throw error;
+    for (let attempt = 1; attempt <= MAX_TRANSACTION_ATTEMPTS; attempt += 1) {
+      let transactionStarted = false;
+      try {
+        await this.client.query('BEGIN');
+        transactionStarted = true;
+        const result = await work(this);
+        await this.client.query('COMMIT');
+        return result;
+      } catch (error) {
+        if (transactionStarted) await this.client.query('ROLLBACK').catch(() => undefined);
+        if (!isRetryablePostgresError(error) || attempt === MAX_TRANSACTION_ATTEMPTS) throw error;
+        await waitForRetry(attempt);
+      }
     }
+    throw new Error('PostgreSQL transaction retry budget exhausted');
   }
 }
 
