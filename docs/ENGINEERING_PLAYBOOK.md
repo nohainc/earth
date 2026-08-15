@@ -64,6 +64,22 @@ codes (`INSUFFICIENT_FUNDS`, `INVALID_PRODUCT`, `NOT_ELIGIBLE`,
 unexpected defects. Routes translate domain results into HTTP responses; domain
 code must not know HTTP status codes.
 
+## API error contract
+
+Every JSON error crossing the Worker boundary includes:
+
+- `error`: a safe, human-readable message;
+- `code`: a stable machine-readable category such as
+  `AUTHENTICATION_REQUIRED`, `VALIDATION_ERROR`, `CONFLICT`, or
+  `SERVICE_UNAVAILABLE`;
+- `correlationId`: the request identifier used to locate the structured Worker
+  log for the failure.
+
+Provider messages, SQL text, stack traces, credentials, and recipient data do
+not cross the API boundary. Infrastructure failures are logged as structured
+events with an internal diagnostic message and returned to the client using a
+safe service-level code.
+
 ## Explicit invariants
 
 Every economic command must preserve these invariants:
