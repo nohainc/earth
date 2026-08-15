@@ -26,6 +26,17 @@ for (const [handler, route] of [
   if (!worker.includes(`async function ${handler}`)) throw new Error(`${handler} is required for PostgreSQL authority`);
   if (!worker.includes(route)) throw new Error(`${handler} must bypass legacy provider branches`);
 }
+for (const [handler, route] of [
+  ['institutionsFromPostgres', "if (url.pathname === '/api/institutions' && request.method === 'GET') return institutionsFromPostgres(request, env);"],
+  ['rankingsFromPostgres', "if (url.pathname === '/api/rankings' && request.method === 'GET') return rankingsFromPostgres(request, env);"],
+  ['historyFromPostgres', "if (url.pathname === '/api/history' && request.method === 'GET') return historyFromPostgres(request, env);"],
+  ['ownershipHistoryFromPostgres', "if (url.pathname === '/api/ownership/events' && request.method === 'GET') return ownershipHistoryFromPostgres(request, env);"],
+  ['membershipHistoryFromPostgres', "if (url.pathname === '/api/membership/events' && request.method === 'GET') return membershipHistoryFromPostgres(request, env);"],
+  ['authorityHistoryFromPostgres', "if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);"],
+]) {
+  if (!worker.includes(`async function ${handler}`)) throw new Error(`${handler} is required for PostgreSQL authority`);
+  if (!worker.includes(route)) throw new Error(`${handler} must bypass legacy provider branches`);
+}
 if (!wrangler.includes('"EMAIL_FROM": "earth@auth.earthuc.com"')) throw new Error('EARTH transactional sender must use the authenticated Cloudflare sending domain');
 if (!wrangler.includes('"EMAIL_REPLY_TO": "earth@nohainc.com"')) throw new Error('EARTH transactional reply-to must remain earth@nohainc.com');
 if (!worker.includes('from: { email: env.EMAIL_FROM')) throw new Error('EARTH transactional sender must be configuration-driven');

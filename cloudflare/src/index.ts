@@ -474,6 +474,59 @@ async function auditFromPostgres(request: Request, env: Env): Promise<Response> 
   return Response.json({ ...result, persistence: 'planetscale-postgres' });
 }
 
+async function institutionsFromPostgres(request: Request, env: Env): Promise<Response> {
+  if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function rankingsFromPostgres(request: Request, env: Env): Promise<Response> {
+  if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function historyFromPostgres(request: Request, env: Env): Promise<Response> {
+  if (!await currentHuman(request, env)) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+  const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function ownershipHistoryFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+  const result = await withRepository(env, (repository) => listOwnershipEventsPostgres(repository, viewer.id, limit));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function membershipHistoryFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+  const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
+async function authorityHistoryFromPostgres(request: Request, env: Env): Promise<Response> {
+  const viewer = await currentHuman(request, env);
+  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+  const url = new URL(request.url);
+  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
+  const result = await withRepository(env, (repository) => listAuthorityEventsPostgres(repository, viewer.id, limit));
+  if (!result) throw new Error('PostgreSQL repository is unavailable');
+  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+}
+
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
@@ -487,6 +540,12 @@ const worker = {
     const notificationReadRoute = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
     if (notificationReadRoute && request.method === 'POST') return markNotificationReadFromPostgres(request, env, notificationReadRoute[1]);
     if (url.pathname === '/api/world/audit' && request.method === 'GET') return auditFromPostgres(request, env);
+    if (url.pathname === '/api/institutions' && request.method === 'GET') return institutionsFromPostgres(request, env);
+    if (url.pathname === '/api/rankings' && request.method === 'GET') return rankingsFromPostgres(request, env);
+    if (url.pathname === '/api/history' && request.method === 'GET') return historyFromPostgres(request, env);
+    if (url.pathname === '/api/ownership/events' && request.method === 'GET') return ownershipHistoryFromPostgres(request, env);
+    if (url.pathname === '/api/membership/events' && request.method === 'GET') return membershipHistoryFromPostgres(request, env);
+    if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);
     if (url.pathname === '/api/auth/me' && request.method === 'GET') {
       const human = await currentHuman(request, env);
       return Response.json({ authenticated: Boolean(human), human, persistence: authorityMode(env) === 'postgres' ? 'planetscale-postgres' : 'cloudflare-d1' });
