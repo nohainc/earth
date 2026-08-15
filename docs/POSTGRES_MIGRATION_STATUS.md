@@ -38,6 +38,7 @@ database.
 | Transactional side effects and retry delivery | Implemented | PostgreSQL outbox, row-lock claiming, retry delay, and post-publish acknowledgement |
 | Game-time governance windows | Implemented | Migration 007 stores proposal close and implementation boundaries as game day/minute |
 | Atomic credit transfer | Implemented | Migration 008 keeps balance mutation, idempotency replay, and ledger insertion inside one PostgreSQL primitive |
+| Market-order credit escrow | Implemented | Migrations 009–010 backfill open buy-order reservations, including legacy zero-reservation cleanup; new settlement, refund, and cancellation paths transfer through explicit escrow accounts |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 
 ## Required migration gates

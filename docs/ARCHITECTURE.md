@@ -92,6 +92,12 @@ atomic operation under contention. Examples include:
 - market settlement;
 - share or ownership transfer.
 
+Market buy orders use an explicit PostgreSQL CREDIT escrow account. Reservation
+funding, seller payment, market fee, price-difference refund, and cancellation
+are separate idempotent transfers within the market transaction. The escrow
+account is deleted after a fully settled or cancelled order; open legacy buy
+orders are backfilled by a reviewed migration.
+
 Such a function must have explicit parameters, deterministic lock ordering,
 idempotency behavior, a small result shape, migration coverage, and a focused
 integration test.
