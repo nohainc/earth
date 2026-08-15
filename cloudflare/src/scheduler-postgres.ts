@@ -102,6 +102,7 @@ async function updateFinancialStates(tx: PostgresRepository, day: number): Promi
   for (const candidate of candidates.rows) {
     const existing = await tx.query<{ status: string; since_game_day: number }>('SELECT status, since_game_day FROM financial_states WHERE institution_id = $1 FOR UPDATE', [candidate.id]);
     const current = existing.rows[0]?.status ?? candidate.current;
+    if (current === 'dissolved') continue;
     const numeric = Number(candidate.value);
     const target = numeric <= 0 ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed') : 'active';
     if (target === current && existing.rows[0]) continue;
