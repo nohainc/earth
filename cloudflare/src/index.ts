@@ -325,7 +325,7 @@ const worker = {
       const result = await withRepository(env, (repository) => listProductionEventsPostgres(repository, viewer.id, limit));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
-    if (url.pathname === '/api/health') return healthResponse(env);
+    if (url.pathname === '/api/health') return healthResponse(request, env);
     if (url.pathname === '/api/world/activity' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });

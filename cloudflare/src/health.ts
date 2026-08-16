@@ -1,7 +1,7 @@
 import { probePostgres } from './postgres';
 import { withPostgresRepository } from './repository';
 
-export async function healthResponse(env: Env): Promise<Response> {
+export async function healthResponse(request: Request, env: Env): Promise<Response> {
   const postgres = await probePostgres(env.HYPERDRIVE);
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
     const [core, feature, maintenance, reservations, governance, financial, assets, taxed, balances, machines, scheduler, outbox, counts] = await Promise.all([
@@ -65,6 +65,7 @@ export async function healthResponse(env: Env): Promise<Response> {
   };
   const shadow = postgresChecks?.counts ?? null;
   return Response.json({
+    correlationId: request.headers.get('X-Request-ID') ?? crypto.randomUUID(),
     ok: Object.values(checks).every(Boolean),
     checks: { ...checks, postgresConfigured: postgres.configured, postgresReachable: postgres.reachable, postgresSchemaReady: postgres.schemaReady, postgresDataReady: postgres.dataReady, postgresShadowParity: Boolean(shadow && postgres.dataReady) },
     postgres: { serverVersion: postgres.serverVersion ?? null, featureTableCount: postgres.featureTableCount ?? 0, dataReady: postgres.dataReady },

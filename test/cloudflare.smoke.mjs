@@ -23,6 +23,7 @@ for (const landingPath of ['/', '/landing']) {
 
 const health = await get(`/api/health?probe=${Date.now()}`);
 assert.equal(health.response.status, 200);
+assert.equal(typeof health.body.correlationId, 'string');
 assert.equal(health.body.ok, true);
 assert.equal(health.body.persistence, 'planetscale-postgres');
 assert.equal(health.body.environment, 'production');
