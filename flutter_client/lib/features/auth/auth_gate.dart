@@ -1,4 +1,7 @@
-part of '../../main.dart';
+import 'package:flutter/material.dart';
+import '../../core/api/earth_api.dart';
+import '../command_center/command_center_screen.dart';
+import 'auth_screen.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});

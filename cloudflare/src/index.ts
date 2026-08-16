@@ -22,90 +22,10 @@ import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMe
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
+import { bytesToBase32, bytesToBase64, derivePassword, digest, validTotp } from './auth-crypto';
+import { cookieValue, currentHuman, issueActionToken, sensitiveActionAllowed, sessionCookie } from './auth-session';
 
-const SESSION_DAYS = 7;
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
-const encoder = new TextEncoder();
-const bytesToBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
-const base64ToBytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-const base32Alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
-const bytesToBase32 = (bytes: Uint8Array) => {
-  let output = ''; let buffer = 0; let bits = 0;
-  for (const byte of bytes) { buffer = (buffer << 8) | byte; bits += 8; while (bits >= 5) { output += base32Alphabet[(buffer >>> (bits - 5)) & 31]; bits -= 5; } }
-  if (bits > 0) output += base32Alphabet[(buffer << (5 - bits)) & 31];
-  return output;
-};
-const base32ToBytes = (value: string) => {
-  let buffer = 0; let bits = 0; const output: number[] = [];
-  for (const char of value.replace(/=+$/, '').toUpperCase()) { const index = base32Alphabet.indexOf(char); if (index < 0) continue; buffer = (buffer << 5) | index; bits += 5; if (bits >= 8) { output.push((buffer >>> (bits - 8)) & 255); bits -= 8; } }
-  return new Uint8Array(output);
-};
-async function totp(secret: string, timestamp = Date.now()): Promise<string> {
-  const counter = Math.floor(timestamp / 30000); const data = new ArrayBuffer(8); const view = new DataView(data); view.setUint32(4, counter);
-  const key = await crypto.subtle.importKey('raw', base32ToBytes(secret), { name: 'HMAC', hash: 'SHA-1' }, false, ['sign']);
-  const hash = new Uint8Array(await crypto.subtle.sign('HMAC', key, data)); const offset = hash[hash.length - 1] & 15;
-  const value = ((hash[offset] & 127) << 24) | (hash[offset + 1] << 16) | (hash[offset + 2] << 8) | hash[offset + 3];
-  return String(value % 1000000).padStart(6, '0');
-}
-async function validTotp(secret: string, code: string): Promise<boolean> {
-  if (!/^\d{6}$/.test(code)) return false;
-  for (const drift of [-30000, 0, 30000]) if (code === await totp(secret, Date.now() + drift)) return true;
-  return false;
-}
-async function derivePassword(password: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
-  return bytesToBase64(new Uint8Array(bits));
-}
-async function digest(value: string): Promise<string> {
-  return bytesToBase64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
-}
-function cookieValue(request: Request, name: string): string | null {
-  const cookies = request.headers.get('Cookie')?.split(';').map((part) => part.trim()) ?? [];
-  const value = cookies.find((part) => part.startsWith(`${name}=`));
-  return value ? decodeURIComponent(value.slice(name.length + 1)) : null;
-}
-async function currentHuman(request: Request, env: Env, allowEstate = false): Promise<{ id: string; display_name: string; email: string; life_status: string } | null> {
-  const token = cookieValue(request, 'earth_session');
-  if (!token) return null;
-  const tokenHash = await digest(token);
-  const result = await withRepository(env, (repository) => repository.query<{ id: string; display_name: string; life_status: string; email: string }>("SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email FROM auth_sessions JOIN humans ON humans.id = auth_sessions.human_id JOIN auth_credentials ON auth_credentials.human_id = humans.id WHERE auth_sessions.token_hash = $1 AND auth_sessions.revoked_at IS NULL AND auth_sessions.expires_at > CURRENT_TIMESTAMP AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status = 'estate'))", [tokenHash, allowEstate ? 1 : 0]));
-  return result?.rows[0] ?? null;
-}
-async function sensitiveActionAllowed(env: Env, humanId: string, otp?: string): Promise<boolean> {
-  const result = await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean; mfa_secret: string | null }>('SELECT mfa_enabled, mfa_secret FROM auth_credentials WHERE human_id = $1', [humanId]));
-  const credential = result?.rows[0];
-  return !credential?.mfa_enabled || Boolean(credential.mfa_secret && await validTotp(credential.mfa_secret, otp ?? ''));
-}
-function sessionCookie(token: string, maxAge: number): string {
-  return `earth_session=${encodeURIComponent(token)}; Max-Age=${maxAge}; Path=/; HttpOnly; Secure; SameSite=Lax`;
-}
-async function issueActionToken(env: Env, humanId: string, action: 'verify_email' | 'reset_password', email: string): Promise<void> {
-  const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
-  const tokenHash = await digest(token);
-  const id = crypto.randomUUID();
-  const expires = new Date(Date.now() + (action === 'verify_email' ? 24 : 1) * 3600000).toISOString();
-  const result = await withRepository(env, (repository) => repository.query('INSERT INTO auth_action_tokens (id, human_id, token_hash, action, expires_at) VALUES ($1,$2,$3,$4,$5)', [id, humanId, tokenHash, action, expires]));
-  if (!result) throw new Error('PostgreSQL authentication repository is unavailable');
-  if (!env.EMAIL || !env.EMAIL_FROM) {
-    throw new Error('Transactional email is not configured');
-  }
-  const path = action === 'verify_email'
-    ? `/app?verify_token=${encodeURIComponent(token)}`
-    : `/app?reset_token=${encodeURIComponent(token)}`;
-  const subject = action === 'verify_email' ? 'Verify your EARTH identity' : 'Reset your EARTH password';
-  const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}\n\nThis link expires soon and can only be used once.`;
-  try {
-    const delivery = await env.EMAIL.send({ to: email, from: { email: env.EMAIL_FROM, name: 'EARTH Identity' }, replyTo: env.EMAIL_REPLY_TO, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
-    console.info(JSON.stringify({ event: 'transactional_email_accepted', action, messageId: delivery?.messageId ?? null }));
-  } catch (error) {
-    const details = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : {};
-    console.error(JSON.stringify({ event: 'transactional_email_failed', action, code: String(details.code ?? 'unknown'), message: String(details.message ?? 'unknown') }));
-    // Do not let a failed delivery consume the resend throttle window.
-    await withRepository(env, (repository) => repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]));
-    throw error;
-  }
-}
 
 export class MarketCoordinator extends DurableObject<Env> {
   constructor(ctx: DurableObjectState, env: Env) {
@@ -327,8 +247,11 @@ const worker = {
       return Response.json({ ok: true, secret, otpauth: `otpauth://totp/EARTH:${encodeURIComponent(human.email)}?secret=${secret}&issuer=EARTH`, message: 'Scan or enter this secret in an authenticator, then confirm with a six-digit code.' });
     }
     if (url.pathname === '/api/auth/mfa/confirm' && request.method === 'POST') {
-      const human = await currentHuman(request, env); if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ code?: string }>();
+      const human = await currentHuman(request, env);
+      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ code?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null }>('SELECT mfa_secret FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
       if (!credential?.mfa_secret || !(await validTotp(credential.mfa_secret, body.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
       const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = true WHERE human_id = $1', [human.id]));
@@ -336,8 +259,11 @@ const worker = {
       return Response.json({ ok: true, enabled: true });
     }
     if (url.pathname === '/api/auth/mfa/disable' && request.method === 'POST') {
-      const human = await currentHuman(request, env); if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ code?: string }>();
+      const human = await currentHuman(request, env);
+      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ code?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null; mfa_enabled: boolean }>('SELECT mfa_secret, mfa_enabled FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
       if (!credential?.mfa_enabled || !credential.mfa_secret || !(await validTotp(credential.mfa_secret, body.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
       const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = false, mfa_secret = NULL WHERE human_id = $1', [human.id]));
@@ -395,7 +321,9 @@ const worker = {
       }
     }
     if (url.pathname === '/api/auth/verify-email/resend' && request.method === 'POST') {
-      const body = await request.json<{ email?: string }>();
+      const parsed = await parseJsonBody<{ email?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const email = body.email?.trim().toLowerCase();
       if (email) {
         const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
@@ -427,7 +355,9 @@ const worker = {
       return Response.json({ ok: true, message: 'Email verified. You can now sign in.' });
     }
     if (url.pathname === '/api/auth/password-reset/request' && request.method === 'POST') {
-      const body = await request.json<{ email?: string }>();
+      const parsed = await parseJsonBody<{ email?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const email = body.email?.trim().toLowerCase();
       const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [email])))?.rows[0] : null;
       if (credential) {
@@ -436,7 +366,9 @@ const worker = {
       return Response.json({ ok: true, message: 'If that identity exists, recovery instructions have been sent.' });
     }
     if (url.pathname === '/api/auth/password-reset/complete' && request.method === 'POST') {
-      const body = await request.json<{ token?: string; password?: string }>();
+      const parsed = await parseJsonBody<{ token?: string; password?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!body.token || (body.password ?? '').length < 12) return Response.json({ ok: false, error: 'A valid token and 12-character password are required' }, { status: 400 });
       const tokenHash = await digest(body.token);
       const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
@@ -487,7 +419,9 @@ const worker = {
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const stub = env.MARKET_COORDINATOR.getByName('central-market');
       if (request.method === 'POST') {
-        return Response.json(await stub.submitCommand({ humanId: human.id, command: await request.json() }));
+        const parsed = await parseJsonBody<unknown>(request);
+        if (!parsed.ok) return parsed.response;
+        return Response.json(await stub.submitCommand({ humanId: human.id, command: parsed.value }));
       }
       return Response.json({ ok: true, coordinator: 'market', state: await stub.snapshot() });
     }
@@ -519,7 +453,9 @@ const worker = {
     if (url.pathname === '/api/ai/policy' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ assistantId?: string; policy?: string; enabled?: boolean }>();
+      const parsed = await parseJsonBody<{ assistantId?: string; policy?: string; enabled?: boolean }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!body.assistantId || !['recommend', 'maintenance'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Basic AI supports only recommend or maintenance policies' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => updateAssistantPolicyPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId, policy: body.policy ?? 'recommend', enabled: body.enabled !== false }));
@@ -531,7 +467,9 @@ const worker = {
     if (url.pathname === '/api/ai/upgrade' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ assistantId?: string; otp?: string }>();
+      const parsed = await parseJsonBody<{ assistantId?: string; otp?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for AI upgrade' }, { status: 401 });
       try {
         const result = await withRepository(env, (repository) => upgradeAssistantPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId ?? '' }));
@@ -656,7 +594,9 @@ const worker = {
     if (delegationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ delegateHumanId?: string }>();
+      const parsed = await parseJsonBody<{ delegateHumanId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       try {
         const result = await withRepository(env, (repository) => changeDelegationPostgres(repository, { humanId: viewer.id, roleId: delegationMatch[1], action: delegationMatch[2] as 'delegate' | 'recall', delegateHumanId: body.delegateHumanId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -673,7 +613,9 @@ const worker = {
     if (url.pathname === '/api/communities' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ name?: string; founderId?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ name?: string; founderId?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const name = body.name?.trim();
       const founderId = viewer.id;
       if (!name || name.length < 3 || name.length > 80) return Response.json({ ok: false, error: 'Community name must be 3–80 characters' }, { status: 400 });
@@ -703,7 +645,6 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const communityId = communityMembersMatch[1];
-      const body = await request.json<{ humanId?: string }>();
       const humanId = viewer.id;
       try {
         const result = await withRepository(env, (repository) => changeCommunityMembershipPostgres(repository, { communityId, humanId, action: request.method === 'POST' ? 'join' : 'leave' }));
@@ -727,12 +668,15 @@ const worker = {
     }
     if (communityContributionMatch && request.method === 'POST') {
       const communityId = communityContributionMatch[1];
-      const body = await request.json<{ humanId?: string; amount?: number; correlationId?: string }>();
       const authenticatedHuman = await currentHuman(request, env);
       if (!authenticatedHuman) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ humanId?: string; amount?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const humanId = authenticatedHuman.id;
       const amount = Math.round(Number(body.amount) * 100) / 100;
-      const correlationId = body.correlationId || crypto.randomUUID();
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Contribution amount must be positive' }, { status: 400 });
       if (amount > 100000) return Response.json({ ok: false, error: 'Contribution exceeds the per-command limit' }, { status: 400 });
       try {
@@ -785,7 +729,9 @@ const worker = {
     if (url.pathname === '/api/cities' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ name?: string; communityId?: string }>();
+      const parsed = await parseJsonBody<{ name?: string; communityId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const name = body.name?.trim();
       const communityId = body.communityId?.trim();
       if (!name || name.length < 3 || name.length > 80 || !communityId) return Response.json({ ok: false, error: 'City name and founding Community are required' }, { status: 400 });
@@ -816,7 +762,9 @@ const worker = {
     if (url.pathname === '/api/corporations' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ name?: string; cityId?: string }>();
+      const parsed = await parseJsonBody<{ name?: string; cityId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const name = body.name?.trim();
       const cityId = body.cityId?.trim();
       if (!name || name.length < 3 || name.length > 80 || !cityId) return Response.json({ ok: false, error: 'Corporation name and founding City are required' }, { status: 400 });
@@ -844,11 +792,13 @@ const worker = {
     if (cityBudgetMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ category?: string; amount?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ category?: string; amount?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const category = body.category?.trim();
       const amount = Number(body.amount);
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!category || !Number.isFinite(amount) || amount < 0 || correlationId.length > 120) return Response.json({ ok: false, error: 'A valid budget category, amount, and correlation ID are required' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!category || !Number.isFinite(amount) || amount < 0 || !correlationId) return Response.json({ ok: false, error: 'A valid budget category, amount, and correlation ID are required' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => setCityBudgetPostgres(repository, { humanId: viewer.id, cityId: cityBudgetMatch[1], category, amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -875,7 +825,9 @@ const worker = {
     if (residencyMatch && (request.method === 'POST' || request.method === 'DELETE')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = request.method === 'POST' ? await request.json<{ correlationId?: string }>() : {};
+      const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const dayKey = request.method === 'POST' ? '' : 'leave';
       const correlationId = body.correlationId?.trim() || `RESIDENCY-${viewer.id}-${residencyMatch[1]}-${request.method}-${dayKey}`;
       if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
@@ -892,12 +844,14 @@ const worker = {
     if (corporationSpendMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ category?: string; amount?: number; cityId?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ category?: string; amount?: number; cityId?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const amount = Number(body.amount);
       const category = body.category?.trim() || 'public-services';
       const cityId = body.cityId?.trim() || 'CITY-0084';
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || correlationId.length > 120) return Response.json({ ok: false, error: 'Treasury amount and correlation ID are invalid' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || !correlationId) return Response.json({ ok: false, error: 'Treasury amount and correlation ID are invalid' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => spendCorporationTreasuryPostgres(repository, { humanId: viewer.id, corporationId: corporationSpendMatch[1], cityId, category, amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -911,10 +865,12 @@ const worker = {
     if (corporationContributionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ amount?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const amount = Math.round(Number(body.amount) * 100) / 100;
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!Number.isFinite(amount) || amount <= 0 || amount > 10000 || correlationId.length > 120) return Response.json({ ok: false, error: 'Contribution amount or correlation ID is invalid' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!Number.isFinite(amount) || amount <= 0 || amount > 10000 || !correlationId) return Response.json({ ok: false, error: 'Contribution amount or correlation ID is invalid' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => contributeToCorporationPostgres(repository, { humanId: viewer.id, corporationId: corporationContributionMatch[1], amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -935,7 +891,9 @@ const worker = {
     if (url.pathname === '/api/machines/acquire' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ machineType?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ machineType?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const type = body.machineType?.trim() ?? '';
       const spec = MACHINE_CATALOG[type];
       if (!spec) return Response.json({ ok: false, error: 'Unsupported machine type' }, { status: 400 });
@@ -960,7 +918,9 @@ const worker = {
     if (url.pathname === '/api/technology/projects' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ name?: string; budget?: number; focus?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ name?: string; budget?: number; focus?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const name = body.name?.trim();
       const budget = Math.round(Number(body.budget ?? 240) * 100) / 100;
       const focus = body.focus?.trim() ?? 'efficiency';
@@ -977,7 +937,9 @@ const worker = {
     if ((url.pathname === '/api/technology/TECH-001/fund' || url.pathname === '/api/technology/me/fund') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ amount?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const amount = Number(body.amount ?? 240);
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!Number.isFinite(amount) || amount <= 0 || !correlationId) return Response.json({ ok: false, error: 'Funding parameters or Idempotency-Key are invalid' }, { status: 400 });
@@ -1004,7 +966,9 @@ const worker = {
     if ((url.pathname === '/api/technology/TECH-001/license' || url.pathname === '/api/technology/me/license') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ licenseeId?: string; royaltyRate?: number; licenseFee?: number; otp?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ licenseeId?: string; royaltyRate?: number; licenseFee?: number; otp?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const licenseeId = body.licenseeId || viewer.id;
       const royaltyRate = Number(body.royaltyRate ?? 0.05);
       const licenseFee = Math.round(Number(body.licenseFee ?? (licenseeId === viewer.id ? 0 : 100)) * 100) / 100;
@@ -1039,7 +1003,9 @@ const worker = {
     if (url.pathname === '/api/finance/personal/declare' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ otp?: string; reason?: string }>();
+      const parsed = await parseJsonBody<{ otp?: string; reason?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for personal insolvency' }, { status: 401 });
       try {
         const result = await withRepository(env, (repository) => declarePersonalInsolvencyPostgres(repository, viewer.id, (body.reason?.trim() || 'Human-requested insolvency restructuring').slice(0, 240)));
@@ -1074,7 +1040,9 @@ const worker = {
     if (url.pathname === '/api/contracts' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ kind?: string; counterpartyId?: string; title?: string; terms?: Record<string, unknown>; amount?: number; durationDays?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ kind?: string; counterpartyId?: string; title?: string; terms?: Record<string, unknown>; amount?: number; durationDays?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const kind = body.kind?.trim() ?? '';
       const counterpartyId = body.counterpartyId?.trim() ?? '';
       const title = body.title?.trim() ?? '';
@@ -1084,8 +1052,8 @@ const worker = {
       const counterparty = await withRepository(env, (repository) => repository.query("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [counterpartyId]));
       if (!counterpartyId || counterpartyId === viewer.id || !counterparty?.rows[0]) return Response.json({ ok: false, error: 'An active counterparty Human is required' }, { status: 400 });
       if (title.length < 3 || title.length > 140 || !Number.isFinite(amount) || amount < 0 || amount > 100000 || !Number.isInteger(durationDays) || durationDays < 1 || durationDays > 365) return Response.json({ ok: false, error: 'Contract terms are outside engine bounds' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => createContractPostgres(repository, { proposerId: viewer.id, kind, counterpartyId, title, terms: body.terms ?? {}, amount, durationDays, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1115,14 +1083,18 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       try {
         if (contractDisputeMatch[2] === 'dispute') {
-          const body = await request.json<{ reason?: string }>();
+          const parsed = await parseJsonBody<{ reason?: string }>(request);
+          if (!parsed.ok) return parsed.response;
+          const body = parsed.value;
           const reason = body.reason?.trim() ?? '';
           if (reason.length < 10 || reason.length > 1000) return Response.json({ ok: false, error: 'A dispute reason must be 10–1000 characters' }, { status: 400 });
           const result = await withRepository(env, (repository) => openDisputePostgres(repository, { contractId: contractDisputeMatch[1], claimantId: viewer.id, reason }));
           if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
           return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyOpen ? 200 : 201 });
         }
-        const body = await request.json<{ outcome?: string; resolution?: string }>();
+        const parsed = await parseJsonBody<{ outcome?: string; resolution?: string }>(request);
+        if (!parsed.ok) return parsed.response;
+        const body = parsed.value;
         if (!['uphold', 'void'].includes(body.outcome ?? '') || (body.resolution?.trim().length ?? 0) < 10) return Response.json({ ok: false, error: 'A bounded arbitration outcome and resolution are required' }, { status: 400 });
         const result = await withRepository(env, (repository) => resolveContractDisputePostgres(repository, { contractId: contractDisputeMatch[1], resolverId: viewer.id, outcome: body.outcome as 'uphold' | 'void', resolution: body.resolution!.trim().slice(0, 1000) }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1151,15 +1123,16 @@ const worker = {
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ institutionId?: string; amount?: number; otp?: string }>(request);
+      const parsed = await parseJsonBody<{ institutionId?: string; amount?: number; otp?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for financial recovery' }, { status: 401 });
       const institutionId = body.institutionId?.trim() ?? '';
       const amount = Math.round(Number(body.amount) * 100) / 100;
-      if (!institutionId || !Number.isFinite(amount) || amount <= 0 || amount > 100000) return Response.json({ ok: false, error: 'Recovery amount must be between 0 and 100,000 Credits' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!institutionId || !Number.isFinite(amount) || amount <= 0 || amount > 100000 || !correlationId) return Response.json({ ok: false, error: 'Recovery amount must be between 0 and 100,000 Credits' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => recoverInstitutionPostgres(repository, { humanId: viewer.id, institutionId, amount, correlationId: crypto.randomUUID() }));
+        const result = await withRepository(env, (repository) => recoverInstitutionPostgres(repository, { humanId: viewer.id, institutionId, amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1193,9 +1166,8 @@ const worker = {
       const cityId = body.cityId || 'CITY-0084';
       const category = body.category?.trim() || 'public-services';
       const amount = Number(body.amount);
-      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Public spending amount must be positive' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!Number.isFinite(amount) || amount <= 0 || !correlationId) return Response.json({ ok: false, error: 'Public spending amount and Idempotency-Key are required' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => publicSpendingPostgres(repository, { actorId: viewer.id, cityId, category, amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1233,7 +1205,9 @@ const worker = {
     if (url.pathname === '/api/market/orders' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const product = body.product;
       const side = body.side === 'sell' ? 'sell' : 'buy';
       const quantity = Number(body.quantity);
@@ -1345,13 +1319,15 @@ const worker = {
     if (url.pathname === '/api/businesses' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ name?: string; sector?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ name?: string; sector?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const name = body.name?.trim();
       const sector = body.sector?.trim() ?? 'maintenance';
       const sectors = ['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d'];
       if (!name || name.length < 3 || name.length > 80 || !sectors.includes(sector)) return Response.json({ ok: false, error: 'Business name or sector is invalid' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => createBusinessPostgres(repository, { ownerId: viewer.id, name, sector, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1365,9 +1341,11 @@ const worker = {
     if (businessLiquidationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ otp?: string; correlationId?: string }>();
-      const correlationId = body.correlationId?.trim() ?? '';
-      if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid decommission correlationId is required' }, { status: 400 });
+      const parsed = await parseJsonBody<{ otp?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'A valid decommission correlationId is required' }, { status: 400 });
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for business liquidation' }, { status: 401 });
       try {
         const result = await withRepository(env, (repository) => liquidateBusinessPostgres(repository, { ownerId: viewer.id, businessId: businessLiquidationMatch[1], correlationId }));
@@ -1390,7 +1368,9 @@ const worker = {
     if ((url.pathname === '/api/businesses/kline-works/policy' || url.pathname === '/api/businesses/me/policy') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ policy?: string }>();
+      const parsed = await parseJsonBody<{ policy?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!['reliability', 'margin', 'capacity'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Unknown business policy' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => setBusinessPolicyPostgres(repository, { humanId: viewer.id, policy: body.policy! }));
@@ -1404,7 +1384,9 @@ const worker = {
     if (managerMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ managerId?: string }>();
+      const parsed = await parseJsonBody<{ managerId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       try {
         const result = await withRepository(env, (repository) => appointManagerPostgres(repository, { ownerId: viewer.id, businessId: managerMatch[1], managerId: body.managerId?.trim() ?? '' }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1445,7 +1427,9 @@ const worker = {
     if (constitutionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ shareholderVoteThreshold?: number; boardApprovalThreshold?: number; dilutionNoticeDays?: number }>();
+      const parsed = await parseJsonBody<{ shareholderVoteThreshold?: number; boardApprovalThreshold?: number; dilutionNoticeDays?: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const shareholderVoteThreshold = Number(body.shareholderVoteThreshold ?? 0.5);
       const boardApprovalThreshold = Number(body.boardApprovalThreshold ?? 0.5);
       const dilutionNoticeDays = Number(body.dilutionNoticeDays ?? 3);
@@ -1462,11 +1446,13 @@ const worker = {
     if (shareTransferMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ businessId?: string; recipientId?: string; shares?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ businessId?: string; recipientId?: string; shares?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const recipientId = body.recipientId?.trim() ?? '';
       const shares = Number(body.shares);
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share transfer terms' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !correlationId) return Response.json({ ok: false, error: 'Invalid share transfer terms' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => transferSharesPostgres(repository, { holderId: viewer.id, businessId: body.businessId?.trim() || null, recipientId, shares, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1480,12 +1466,14 @@ const worker = {
     if (shareIssueMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ recipientId?: string; shares?: number; pricePerShare?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ recipientId?: string; shares?: number; pricePerShare?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const recipientId = body.recipientId?.trim() ?? '';
       const shares = Number(body.shares);
       const pricePerShare = Math.round(Number(body.pricePerShare) * 100) / 100;
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000 || correlationId.length > 160) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!recipientId || recipientId === viewer.id || !Number.isInteger(shares) || shares < 1 || shares > 10000 || !Number.isFinite(pricePerShare) || pricePerShare <= 0 || pricePerShare > 100000 || !correlationId) return Response.json({ ok: false, error: 'Invalid share issuance terms' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => issueSharesPostgres(repository, { ownerId: viewer.id, businessId: shareIssueMatch[1], recipientId, shares, pricePerShare, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1511,7 +1499,9 @@ const worker = {
     if ((url.pathname === '/api/life/successor' || url.pathname === '/api/successor') && request.method === 'POST') {
       const viewer = await currentHuman(request, env, true);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ name?: string; estatePeriodDays?: number; successorHumanId?: string }>();
+      const parsed = await parseJsonBody<{ name?: string; estatePeriodDays?: number; successorHumanId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const successorName = body.name?.trim();
       const estatePeriodDays = Number(body.estatePeriodDays ?? 30);
       if (!successorName || successorName.length < 2) return Response.json({ ok: false, error: 'Successor name is required' }, { status: 400 });
@@ -1539,7 +1529,9 @@ const worker = {
       const machineId = maintenanceMatch[1];
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ amount?: number; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const amount = Number(body.amount ?? 10);
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
@@ -1557,7 +1549,9 @@ const worker = {
     if (decommissionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ otp?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ otp?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for decommissioning an asset' }, { status: 401 });
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
@@ -1574,7 +1568,9 @@ const worker = {
     if (utilizationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ utilization?: number }>();
+      const parsed = await parseJsonBody<{ utilization?: number }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const utilization = Number(body.utilization);
       if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) return Response.json({ ok: false, error: 'Utilization must be a whole percentage from 0 to 100' }, { status: 400 });
       try {
@@ -1589,7 +1585,9 @@ const worker = {
     if (upgradeMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ otp?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ otp?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
@@ -1606,7 +1604,9 @@ const worker = {
     if (saleMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>();
+      const parsed = await parseJsonBody<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
       const buyerId = body.buyerId?.trim();
       const price = Math.round(Number(body.price) * 100) / 100;
       const correlationId = resolveIdempotencyKey(request, body.correlationId);

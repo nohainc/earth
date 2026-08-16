@@ -1,26 +1,12 @@
 import type { PostgresRepository } from './repository';
 import { calculateStarterPackage, economicStartIndex } from './starter-package.ts';
-
-const encoder = new TextEncoder();
-const SESSION_DAYS = 7;
-
-function bytesToBase64(bytes: Uint8Array): string {
-  return btoa(String.fromCharCode(...bytes));
-}
-
-function base64ToBytes(value: string): Uint8Array {
-  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
-}
-
-async function derivePassword(password: string, salt: Uint8Array, iterations: number): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, ['deriveBits']);
-  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
-  return bytesToBase64(new Uint8Array(bits));
-}
-
-async function digest(value: string): Promise<string> {
-  return bytesToBase64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
-}
+import {
+  base64ToBytes,
+  bytesToBase64,
+  derivePassword,
+  digest,
+  SESSION_DAYS,
+} from './auth-crypto';
 
 export async function registerIdentity(repository: PostgresRepository, input: { email: string; displayName: string; password: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
