@@ -26,6 +26,17 @@ class Sidebar extends StatelessWidget {
         .join();
     final city =
         '${(state.institutions['city'] as Map<String, dynamic>?)?['name'] ?? 'Independent'}';
+    final businessName = '${state.business['name'] ?? 'Business'}';
+    final technologyName =
+        '${state.technologyRegistry['activeProject'] ?? 'Technology'}';
+    final items = [
+      ('command', '✦  Command center'),
+      ('market', '⌁  Central Market'),
+      ('business', '◈  $businessName'),
+      ('civic', '⊙  Civic life'),
+      ('city', '⌖  $city'),
+      ('technology', '✧  $technologyName'),
+    ];
 
     return Container(
       width: 218,
@@ -98,14 +109,7 @@ class Sidebar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          for (final item in const [
-            ('command', '✦  Command center'),
-            ('market', '⌁  Central Market'),
-            ('business', '◈  Kline Works'),
-            ('civic', '⊙  Civic life'),
-            ('city', '⌖  New Carthage'),
-            ('technology', '✧  Technology')
-          ])
+          for (final item in items)
             Padding(
               padding: const EdgeInsets.only(bottom: 5),
               child: Align(
@@ -113,6 +117,12 @@ class Sidebar extends StatelessWidget {
                 child: TextButton(
                   onPressed: () => onNavigate(item.$1),
                   style: TextButton.styleFrom(
+                    backgroundColor: item.$1 == selectedSection
+                        ? violetColor.withValues(alpha: .14)
+                        : Colors.transparent,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
                     padding: const EdgeInsets.symmetric(
                       horizontal: 8,
                       vertical: 5,
