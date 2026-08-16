@@ -27,6 +27,7 @@ class Dashboard extends StatelessWidget {
   final List<dynamic> productionCatalog;
   final int unreadNotifications;
   final Map<String, GlobalKey> sectionKeys;
+  final String selectedSection;
   final Future<void> Function(Future<EarthState> Function()) action;
 
   const Dashboard({
@@ -44,6 +45,7 @@ class Dashboard extends StatelessWidget {
     required this.productionCatalog,
     required this.unreadNotifications,
     required this.sectionKeys,
+    this.selectedSection = 'command',
     required this.action,
   });
 
@@ -72,10 +74,6 @@ class Dashboard extends StatelessWidget {
           style: const TextStyle(color: mutedColor, fontSize: 11, letterSpacing: .7),
         ),
         const SizedBox(height: 24),
-        if (state.opportunities.isNotEmpty) ...[
-          OpportunityPanel(opportunities: state.opportunities),
-          const SizedBox(height: 14),
-        ],
         Wrap(
           spacing: 14,
           runSpacing: 14,
@@ -143,101 +141,120 @@ class Dashboard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
-        InstitutionsCapacityPanel(
-          panelKey: sectionKeys['city'],
-          state: state,
-          busy: busy,
-          action: action,
-        ),
-        const SizedBox(height: 14),
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: [
-            BusinessPanel(
-              panelKey: sectionKeys['business'],
-              state: state,
-              busy: busy,
-              businessOwnership: businessOwnership,
-              businessFinancials: businessFinancials,
-              businessProfile: businessProfile,
-              action: action,
-            ),
-            TechnologyPanel(
-              panelKey: sectionKeys['technology'],
-              state: state,
-              busy: busy,
-              action: action,
-            ),
-            ProposalPanel(state: state, busy: busy, action: action),
-            MachinesPanel(
-              state: state,
-              busy: busy,
-              productionCatalog: productionCatalog,
-              action: action,
-            ),
-            ProductionEventsPanel(state: state),
-            AiAssistantPanel(state: state, busy: busy, action: action),
-            AiRecommendationsPanel(state: state),
-            const EarthPanel(
-              title: 'EIGHT-SECTOR ECONOMY',
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Chip(label: Text('ENERGY')),
-                  Chip(label: Text('EXTRACTION')),
-                  Chip(label: Text('COMPONENTS')),
-                  Chip(label: Text('MACHINES')),
-                  Chip(label: Text('MAINTENANCE')),
-                  Chip(label: Text('HOUSING')),
-                  Chip(label: Text('COMPUTE')),
-                  Chip(label: Text('R&D')),
-                ],
-              ),
-            ),
-            HumanServicesPanel(
-              panelKey: sectionKeys['civic'],
-              state: state,
-            ),
-            MarketSignalsPanel(
-              panelKey: sectionKeys['market'],
-              state: state,
-              busy: busy,
-              action: action,
-            ),
-            MarketOrderBookPanel(state: state),
-            MyMarketOrdersPanel(state: state, busy: busy, action: action),
-            SuccessionPanel(state: state, busy: busy, action: action),
-            LedgerPanel(state: state),
-            WorldFeedPanel(events: events),
-            NotificationsPanel(
-              notifications: notifications,
-              unreadNotifications: unreadNotifications,
-              busy: busy,
-              action: action,
-              state: state,
-            ),
-            OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
-            CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
-            AuthorityHistoryPanel(authorityEvents: authorityEvents),
-            WorldRankingsPanel(state: state),
-            HistoryArchivePanel(state: state),
-            CommunitiesPanel(state: state, busy: busy, action: action),
-            WorldIntegrityPanel(state: state),
-            InstitutionSolvencyPanel(state: state, busy: busy, action: action),
-            PersonalFinancePanel(state: state, busy: busy, action: action),
-            NegotiatedContractsPanel(state: state, busy: busy, action: action),
-            MacroLiquidityPanel(state: state),
-            RolesPanel(state: state, busy: busy, action: action),
-            PublicFinanceGovernancePanel(
-              state: state,
-              busy: busy,
-              action: action,
-            ),
-          ],
-        ),
+        ..._selectedPanels(),
       ],
     );
   }
+
+  List<Widget> _selectedPanels() {
+    switch (selectedSection) {
+      case 'market':
+        return [
+          MarketSignalsPanel(
+            panelKey: sectionKeys['market'],
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          MarketOrderBookPanel(state: state),
+          MyMarketOrdersPanel(state: state, busy: busy, action: action),
+          MacroLiquidityPanel(state: state),
+        ];
+      case 'business':
+        return [
+          BusinessPanel(
+            panelKey: sectionKeys['business'],
+            state: state,
+            busy: busy,
+            businessOwnership: businessOwnership,
+            businessFinancials: businessFinancials,
+            businessProfile: businessProfile,
+            action: action,
+          ),
+          ProductionEventsPanel(state: state),
+          InstitutionSolvencyPanel(state: state, busy: busy, action: action),
+          PersonalFinancePanel(state: state, busy: busy, action: action),
+          NegotiatedContractsPanel(state: state, busy: busy, action: action),
+        ];
+      case 'civic':
+        return [
+          HumanServicesPanel(panelKey: sectionKeys['civic'], state: state),
+          ProposalPanel(state: state, busy: busy, action: action),
+          RolesPanel(state: state, busy: busy, action: action),
+          SuccessionPanel(state: state, busy: busy, action: action),
+          CommunitiesPanel(state: state, busy: busy, action: action),
+          CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
+          AuthorityHistoryPanel(authorityEvents: authorityEvents),
+          PublicFinanceGovernancePanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+        ];
+      case 'city':
+        return [
+          InstitutionsCapacityPanel(
+            panelKey: sectionKeys['city'],
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          CommunitiesPanel(state: state, busy: busy, action: action),
+          InstitutionSolvencyPanel(state: state, busy: busy, action: action),
+          WorldRankingsPanel(state: state),
+        ];
+      case 'technology':
+        return [
+          TechnologyPanel(
+            panelKey: sectionKeys['technology'],
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          MachinesPanel(
+            state: state,
+            busy: busy,
+            productionCatalog: productionCatalog,
+            action: action,
+          ),
+          AiAssistantPanel(state: state, busy: busy, action: action),
+          AiRecommendationsPanel(state: state),
+          const EarthPanel(
+            title: 'EIGHT-SECTOR ECONOMY',
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                Chip(label: Text('ENERGY')),
+                Chip(label: Text('EXTRACTION')),
+                Chip(label: Text('COMPONENTS')),
+                Chip(label: Text('MACHINES')),
+                Chip(label: Text('MAINTENANCE')),
+                Chip(label: Text('HOUSING')),
+                Chip(label: Text('COMPUTE')),
+                Chip(label: Text('R&D')),
+              ],
+            ),
+          ),
+        ];
+      case 'command':
+      default:
+        return [
+          OpportunityPanel(opportunities: state.opportunities),
+          WorldFeedPanel(events: events),
+          NotificationsPanel(
+            notifications: notifications,
+            unreadNotifications: unreadNotifications,
+            busy: busy,
+            action: action,
+            state: state,
+          ),
+          OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
+          WorldIntegrityPanel(state: state),
+          HistoryArchivePanel(state: state),
+          LedgerPanel(state: state),
+        ];
+    }
+  }
+
 }

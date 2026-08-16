@@ -19,6 +19,15 @@ Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
   return Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/edge/events');
 }
 
+String commandSectionTitle(String section) => switch (section) {
+      'market' => 'CENTRAL MARKET',
+      'business' => 'BUSINESS',
+      'civic' => 'CIVIC LIFE',
+      'city' => 'CITY',
+      'technology' => 'TECHNOLOGY',
+      _ => 'COMMAND CENTER',
+    };
+
 class CommandCenter extends StatefulWidget {
   final VoidCallback onLogout;
   const CommandCenter({super.key, required this.onLogout});
@@ -29,7 +38,6 @@ class CommandCenter extends StatefulWidget {
 
 class _CommandCenterState extends State<CommandCenter> {
   final api = const EarthApi();
-  final _scrollController = ScrollController();
   final _sectionKeys = <String, GlobalKey>{
     'command': GlobalKey(),
     'market': GlobalKey(),
@@ -51,6 +59,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> businessProfile = const {};
   List<dynamic> productionCatalog = const [];
   int unreadNotifications = 0;
+  String selectedSection = 'command';
   Timer? eventTimer;
   Timer? liveReconnectTimer;
   WebSocketChannel? liveChannel;
@@ -176,20 +185,13 @@ class _CommandCenterState extends State<CommandCenter> {
     eventTimer?.cancel();
     liveReconnectTimer?.cancel();
     liveChannel?.sink.close();
-    _scrollController.dispose();
     super.dispose();
   }
 
   void _navigateToSection(BuildContext context, String section,
       {required bool closeDrawer}) {
     if (closeDrawer) Navigator.of(context).pop();
-    final target = _sectionKeys[section]?.currentContext;
-    if (target != null) {
-      Scrollable.ensureVisible(target,
-          duration: const Duration(milliseconds: 420),
-          curve: Curves.easeOutCubic,
-          alignment: .04);
-    }
+    if (mounted) setState(() => selectedSection = section);
   }
 
   @override
@@ -212,6 +214,7 @@ class _CommandCenterState extends State<CommandCenter> {
                 child: SafeArea(
                   child: Sidebar(
                     state: current,
+                    selectedSection: selectedSection,
                     onNavigate: (section) => _navigateToSection(
                       context,
                       section,
@@ -222,9 +225,12 @@ class _CommandCenterState extends State<CommandCenter> {
               )
             : null,
         appBar: AppBar(
-          title: const Text(
-            'EARTH  ·  COMMAND CENTER',
-            style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1),
+          title: Text(
+            'EARTH  ·  ${commandSectionTitle(selectedSection)}',
+            style: const TextStyle(
+              fontWeight: FontWeight.w800,
+              letterSpacing: 1.1,
+            ),
           ),
           actions: [
             if (busy)
@@ -284,6 +290,7 @@ class _CommandCenterState extends State<CommandCenter> {
                       if (!compact)
                         Sidebar(
                           state: current,
+                          selectedSection: selectedSection,
                           onNavigate: (section) => _navigateToSection(
                             context,
                             section,
@@ -292,7 +299,6 @@ class _CommandCenterState extends State<CommandCenter> {
                         ),
                       Expanded(
                         child: ListView(
-                          controller: _scrollController,
                           padding: EdgeInsets.fromLTRB(
                             compact ? 16 : 34,
                             compact ? 16 : 26,
@@ -330,6 +336,7 @@ class _CommandCenterState extends State<CommandCenter> {
                               ),
                             Dashboard(
                               state: current,
+                              selectedSection: selectedSection,
                               busy: busy,
                               events: events,
                               notifications: notifications,

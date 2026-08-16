@@ -4,9 +4,15 @@ import '../../core/models/earth_state.dart';
 
 class Sidebar extends StatelessWidget {
   final EarthState state;
+  final String selectedSection;
   final ValueChanged<String> onNavigate;
 
-  const Sidebar({super.key, required this.state, required this.onNavigate});
+  const Sidebar({
+    super.key,
+    required this.state,
+    this.selectedSection = 'command',
+    required this.onNavigate,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -113,12 +119,14 @@ class Sidebar extends StatelessWidget {
                     ),
                     alignment: Alignment.centerLeft,
                   ),
-                  child: Text(
+              child: Text(
                     item.$2,
                     style: TextStyle(
-                      color: item.$1 == 'command' ? violetColor : mutedColor,
+                      color: item.$1 == selectedSection
+                          ? violetColor
+                          : mutedColor,
                       fontSize: 11,
-                      fontWeight: item.$1 == 'command'
+                      fontWeight: item.$1 == selectedSection
                           ? FontWeight.w700
                           : FontWeight.w500,
                     ),
