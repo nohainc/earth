@@ -1380,7 +1380,7 @@ const worker = {
       if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid decommission correlationId is required' }, { status: 400 });
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for business liquidation' }, { status: 401 });
       try {
-        const result = await withRepository(env, (repository) => liquidateBusinessPostgres(repository, { ownerId: viewer.id, businessId: businessLiquidationMatch[1] }));
+        const result = await withRepository(env, (repository) => liquidateBusinessPostgres(repository, { ownerId: viewer.id, businessId: businessLiquidationMatch[1], correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {

@@ -82,15 +82,17 @@ export async function setPolicy(repository: PostgresRepository, input: { humanId
   });
 }
 
-export async function liquidateBusiness(repository: PostgresRepository, input: { ownerId: string; businessId: string }): Promise<Record<string, unknown>> {
+export async function liquidateBusiness(repository: PostgresRepository, input: { ownerId: string; businessId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ id: string }>('SELECT id FROM bankruptcy_events WHERE institution_id = $1 AND correlation_id = $2 LIMIT 1', [input.businessId, input.correlationId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, businessId: input.businessId, releasedMachines: 0, correlationId: input.correlationId };
     const business = await tx.query<{ id: string; owner_id: string; status: string; financial_status: string | null }>(
       "SELECT businesses.id, businesses.owner_id, businesses.status, financial_states.status AS financial_status FROM businesses LEFT JOIN financial_states ON financial_states.institution_id = businesses.id WHERE businesses.id = $1 FOR UPDATE",
       [input.businessId],
     );
     if (!business.rows[0]) throw new Error('Business not found');
     if (business.rows[0].owner_id !== input.ownerId) throw new Error('Only the Business owner may liquidate it');
-    if (business.rows[0].status === 'bankrupt' || business.rows[0].financial_status === 'dissolved') return { ok: true, alreadyProcessed: true, businessId: input.businessId, releasedMachines: 0 };
+    if (business.rows[0].status === 'bankrupt' || business.rows[0].financial_status === 'dissolved') return { ok: true, alreadyProcessed: true, businessId: input.businessId, releasedMachines: 0, correlationId: input.correlationId };
     if (!['distressed', 'insolvent'].includes(business.rows[0].status) && !['distressed', 'insolvent'].includes(business.rows[0].financial_status ?? '')) throw new Error('Business must be distressed or insolvent before liquidation');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
@@ -101,10 +103,10 @@ export async function liquidateBusiness(repository: PostgresRepository, input: {
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [input.businessId]);
     await tx.query("UPDATE financial_states SET status = 'dissolved', recovery_game_day = $1, last_reason = 'Owner-authorized business liquidation', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND status IN ('distressed','insolvent')", [day, input.businessId]);
     const eventId = `BUSINESS-LIQUIDATION-${input.businessId}-${day}`;
-    await tx.query("INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,'BUSINESS',$3,'dissolved',$4,$5) ON CONFLICT (id) DO NOTHING", [eventId, input.businessId, business.rows[0].financial_status ?? business.rows[0].status, day, 'Owner-authorized business liquidation']);
+    await tx.query("INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason,correlation_id) VALUES ($1,$2,'BUSINESS',$3,'dissolved',$4,$5,$6) ON CONFLICT (id) DO NOTHING", [eventId, input.businessId, business.rows[0].financial_status ?? business.rows[0].status, day, 'Owner-authorized business liquidation', input.correlationId]);
     await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'business.liquidated',$3,$4) ON CONFLICT (id) DO NOTHING", [eventId, day, `Business ${input.businessId} was liquidated`, JSON.stringify({ businessId: input.businessId, releasedMachines: machines.rows.length, ownerId: input.ownerId })]);
     await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'business',$3,$4,$5) ON CONFLICT DO NOTHING", [crypto.randomUUID(), input.ownerId, 'Business liquidation recorded', `${input.businessId} was closed. ${machines.rows.length} productive machine(s) were detached and preserved under your Human ownership for future disposition.`, input.businessId]);
-    return { ok: true, businessId: input.businessId, releasedMachines: machines.rows.length, gameDay: day };
+    return { ok: true, businessId: input.businessId, releasedMachines: machines.rows.length, gameDay: day, correlationId: input.correlationId };
   });
 }
 
