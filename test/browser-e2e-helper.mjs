@@ -128,6 +128,23 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     });
     assert.ok(landingTitle.result.value.includes('EARTH') || landingTitle.result.value.includes('United Corporations'), 'Landing page title should match EARTH');
 
+    const landingUi = await sendSession('Runtime.evaluate', {
+      expression: `({
+        hasHero: document.querySelector('h1')?.textContent.includes('Build a future'),
+        hasWorldLink: [...document.querySelectorAll('a')].some((a) => a.textContent.includes('The world')),
+        themeToggles: (() => {
+          const root = document.documentElement;
+          const before = root.dataset.theme;
+          document.querySelector('#theme')?.click();
+          return before !== root.dataset.theme;
+        })(),
+      })`,
+      returnByValue: true,
+    });
+    assert.equal(landingUi.result.value.hasHero, true, 'Landing page should render its primary hero heading');
+    assert.equal(landingUi.result.value.hasWorldLink, true, 'Landing page should expose world navigation');
+    assert.equal(landingUi.result.value.themeToggles, true, 'Landing page theme control should change the theme');
+
     // Test Flutter Web Application Load
     await sendSession('Page.navigate', { url: `${baseUrl}/app` });
     await new Promise((r) => setTimeout(r, 2000));
@@ -137,6 +154,17 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
       returnByValue: true,
     });
     assert.ok(appTitle.result.value.includes('EARTH') || appTitle.result.value.includes('United Corporations'), 'Flutter web app title should match');
+
+    const appUi = await sendSession('Runtime.evaluate', {
+      expression: `({
+        title: document.title,
+        hasAppShell: Boolean(document.querySelector('.shell, flt-glass-pane, flutter-view, #earth-loading-container, [flt-renderer]')),
+        bodyHasEarth: Boolean(document.body && (document.body.innerText.includes('EARTH') || document.body.innerHTML.includes('EARTH'))),
+      })`,
+      returnByValue: true,
+    });
+    assert.equal(appUi.result.value.hasAppShell, true, 'Application route should render an app shell');
+    assert.equal(appUi.result.value.bodyHasEarth, true, 'Application route should render EARTH content');
 
     // Execute full end-to-end browser journeys inside the browser context
     const journeyEval = await sendSession('Runtime.evaluate', {

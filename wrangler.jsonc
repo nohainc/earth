@@ -10,7 +10,7 @@
     "directory": "./flutter_client/build/web",
     "binding": "ASSETS",
     "not_found_handling": "single-page-application",
-    "run_worker_first": ["/", "/api/*", "/edge/*", "/health"]
+    "run_worker_first": ["/", "/landing", "/app", "/app/*", "/api/*", "/edge/*", "/health", "/ready"]
   },
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres", "EMAIL_FROM": "earth@auth.earthuc.com", "EMAIL_REPLY_TO": "earth@nohainc.com" },

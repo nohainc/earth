@@ -204,6 +204,25 @@ test('authentication flow supports register, login, session lookup, and logout',
   assert.equal(logoutRes.body.ok, true);
 });
 
+test('authenticated session response uses the public human projection only', async () => {
+  const login = await request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'amara@earthuc.com', password: 'password123456' }),
+  });
+  assert.equal(login.status, 200);
+  const cookie = login.headers.get('set-cookie') || (login.headers.getSetCookie && login.headers.getSetCookie().join('; ')) || '';
+  assert.ok(cookie);
+
+  const me = await request('/api/auth/me', { headers: { cookie } });
+  assert.equal(me.status, 200);
+  assert.equal(me.body.authenticated, true);
+  assert.equal(me.body.human.id, 'H-0044');
+  assert.equal(me.body.human.email, 'amara@earthuc.com');
+  assert.equal(me.body.human.passwordHash, undefined);
+  assert.equal(me.body.sessionToken, undefined);
+});
+
 test('live event stream and JSON endpoints support event replay after reconnect', async () => {
   // Advance day to trigger published events
   await request('/api/day/advance', { method: 'POST' });

@@ -21,6 +21,13 @@ for (const landingPath of ['/', '/landing']) {
   assert.match(landingHtml, /\/app/);
 }
 
+for (const readyPath of ['/ready', '/health', '/api/ready', '/api/health']) {
+  const ready = await get(readyPath);
+  assert.equal(ready.response.status, 200, `${readyPath} should return 200`);
+  assert.equal(ready.response.headers.get('content-type')?.includes('application/json'), true, `${readyPath} must return JSON`);
+  assert.equal(ready.body.ok, true, `${readyPath} must return ok: true`);
+}
+
 const health = await get(`/api/health?probe=${Date.now()}`);
 assert.equal(health.response.status, 200);
 assert.equal(typeof health.body.correlationId, 'string');

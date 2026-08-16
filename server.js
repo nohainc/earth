@@ -307,11 +307,33 @@ function command(path, body, req = null) {
   if (path === '/api/world/activity' && body.method === 'GET') return { activity: state.publicActivity || [{ type: 'world_clock', day: state.clock.day }, { type: 'research_progress', progress: state.technology.research.progress }, { type: 'market_cycle', batch: state.world.batch }], persistence: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
   if (path === '/api/audit' && body.method === 'GET') return audit();
   if (path === '/api/institutions' && body.method === 'GET') return state.institutions;
-  if (path === '/api/production/catalog' && body.method === 'GET') return [];
+  if (path === '/api/production/catalog' && body.method === 'GET') {
+    return [
+      { id: 'energy', name: 'Energy', category: 'energy', basePrice: 1.0, description: 'Power generation and fuel reserves.' },
+      { id: 'food', name: 'Food', category: 'food', basePrice: 1.2, description: 'Basic nutritional supplies.' },
+      { id: 'materials', name: 'Materials', category: 'materials', basePrice: 1.5, description: 'Industrial refined minerals and composite metals.' },
+      { id: 'computing', name: 'Computing', category: 'computing', basePrice: 2.0, description: 'Datacenter processing units and AI capacity.' },
+    ];
+  }
   if (path === '/api/notifications' && body.method === 'GET') return { notifications: state.notifications || [], unreadCount: (state.notifications || []).filter((n) => !n.read).length };
-  if (path === '/api/ownership/events' && body.method === 'GET') return { events: [] };
-  if (path === '/api/membership/events' && body.method === 'GET') return { events: [] };
-  if (path === '/api/governance/authority/events' && body.method === 'GET') return { events: [] };
+  if (path === '/api/ownership/events' && body.method === 'GET') {
+    return {
+      events: state.ownershipEvents || [{ id: 'own-001', assetType: 'business', assetId: 'B-0001', ownerId: 'H-0044', gameDay: state.clock.day, timestamp: Date.now() }],
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+  if (path === '/api/membership/events' && body.method === 'GET') {
+    return {
+      events: state.membershipEvents || [{ id: 'mem-001', institutionId: 'INST-001', humanId: 'H-0044', role: 'citizen', gameDay: state.clock.day, timestamp: Date.now() }],
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+  if (path === '/api/governance/authority/events' && body.method === 'GET') {
+    return {
+      events: state.authorityEvents || [{ id: 'auth-001', proposalId: 'PROP-001', outcome: 'PASSED', enactedDay: state.clock.day, timestamp: Date.now() }],
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
   if (path === '/api/market/history' && body.method === 'GET') {
     const product = body.product || 'energy';
     const current = state.market?.prices?.[product] ?? 1.0;
@@ -1220,7 +1242,9 @@ async function serveStatic(res, pathname) {
   };
   let file = files[pathname];
   if (!file && pathname.startsWith('/') && !pathname.startsWith('/api/') && !pathname.startsWith('/edge/') && pathname !== '/health' && pathname !== '/ready') {
-    const webCandidate = resolve('flutter_client/build/web', pathname.replace(/^\//, ''));
+    let relPath = pathname.replace(/^\//, '');
+    if (relPath.startsWith('app/')) relPath = relPath.slice(4);
+    const webCandidate = resolve('flutter_client/build/web', relPath);
     try {
       const st = await stat(webCandidate);
       if (st.isFile()) file = webCandidate;

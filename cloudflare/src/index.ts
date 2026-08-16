@@ -351,7 +351,7 @@ const worker = {
         return Response.json({ ok: false, error: message }, { status: /insufficient/i.test(message) ? 409 : 404 });
       }
     }
-    if (url.pathname === '/api/health') return healthResponse(request, env);
+    if (url.pathname === '/api/health' || url.pathname === '/health' || url.pathname === '/api/ready' || url.pathname === '/ready') return healthResponse(request, env);
     if (url.pathname === '/api/governance/roles' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listRolesPostgres(repository));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -1549,21 +1549,22 @@ export default {
       } });
     }
     const url = new URL(request.url);
-    const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health';
+    const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health' || url.pathname === '/ready' || url.pathname === '/api/ready';
     let response: Response;
     try {
       if (isDataRequest) authorityMode(env);
-      response = isDataRequest
-      ? await worker.fetch(request, env, ctx)
-      : url.pathname === '/'
-        ? await env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request))
-      : url.pathname === '/landing'
-        ? await env.ASSETS.fetch(new Request(new URL(`/landing.html?v=${WEB_ASSET_VERSION}`, request.url), request))
-      : url.pathname === '/app'
-          ? await env.ASSETS.fetch(new Request(new URL(`/app.html?v=${WEB_ASSET_VERSION}`, request.url), request))
-        : url.pathname.startsWith('/app/')
-          ? await env.ASSETS.fetch(new Request(new URL(`${url.pathname.slice(4)}?v=${WEB_ASSET_VERSION}`, request.url), request))
-          : await env.ASSETS.fetch(request);
+      if (isDataRequest) {
+        response = await worker.fetch(request, env, ctx);
+      } else if (url.pathname === '/' || url.pathname === '/landing') {
+        response = await env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request));
+      } else if (url.pathname === '/app' || url.pathname === '/app/') {
+        response = await env.ASSETS.fetch(new Request(new URL('/app.html', request.url), request));
+      } else if (url.pathname.startsWith('/app/')) {
+        const assetSubpath = url.pathname.slice(4);
+        response = await env.ASSETS.fetch(new Request(new URL(assetSubpath + url.search, request.url), request));
+      } else {
+        response = await env.ASSETS.fetch(request);
+      }
       if ((request.method === 'POST' || request.method === 'DELETE') && response.status < 400 && url.pathname.startsWith('/api/')) {
         const deliverPromise = withRepository(env, (repository) =>
           deliverOutbox(repository, (outboxEvent) =>

@@ -10,6 +10,7 @@ test('API Contract Specification and Schema Validation', async () => {
 
   assert.equal(contract.openapi, '3.1.0');
   assert.equal(contract.info.version, '2026-08');
+  assert.equal(contract.servers[0].url, 'https://earthuc.com');
 
   // Verify paths
   const requiredPaths = ['/api/health', '/api/world', '/api/market/orders', '/api/governance/proposals/{id}/vote', '/api/history', '/api/events'];

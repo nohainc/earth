@@ -7,7 +7,7 @@
   },
   "servers": [
     {
-      "url": "https://earth.nohainc.com",
+      "url": "https://earthuc.com",
       "description": "Production Edge Worker"
     },
     {
