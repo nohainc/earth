@@ -52,6 +52,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> businessProfile = const {};
   List<dynamic> productionCatalog = const [];
   Map<String, dynamic> marketHistory = const {};
+  Map<String, dynamic> pantheon = const {};
   int unreadNotifications = 0;
   String selectedSection = 'command';
   Timer? eventTimer;
@@ -142,6 +143,7 @@ class _CommandCenterState extends State<CommandCenter> {
       Map<String, dynamic> financials = const {};
       Map<String, dynamic> profile = const {};
       final history = <String, dynamic>{};
+      Map<String, dynamic> achievementData = const {};
       final businessId = value.business['id'] as String?;
       if (businessId != null && businessId.isNotEmpty) {
         try {
@@ -161,6 +163,11 @@ class _CommandCenterState extends State<CommandCenter> {
           // Analytics are optional; live market data remains authoritative.
         }
       }));
+      try {
+        achievementData = await api.pantheon();
+      } catch (_) {
+        // Historical achievements are optional and must not block the world snapshot.
+      }
       if (mounted && requestGeneration == _requestGeneration) {
         setState(() {
           state = value;
@@ -168,6 +175,7 @@ class _CommandCenterState extends State<CommandCenter> {
           businessOwnership = ownership;
           businessFinancials = financials;
           marketHistory = history;
+          pantheon = achievementData;
         });
       }
       await _refreshEvents();
@@ -351,6 +359,7 @@ class _CommandCenterState extends State<CommandCenter> {
                               authorityEvents: authorityEvents,
                               productionCatalog: productionCatalog,
                               marketHistory: marketHistory,
+                              pantheon: pantheon,
                               unreadNotifications: unreadNotifications,
                               sectionKeys: _sectionKeys,
                               action: _run,

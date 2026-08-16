@@ -556,6 +556,56 @@ class HistoryArchivePanel extends StatelessWidget {
   }
 }
 
+class PantheonPanel extends StatelessWidget {
+  final Map<String, dynamic> pantheon;
+
+  const PantheonPanel({super.key, required this.pantheon});
+
+  @override
+  Widget build(BuildContext context) {
+    final deceased = (pantheon['deceasedPantheon'] as List<dynamic>?) ?? const [];
+    final living = (pantheon['livingLeaders'] as List<dynamic>?) ?? const [];
+    return EarthPanel(
+      title: 'PANTHEON / ACHIEVEMENTS',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Legacy is measured across generations, not only by current wealth.',
+            style: TextStyle(color: mutedColor, fontSize: 10),
+          ),
+          const SizedBox(height: 10),
+          if (deceased.isEmpty && living.isEmpty)
+            const Text('No recorded achievements yet.'),
+          if (deceased.isNotEmpty) ...[
+            const Text('DECEASED PANTHEON',
+                style: TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1)),
+            ...deceased.take(3).map((raw) {
+              final entry = raw as Map<String, dynamic>;
+              return Text(
+                '${entry['display_name']}  ·  legacy ${entry['final_legacy'] ?? 0}',
+                style: const TextStyle(fontSize: 11),
+              );
+            }),
+          ],
+          if (living.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('LIVING LEADERS',
+                style: TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1)),
+            ...living.take(3).map((raw) {
+              final entry = raw as Map<String, dynamic>;
+              return Text(
+                '${entry['display_name']}  ·  score ${entry['composite_legacy_score'] ?? 0}',
+                style: const TextStyle(fontSize: 11),
+              );
+            }),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class WorldIntegrityPanel extends StatelessWidget {
   final EarthState state;
 
