@@ -127,6 +127,14 @@ For every slice, run:
 4. production smoke test and `/api/health` persistence/readiness checks;
 5. one monitored game-day after each scheduled-simulation change.
 
+The deterministic local simulator can be exercised across several world sizes
+and horizons with `npm run simulate:scenarios`. It fails when credit,
+resource, institution, or machine-condition invariants are violated.
+
+Run `npm run audit:mutation-boundaries` to verify that PostgreSQL mutation
+adapters retain transaction boundaries, visible replay/correlation handling,
+the PostgreSQL authority guard, and no legacy D1 access.
+
 The authority flag is `postgres` after the completed cutover. Never switch only
 one side of a multi-command domain without recording the boundary.
 

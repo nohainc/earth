@@ -1,6 +1,8 @@
 # EARTH deployment plan
 
-The prototype uses a modular-monolith boundary first, matching the technical architecture document.
+The deployed system uses a modular-monolith boundary first, matching the
+technical architecture document. The local `server.js` process is a
+non-production reference simulator only.
 
 ## Local
 
@@ -30,7 +32,9 @@ versions, inspect the custom-domain attachment before debugging Flutter code.
 - Queues: future retryable notifications, statistics, aging, and settlement side effects
 - R2: reports, logos, exports, and future media
 
-The current `server.js` remains the local PostgreSQL reference implementation. The deployed game client uses the PostgreSQL-backed Worker API above; the Flutter client is the primary web UI.
+The current `server.js` is a local compatibility/reference simulator only. It
+is not deployed and is not a fallback authority. The deployed game client uses
+the PostgreSQL-backed Worker API above; the Flutter client is the primary web UI.
 
 ## Secrets
 
@@ -42,6 +46,9 @@ Never commit `DATABASE_URL` or Cloudflare credentials. Use `.env` locally and Wr
 DATABASE_URL="$DATABASE_URL" npm run db:verify:manifest
 npm run cf:smoke
 ```
+
+The release is blocked if PostgreSQL connectivity, schema/data readiness, or
+the stable API error contract fails.
 
 The Flutter web build is tested against the deployed API with
 `--dart-define=EARTH_API_URL=https://earthuc.com`; production uses the same

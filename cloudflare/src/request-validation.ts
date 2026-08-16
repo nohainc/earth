@@ -1,5 +1,14 @@
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
+function validationResponse(request: Request, error: string, status: number): Response {
+  return Response.json({
+    ok: false,
+    error,
+    code: status === 413 ? 'PAYLOAD_TOO_LARGE' : 'VALIDATION_ERROR',
+    correlationId: request.headers.get('X-Request-ID') ?? crypto.randomUUID(),
+  }, { status });
+}
+
 export type JsonBodyResult<T> =
   | { ok: true; value: T }
   | { ok: false; response: Response };
@@ -7,12 +16,12 @@ export type JsonBodyResult<T> =
 export async function parseJsonBody<T>(request: Request, maxBytes = MAX_JSON_BODY_BYTES): Promise<JsonBodyResult<T>> {
   const declaredLength = Number(request.headers.get('Content-Length') ?? 0);
   if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
-    return { ok: false, response: Response.json({ ok: false, error: `Request body must be ${maxBytes} bytes or smaller` }, { status: 413 }) };
+    return { ok: false, response: validationResponse(request, `Request body must be ${maxBytes} bytes or smaller`, 413) };
   }
 
   const text = await request.text();
   if (new TextEncoder().encode(text).byteLength > maxBytes) {
-    return { ok: false, response: Response.json({ ok: false, error: `Request body must be ${maxBytes} bytes or smaller` }, { status: 413 }) };
+    return { ok: false, response: validationResponse(request, `Request body must be ${maxBytes} bytes or smaller`, 413) };
   }
 
   if (!text.trim()) return { ok: true, value: {} as T };
@@ -21,6 +30,6 @@ export async function parseJsonBody<T>(request: Request, maxBytes = MAX_JSON_BOD
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('JSON body must be an object');
     return { ok: true, value: value as T };
   } catch {
-    return { ok: false, response: Response.json({ ok: false, error: 'Request body must be valid JSON object' }, { status: 400 }) };
+    return { ok: false, response: validationResponse(request, 'Request body must be valid JSON object', 400) };
   }
 }

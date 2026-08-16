@@ -4,6 +4,7 @@ import { processMortality } from './lifecycle-postgres';
 import { transferCredits } from './financial-postgres';
 import { classifyBusinessFinancialStatus } from './business-finance';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money';
+import { validateWorldAdvanceMinutes } from './scheduler-rules';
 
 const products = ['material', 'components', 'energy', 'compute'];
 
@@ -177,6 +178,7 @@ async function settleProduction(tx: PostgresRepository, day: number): Promise<nu
 }
 
 export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
+  validateWorldAdvanceMinutes(minutesPerTick);
   const result = await repository.transaction(async (tx) => {
     if (idempotencyKey) {
       const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`SCHEDULED-TICK-${idempotencyKey}`]);

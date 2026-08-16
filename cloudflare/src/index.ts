@@ -1375,7 +1375,9 @@ const worker = {
     if (businessLiquidationMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ otp?: string }>();
+      const body = await request.json<{ otp?: string; correlationId?: string }>();
+      const correlationId = body.correlationId?.trim() ?? '';
+      if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid decommission correlationId is required' }, { status: 400 });
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for business liquidation' }, { status: 401 });
       try {
         const result = await withRepository(env, (repository) => liquidateBusinessPostgres(repository, { ownerId: viewer.id, businessId: businessLiquidationMatch[1] }));
@@ -1568,9 +1570,9 @@ const worker = {
       const body = await request.json<{ otp?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for decommissioning an asset' }, { status: 401 });
       try {
-        const result = await withRepository(env, (repository) => recycleMachinePostgres(repository, { machineId: decommissionMatch[1], ownerId: viewer.id }));
+        const result = await withRepository(env, (repository) => recycleMachinePostgres(repository, { machineId: decommissionMatch[1], ownerId: viewer.id, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Machine recycling failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
@@ -1664,8 +1666,10 @@ export default {
     }
     const url = new URL(request.url);
     const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health';
-    if (isDataRequest) authorityMode(env);
-    const response = isDataRequest
+    let response: Response;
+    try {
+      if (isDataRequest) authorityMode(env);
+      response = isDataRequest
       ? await worker.fetch(request, env, ctx)
       : url.pathname === '/'
         ? await env.ASSETS.fetch(new Request(new URL('/landing.html', request.url), request))
@@ -1676,6 +1680,10 @@ export default {
         : url.pathname.startsWith('/app/')
           ? await env.ASSETS.fetch(new Request(new URL(`${url.pathname.slice(4)}?v=${WEB_ASSET_VERSION}`, request.url), request))
           : await env.ASSETS.fetch(request);
+    } catch (error) {
+      console.error(JSON.stringify({ event: 'worker_request_failed', requestId, path: url.pathname, method: request.method, error: error instanceof Error ? error.message : 'unknown' }));
+      response = Response.json({ ok: false, error: 'EARTH service is temporarily unavailable', code: 'SERVICE_UNAVAILABLE', correlationId: requestId }, { status: 503 });
+    }
     const headers = new Headers(response.headers);
     const origin = request.headers.get('Origin');
     if (origin === 'https://earth-client.pages.dev' || origin?.endsWith('.earth-client.pages.dev')) {

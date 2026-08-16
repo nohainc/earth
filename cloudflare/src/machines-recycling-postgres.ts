@@ -1,7 +1,9 @@
 import type { PostgresRepository } from './repository';
 
-export async function recycleMachine(repository: PostgresRepository, input: { machineId: string; ownerId: string }): Promise<Record<string, unknown>> {
+export async function recycleMachine(repository: PostgresRepository, input: { machineId: string; ownerId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ id: string; material_returned: string; components_returned: string; efficiency: string; game_day: number }>('SELECT id, material_returned, components_returned, efficiency, game_day FROM recycling_events WHERE machine_id = $1 AND owner_id = $2 AND correlation_id = $3', [input.machineId, input.ownerId, input.correlationId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, eventId: prior.rows[0].id, machineId: input.machineId, materialReturned: Number(prior.rows[0].material_returned), componentsReturned: Number(prior.rows[0].components_returned), efficiency: Number(prior.rows[0].efficiency), gameDay: Number(prior.rows[0].game_day), correlationId: input.correlationId };
     const machine = await tx.query<{ id: string; machine_type: string; condition: string; productive_capacity: string }>('SELECT id, machine_type, condition, productive_capacity FROM machines WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.machineId, input.ownerId]);
     if (!machine.rows[0]) throw new Error('Machine not found for this Human');
     const embeddedMaterial: Record<string, number> = { extractor: 80, 'energy-array': 60, 'compute-node': 100, fabricator: 90, 'housing-fabricator': 110, 'research-cluster': 140, 'service-robot': 45 };
@@ -14,9 +16,9 @@ export async function recycleMachine(repository: PostgresRepository, input: { ma
     await tx.query('DELETE FROM business_assets WHERE machine_id = $1', [input.machineId]);
     await tx.query('DELETE FROM machines WHERE id = $1 AND owner_id = $2', [input.machineId, input.ownerId]);
     await tx.query("INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1, 'material', $2), ($1, 'components', $3) ON CONFLICT(owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount", [input.ownerId, materialReturned, componentsReturned]);
-    await tx.query('INSERT INTO recycling_events (id, machine_id, owner_id, material_returned, components_returned, efficiency, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7)', [eventId, input.machineId, input.ownerId, materialReturned, componentsReturned, efficiency, day]);
+    await tx.query('INSERT INTO recycling_events (id, machine_id, owner_id, material_returned, components_returned, efficiency, game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [eventId, input.machineId, input.ownerId, materialReturned, componentsReturned, efficiency, day, input.correlationId]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'MACHINE', input.machineId, input.ownerId, null, 1, 'recycling', eventId, day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'production', 'Machine recycled', `${materialReturned} Material and ${componentsReturned} Components returned at ${Math.round(efficiency * 100)}% efficiency.`, input.machineId]);
-    return { ok: true, eventId, machineId: input.machineId, materialReturned, componentsReturned, efficiency };
+    return { ok: true, eventId, machineId: input.machineId, materialReturned, componentsReturned, efficiency, gameDay: day, correlationId: input.correlationId };
   });
 }

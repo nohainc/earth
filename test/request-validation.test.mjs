@@ -15,10 +15,13 @@ test('rejects malformed and non-object JSON bodies with validation responses', a
   assert.equal(array.ok, false);
   assert.equal(malformed.response.status, 400);
   assert.equal(array.response.status, 400);
+  assert.equal((await malformed.response.clone().json()).code, 'VALIDATION_ERROR');
+  assert.equal(typeof (await array.response.clone().json()).correlationId, 'string');
 });
 
 test('rejects oversized request bodies before JSON parsing', async () => {
   const result = await parseJsonBody(new Request('https://earth.test/api', { method: 'POST', body: '1234567890' }), 8);
   assert.equal(result.ok, false);
   assert.equal(result.response.status, 413);
+  assert.equal((await result.response.json()).code, 'PAYLOAD_TOO_LARGE');
 });

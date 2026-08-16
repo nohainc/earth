@@ -147,14 +147,19 @@ class EarthApi {
     try {
       decoded = jsonDecode(response.body);
     } catch (_) {
-      throw Exception(
-          'The server returned an unexpected response (HTTP ${response.statusCode})');
+      throw EarthApiException(
+          'The server returned an unexpected response (HTTP ${response.statusCode})',
+          statusCode: response.statusCode);
     }
     if (response.statusCode >= 400) {
       final requestId = response.headers['x-request-id'];
-      throw Exception(decoded is Map
-          ? '${decoded['error'] ?? 'Request failed'}${requestId == null ? '' : ' (request $requestId)'}'
-          : 'Request failed${requestId == null ? '' : ' (request $requestId)'}');
+      final payload = decoded is Map ? decoded : const <String, dynamic>{};
+      throw EarthApiException(
+        '${payload['error'] ?? 'Request failed'}',
+        code: '${payload['code'] ?? 'REQUEST_FAILED'}',
+        correlationId: '${payload['correlationId'] ?? requestId ?? ''}',
+        statusCode: response.statusCode,
+      );
     }
     return decoded;
   }
@@ -399,6 +404,8 @@ class EarthApi {
         method: 'POST',
         body: {
           if (otp.isNotEmpty) 'otp': otp,
+          'correlationId':
+              'machine-recycle-$machineId-${DateTime.now().microsecondsSinceEpoch}',
         });
     return world();
   }
@@ -1195,13 +1202,14 @@ class _CommandCenterState extends State<CommandCenter> {
           financials = await api.businessFinancials(businessId);
         } catch (_) {/* Keep the canonical world snapshot usable. */}
       }
-      if (mounted)
+      if (mounted) {
         setState(() {
           state = value;
           businessProfile = profile;
           businessOwnership = ownership;
           businessFinancials = financials;
         });
+      }
       await _refreshEvents();
     } catch (exception) {
       if (mounted) {

@@ -91,3 +91,8 @@ The active repository tools are `npm run db:migrate:postgres` and
 `npm run db:verify:manifest`; both require explicit credentials and never use
 the Worker Hyperdrive binding implicitly. The retired D1 import, parity, and
 restore-rehearsal scripts are no longer part of the application toolchain.
+
+Run `npm run db:verify:invariants` after connecting to the intended database.
+It fails closed without `DATABASE_URL` and checks non-negative balances,
+ledger validity, machine bounds, ownership conflicts, outbox retry pressure,
+the single world row, and migration count.

@@ -6,6 +6,7 @@ import { createDatabase } from './database.js';
 
 // EARTH prototype server: commands mutate canonical state; clients only submit intent.
 const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || '127.0.0.1';
 const database = createDatabase();
 const commandResults = new Map();
 const eventSubscribers = new Set();
@@ -86,9 +87,9 @@ function settleMarket() {
 }
 function command(path, body) {
   if (path === '/api/world' && body.method === 'GET') return snapshot();
-  if (path === '/api/storage' && body.method === 'GET') return { configured: Boolean(database), mode: database ? 'postgres-ready' : 'memory-fallback' };
-  if (path === '/api/health' && body.method === 'GET') return { ok: true, checks: { database: true, coreSchema: true, balancesNonNegative: true, machineConditionsBounded: true }, persistence: database ? 'postgres' : 'memory' };
-  if (path === '/api/world/activity' && body.method === 'GET') return { activity: [{ type: 'world_clock', day: state.clock.day }, { type: 'research_progress', progress: state.technology.research.progress }, { type: 'market_cycle', batch: state.world.batch }], persistence: database ? 'postgres' : 'memory' };
+  if (path === '/api/storage' && body.method === 'GET') return { configured: Boolean(database), mode: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
+  if (path === '/api/health' && body.method === 'GET') return { ok: true, checks: { database: Boolean(database), coreSchema: Boolean(database), balancesNonNegative: true, machineConditionsBounded: true }, persistence: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
+  if (path === '/api/world/activity' && body.method === 'GET') return { activity: [{ type: 'world_clock', day: state.clock.day }, { type: 'research_progress', progress: state.technology.research.progress }, { type: 'market_cycle', batch: state.world.batch }], persistence: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
   if (path === '/api/audit' && body.method === 'GET') return audit();
   if (path === '/api/institutions' && body.method === 'GET') return state.institutions;
   if (path === '/api/life/successor' && body.method === 'POST') {
@@ -158,6 +159,23 @@ const server = createServer(async (req, res) => {
   if (req.method === 'GET' && url.pathname === '/api/events') { res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive', 'access-control-allow-origin': '*' }); res.write(`data: ${JSON.stringify({ type: 'connected', gameDay: state.clock.day })}\n\n`); eventSubscribers.add(res); req.on('close', () => eventSubscribers.delete(res)); return; }
   if (req.method === 'GET' && await serveStatic(res, url.pathname)) return;
   try { const result = command(url.pathname, { ...(raw ? JSON.parse(raw) : {}), method: req.method }); send(res, 200, result); }
-  catch (error) { send(res, error.message === 'Route not found' ? 404 : 400, { ok: false, error: error.message }); }
+  catch (error) {
+    const status = error.message === 'Route not found' ? 404 : 400;
+    const code = status === 404 ? 'NOT_FOUND' : 'VALIDATION_ERROR';
+    const correlationId = req.headers['x-request-id'] || randomUUID();
+    send(res, status, { ok: false, error: error.message, code, correlationId });
+  }
 });
-hydrateFromDatabase().then(() => server.listen(PORT, () => console.log(`EARTH authoritative prototype server listening on http://localhost:${PORT}`))).catch(error => { console.error('database hydration failed', error.message); server.listen(PORT, () => console.log(`EARTH server running with fallback state on http://localhost:${PORT}`)); });
+server.on('error', (error) => {
+  console.error(`EARTH reference simulator failed to listen on ${HOST}:${PORT}:`, error.message);
+  process.exitCode = 1;
+});
+
+// This Node process is a local compatibility/reference simulator only. The
+// deployed Worker and all production economic mutations use PostgreSQL.
+hydrateFromDatabase()
+  .then(() => server.listen(PORT, HOST, () => console.log(`EARTH reference simulator listening on http://${HOST}:${PORT}`)))
+  .catch((error) => {
+    console.error('PostgreSQL hydration failed; refusing to start with stale or partial state:', error.message);
+    process.exitCode = 1;
+  });

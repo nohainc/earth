@@ -6,7 +6,7 @@ EARTH is a web-first prototype of a persistent economic and civic simulation bas
 
 For the visual prototype, open `index.html` in this folder. It launches the current Prototype 3 experience from the project root.
 
-For the authoritative API prototype:
+For the local reference API simulator:
 
 ```bash
 cd earth
@@ -14,7 +14,10 @@ npm install
 npm start
 ```
 
-The server listens on `http://localhost:8787` and exposes `GET /api/world`, market order and settlement commands, business policy, research funding, governance ballots, and day advancement. Set `DATABASE_URL` to enable PostgreSQL persistence; without it, the server deliberately runs in an in-memory development mode. `GET /api/storage` reports which mode is active.
+The server listens on `http://localhost:8787` and exposes the compatibility
+API. It is non-production and never a fallback for the Cloudflare Worker. Set
+`DATABASE_URL` when hydrating the simulator from PostgreSQL; production
+gameplay uses the PostgreSQL-backed Worker API.
 
 To provision the recommended local PostgreSQL authority:
 
@@ -53,9 +56,15 @@ cd ..
 npx wrangler deploy --domains earthuc.com
 ```
 
+## API contract
+
+The versioned REST/JSON error and authority contract is documented in
+[`docs/API_CONTRACT.md`](docs/API_CONTRACT.md). The current response version is
+`2026-08`.
+
 ## Repository map
 
-- `server.js` — authoritative prototype API and event stream
+- `server.js` — non-production reference API and event stream
 - `database.js` — optional PostgreSQL write-through adapter
 - `db/migrations/001_initial.sql` — relational world schema
 - `db/seed.sql` — initial United Corporations / City / Corporation / Human world
@@ -68,6 +77,7 @@ npx wrangler deploy --domains earthuc.com
 ```bash
 npm run check
 npm test
+npm run simulate:scenarios
 ```
 
 ## Current playable systems

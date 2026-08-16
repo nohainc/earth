@@ -19,3 +19,18 @@ test('synthetic economy is deterministic for replay and dispute analysis', () =>
   const second = runSimulation({ days: 120, humans: 30, seed: 2026 });
   assert.deepEqual(second, first);
 });
+
+test('simulation scenarios preserve invariants across world sizes and horizons', () => {
+  for (const scenario of [
+    { days: 180, humans: 5, seed: 7 },
+    { days: 365, humans: 250, seed: 2026 },
+    { days: 1825, humans: 100, seed: 99 },
+  ]) {
+    const result = runSimulation(scenario);
+    assert.equal(result.creditsConserved, true);
+    assert.equal(result.nonNegativeBalances, true);
+    assert.equal(result.resourceNonNegative, true);
+    assert.equal(result.institutionBalancesNonNegative, true);
+    assert.equal(result.boundedMachineCondition, true);
+  }
+});
