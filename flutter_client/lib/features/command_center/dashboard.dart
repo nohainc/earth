@@ -19,6 +19,8 @@ String dashboardSectionTitle(String section) => switch (section) {
       'civic' => 'CIVIC LIFE',
       'city' => 'CITY',
       'technology' => 'TECHNOLOGY',
+      'life' => 'LIFE & LEGACY',
+      'contracts' => 'CONTRACTS',
       _ => 'COMMAND CENTER',
     };
 
@@ -206,14 +208,12 @@ class Dashboard extends StatelessWidget {
           ProductionEventsPanel(state: state),
           InstitutionSolvencyPanel(state: state, busy: busy, action: action),
           PersonalFinancePanel(state: state, busy: busy, action: action),
-          NegotiatedContractsPanel(state: state, busy: busy, action: action),
         ];
       case 'civic':
         return [
           HumanServicesPanel(panelKey: sectionKeys['civic'], state: state),
           ProposalPanel(state: state, busy: busy, action: action),
           RolesPanel(state: state, busy: busy, action: action),
-          SuccessionPanel(state: state, busy: busy, action: action),
           CommunitiesPanel(state: state, busy: busy, action: action),
           CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
           AuthorityHistoryPanel(authorityEvents: authorityEvents),
@@ -268,6 +268,26 @@ class Dashboard extends StatelessWidget {
               ],
             ),
           ),
+        ];
+      case 'life':
+        return [
+          SuccessionPanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          LedgerPanel(state: state),
+          OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
+          HistoryArchivePanel(state: state),
+        ];
+      case 'contracts':
+        return [
+          NegotiatedContractsPanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          AuthorityHistoryPanel(authorityEvents: authorityEvents),
         ];
       case 'command':
       default:

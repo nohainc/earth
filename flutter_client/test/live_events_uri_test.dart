@@ -6,6 +6,8 @@ void main() {
   test('maps navigation topics to app section titles', () {
     expect(dashboardSectionTitle('market'), 'CENTRAL MARKET');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
+    expect(dashboardSectionTitle('life'), 'LIFE & LEGACY');
+    expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
     expect(dashboardSectionTitle('unknown'), 'COMMAND CENTER');
   });
 

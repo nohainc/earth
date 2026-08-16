@@ -36,6 +36,8 @@ class _CommandCenterState extends State<CommandCenter> {
     'civic': GlobalKey(),
     'city': GlobalKey(),
     'technology': GlobalKey(),
+    'life': GlobalKey(),
+    'contracts': GlobalKey(),
   };
   EarthState? state;
   String? error;
