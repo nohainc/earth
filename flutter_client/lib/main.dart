@@ -1239,45 +1239,54 @@ class _CommandCenterState extends State<CommandCenter> {
               role['assignment_status'] == 'active';
         }) ??
         false;
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('EARTH  ·  COMMAND CENTER',
-            style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1)),
-        actions: [
-          if (busy)
-            const Padding(
-                padding: EdgeInsets.all(18),
-                child: SizedBox(
-                    width: 18,
-                    height: 18,
-                    child: CircularProgressIndicator(strokeWidth: 2))),
-          TextButton(
-              onPressed:
-                  busy || !canAdvanceDay ? null : () => _run(api.advanceDay),
-              child: const Text('ADVANCE DAY  →')),
-          IconButton(
-              tooltip: 'Sign out',
-              onPressed: busy
-                  ? null
-                  : () async {
-                      await api.logout();
-                      if (mounted) widget.onLogout();
-                    },
-              icon: const Icon(Icons.logout)),
-          IconButton(
-              tooltip: 'Account security',
-              onPressed: busy ? null : () => _showSecurityDialog(context),
-              icon: const Icon(Icons.security))
-        ],
-      ),
-      body: current == null
-          ? Center(
-              child: error == null
-                  ? const CircularProgressIndicator()
-                  : _ErrorState(message: error!, retry: () => _run(api.world)))
-          : LayoutBuilder(builder: (context, constraints) {
-              final compact = constraints.maxWidth < 900;
-              return RefreshIndicator(
+    return LayoutBuilder(builder: (context, viewport) {
+      final compact = viewport.maxWidth < 900;
+      return Scaffold(
+          drawer: current != null && compact
+              ? Drawer(
+                  backgroundColor: _canvas,
+                  child: SafeArea(child: _Sidebar(state: current)),
+                )
+              : null,
+          appBar: AppBar(
+            title: const Text('EARTH  ·  COMMAND CENTER',
+                style:
+                    TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1)),
+            actions: [
+              if (busy)
+                const Padding(
+                    padding: EdgeInsets.all(18),
+                    child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2))),
+              TextButton(
+                  onPressed: busy || !canAdvanceDay
+                      ? null
+                      : () => _run(api.advanceDay),
+                  child: const Text('ADVANCE DAY  →')),
+              IconButton(
+                  tooltip: 'Sign out',
+                  onPressed: busy
+                      ? null
+                      : () async {
+                          await api.logout();
+                          if (mounted) widget.onLogout();
+                        },
+                  icon: const Icon(Icons.logout)),
+              IconButton(
+                  tooltip: 'Account security',
+                  onPressed: busy ? null : () => _showSecurityDialog(context),
+                  icon: const Icon(Icons.security))
+            ],
+          ),
+          body: current == null
+              ? Center(
+                  child: error == null
+                      ? const CircularProgressIndicator()
+                      : _ErrorState(
+                          message: error!, retry: () => _run(api.world)))
+              : RefreshIndicator(
                   onRefresh: () async => _run(api.world),
                   child: Container(
                       decoration: const BoxDecoration(
@@ -1317,9 +1326,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                   unreadNotifications: unreadNotifications,
                                   action: _run)
                             ]))
-                      ])));
-            }),
-    );
+                      ]))));
+    });
   }
 
   Future<void> _showMfaDialog(BuildContext context) async {
