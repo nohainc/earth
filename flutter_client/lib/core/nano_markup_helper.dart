@@ -27,7 +27,7 @@ class NanoMarkupHelper {
     }
   }
 
-  /// Decodes a Nano Markup string (or legacy JSON string) to dynamic / Map<String, dynamic>.
+  /// Decodes a Nano Markup string (or legacy JSON string) to dynamic or `Map<String, dynamic>`.
   static dynamic decode(String source) {
     final trimmed = source.trim();
     if (trimmed.isEmpty) return null;
