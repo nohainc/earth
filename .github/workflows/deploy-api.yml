@@ -32,4 +32,6 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --config wrangler.api.jsonc
       - name: Verify API health
-        run: node -e "fetch('https://earthuc.com/api/health').then(async r=>{if(!r.ok)throw Error('health returned '+r.status); const b=await r.json(); if(!b.ok)throw Error('API is not healthy'); console.log('API healthy')})"
+        env:
+          DEPLOY_URL: https://earthuc.com
+        run: node -e "const url=process.env.DEPLOY_URL+'/api/health'; fetch(url).then(async r=>{if(!r.ok)throw Error('health returned '+r.status+' from '+url); const b=await r.json(); if(!b.ok)throw Error('API is not healthy'); console.log('API healthy:',url)})"
