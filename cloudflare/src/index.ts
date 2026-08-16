@@ -21,17 +21,10 @@ import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
+import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
 
 const SESSION_DAYS = 7;
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
-const MACHINE_CATALOG: Record<string, { output: string; credit: number; material: number; capacity: number }> = {
-  extractor: { output: 'material', credit: 4200, material: 80, capacity: 2 },
-  'energy-array': { output: 'energy', credit: 3600, material: 60, capacity: 2 },
-  'compute-node': { output: 'compute', credit: 5200, material: 100, capacity: 1.5 },
-  fabricator: { output: 'components', credit: 4800, material: 90, capacity: 1.8 },
-  'housing-fabricator': { output: 'components', credit: 5000, material: 110, capacity: 1.6 },
-  'research-cluster': { output: 'compute', credit: 7000, material: 140, capacity: 1.2 },
-};
 const encoder = new TextEncoder();
 const bytesToBase64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const base64ToBytes = (value: string) => Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
@@ -957,16 +950,7 @@ const worker = {
       }
     }
     if (url.pathname === '/api/production/catalog' && request.method === 'GET') {
-      return Response.json({ sectors: [
-        { id: 'energy', name: 'Energy', output: 'energy', machineTypes: ['energy-array'], acquisition: MACHINE_CATALOG['energy-array'] },
-        { id: 'extraction', name: 'Extraction', output: 'material', machineTypes: ['extractor'], acquisition: MACHINE_CATALOG.extractor },
-        { id: 'components', name: 'Components', output: 'components', machineTypes: ['fabricator'], acquisition: MACHINE_CATALOG.fabricator },
-        { id: 'machines', name: 'Machines', output: 'components', machineTypes: ['assembly-line'] },
-        { id: 'maintenance', name: 'Maintenance', output: 'components', machineTypes: ['service-robot'] },
-        { id: 'housing', name: 'Housing', output: 'components', machineTypes: ['housing-fabricator'], acquisition: MACHINE_CATALOG['housing-fabricator'] },
-        { id: 'compute', name: 'Compute', output: 'compute', machineTypes: ['compute-node'], acquisition: MACHINE_CATALOG['compute-node'] },
-        { id: 'r-and-d', name: 'R&D', output: 'compute', machineTypes: ['research-cluster'], acquisition: MACHINE_CATALOG['research-cluster'] },
-      ], rules: { serverAuthoritative: true, productionRequiresUtilization: true, depreciationApplied: true }, persistence: 'planetscale-postgres' });
+      return productionCatalogResponse();
     }
     if (url.pathname === '/api/technology' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listTechnologyPostgres(repository));
