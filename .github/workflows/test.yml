@@ -70,5 +70,4 @@ jobs:
       - run: flutter analyze
       - run: flutter test
       - run: flutter build web --release --dart-define=EARTH_API_URL=https://earthuc.com
-      - name: Check deployed PostgreSQL Worker
-        run: curl --fail --silent --show-error https://earthuc.com/api/health
+
