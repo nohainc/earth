@@ -13,6 +13,15 @@ import '../operations/technology_panel.dart';
 import 'hero_card.dart';
 import 'opportunity_panel.dart';
 
+String dashboardSectionTitle(String section) => switch (section) {
+      'market' => 'CENTRAL MARKET',
+      'business' => 'BUSINESS',
+      'civic' => 'CIVIC LIFE',
+      'city' => 'CITY',
+      'technology' => 'TECHNOLOGY',
+      _ => 'COMMAND CENTER',
+    };
+
 class Dashboard extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -58,6 +67,7 @@ class Dashboard extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        if (selectedSection == 'command') ...[
         HeroCard(key: sectionKeys['command'], state: state),
         const SizedBox(height: 16),
         Text(
@@ -141,6 +151,28 @@ class Dashboard extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 14),
+
+        ],
+        if (selectedSection != 'command') ...[
+          Text(
+            dashboardSectionTitle(selectedSection),
+            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: inkColor,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -.6,
+                ),
+          ),
+          const SizedBox(height: 6),
+          Text(
+            'DAY ${state.clock['day']}  ·  ${state.institutions['city']['name']}  ·  ${state.institutions['corporation']['name']}',
+            style: const TextStyle(
+              color: mutedColor,
+              fontSize: 11,
+              letterSpacing: .7,
+            ),
+          ),
+          const SizedBox(height: 20),
+        ],
         ..._selectedPanels(),
       ],
     );

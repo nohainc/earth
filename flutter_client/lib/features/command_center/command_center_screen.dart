@@ -19,15 +19,6 @@ Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
   return Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/edge/events');
 }
 
-String commandSectionTitle(String section) => switch (section) {
-      'market' => 'CENTRAL MARKET',
-      'business' => 'BUSINESS',
-      'civic' => 'CIVIC LIFE',
-      'city' => 'CITY',
-      'technology' => 'TECHNOLOGY',
-      _ => 'COMMAND CENTER',
-    };
-
 class CommandCenter extends StatefulWidget {
   final VoidCallback onLogout;
   const CommandCenter({super.key, required this.onLogout});
@@ -226,7 +217,7 @@ class _CommandCenterState extends State<CommandCenter> {
             : null,
         appBar: AppBar(
           title: Text(
-            'EARTH  ·  ${commandSectionTitle(selectedSection)}',
+            'EARTH  ·  ${dashboardSectionTitle(selectedSection)}',
             style: const TextStyle(
               fontWeight: FontWeight.w800,
               letterSpacing: 1.1,

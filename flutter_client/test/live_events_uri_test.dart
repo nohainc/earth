@@ -1,11 +1,12 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/features/command_center/command_center_screen.dart';
+import 'package:earth_client/features/command_center/dashboard.dart';
 
 void main() {
   test('maps navigation topics to app section titles', () {
-    expect(commandSectionTitle('market'), 'CENTRAL MARKET');
-    expect(commandSectionTitle('technology'), 'TECHNOLOGY');
-    expect(commandSectionTitle('unknown'), 'COMMAND CENTER');
+    expect(dashboardSectionTitle('market'), 'CENTRAL MARKET');
+    expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
+    expect(dashboardSectionTitle('unknown'), 'COMMAND CENTER');
   });
 
   test('uses configured API origin for live events', () {
