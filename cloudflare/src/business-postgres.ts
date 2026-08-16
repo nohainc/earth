@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, marketValueToCents, moneyToCents } from './money.ts';
+import { enqueueOutbox } from './outbox-postgres.ts';
 
 const sectors = new Set(['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d']);
 
@@ -119,6 +120,13 @@ export async function distributeDividends(repository: PostgresRepository, input:
     }
     await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [centsToMoney(totalCents), day, input.businessId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.dividend_distributed', `Dividends distributed for ${input.businessId}`, JSON.stringify({ businessId: input.businessId, totalAmount: input.totalAmount, recipientsCount: payouts.length, correlationId: input.correlationId })]);
+    await enqueueOutbox(tx, {
+      eventKey: `business-dividend:${input.correlationId}`,
+      topic: 'world_activity',
+      aggregateType: 'business',
+      aggregateId: input.businessId,
+      payload: { type: 'world_activity', category: 'business', action: 'dividend_distributed', businessId: input.businessId, totalAmount: input.totalAmount, recipientsCount: payouts.length, gameDay: day },
+    });
     return { ok: true, businessId: input.businessId, totalAmount: input.totalAmount, distributions: payouts, correlationId: input.correlationId };
   });
 }
@@ -220,6 +228,13 @@ export async function proposeMerger(repository: PostgresRepository, input: { acq
     const terms = { acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, pricePerShare: input.pricePerShare, totalShares: Number(totalShares), totalAmount: Number(total) };
     await tx.query("INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, status, starts_game_day, ends_game_day, correlation_id) VALUES ($1,'strategic',$2,$3,'Merger Tender Offer',$4,$5,'proposed',$6,$7,$8)", [mergerId, input.acquirerId, target.rows[0].owner_id, JSON.stringify(terms), total, day, day + 30, input.correlationId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merger_proposed', `Merger tender offer for ${input.targetBusinessId}`, JSON.stringify({ mergerId, acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, totalAmount: Number(total) })]);
+    await enqueueOutbox(tx, {
+      eventKey: `business-merger-proposal:${input.correlationId}`,
+      topic: 'world_activity',
+      aggregateType: 'business',
+      aggregateId: input.acquirerBusinessId,
+      payload: { type: 'world_activity', category: 'business', action: 'merger_proposed', mergerId, acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, gameDay: day },
+    });
     return { ok: true, mergerId, terms, correlationId: input.correlationId };
   });
 }
@@ -265,6 +280,13 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE negotiated_contracts SET status = 'completed', accepted_game_day = $1 WHERE id = $2", [day, input.mergerId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, JSON.stringify({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId })]);
+    await enqueueOutbox(tx, {
+      eventKey: `business-merger:${input.correlationId}`,
+      topic: 'world_activity',
+      aggregateType: 'business',
+      aggregateId: acquirerBusinessId,
+      payload: { type: 'world_activity', category: 'business', action: 'business_merged', mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, gameDay: day },
+    });
     return { ok: true, mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId };
   });
 }

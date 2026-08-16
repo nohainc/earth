@@ -45,6 +45,7 @@ test('listMarketPriceHistory queries current clearing price and snapshot history
 
 test('proposeMerger validates balance and records tender offer', async () => {
   let createdProposal = null;
+  const outboxEvents = [];
   const repo = createMockRepository((sql, params) => {
     if (sql.includes("FROM negotiated_contracts WHERE proposer_id = $1 AND correlation_id = $2")) {
       return { rows: [] };
@@ -65,6 +66,10 @@ test('proposeMerger validates balance and records tender offer', async () => {
       createdProposal = params[0];
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes('INSERT INTO event_outbox')) {
+      outboxEvents.push(params[1]);
+      return { rows: [], rowCount: 1 };
+    }
     return { rows: [], rowCount: 1 };
   });
 
@@ -80,12 +85,14 @@ test('proposeMerger validates balance and records tender offer', async () => {
   assert.ok(result.mergerId);
   assert.equal(result.terms.totalAmount, 20000);
   assert.equal(createdProposal, result.mergerId);
+  assert.deepEqual(outboxEvents, ['business-merger-proposal:MERGER-PROPOSE-1']);
 });
 
 test('executeMerger transfers funds pro-rata, transfers assets, and dissolves target', async () => {
   let transferredLedgerCount = 0;
   let targetDissolved = false;
   let assetsTransferred = false;
+  const outboxEvents = [];
 
   const repo = createMockRepository((sql, params) => {
     if (sql.includes("FROM world_events WHERE event_type = 'business.merged'")) {
@@ -138,6 +145,10 @@ test('executeMerger transfers funds pro-rata, transfers assets, and dissolves ta
       targetDissolved = true;
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes('INSERT INTO event_outbox')) {
+      outboxEvents.push(params[1]);
+      return { rows: [], rowCount: 1 };
+    }
     return { rows: [], rowCount: 1 };
   });
 
@@ -153,4 +164,5 @@ test('executeMerger transfers funds pro-rata, transfers assets, and dissolves ta
   assert.equal(transferredLedgerCount, 2);
   assert.equal(assetsTransferred, true);
   assert.equal(targetDissolved, true);
+  assert.deepEqual(outboxEvents, ['business-merger:MERGER-EXEC-1']);
 });

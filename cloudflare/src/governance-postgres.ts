@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { enqueueOutbox } from './outbox-postgres.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -134,6 +135,13 @@ export async function challengeProposal(repository: PostgresRepository, input: {
     const day = Number(world.rows[0]?.game_day ?? 0);
     await tx.query("UPDATE proposals SET execution_status = 'challenged' WHERE id = $1", [input.proposalId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.challenge_filed', `Constitutional challenge filed for proposal ${input.proposalId}`, JSON.stringify({ proposalId: input.proposalId, challenger: input.humanId, reason: input.reason, correlationId: input.correlationId })]);
+    await enqueueOutbox(tx, {
+      eventKey: `governance-challenge:${input.correlationId}`,
+      topic: 'world_activity',
+      aggregateType: 'proposal',
+      aggregateId: input.proposalId,
+      payload: { type: 'world_activity', category: 'governance', action: 'constitutional_challenge_filed', proposalId: input.proposalId, gameDay: day },
+    });
     return { ok: true, proposalId: input.proposalId, executionStatus: 'challenged', reason: input.reason, correlationId: input.correlationId };
   });
 }
@@ -154,6 +162,13 @@ export async function resolveConstitutionalAppeal(repository: PostgresRepository
       await tx.query("UPDATE proposals SET execution_status = 'ready' WHERE id = $1", [input.proposalId]);
     }
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.ruling_issued', `Constitutional ruling for proposal ${input.proposalId}: ${input.ruling.toUpperCase()}`, JSON.stringify({ proposalId: input.proposalId, jurist: input.humanId, ruling: input.ruling, rationale: input.rationale, correlationId: input.correlationId })]);
+    await enqueueOutbox(tx, {
+      eventKey: `governance-ruling:${input.correlationId}`,
+      topic: 'world_activity',
+      aggregateType: 'proposal',
+      aggregateId: input.proposalId,
+      payload: { type: 'world_activity', category: 'governance', action: 'constitutional_ruling_issued', proposalId: input.proposalId, ruling: input.ruling, gameDay: day },
+    });
     return { ok: true, proposalId: input.proposalId, ruling: input.ruling, executionStatus: input.ruling === 'void' ? 'voided' : 'ready', rationale: input.rationale, correlationId: input.correlationId };
   });
 }

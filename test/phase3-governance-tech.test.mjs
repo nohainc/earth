@@ -20,6 +20,7 @@ function createMockRepository(queries) {
 
 test('challengeProposal puts passed proposal under constitutional injunction', async () => {
   let updatedStatus = null;
+  const outboxEvents = [];
   const repo = createMockRepository((sql, params) => {
     if (sql.includes("FROM world_events WHERE event_type = 'governance.challenge_filed'")) {
       return { rows: [] };
@@ -43,6 +44,10 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
       updatedStatus = 'challenged';
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes('INSERT INTO event_outbox')) {
+      outboxEvents.push(params[1]);
+      return { rows: [], rowCount: 1 };
+    }
     return { rows: [], rowCount: 1 };
   });
 
@@ -57,11 +62,13 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
   assert.equal(result.proposalId, 'P-123');
   assert.equal(result.executionStatus, 'challenged');
   assert.equal(updatedStatus, 'challenged');
+  assert.deepEqual(outboxEvents, ['governance-challenge:CHALLENGE-1']);
 });
 
 test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => {
   let finalOutcome = null;
   let finalStatus = null;
+  const outboxEvents = [];
   const repo = createMockRepository((sql, params) => {
     if (sql.includes("FROM world_events WHERE event_type = 'governance.ruling_issued'")) {
       return { rows: [] };
@@ -86,6 +93,10 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
       finalStatus = 'voided';
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes('INSERT INTO event_outbox')) {
+      outboxEvents.push(params[1]);
+      return { rows: [], rowCount: 1 };
+    }
     return { rows: [], rowCount: 1 };
   });
 
@@ -102,6 +113,7 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
   assert.equal(result.executionStatus, 'voided');
   assert.equal(finalOutcome, 'rejected');
   assert.equal(finalStatus, 'voided');
+  assert.deepEqual(outboxEvents, ['governance-ruling:RULING-1']);
 });
 
 test('executeProposal blocks execution when under challenge', async () => {

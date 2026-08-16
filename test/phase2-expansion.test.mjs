@@ -21,6 +21,7 @@ function createMockRepository(queries) {
 test('distributeDividends computes pro-rata share payouts and enforces idempotency', async () => {
   const ledgerEntries = [];
   const notifications = [];
+  const outboxEvents = [];
   const repo = createMockRepository((sql, params) => {
     if (sql.includes('FROM ledger_entries WHERE reason_type = \'dividend_payout\'')) {
       return { rows: [] };
@@ -56,6 +57,10 @@ test('distributeDividends computes pro-rata share payouts and enforces idempoten
       notifications.push({ sql, params });
       return { rows: [], rowCount: 1 };
     }
+    if (sql.includes('INSERT INTO event_outbox')) {
+      outboxEvents.push(params[1]);
+      return { rows: [], rowCount: 1 };
+    }
     return { rows: [], rowCount: 1 };
   });
 
@@ -74,6 +79,7 @@ test('distributeDividends computes pro-rata share payouts and enforces idempoten
   assert.equal(result.distributions[1].holderId, 'H-INVESTOR');
   assert.equal(result.distributions[1].amount, 40);
   assert.equal(ledgerEntries.length, 2);
+  assert.deepEqual(outboxEvents, ['business-dividend:DIV-100']);
 });
 
 test('issueShares enforces supermajority minority shareholder protection', async () => {

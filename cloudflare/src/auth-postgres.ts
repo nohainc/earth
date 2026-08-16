@@ -7,6 +7,7 @@ import {
   digest,
   SESSION_DAYS,
 } from './auth-crypto.ts';
+import { enqueueOutbox } from './outbox-postgres.ts';
 
 export async function registerIdentity(repository: PostgresRepository, input: { email: string; displayName: string; password: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -44,6 +45,13 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query("INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,status,started_game_day) VALUES ($1,$2,$3,0,0,'active',$4)", [researchId, technologyId, humanId, worldDay]);
     await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
     await tx.query("INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,'BUSINESS',$2,NULL,$3,1,'starter_package',$3,$4),($5,'BUSINESS_SHARES',$2,NULL,$3,100,'starter_package',$3,$4),($6,'MACHINE',$7,NULL,$3,1,'starter_package',$3,$4)", [crypto.randomUUID(), businessId, humanId, worldDay, crypto.randomUUID(), crypto.randomUUID(), machineId]);
+    await enqueueOutbox(tx, {
+      eventKey: `starter-package:${humanId}`,
+      topic: 'world_activity',
+      aggregateType: 'human',
+      aggregateId: humanId,
+      payload: { type: 'world_activity', category: 'identity', action: 'starter_package_created', humanId, businessId, gameDay: worldDay },
+    });
     return { ok: true, human: { id: humanId, displayName: input.displayName, email: input.email }, starterPackage: starter };
   });
 }
