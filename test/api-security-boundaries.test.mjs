@@ -8,7 +8,7 @@ test('API Security Boundaries and Request Hardening', async () => {
     ...process.env,
     PORT: String(port),
     NODE_ENV: 'test',
-    EARTH_READ_ONLY_MODE: 'true',
+    DATABASE_URL: '',
   };
 
   const server = spawn('node', ['server.js'], {
@@ -18,13 +18,18 @@ test('API Security Boundaries and Request Hardening', async () => {
 
   try {
     // Wait for server to be ready
-    for (let i = 0; i < 30; i++) {
+    let ready = false;
+    for (let i = 0; i < 40; i++) {
       try {
         const res = await fetch(`http://127.0.0.1:${port}/api/health`);
-        if (res.ok) break;
+        if (res.ok) {
+          ready = true;
+          break;
+        }
       } catch {}
       await new Promise((r) => setTimeout(r, 150));
     }
+    assert.ok(ready, 'Server must start and report healthy');
 
     const baseUrl = `http://127.0.0.1:${port}`;
 

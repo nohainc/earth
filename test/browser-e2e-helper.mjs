@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
 
@@ -8,13 +9,17 @@ async function findChromePath() {
     '/usr/bin/google-chrome',
     '/usr/bin/chromium',
     '/usr/bin/chromium-browser',
+    '/usr/bin/google-chrome-stable',
   ];
   for (const path of candidates) {
-    try {
-      const p = spawn(path, ['--version']);
-      const code = await new Promise((resolve) => p.on('close', resolve));
-      if (code === 0) return path;
-    } catch {}
+    if (existsSync(path)) {
+      try {
+        const p = spawn(path, ['--version']);
+        p.on('error', () => {});
+        const code = await new Promise((resolve) => p.on('close', resolve));
+        if (code === 0) return path;
+      } catch {}
+    }
   }
   return null;
 }

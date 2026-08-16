@@ -14,7 +14,7 @@ const request = async (path, options = {}) => {
 before(async () => {
   processHandle = spawn(process.execPath, ['server.js'], {
     cwd: new URL('..', import.meta.url),
-    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', EARTH_READ_ONLY_MODE: 'true' },
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', DATABASE_URL: '' },
     stdio: 'ignore',
   });
   for (let i = 0; i < 40; i++) {

@@ -9,7 +9,7 @@ test('production Flutter assets are executable JavaScript and readiness aliases 
   if (!baseUrl) {
     const port = 9100 + Math.floor(Math.random() * 800);
     localServer = spawn('node', ['server.js'], {
-      env: { ...process.env, PORT: String(port), NODE_ENV: 'test', EARTH_READ_ONLY_MODE: 'true' },
+      env: { ...process.env, PORT: String(port), NODE_ENV: 'test', DATABASE_URL: '' },
       stdio: 'ignore',
     });
     baseUrl = `http://127.0.0.1:${port}`;

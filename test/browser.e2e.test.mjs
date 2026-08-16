@@ -9,7 +9,7 @@ test('End-to-End Browser Testing against local server', async () => {
     ...process.env,
     PORT: String(port),
     NODE_ENV: 'test',
-    EARTH_READ_ONLY_MODE: 'true',
+    DATABASE_URL: '',
   };
 
   const server = spawn('node', ['server.js'], {
