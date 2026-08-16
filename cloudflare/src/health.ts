@@ -48,6 +48,11 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         schedulerAgeSeconds: Number.isFinite(schedulerAgeSeconds) ? schedulerAgeSeconds : null,
         outboxPending,
         outboxRetryFailures,
+        invariantScan: {
+          ok: Number(balances.rows[0]?.invalid ?? 0) === 0 && Number(machines.rows[0]?.invalid ?? 0) === 0,
+          balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0,
+          machineConditionsBounded: Number(machines.rows[0]?.invalid ?? 0) === 0,
+        },
       },
       counts: {
         humans: Number(counts[0].rows[0]?.count ?? 0),
