@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/nano_markup_helper.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../governance/governance_dialogs.dart';
 import '../lifecycle/lifecycle_dialogs.dart';
@@ -151,50 +152,61 @@ class _ContractsPanelState extends State<ContractsPanel> {
               if (status == 'cancelled' || status == 'rejected') statusColor = Colors.redAccent;
               if (isDisputed) statusColor = Colors.orangeAccent;
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(6),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '$title ($contractId)',
-                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          isDisputed ? 'DISPUTED ($disputeStatus)' : status.toUpperCase(),
-                          style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Kind: $kind · Amount: $amount C · Schedule: Day $startDay → Day $endDay',
-                      style: const TextStyle(fontSize: 11, color: mutedColor),
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Parties: Proposer $proposerId ⇄ Counterparty $counterpartyId',
-                      style: const TextStyle(fontSize: 10, color: mutedColor),
-                    ),
-                    if (isDisputed) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Dispute details: ID $disputeId · Reason: ${contract['dispute_reason'] ?? 'Under review'}',
-                        style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                    final rawTerms = contract['terms_json'] ?? contract['terms'];
+                    final dynamic decodedTerms = rawTerms is String ? NanoMarkupHelper.decode(rawTerms) : rawTerms;
+                    final Map<dynamic, dynamic>? termsMap = decodedTerms is Map ? decodedTerms : null;
+
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 12),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withAlpha(6),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.white10),
                       ),
-                    ],
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '$title ($contractId)',
+                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Text(
+                                isDisputed ? 'DISPUTED ($disputeStatus)' : status.toUpperCase(),
+                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Kind: $kind · Amount: $amount C · Schedule: Day $startDay → Day $endDay',
+                            style: const TextStyle(fontSize: 11, color: mutedColor),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            'Parties: Proposer $proposerId ⇄ Counterparty $counterpartyId',
+                            style: const TextStyle(fontSize: 10, color: mutedColor),
+                          ),
+                          if (termsMap != null && termsMap.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              'Terms: ${termsMap.entries.map((e) => '${e.key}: ${e.value}').join(' · ')}',
+                              style: const TextStyle(fontSize: 10, color: Colors.white70),
+                            ),
+                          ],
+                          if (isDisputed) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              'Dispute details: ID $disputeId · Reason: ${contract['dispute_reason'] ?? 'Under review'}',
+                              style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                            ),
+                          ],
                     const SizedBox(height: 8),
                     Wrap(
                       spacing: 8,
