@@ -152,6 +152,39 @@ async function snapshotRankings(tx: PostgresRepository, day: number): Promise<vo
   for (const [index, row] of corporations.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'corporation_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CORP-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
 }
 
+async function processCityDynamics(tx: PostgresRepository, day: number): Promise<void> {
+  const cities = await tx.query<{ id: string; residents: number; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number; treasury: string }>('SELECT * FROM cities WHERE residents > 0 ORDER BY id');
+  for (const city of cities.rows) {
+    const res = Math.max(1, Number(city.residents));
+    if (Number(city.energy_capacity) < res) {
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING', [`BROWNOUT-${city.id}-${day}`, day, 'city.brownout', `Power grid deficit in ${city.id}`, JSON.stringify({ cityId: city.id, capacity: city.energy_capacity, demand: city.residents })]);
+    }
+  }
+  if (cities.rows.length >= 2) {
+    const scoredCities = cities.rows.map((c) => {
+      const res = Math.max(1, Number(c.residents));
+      const housingScore = Math.min(1.2, Number(c.housing_capacity) / res);
+      const energyScore = Math.min(1.2, Number(c.energy_capacity) / res);
+      const healthScore = Math.min(1.0, Number(c.health_capacity) / 100);
+      const connectivityScore = Math.min(1.0, Number(c.connectivity_capacity) / res);
+      const totalScore = (housingScore + energyScore + healthScore + connectivityScore) / 4;
+      return { ...c, totalScore };
+    });
+    const bestCity = scoredCities.reduce((prev, curr) => (curr.totalScore > prev.totalScore ? curr : prev), scoredCities[0]);
+    const worstCity = scoredCities.reduce((prev, curr) => (curr.totalScore < prev.totalScore ? curr : prev), scoredCities[0]);
+    if (bestCity.id !== worstCity.id && bestCity.totalScore >= 0.8 && worstCity.totalScore < 0.6 && Number(worstCity.residents) > 5) {
+      const migrant = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 LIMIT 1 FOR UPDATE', [worstCity.id]);
+      if (migrant.rows[0]) {
+        await tx.query('UPDATE memberships SET city_id = $1 WHERE human_id = $2', [bestCity.id, migrant.rows[0].human_id]);
+        await tx.query('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = $1) WHERE id = $1', [worstCity.id]);
+        await tx.query('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = $1) WHERE id = $1', [bestCity.id]);
+        await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CITY',$3,'joined',$4,'economic_migration')", [crypto.randomUUID(), migrant.rows[0].human_id, bestCity.id, day]);
+        await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [`MIGRATION-${migrant.rows[0].human_id}-${day}`, migrant.rows[0].human_id, 'institution', 'Relocated to higher-opportunity city', `You migrated from ${worstCity.id} to ${bestCity.id} due to superior municipal infrastructure and health services.`, bestCity.id]);
+      }
+    }
+  }
+}
+
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
   const machines = await tx.query<{ id: string; owner_id: string; business_id: string | null; productive_capacity: string; utilization: string; condition: string; output_resource: string; input_resource: string; input_per_output: string; focus: string }>("SELECT machines.id, machines.owner_id, business_assets.business_id, machines.productive_capacity, machines.utilization, machines.condition, machines.output_resource, machines.input_resource, machines.input_per_output, COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC, started_game_day DESC LIMIT 1), 'efficiency') AS focus FROM machines LEFT JOIN business_assets ON business_assets.machine_id = machines.id WHERE machines.condition > 0 AND machines.utilization > 0");
   let events = 0;
@@ -215,6 +248,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await settleBusinessDepreciation(tx, day);
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
+      await processCityDynamics(tx, day);
       await updateFinancialStates(tx, day);
       await dissolveInstitutions(tx, day);
       await snapshotRankings(tx, day);

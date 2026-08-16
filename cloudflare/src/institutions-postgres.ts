@@ -1,6 +1,6 @@
-import type { PostgresRepository } from './repository';
-import { transferCredits } from './financial-postgres';
-import { centsToMoney, moneyToCents } from './money';
+import type { PostgresRepository } from './repository.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { centsToMoney, moneyToCents } from './money.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
   const result = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -231,5 +231,31 @@ export async function contributeToCorporation(repository: PostgresRepository, in
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: account.rows[0].account_id, creditAccount: corporationAccount.rows[0].account_id, amount, reasonType: 'corporation_contribution', reasonId: input.corporationId, ruleVersion: 'corp-finance-v2', correlationId: input.correlationId });
     await tx.query('UPDATE corporations SET treasury = treasury + $1 WHERE id = $2', [amount, input.corporationId]);
     return { ok: true, amount: Number(amount), corporation: (await tx.query('SELECT id, treasury FROM corporations WHERE id = $1', [input.corporationId])).rows[0], correlationId: input.correlationId };
+  });
+}
+
+export async function setCityTaxCharter(repository: PostgresRepository, input: { humanId: string; cityId: string; incomeTaxBps: number; salesTaxBps: number; corporateTaxBps: number; propertyTaxBps: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    if (!(await hasRole(tx, input.humanId, input.cityId, ['City Mayor', 'Infrastructure Planner']))) {
+      throw new Error('An active City Mayor or Infrastructure Planner term is required');
+    }
+    const city = await tx.query<{ id: string }>('SELECT id FROM cities WHERE id = $1 FOR UPDATE', [input.cityId]);
+    if (!city.rows[0]) throw new Error('City not found');
+    const incomeBps = Math.max(0, Math.min(5000, Math.round(Number(input.incomeTaxBps ?? 0))));
+    const salesBps = Math.max(0, Math.min(2500, Math.round(Number(input.salesTaxBps ?? 0))));
+    const corporateBps = Math.max(0, Math.min(5000, Math.round(Number(input.corporateTaxBps ?? 0))));
+    const propertyBps = Math.max(0, Math.min(3000, Math.round(Number(input.propertyTaxBps ?? 0))));
+    const gameDay = await day(tx);
+    const charter = {
+      incomeTaxBps: incomeBps,
+      salesTaxBps: salesBps,
+      corporateTaxBps: corporateBps,
+      propertyTaxBps: propertyBps,
+      updatedBy: input.humanId,
+      updatedGameDay: gameDay,
+    };
+    await tx.query('UPDATE institutions SET charter_rules = $1 WHERE id = $2', [JSON.stringify(charter), input.cityId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'city.tax_charter_updated', `Municipal Tax Charter updated for ${input.cityId}`, JSON.stringify({ cityId: input.cityId, charter, correlationId: input.correlationId })]);
+    return { ok: true, cityId: input.cityId, charter, correlationId: input.correlationId };
   });
 }

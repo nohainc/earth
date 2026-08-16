@@ -1,6 +1,6 @@
-import type { PostgresRepository } from './repository';
-import { transferCredits } from './financial-postgres';
-import { centsToMoney, marketValueToCents, moneyToCents } from './money';
+import type { PostgresRepository } from './repository.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { centsToMoney, marketValueToCents, moneyToCents } from './money.ts';
 
 const sectors = new Set(['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d']);
 
@@ -64,12 +64,62 @@ export async function issueShares(repository: PostgresRepository, input: { owner
     const buyer = accounts.rows.find((row) => row.owner_id === input.recipientId);
     const owner = accounts.rows.find((row) => row.owner_id === input.ownerId);
     if (!buyer || !owner || moneyToCents(buyer.balance) < totalCents) throw new Error('Recipient has insufficient Credits');
+    const constitution = await tx.query<{ shareholder_vote_threshold: string }>('SELECT shareholder_vote_threshold FROM business_constitutions WHERE business_id = $1', [input.businessId]);
+    const threshold = Number(constitution.rows[0]?.shareholder_vote_threshold ?? 0.667);
+    const allShares = await tx.query<{ holder_id: string; shares: string }>('SELECT holder_id, shares FROM business_shares WHERE business_id = $1', [input.businessId]);
+    const totalExisting = allShares.rows.reduce((sum, r) => sum + Number(r.shares), 0);
+    const ownerShares = Number(allShares.rows.find((r) => r.holder_id === input.ownerId)?.shares ?? 0);
+    if (allShares.rows.length > 1 && totalExisting > 0 && ownerShares / totalExisting < threshold) {
+      throw new Error('Supermajority shareholder approval required for dilution');
+    }
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: total, reasonType: 'share_issuance', reasonId: input.businessId, ruleVersion: 'shares-v2', correlationId: input.correlationId });
     await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,$3) ON CONFLICT(business_id, holder_id) DO UPDATE SET shares = business_shares.shares + excluded.shares, updated_at = CURRENT_TIMESTAMP', [input.businessId, input.recipientId, input.shares]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'BUSINESS_SHARES', input.businessId, input.ownerId, input.recipientId, input.shares, 'share_issuance', input.correlationId, day]);
     return { ok: true, businessId: input.businessId, recipientId: input.recipientId, shares: input.shares, pricePerShare: input.pricePerShare, total: Number(total), correlationId: input.correlationId, holdings: (await tx.query('SELECT holder_id, shares FROM business_shares WHERE business_id = $1 ORDER BY shares DESC', [input.businessId])).rows };
+  });
+}
+
+export async function distributeDividends(repository: PostgresRepository, input: { callerId: string; businessId: string; totalAmount: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ amount: string; game_day: number }>("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'dividend_payout' AND correlation_id = $1", [input.correlationId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, businessId: input.businessId, totalAmount: input.totalAmount, correlationId: input.correlationId };
+    const business = await tx.query<{ id: string; owner_id: string }>('SELECT id, owner_id FROM businesses WHERE id = $1 FOR UPDATE', [input.businessId]);
+    if (!business.rows[0]) throw new Error('Business not found');
+    const management = await tx.query<{ manager_id: string }>('SELECT manager_id FROM business_management WHERE business_id = $1', [input.businessId]);
+    const isManager = management.rows[0]?.manager_id === input.callerId;
+    const isOwner = business.rows[0].owner_id === input.callerId;
+    if (!isOwner && !isManager) throw new Error('Only the Business owner or appointed manager may distribute dividends');
+    const totalCents = moneyToCents(input.totalAmount);
+    if (totalCents <= 0n) throw new Error('Dividend amount must be positive');
+    const sourceAccount = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [business.rows[0].owner_id]);
+    if (!sourceAccount.rows[0] || moneyToCents(sourceAccount.rows[0].balance) < totalCents) throw new Error('Insufficient operating balance for dividend distribution');
+    const shares = await tx.query<{ holder_id: string; shares: string }>('SELECT holder_id, shares FROM business_shares WHERE business_id = $1 ORDER BY shares DESC FOR UPDATE', [input.businessId]);
+    if (!shares.rows.length) throw new Error('No shareholders registered');
+    const totalShares = shares.rows.reduce((sum, row) => sum + BigInt(row.shares), 0n);
+    if (totalShares <= 0n) throw new Error('Total shares count is invalid');
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 0);
+    let distributedCents = 0n;
+    const payouts: Array<{ holderId: string; amount: number; shares: number }> = [];
+    for (let i = 0; i < shares.rows.length; i++) {
+      const row = shares.rows[i];
+      const rowShares = BigInt(row.shares);
+      const holderCents = i === shares.rows.length - 1 ? totalCents - distributedCents : (totalCents * rowShares) / totalShares;
+      if (holderCents <= 0n) continue;
+      distributedCents += holderCents;
+      const holderAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.holder_id]);
+      if (!holderAccount.rows[0]) continue;
+      const payoutAmount = centsToMoney(holderCents);
+      const subCorrelation = `${input.correlationId}-${row.holder_id}`;
+      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: sourceAccount.rows[0].account_id, creditAccount: holderAccount.rows[0].account_id, amount: payoutAmount, reasonType: 'dividend_payout', reasonId: input.businessId, ruleVersion: 'dividends-v1', correlationId: subCorrelation });
+      payouts.push({ holderId: row.holder_id, amount: Number(payoutAmount), shares: Number(row.shares) });
+      await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [crypto.randomUUID(), row.holder_id, 'business', 'Dividend payout received', `You received ${payoutAmount} Credits in dividend distribution from ${input.businessId}.`, input.businessId]);
+    }
+    await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [centsToMoney(totalCents), day, input.businessId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.dividend_distributed', `Dividends distributed for ${input.businessId}`, JSON.stringify({ businessId: input.businessId, totalAmount: input.totalAmount, recipientsCount: payouts.length, correlationId: input.correlationId })]);
+    return { ok: true, businessId: input.businessId, totalAmount: input.totalAmount, distributions: payouts, correlationId: input.correlationId };
   });
 }
 
