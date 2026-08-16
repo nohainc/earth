@@ -1541,9 +1541,9 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ amount?: number; correlationId?: string }>();
       const amount = Number(body.amount ?? 10);
-      const correlationId = String(body.correlationId ?? '').trim();
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
-      if (!correlationId || correlationId.length > 160) return Response.json({ ok: false, error: 'A valid maintenance correlationId is required' }, { status: 400 });
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => maintainMachinePostgres(repository, { machineId, ownerId: viewer.id, amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1557,8 +1557,10 @@ const worker = {
     if (decommissionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ otp?: string }>();
+      const body = await request.json<{ otp?: string; correlationId?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for decommissioning an asset' }, { status: 401 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => recycleMachinePostgres(repository, { machineId: decommissionMatch[1], ownerId: viewer.id, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1589,8 +1591,8 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ otp?: string; correlationId?: string }>();
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => upgradeMachinePostgres(repository, { machineId: upgradeMatch[1], ownerId: viewer.id, correlationId, creditCost: 600, componentsCost: 20 }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1607,9 +1609,9 @@ const worker = {
       const body = await request.json<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>();
       const buyerId = body.buyerId?.trim();
       const price = Math.round(Number(body.price) * 100) / 100;
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!buyerId || buyerId === viewer.id || !Number.isFinite(price) || price <= 0 || price > 1000000) return Response.json({ ok: false, error: 'Buyer and sale price are invalid' }, { status: 400 });
-      if (correlationId.length > 160) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine sale' }, { status: 401 });
       try {
         const result = await withRepository(env, (repository) => sellMachinePostgres(repository, { machineId: saleMatch[1], sellerId: viewer.id, buyerId, price, correlationId }));
