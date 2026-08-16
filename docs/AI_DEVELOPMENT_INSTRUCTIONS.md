@@ -1,0 +1,219 @@
+# EARTH AI development instructions
+
+This document is the operating guide for future AI-assisted work on EARTH. It
+combines the repository decisions in
+[`ADR-001-current-architecture-boundary.md`](ADR-001-current-architecture-boundary.md)
+and [`FLUTTER_ARCHITECTURE.md`](FLUTTER_ARCHITECTURE.md). The master
+specification remains authoritative when these instructions are ambiguous.
+
+## 1. Start every task with evidence
+
+Before editing:
+
+1. Read the relevant sections of
+   `EARTH_Master_Specification_and_Engineering_Architecture_v1.0.md`.
+2. Read the applicable architecture document and current ADRs.
+3. Inspect the current source, migrations, tests, and deployment configuration.
+4. Check `git status`; preserve unrelated user changes.
+5. Identify the exact public route, database tables, client screens, and tests
+   affected by the task.
+6. State whether the work is current architecture, target architecture, or a
+   new decision requiring an ADR.
+
+Never describe a target recommendation as implemented without repository,
+deployment, and verification evidence.
+
+## 2. Choose the smallest complete vertical slice
+
+Implement one bounded user journey or domain capability at a time. A complete
+slice normally includes:
+
+- Worker route and validation;
+- domain rule or repository operation;
+- PostgreSQL migration when schema changes are required;
+- ledger, history, and outbox records for authoritative mutations;
+- Flutter API method and feature UI state;
+- focused success, validation, authorization, replay, and failure tests;
+- production smoke coverage when the public contract changes.
+
+Do not solve a large refactor and a behavior change in the same edit unless the
+new behavior has focused coverage.
+
+## 3. Non-negotiable authority rules
+
+- PostgreSQL is the only production authority.
+- The Flutter client is an untrusted presentation shell.
+- Never trust client balances, taxes, market fills, production results,
+  ownership, governance outcomes, or game time.
+- Durable Objects coordinate sockets and delivery; they do not own economic
+  state.
+- Never put authoritative state in module-level mutable memory.
+- Money, ownership, inventory, legal status, and game-time changes require one
+  short atomic PostgreSQL transaction.
+- Ledger entries, ownership events, membership events, authority events, and
+  world history are append-only. Correct mistakes with compensating entries.
+- External delivery, email, WebSocket broadcast, and unbounded work happen
+  after commit, never inside the economic transaction.
+
+## 4. TypeScript Worker rules
+
+### File ownership
+
+Keep HTTP concerns in the Worker boundary:
+
+- authentication and actor resolution;
+- authorization and institution scope;
+- runtime input validation;
+- idempotency mapping;
+- command/query dispatch;
+- stable DTO and error normalization.
+
+Keep business rules and PostgreSQL operations in bounded-context modules under
+`cloudflare/src/`. Prefer the existing context names: `auth`, `market`,
+`governance`, `institutions`, `finance`, `lifecycle`, `machines`,
+`technology`, `scheduler`, and read projections.
+
+Do not add new domain logic to `index.ts` when a context module is appropriate.
+Keep `index.ts` as compatibility route glue until an extraction is verified.
+
+### Command sequence
+
+For every state-changing command:
+
+1. Authenticate first.
+2. Parse the body through the runtime validation layer.
+3. Resolve `Idempotency-Key`; temporarily accept matching body
+   `correlationId`; reject conflicts.
+4. Load the current game clock and active rule version.
+5. Start one PostgreSQL transaction.
+6. Lock contested rows in deterministic order.
+7. Re-check mutable authorization and balances inside the transaction.
+8. Apply the rule and all ledger/history changes.
+9. Write the outbox event in the same transaction.
+10. Commit, then perform external delivery.
+
+Malformed JSON is a validation error, not a 503. Public errors must contain a
+safe message, stable `code`, and `correlationId`; never expose SQL, provider
+details, stack traces, or secrets.
+
+### Determinism and money
+
+- Keep pure calculations independent of `Request`, Cloudflare APIs, database
+  I/O, wall-clock time, and random values.
+- Pass game time explicitly into deterministic rules.
+- Never use JavaScript floating-point arithmetic for authoritative money.
+- Use the existing money helpers and PostgreSQL numeric/account primitives.
+- Add adversarial tests for insufficient funds, replay, contention,
+  serialization/deadlock retry, and rollback/no-partial-write behavior.
+
+## 5. Flutter rules
+
+Use the incremental feature-first modular monolith:
+
+```text
+lib/
+  app/                 shell, routing, theme
+  core/api/            transport, errors, API facade
+  core/models/         immutable state and DTOs
+  features/auth/
+  features/command_center/
+  features/market/
+  features/governance/
+  features/institutions/
+  features/operations/
+  features/lifecycle/
+  shared/widgets/      reusable presentation primitives
+```
+
+- Put API calls in `core/api`, never directly in widgets or dialogs.
+- Keep feature state in a coordinator/controller, not in reusable widgets.
+- Pass immutable values into widgets.
+- Keep shared widgets independent of routes, PostgreSQL, and domain IDs.
+- Keep `main.dart` as composition and compatibility glue; extract one cohesive
+  feature at a time.
+- Preserve the hand-written DTOs and transport until the API/error contract is
+  stable. Do not introduce Riverpod, code generation, or generated clients
+  without an ADR and measurable benefit.
+- Financial and voting actions show loading until server confirmation;
+  optimistic updates are for local visual state only.
+
+## 6. Database and migration rules
+
+- Add every schema change as a forward-only, human-reviewed SQL migration.
+- Update `db/schema-manifest.json` when the schema contract changes.
+- Never use destructive automatic schema pushes in production.
+- Add indexes for foreign keys, active-state lookups, and timestamp filters.
+- Put invariants in PostgreSQL constraints where practical.
+- Use stored functions only for narrow atomic primitives under contention.
+- Never silently edit historical records or create credits by overwriting a
+  balance.
+- Apply and verify migrations locally before production.
+
+## 7. Testing and verification gate
+
+Run the smallest relevant tests during development, then the full gate before
+handoff:
+
+```text
+npm test
+npm run cf:check
+cd flutter_client && flutter analyze
+cd flutter_client && flutter test
+cd flutter_client && flutter build web --release --base-href /
+npm run flutter:prepare:web
+npm run cf:smoke
+```
+
+For money, ownership, governance, lifecycle, or scheduler work, also verify:
+
+- PostgreSQL authority and mutation boundaries;
+- migration and manifest checks;
+- balances plus ledger/history/outbox records;
+- replay and authorization behavior;
+- production readiness checks;
+- one monitored game-day tick;
+- the changed user journey manually.
+
+Tests are evidence only when they cover the requirement being claimed.
+
+## 8. Deployment and commits
+
+- Keep commits focused and reversible.
+- Commit major vertical slices separately from unrelated cleanup.
+- Push verified commits regularly, as requested by the project owner.
+- Deploy production only after local gates pass.
+- After deployment, check the real `earthuc.com` health endpoint and smoke
+  suite, not only a dry-run.
+- If readiness fails, inspect scheduler/outbox diagnostics and Worker logs
+  before making additional changes.
+- Do not hide a failed production check in the final report.
+- Never include database connection strings, tokens, or provider credentials in
+  source, commits, logs, or responses.
+
+## 9. When an ADR is required
+
+Stop and write or amend an ADR before:
+
+- changing PostgreSQL authority;
+- adding Hono, Zod, Drizzle, Riverpod, OpenAPI generation, Queues, or R2;
+- changing the game-clock model;
+- changing Durable Object authority boundaries;
+- renaming immutable UC/OUC identifiers;
+- adding monetized gameplay mechanics;
+- splitting a bounded context into an independently deployed service.
+
+The ADR must state the problem, alternatives, migration plan, rollback plan,
+operational cost, and verification evidence.
+
+## 10. Final handoff format
+
+Every completed AI task should report:
+
+1. What changed and why it follows the specification.
+2. Which files, migrations, routes, and features changed.
+3. Tests and verification commands that passed.
+4. Commit hash and deployment version, if deployed.
+5. Any known incomplete target or deferred decision.
+
+Do not claim the full project is complete when only one slice or architecture
+boundary has been implemented.
