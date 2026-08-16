@@ -9,6 +9,16 @@ import '../auth/security_dialog.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 
+Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
+  final base = configuredBase.isNotEmpty
+      ? configuredBase
+      : (pageUri.scheme == 'http' || pageUri.scheme == 'https'
+          ? pageUri.origin
+          : '');
+  if (!base.startsWith('http')) return null;
+  return Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/edge/events');
+}
+
 class CommandCenter extends StatefulWidget {
   final VoidCallback onLogout;
   const CommandCenter({super.key, required this.onLogout});
@@ -66,10 +76,8 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   void _connectLiveChannel() {
-    final base = api.baseUrl.isNotEmpty ? api.baseUrl : Uri.base.origin;
-    if (!base.startsWith('http')) return;
-    final uri =
-        Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/edge/events');
+    final uri = liveEventsUri(configuredBase: api.baseUrl, pageUri: Uri.base);
+    if (uri == null) return;
     try {
       liveChannel = WebSocketChannel.connect(uri);
       liveChannel!.stream.listen((_) {
