@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import 'technology_dialogs.dart';
 
 class TechnologyPanel extends StatelessWidget {
@@ -28,13 +29,15 @@ class TechnologyPanel extends StatelessWidget {
     final techName = (research['name'] as String?)?.toUpperCase() ??
         (tech['name'] as String?)?.toUpperCase() ??
         'ADAPTIVE MAINTENANCE AI';
-    final progressNum = (research['progress'] as num?) ?? (tech['progress'] as num?) ?? 0;
-    final progress = progressNum.toDouble().clamp(0.0, 100.0);
+    final progress =
+        (asDouble(research['progress']) ?? asDouble(tech['progress']) ?? 0)
+            .clamp(0.0, 100.0);
     final focus = research['focus'] ?? tech['focus'] ?? 'efficiency';
     final budget = research['budget'] ?? research['budgetPerDay'] ?? 240;
     final isComplete = progress >= 100;
 
-    final activePatents = state.technologyRegistry['activePatents'] ?? (isComplete ? 1 : 0);
+    final activePatents =
+        state.technologyRegistry['activePatents'] ?? (isComplete ? 1 : 0);
     final activeLicenses = state.technologyRegistry['activeLicenses'] ?? 1;
 
     return EarthPanel(
@@ -52,7 +55,8 @@ class TechnologyPanel extends StatelessWidget {
                   children: [
                     Text(
                       techName,
-                      style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                      style: const TextStyle(
+                          fontWeight: FontWeight.w700, fontSize: 13),
                     ),
                     const SizedBox(height: 2),
                     Text(
@@ -93,13 +97,15 @@ class TechnologyPanel extends StatelessWidget {
                 Expanded(
                   child: Text(
                     'Patents granted: $activePatents',
-                    style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ),
                 Expanded(
                   child: Text(
                     'Active licenses: $activeLicenses (5.00% royalty)',
-                    style: const TextStyle(fontSize: 11, color: cyanAccentColor),
+                    style:
+                        const TextStyle(fontSize: 11, color: cyanAccentColor),
                     textAlign: TextAlign.right,
                   ),
                 ),

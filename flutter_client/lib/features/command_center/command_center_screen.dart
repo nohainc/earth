@@ -6,6 +6,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
@@ -89,9 +90,11 @@ class _CommandCenterState extends State<CommandCenter> {
   bool handleLiveMessage(dynamic rawMessage) {
     if (rawMessage == null) return false;
     try {
-      final decoded = rawMessage is String ? jsonDecode(rawMessage) : rawMessage;
+      final decoded =
+          rawMessage is String ? jsonDecode(rawMessage) : rawMessage;
       if (decoded is Map<String, dynamic>) {
-        final key = (decoded['eventKey'] ?? decoded['id'] ?? decoded['eventId'])?.toString();
+        final key = (decoded['eventKey'] ?? decoded['id'] ?? decoded['eventId'])
+            ?.toString();
         if (key != null && key.isNotEmpty) {
           if (_seenEventKeys.contains(key)) {
             return false; // Duplicate delivery: ignore without duplicating state
@@ -101,7 +104,10 @@ class _CommandCenterState extends State<CommandCenter> {
         }
         final type = decoded['type']?.toString();
         final topic = decoded['topic']?.toString();
-        if (type == 'world_day_started' || type == 'world_tick' || topic == 'world_activity' || topic == 'market') {
+        if (type == 'world_day_started' ||
+            type == 'world_tick' ||
+            topic == 'world_activity' ||
+            topic == 'market') {
           _run(api.world);
         }
       }
@@ -163,9 +169,8 @@ class _CommandCenterState extends State<CommandCenter> {
           contractsList = cList;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
-          unreadNotifications =
-              (notificationData['unread'] as num?)?.toInt() ??
-              (notificationData['unreadCount'] as num?)?.toInt() ??
+          unreadNotifications = asInt(notificationData['unread']) ??
+              asInt(notificationData['unreadCount']) ??
               0;
         });
       }
@@ -269,6 +274,18 @@ class _CommandCenterState extends State<CommandCenter> {
                   child: Sidebar(
                     state: current,
                     selectedSection: selectedSection,
+                    busy: busy,
+                    canAdvanceDay: canAdvanceDay,
+                    isLiveConnected: liveChannel != null,
+                    isReconnecting: liveReconnectTimer?.isActive == true,
+                    unreadNotifications: unreadNotifications,
+                    onAdvanceDay: () => _run(api.advanceDay),
+                    onLogout: () async {
+                      await api.logout();
+                      if (mounted) widget.onLogout();
+                    },
+                    onSecurity: () =>
+                        showSecurityDialog(context, api, widget.onLogout),
                     onNavigate: (section) => _navigateToSection(
                       context,
                       section,
@@ -278,15 +295,97 @@ class _CommandCenterState extends State<CommandCenter> {
                 ),
               )
             : null,
-        appBar: AppBar(
-          title: Text(
-            'EARTH  ·  ${dashboardSectionTitle(selectedSection)}',
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              letterSpacing: 1.1,
-            ),
+        /* appBar: AppBar(
+          title: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('EARTH  ·  ${dashboardSectionTitle(selectedSection)}',
+                  style: const TextStyle(
+                      fontWeight: FontWeight.w800, letterSpacing: 1.1)),
+              if (current != null)
+                Text(
+                  'DAY ${current.clock['day']}  ·  ${current.institutions['city']['name']}  ·  ${current.institutions['corporation']['name']}',
+                  style: const TextStyle(
+                      color: mutedColor, fontSize: 9, letterSpacing: .5),
+                  overflow: TextOverflow.ellipsis,
+                ),
+            ],
           ),
           actions: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+              decoration: BoxDecoration(
+                color: liveColor.withValues(alpha: .10),
+                borderRadius: BorderRadius.circular(20),
+              ),
+              child: Row(children: [
+                Container(
+                    width: 6,
+                    height: 6,
+                    decoration: BoxDecoration(
+                        color: liveColor, shape: BoxShape.circle)),
+                const SizedBox(width: 6),
+                Text(liveLabel,
+                    style: TextStyle(
+                        color: liveColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .8)),
+              ]),
+            ),
+            IconButton(
+              tooltip: 'Activity and alerts',
+              onPressed: () =>
+                  _navigateToSection(context, 'activity', closeDrawer: false),
+              icon: Badge(
+                isLabelVisible: unreadNotifications > 0,
+                label: Text('$unreadNotifications'),
+                child: const Icon(Icons.notifications_none),
+              ),
+            ),
+            PopupMenuButton<String>(
+              tooltip: 'Account',
+              onSelected: (value) async {
+                if (value == 'security') {
+                  await showSecurityDialog(context, api, widget.onLogout);
+                } else if (value == 'logout') {
+                  await api.logout();
+                  if (mounted) widget.onLogout();
+                }
+              },
+              itemBuilder: (context) => [
+                PopupMenuItem(
+                  enabled: false,
+                  value: 'identity',
+                  child: Text(
+                      '${current?.human['name'] ?? 'Human'}\n${current?.human['email'] ?? ''}'),
+                ),
+                const PopupMenuDivider(),
+                const PopupMenuItem(
+                    value: 'security', child: Text('Account security')),
+                const PopupMenuItem(value: 'logout', child: Text('Sign out')),
+              ],
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: Row(children: [
+                  CircleAvatar(
+                    radius: 14,
+                    backgroundColor: violetColor,
+                    child: Text(
+                      (current?.human['name']?.toString() ?? 'H')
+                          .trim()
+                          .split(RegExp(r'\s+'))
+                          .where((part) => part.isNotEmpty)
+                          .take(2)
+                          .map((part) => part[0].toUpperCase())
+                          .join(),
+                      style: const TextStyle(fontSize: 9),
+                    ),
+                  ),
+                  const Icon(Icons.expand_more, size: 16),
+                ]),
+              ),
+            ),
             if (busy)
               const Padding(
                 padding: EdgeInsets.all(18),
@@ -301,25 +400,9 @@ class _CommandCenterState extends State<CommandCenter> {
                   busy || !canAdvanceDay ? null : () => _run(api.advanceDay),
               child: const Text('ADVANCE DAY  →'),
             ),
-            IconButton(
-              tooltip: 'Sign out',
-              onPressed: busy
-                  ? null
-                  : () async {
-                      await api.logout();
-                      if (mounted) widget.onLogout();
-                    },
-              icon: const Icon(Icons.logout),
-            ),
-            IconButton(
-              tooltip: 'Account security',
-              onPressed: busy
-                  ? null
-                  : () => showSecurityDialog(context, api, widget.onLogout),
-              icon: const Icon(Icons.security),
-            ),
           ],
-        ),
+        ), */
+        appBar: null,
         body: current == null
             ? Center(
                 child: error == null
@@ -345,6 +428,18 @@ class _CommandCenterState extends State<CommandCenter> {
                         Sidebar(
                           state: current,
                           selectedSection: selectedSection,
+                          busy: busy,
+                          canAdvanceDay: canAdvanceDay,
+                          isLiveConnected: liveChannel != null,
+                          isReconnecting: liveReconnectTimer?.isActive == true,
+                          unreadNotifications: unreadNotifications,
+                          onAdvanceDay: () => _run(api.advanceDay),
+                          onLogout: () async {
+                            await api.logout();
+                            if (mounted) widget.onLogout();
+                          },
+                          onSecurity: () =>
+                              showSecurityDialog(context, api, widget.onLogout),
                           onNavigate: (section) => _navigateToSection(
                             context,
                             section,
@@ -368,9 +463,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                   leading: const Icon(Icons.warning_amber),
                                   actions: [
                                     TextButton(
-                                      onPressed: busy
-                                          ? null
-                                          : () => _run(api.world),
+                                      onPressed:
+                                          busy ? null : () => _run(api.world),
                                       child: const Text('RETRY'),
                                     ),
                                   ],
@@ -406,7 +500,8 @@ class _CommandCenterState extends State<CommandCenter> {
                               personalFinanceData: personalFinanceData,
                               contracts: contractsList,
                               isLiveConnected: liveChannel != null,
-                              isReconnecting: liveReconnectTimer?.isActive == true,
+                              isReconnecting:
+                                  liveReconnectTimer?.isActive == true,
                               unreadNotifications: unreadNotifications,
                               sectionKeys: _sectionKeys,
                               action: _run,

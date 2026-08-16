@@ -93,110 +93,90 @@ class Dashboard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (selectedSection == 'command') ...[
-        HeroCard(key: sectionKeys['command'], state: state),
-        const SizedBox(height: 16),
-        Text(
-          'The world is moving.',
-          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                color: inkColor,
-                fontWeight: FontWeight.w800,
-                letterSpacing: -1.2,
-              ),
-        ),
-        const SizedBox(height: 8),
-        Text(
-          'DAY ${state.clock['day']}  ·  ${state.institutions['city']['name']}  ·  ${state.institutions['corporation']['name']}',
-          style: const TextStyle(color: mutedColor, fontSize: 11, letterSpacing: .7),
-        ),
-        const SizedBox(height: 24),
-        Wrap(
-          spacing: 14,
-          runSpacing: 14,
-          children: [
-            EarthMetric(
-              label: 'CREDITS',
-              value: '${state.human['credits']} C',
-              accent: violetColor,
-            ),
-            EarthMetric(
-              label: 'STANDING',
-              value: '${state.human['standing']}',
-              accent: Colors.teal,
-            ),
-            EarthMetric(
-              label: 'LEGACY',
-              value: '${state.human['legacy']}',
-              accent: Colors.indigo,
-            ),
-            EarthMetric(
-              label: 'WORLD HEALTH',
-              value: '${state.world['health']} / 100',
-              accent: Colors.orange,
-            ),
-          ],
-        ),
-        if (state.human['politicalMaturity'] == false)
-          Padding(
-            padding: const EdgeInsets.only(top: 10),
-            child: Text(
-              'POLITICAL MATURITY · AVAILABLE FROM GAME DAY ${state.human['politicalEligibilityGameDay']}',
-              style: const TextStyle(
-                color: Colors.orange,
-                fontSize: 10,
-                letterSpacing: .7,
-              ),
-            ),
-          ),
-        const SizedBox(height: 18),
-        Card(
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'RESOURCE RESERVES   $resourceText',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    letterSpacing: .8,
-                    color: mutedColor,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  'STARTER ECONOMY   living-cost ${state.world['livingCostIndex'] ?? '—'}  ·  productive ${state.world['economicStartIndex'] ?? '—'}',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    letterSpacing: .6,
-                    color: mutedColor,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        ],
-        if (selectedSection != 'command') ...[
+          HeroCard(key: sectionKeys['command'], state: state),
+          const SizedBox(height: 16),
           Text(
-            dashboardSectionTitle(selectedSection),
-            style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+            'The world is moving.',
+            style: Theme.of(context).textTheme.displaySmall?.copyWith(
                   color: inkColor,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: -.6,
+                  letterSpacing: -1.2,
                 ),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
             'DAY ${state.clock['day']}  ·  ${state.institutions['city']['name']}  ·  ${state.institutions['corporation']['name']}',
             style: const TextStyle(
-              color: mutedColor,
-              fontSize: 11,
-              letterSpacing: .7,
+                color: mutedColor, fontSize: 11, letterSpacing: .7),
+          ),
+          const SizedBox(height: 24),
+          Wrap(
+            spacing: 14,
+            runSpacing: 14,
+            children: [
+              EarthMetric(
+                label: 'CREDITS',
+                value: '${state.human['credits']} C',
+                accent: violetColor,
+              ),
+              EarthMetric(
+                label: 'STANDING',
+                value: '${state.human['standing']}',
+                accent: Colors.teal,
+              ),
+              EarthMetric(
+                label: 'LEGACY',
+                value: '${state.human['legacy']}',
+                accent: Colors.indigo,
+              ),
+              EarthMetric(
+                label: 'WORLD HEALTH',
+                value: '${state.world['health']} / 100',
+                accent: Colors.orange,
+              ),
+            ],
+          ),
+          if (state.human['politicalMaturity'] == false)
+            Padding(
+              padding: const EdgeInsets.only(top: 10),
+              child: Text(
+                'POLITICAL MATURITY · AVAILABLE FROM GAME DAY ${state.human['politicalEligibilityGameDay']}',
+                style: const TextStyle(
+                  color: Colors.orange,
+                  fontSize: 10,
+                  letterSpacing: .7,
+                ),
+              ),
+            ),
+          const SizedBox(height: 18),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'RESOURCE RESERVES   $resourceText',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      letterSpacing: .8,
+                      color: mutedColor,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'STARTER ECONOMY   living-cost ${state.world['livingCostIndex'] ?? '—'}  ·  productive ${state.world['economicStartIndex'] ?? '—'}',
+                    style: const TextStyle(
+                      fontSize: 10,
+                      letterSpacing: .6,
+                      color: mutedColor,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 14),
         ],
         ..._selectedPanels(),
       ],

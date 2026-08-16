@@ -11,7 +11,9 @@ void main() {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
-      'institutions': {'city': {'name': 'New Kyoto'}},
+      'institutions': {
+        'city': {'name': 'New Kyoto'}
+      },
       'business': {'name': 'Aether Dynamics'},
       'technology': {'research': {}},
       'technologyRegistry': {'activeProject': 'Quantum Grid'},
@@ -39,9 +41,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('◌  EARTH'), findsOneWidget);
-    expect(find.text('Amara Vance'), findsOneWidget);
+    expect(find.text('Amara Vance · New Kyoto'), findsOneWidget);
 
-    final marketButton = find.text('⌁  Central Market');
+    final marketButton = find.text('Central Market');
     expect(marketButton, findsOneWidget);
     await tester.tap(marketButton);
     await tester.pumpAndSettle();
@@ -91,7 +93,8 @@ void main() {
     expect(submitted, true);
   });
 
-  testWidgets('showResearchComposerDialog validates budget and submits research project',
+  testWidgets(
+      'showResearchComposerDialog validates budget and submits research project',
       (tester) async {
     bool started = false;
 

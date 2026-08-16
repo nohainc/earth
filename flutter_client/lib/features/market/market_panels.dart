@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 Future<void> showPlaceOrderDialog(
   BuildContext context,
@@ -15,8 +16,8 @@ Future<void> showPlaceOrderDialog(
   String selectedProduct = initialProduct;
   String side = initialSide;
   final qtyController = TextEditingController(text: '10');
-  final priceController =
-      TextEditingController(text: initialPrice > 0 ? initialPrice.toString() : '50');
+  final priceController = TextEditingController(
+      text: initialPrice > 0 ? initialPrice.toString() : '50');
 
   await showDialog<void>(
     context: context,
@@ -29,7 +30,8 @@ Future<void> showPlaceOrderDialog(
         final grandTotal = side == 'buy' ? baseTotal + fee : baseTotal;
 
         return AlertDialog(
-          title: Text('PLACE ${side.toUpperCase()} ORDER · ${selectedProduct.toUpperCase()}'),
+          title: Text(
+              'PLACE ${side.toUpperCase()} ORDER · ${selectedProduct.toUpperCase()}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -55,10 +57,14 @@ Future<void> showPlaceOrderDialog(
                   initialValue: selectedProduct,
                   decoration: const InputDecoration(labelText: 'COMMODITY'),
                   items: const [
-                    DropdownMenuItem(value: 'material', child: Text('MATERIALS (MATR)')),
-                    DropdownMenuItem(value: 'components', child: Text('COMPONENTS (FABR)')),
-                    DropdownMenuItem(value: 'energy', child: Text('ENERGY (ENGY)')),
-                    DropdownMenuItem(value: 'compute', child: Text('COMPUTE (INFO)')),
+                    DropdownMenuItem(
+                        value: 'material', child: Text('MATERIALS (MATR)')),
+                    DropdownMenuItem(
+                        value: 'components', child: Text('COMPONENTS (FABR)')),
+                    DropdownMenuItem(
+                        value: 'energy', child: Text('ENERGY (ENGY)')),
+                    DropdownMenuItem(
+                        value: 'compute', child: Text('COMPUTE (INFO)')),
                   ],
                   onChanged: (value) {
                     if (value != null) {
@@ -104,7 +110,8 @@ Future<void> showPlaceOrderDialog(
                       if (side == 'buy' && feeRate > 0)
                         Text(
                           'Exchange fee (${(feeRate * 100).toStringAsFixed(2)}%): ${fee.toStringAsFixed(2)} C',
-                          style: const TextStyle(fontSize: 11, color: mutedColor),
+                          style:
+                              const TextStyle(fontSize: 11, color: mutedColor),
                         ),
                       const SizedBox(height: 4),
                       Text(
@@ -193,8 +200,11 @@ class MarketSignalsPanel extends StatelessWidget {
                     : () => showPlaceOrderDialog(
                           context,
                           action,
-                          initialProduct: state.market.keys.firstOrNull ?? 'material',
-                          initialPrice: (state.market.values.firstOrNull?['price'] as num?)?.toDouble() ?? 50.0,
+                          initialProduct:
+                              state.market.keys.firstOrNull ?? 'material',
+                          initialPrice: asDouble(
+                                  state.market.values.firstOrNull?['price']) ??
+                              50.0,
                           feeRate: state.marketFeeRate,
                         ),
               ),
@@ -239,10 +249,11 @@ class MarketSignalsPanel extends StatelessWidget {
                           child: OutlinedButton(
                             onPressed: busy
                                 ? null
-                                : () => action(() => const EarthApi().submitOrder(
-                                      entry.key,
-                                      (product['price'] as num).toDouble(),
-                                    )),
+                                : () =>
+                                    action(() => const EarthApi().submitOrder(
+                                          entry.key,
+                                          asDouble(product['price']) ?? 0,
+                                        )),
                             child: const Text('BUY 1'),
                           ),
                         ),
@@ -251,11 +262,12 @@ class MarketSignalsPanel extends StatelessWidget {
                           child: OutlinedButton(
                             onPressed: busy
                                 ? null
-                                : () => action(() => const EarthApi().submitOrder(
-                                      entry.key,
-                                      (product['price'] as num).toDouble(),
-                                      side: 'sell',
-                                    )),
+                                : () =>
+                                    action(() => const EarthApi().submitOrder(
+                                          entry.key,
+                                          asDouble(product['price']) ?? 0,
+                                          side: 'sell',
+                                        )),
                             child: const Text('SELL 1'),
                           ),
                         ),
@@ -272,7 +284,8 @@ class MarketSignalsPanel extends StatelessWidget {
                                       context,
                                       action,
                                       initialProduct: entry.key,
-                                      initialPrice: (product['price'] as num).toDouble(),
+                                      initialPrice:
+                                          asDouble(product['price']) ?? 0,
                                       feeRate: state.marketFeeRate,
                                     ),
                             child: const Text('ORDER…'),
@@ -313,8 +326,8 @@ class _PriceTrend extends StatelessWidget {
     }
     final points = (history['history'] as List).whereType<Map>().toList();
     if (points.length < 2) return const SizedBox.shrink();
-    final latest = (points.first['price'] as num?)?.toDouble();
-    final oldest = (points.last['price'] as num?)?.toDouble();
+    final latest = asDouble(points.first['price']);
+    final oldest = asDouble(points.last['price']);
     if (latest == null || oldest == null) return const SizedBox.shrink();
     final change = latest - oldest;
     return Text(
@@ -382,39 +395,46 @@ class MyMarketOrdersPanel extends StatelessWidget {
                 final order = raw as Map<String, dynamic>;
                 final id = order['id']?.toString() ?? '';
                 final side = (order['side']?.toString() ?? 'buy').toUpperCase();
-                final product = (order['product']?.toString() ?? '').toUpperCase();
-                final quantity = (order['quantity'] as num?)?.toInt() ?? 1;
-                final filledQty = (order['filled_quantity'] as num?)?.toInt() ??
-                    (order['filled'] as num?)?.toInt() ??
+                final product =
+                    (order['product']?.toString() ?? '').toUpperCase();
+                final quantity = asInt(order['quantity']) ?? 1;
+                final filledQty = asInt(order['filled_quantity']) ??
+                    asInt(order['filled']) ??
                     0;
                 final remaining = (quantity - filledQty).clamp(0, quantity);
-                final limitPrice = (order['limit_price'] as num?)?.toDouble() ??
-                    (order['limitPrice'] as num?)?.toDouble() ??
+                final limitPrice = asDouble(order['limit_price']) ??
+                    asDouble(order['limitPrice']) ??
                     0.0;
-                final settlementPrice = (order['settlement_price'] as num?)?.toDouble() ??
-                    (order['clearing_price'] as num?)?.toDouble() ??
-                    (order['price'] as num?)?.toDouble();
-                final status = (order['status']?.toString() ?? 'open').toLowerCase();
-                final reservedCredits = (order['reserved_credits'] as num?)?.toDouble() ??
-                    (order['reservedCredits'] as num?)?.toDouble() ??
+                final settlementPrice = asDouble(order['settlement_price']) ??
+                    asDouble(order['clearing_price']) ??
+                    asDouble(order['price']);
+                final status =
+                    (order['status']?.toString() ?? 'open').toLowerCase();
+                final reservedCredits = asDouble(order['reserved_credits']) ??
+                    asDouble(order['reservedCredits']) ??
                     (side == 'BUY' && (status == 'open' || status == 'partial')
                         ? remaining * limitPrice
                         : 0.0);
-                final releasedEscrow = (order['released_escrow'] as num?)?.toDouble() ??
-                    (order['releasedEscrow'] as num?)?.toDouble() ??
-                    (status == 'cancelled' || status == 'refunded' ? remaining * limitPrice : 0.0);
-                final fee = (order['fee'] as num?)?.toDouble() ?? 0.0;
+                final releasedEscrow = asDouble(order['released_escrow']) ??
+                    asDouble(order['releasedEscrow']) ??
+                    (status == 'cancelled' || status == 'refunded'
+                        ? remaining * limitPrice
+                        : 0.0);
+                final fee = asDouble(order['fee']) ?? 0.0;
                 final totalValue = filledQty > 0
                     ? filledQty * (settlementPrice ?? limitPrice)
                     : quantity * limitPrice;
 
-                final canCancel = (status == 'open' || status == 'partial') && !busy;
+                final canCancel =
+                    (status == 'open' || status == 'partial') && !busy;
 
                 Color statusColor = mutedColor;
                 if (status == 'open') statusColor = Colors.lightBlueAccent;
                 if (status == 'partial') statusColor = Colors.orangeAccent;
                 if (status == 'filled') statusColor = cyanAccentColor;
-                if (status == 'cancelled' || status == 'rejected') statusColor = Colors.redAccent;
+                if (status == 'cancelled' || status == 'rejected') {
+                  statusColor = Colors.redAccent;
+                }
                 if (status == 'refunded') statusColor = Colors.tealAccent;
 
                 return Container(
@@ -434,7 +454,8 @@ class MyMarketOrdersPanel extends StatelessWidget {
                           Expanded(
                             child: Text(
                               '$side $product · $quantity units @ ${limitPrice.toStringAsFixed(2)} C',
-                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w700, fontSize: 11),
                             ),
                           ),
                           const SizedBox(width: 8),
@@ -456,17 +477,20 @@ class MyMarketOrdersPanel extends StatelessWidget {
                       if (settlementPrice != null && filledQty > 0)
                         Text(
                           'Settlement price: ${settlementPrice.toStringAsFixed(2)} C · Fee paid: ${fee.toStringAsFixed(2)} C',
-                          style: const TextStyle(fontSize: 10, color: cyanAccentColor),
+                          style: const TextStyle(
+                              fontSize: 10, color: cyanAccentColor),
                         ),
                       if (reservedCredits > 0)
                         Text(
                           'Reserved Credits in escrow: ${reservedCredits.toStringAsFixed(2)} C',
-                          style: const TextStyle(fontSize: 10, color: Colors.lightBlueAccent),
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.lightBlueAccent),
                         ),
                       if (releasedEscrow > 0)
                         Text(
                           'Released escrow refund: ${releasedEscrow.toStringAsFixed(2)} C',
-                          style: const TextStyle(fontSize: 10, color: Colors.tealAccent),
+                          style: const TextStyle(
+                              fontSize: 10, color: Colors.tealAccent),
                         ),
                       if (canCancel) ...[
                         const SizedBox(height: 8),
@@ -475,10 +499,13 @@ class MyMarketOrdersPanel extends StatelessWidget {
                           child: OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 12, vertical: 4),
                             ),
-                            onPressed: () => action(() => const EarthApi().cancelOrder(id)),
-                            child: const Text('CANCEL ORDER', style: TextStyle(fontSize: 10)),
+                            onPressed: () =>
+                                action(() => const EarthApi().cancelOrder(id)),
+                            child: const Text('CANCEL ORDER',
+                                style: TextStyle(fontSize: 10)),
                           ),
                         ),
                       ],

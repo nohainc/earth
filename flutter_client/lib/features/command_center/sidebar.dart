@@ -6,41 +6,79 @@ class Sidebar extends StatelessWidget {
   final EarthState state;
   final String selectedSection;
   final ValueChanged<String> onNavigate;
+  final bool busy;
+  final bool canAdvanceDay;
+  final bool isLiveConnected;
+  final bool isReconnecting;
+  final int unreadNotifications;
+  final VoidCallback? onAdvanceDay;
+  final VoidCallback? onLogout;
+  final VoidCallback? onSecurity;
 
   const Sidebar({
     super.key,
     required this.state,
     this.selectedSection = 'command',
     required this.onNavigate,
+    this.busy = false,
+    this.canAdvanceDay = false,
+    this.isLiveConnected = false,
+    this.isReconnecting = false,
+    this.unreadNotifications = 0,
+    this.onAdvanceDay,
+    this.onLogout,
+    this.onSecurity,
   });
 
   @override
   Widget build(BuildContext context) {
     final name = '${state.human['name'] ?? 'Human'}';
-    final initials = name
-        .trim()
-        .split(RegExp(r'\s+'))
-        .where((part) => part.isNotEmpty)
-        .take(2)
-        .map((part) => part[0].toUpperCase())
-        .join();
     final city =
         '${(state.institutions['city'] as Map<String, dynamic>?)?['name'] ?? 'Independent'}';
     final businessName = '${state.business['name'] ?? 'Business'}';
     final technologyName =
         '${state.technologyRegistry['activeProject'] ?? 'Technology'}';
-    final items = [
-      ('command', '✦  Command center'),
-      ('market', '⌁  Central Market'),
-      ('business', '◈  $businessName'),
-      ('civic', '⊙  Civic life'),
-      ('city', '⌖  $city'),
-      ('technology', '✧  $technologyName'),
-      ('life', '◒  Life & legacy'),
-      ('finance', '⛁  Personal finance'),
-      ('contracts', '⇄  Contracts'),
-      ('activity', '⌕  Activity & alerts'),
+    final groups = [
+      (
+        'OVERVIEW',
+        [
+          ('command', 'Command center', Icons.dashboard_outlined),
+          ('activity', 'Activity & alerts', Icons.notifications_none),
+        ]
+      ),
+      (
+        'ECONOMY',
+        [
+          ('market', 'Central Market', Icons.swap_horiz),
+          ('business', businessName, Icons.business_center_outlined),
+          (
+            'finance',
+            'Personal finance',
+            Icons.account_balance_wallet_outlined
+          ),
+          ('contracts', 'Contracts', Icons.handshake_outlined),
+        ]
+      ),
+      (
+        'CIVIC & OPERATIONS',
+        [
+          ('civic', 'Civic life', Icons.how_to_vote_outlined),
+          ('city', city, Icons.location_city_outlined),
+          ('technology', technologyName, Icons.memory_outlined),
+          ('life', 'Life & legacy', Icons.auto_awesome_outlined),
+        ]
+      ),
     ];
+    final liveLabel = isLiveConnected
+        ? 'LIVE'
+        : isReconnecting
+            ? 'RECONNECTING'
+            : 'OFFLINE';
+    final liveColor = isLiveConnected
+        ? cyanAccentColor
+        : isReconnecting
+            ? Colors.orangeAccent
+            : Colors.redAccent;
 
     return Container(
       width: 218,
@@ -70,107 +108,144 @@ class Sidebar extends StatelessWidget {
               ),
             ),
           ),
-          Container(
-            padding: const EdgeInsets.all(11),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .8),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Row(
-              children: [
-                CircleAvatar(
-                  radius: 16,
+          const SizedBox(height: 6),
+          PopupMenuButton<String>(
+            onSelected: (value) =>
+                value == 'security' ? onSecurity?.call() : onLogout?.call(),
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                  enabled: false,
+                  child: Text('$name\n${state.human['email'] ?? ''}')),
+              const PopupMenuDivider(),
+              const PopupMenuItem(
+                  value: 'security', child: Text('Account security')),
+              const PopupMenuItem(value: 'logout', child: Text('Sign out')),
+            ],
+            child: Row(children: [
+              CircleAvatar(
+                  radius: 15,
                   backgroundColor: violetColor,
                   child: Text(
-                    initials.isEmpty ? 'H' : initials,
-                    style: const TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 9),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        name,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      Text(
-                        'Human · $city',
-                        style: const TextStyle(fontSize: 8, color: mutedColor),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                      name.trim().isEmpty ? 'H' : name.trim()[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 10))),
+              const SizedBox(width: 9),
+              Expanded(
+                  child: Text(name,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                          fontSize: 11, fontWeight: FontWeight.w700))),
+              const Icon(Icons.expand_more, size: 16, color: mutedColor),
+            ]),
           ),
-          const SizedBox(height: 22),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (final item in items)
+                  for (final group in groups) ...[
                     Padding(
-                      padding: const EdgeInsets.only(bottom: 5),
-                      child: Align(
-                        alignment: Alignment.centerLeft,
-                        child: TextButton(
-                          onPressed: () => onNavigate(item.$1),
-                          style: TextButton.styleFrom(
-                            backgroundColor: item.$1 == selectedSection
-                                ? violetColor.withValues(alpha: .14)
-                                : Colors.transparent,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(8),
+                      padding:
+                          const EdgeInsets.only(left: 8, top: 8, bottom: 5),
+                      child: Text(group.$1,
+                          style: const TextStyle(
+                              color: mutedColor,
+                              fontSize: 8,
+                              letterSpacing: 1.1,
+                              fontWeight: FontWeight.w700)),
+                    ),
+                    for (final item in group.$2)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 3),
+                        child: SizedBox(
+                          width: double.infinity,
+                          child: TextButton(
+                            onPressed: () => onNavigate(item.$1),
+                            style: TextButton.styleFrom(
+                              foregroundColor: violetColor,
+                              backgroundColor: item.$1 == selectedSection
+                                  ? violetColor.withValues(alpha: .16)
+                                  : Colors.transparent,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8)),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 8),
+                              alignment: Alignment.centerLeft,
                             ),
-                            padding: const EdgeInsets.symmetric(
-                              horizontal: 8,
-                              vertical: 5,
-                            ),
-                            alignment: Alignment.centerLeft,
-                          ),
-                          child: Text(
-                            item.$2,
-                            style: TextStyle(
-                              color: item.$1 == selectedSection
-                                  ? violetColor
-                                  : mutedColor,
-                              fontSize: 11,
-                              fontWeight: item.$1 == selectedSection
-                                  ? FontWeight.w700
-                                  : FontWeight.w500,
-                            ),
+                            child: Row(children: [
+                              Icon(item.$3,
+                                  size: 16,
+                                  color: item.$1 == selectedSection
+                                      ? violetColor
+                                      : mutedColor),
+                              const SizedBox(width: 9),
+                              Expanded(
+                                child: Text(item.$2,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                        color: item.$1 == selectedSection
+                                            ? inkColor
+                                            : mutedColor,
+                                        fontSize: 11,
+                                        fontWeight: item.$1 == selectedSection
+                                            ? FontWeight.w700
+                                            : FontWeight.w500)),
+                              ),
+                              if (item.$1 == 'activity' &&
+                                  unreadNotifications > 0)
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 2),
+                                  decoration: BoxDecoration(
+                                      color: cyanAccentColor.withValues(
+                                          alpha: .15),
+                                      borderRadius: BorderRadius.circular(10)),
+                                  child: const Text('NEW',
+                                      style: TextStyle(
+                                          color: cyanAccentColor,
+                                          fontSize: 7,
+                                          fontWeight: FontWeight.w800)),
+                                ),
+                            ]),
                           ),
                         ),
                       ),
-                    ),
+                  ],
                 ],
               ),
             ),
           ),
           const Divider(color: Colors.white12),
-          const Text(
-            '●  WORLD CLOCK',
-            style: TextStyle(
-              color: cyanAccentColor,
-              fontSize: 9,
-              letterSpacing: 1,
-            ),
-          ),
+          Row(children: [
+            Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(color: liveColor, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Text(liveLabel,
+                style:
+                    TextStyle(color: liveColor, fontSize: 9, letterSpacing: 1))
+          ]),
           const SizedBox(height: 7),
+          const Text('WORLD CLOCK',
+              style:
+                  TextStyle(color: mutedColor, fontSize: 8, letterSpacing: 1)),
           Text(
             'DAY ${state.clock['day']} · ${state.clock['minute']}',
             style: const TextStyle(fontSize: 10, letterSpacing: 1),
           ),
+          const SizedBox(height: 8),
+          Text('$name · $city',
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: mutedColor, fontSize: 9)),
+          const SizedBox(height: 10),
+          SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: busy || !canAdvanceDay ? null : onAdvanceDay,
+                icon: const Icon(Icons.skip_next, size: 14),
+                label: const Text('ADVANCE DAY', style: TextStyle(fontSize: 9)),
+              )),
         ],
       ),
     );

@@ -1236,12 +1236,14 @@ function audit() {
 function send(res, status, data, extraHeaders = {}, req = null) {
   const acceptHeader = req?.headers?.accept || '';
   const requestContentType = req?.headers?.['content-type'] || '';
+  const corsOrigin = process.env.CORS_ORIGIN || req?.headers?.origin || '*';
   const prefersNano = acceptHeader.includes('application/nanomarkup') ||
     requestContentType.includes('application/nanomarkup');
 
   const headers = {
     'content-type': prefersNano ? 'application/nanomarkup; charset=utf-8' : 'application/json',
-    'access-control-allow-origin': '*',
+    'access-control-allow-origin': corsOrigin,
+    'access-control-allow-credentials': 'true',
     'access-control-allow-headers': 'content-type, authorization, idempotency-key, x-request-id, accept',
     'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
     'access-control-expose-headers': 'x-request-id, x-earth-api-version',
@@ -1572,7 +1574,8 @@ const server = createServer(async (req, res) => {
         'content-type': 'text/event-stream',
         'cache-control': 'no-cache',
         connection: 'keep-alive',
-        'access-control-allow-origin': '*',
+        'access-control-allow-origin': process.env.CORS_ORIGIN || req.headers.origin || '*',
+        'access-control-allow-credentials': 'true',
         'access-control-allow-headers': 'content-type, authorization, idempotency-key, x-request-id',
         'x-request-id': correlationId,
         'x-earth-api-version': '2026-08',
@@ -1617,9 +1620,19 @@ const server = createServer(async (req, res) => {
   let body = {};
   if (raw.trim()) {
     try {
-      body = JSON.parse(raw);
+      const contentType = req.headers['content-type'] || '';
+      body = contentType.includes('application/nanomarkup')
+        ? parseNano(raw)
+        : JSON.parse(raw);
     } catch {
-      return sendError(res, 400, 'Malformed JSON payload', 'VALIDATION_ERROR', correlationId);
+      return sendError(
+        res,
+        400,
+        'Malformed request payload',
+        'VALIDATION_ERROR',
+        correlationId,
+        req,
+      );
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
       return sendError(res, 400, 'Request body must be a JSON object', 'VALIDATION_ERROR', correlationId);

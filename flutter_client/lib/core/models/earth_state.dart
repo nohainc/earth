@@ -1,3 +1,5 @@
+import '../../shared/widgets/format_helpers.dart';
+
 class EarthState {
   final Map<String, dynamic> json;
   const EarthState(this.json);
@@ -39,9 +41,7 @@ class EarthState {
       ((json['market'] as Map<String, dynamic>)['orders'] as List<dynamic>?) ??
       const [];
   double get marketFeeRate =>
-      ((json['market'] as Map<String, dynamic>)['feeRate'] as num?)
-          ?.toDouble() ??
-      0;
+      asDouble((json['market'] as Map<String, dynamic>)['feeRate']) ?? 0;
   List<dynamic> get communities =>
       (json['communities'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get audit =>
