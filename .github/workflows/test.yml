@@ -49,6 +49,7 @@ jobs:
           npm run db:verify:invariants
       - run: npm run check
       - run: npm run cf:assert-postgres
+      - run: npm run audit:mutation-boundaries
       - run: npm test
         env:
           DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth
