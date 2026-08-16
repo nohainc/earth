@@ -46,6 +46,7 @@ database.
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 | Indexed Human starter package | Implemented | PostgreSQL world and market indices deterministically scale the initial Credit and resource reserve; bounds and calculation are unit-tested |
 | Business financial lifecycle | Implemented | Scheduler uses business profit and condition for distress/insolvency transitions and preserves auditable dissolution boundaries |
+| Business asset liquidation | Implemented | Owner-authorized PostgreSQL liquidation closes distressed businesses, detaches machines without deleting append-only history, and records dissolution events/notifications |
 
 ## Required migration gates
 

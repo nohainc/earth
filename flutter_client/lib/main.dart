@@ -328,6 +328,16 @@ class EarthApi {
     return world();
   }
 
+  Future<EarthState> liquidateBusiness(String businessId,
+      {String otp = ''}) async {
+    await _request('/api/businesses/$businessId/liquidate',
+        method: 'POST',
+        body: {
+          if (otp.trim().isNotEmpty) 'otp': otp.trim(),
+        });
+    return world();
+  }
+
   Future<EarthState> fundResearch() async {
     await _request('/api/technology/me/fund', method: 'POST', body: {
       'amount': 240,
@@ -1754,7 +1764,8 @@ class _Dashboard extends StatelessWidget {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Policy: ${state.business['policy']}'),
-              Text('Financial status: ${state.business['status'] ?? 'active'}', style: const TextStyle(color: _muted, fontSize: 11)),
+              Text('Financial status: ${state.business['status'] ?? 'active'}',
+                  style: const TextStyle(color: _muted, fontSize: 11)),
               Text('Condition: ${state.business['condition']}%'),
               if (businessProfile['business'] is Map)
                 Text(
@@ -1827,6 +1838,18 @@ class _Dashboard extends StatelessWidget {
                       : () => _showBusinessManager(
                           context, action, state.business['id'] as String?),
                   child: const Text('APPOINT MANAGER')),
+              if (['distressed', 'insolvent']
+                  .contains('${state.business['status'] ?? ''}')) ...[
+                const SizedBox(height: 8),
+                OutlinedButton(
+                    onPressed: busy
+                        ? null
+                        : () => _showBusinessLiquidationDialog(
+                            context, action, state.business['id'] as String?),
+                    style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.redAccent),
+                    child: const Text('LIQUIDATE BUSINESS')),
+              ],
               const SizedBox(height: 8),
               Wrap(
                   spacing: 8,
@@ -2819,6 +2842,45 @@ Future<void> _showBusinessManager(
             ],
           ));
   manager.dispose();
+}
+
+Future<void> _showBusinessLiquidationDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    String? businessId) async {
+  if (businessId == null || businessId.isEmpty) return;
+  final otp = TextEditingController();
+  await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+            title: const Text('Liquidate business?'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              const Text(
+                  'This permanently closes the business. Its machines will be detached and preserved for future disposition; financial and production history remains recorded.',
+                  style: TextStyle(color: _muted, fontSize: 12)),
+              const SizedBox(height: 12),
+              TextField(
+                  controller: otp,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                      labelText: 'Authenticator code (if enabled)')),
+            ]),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('CANCEL')),
+              FilledButton(
+                  onPressed: () async {
+                    await action(() => const EarthApi()
+                        .liquidateBusiness(businessId, otp: otp.text));
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  },
+                  style:
+                      FilledButton.styleFrom(backgroundColor: Colors.redAccent),
+                  child: const Text('LIQUIDATE')),
+            ],
+          ));
+  otp.dispose();
 }
 
 Future<void> _showBusinessConstitution(
