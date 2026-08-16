@@ -100,6 +100,15 @@ assert.equal(resendVerification.response.status, 200);
 assert.equal(resendVerification.body.ok, true);
 assert.match(resendVerification.body.message, /If that identity exists and needs verification/);
 
+const malformedPublicBody = await get('/api/auth/verify-email/resend', {
+  method: 'POST',
+  headers: { 'content-type': 'application/json', 'X-Request-ID': 'smoke-malformed-json' },
+  body: '{',
+});
+assert.equal(malformedPublicBody.response.status, 400);
+assert.equal(malformedPublicBody.body.code, 'VALIDATION_ERROR');
+assert.equal(malformedPublicBody.body.correlationId, 'smoke-malformed-json');
+
 const world = await get('/api/world', { headers: { 'X-Request-ID': 'smoke-error-contract' } });
 assert.equal(world.response.status, 401);
 assert.equal(world.body.error, 'Authentication required');

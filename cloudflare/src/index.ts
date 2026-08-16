@@ -1675,7 +1675,10 @@ export default {
           : await env.ASSETS.fetch(request);
     } catch (error) {
       console.error(JSON.stringify({ event: 'worker_request_failed', requestId, path: url.pathname, method: request.method, error: error instanceof Error ? error.message : 'unknown' }));
-      response = Response.json({ ok: false, error: 'EARTH service is temporarily unavailable', code: 'SERVICE_UNAVAILABLE', correlationId: requestId }, { status: 503 });
+      const malformedJson = error instanceof SyntaxError && /json|unexpected end|unexpected token/i.test(error.message);
+      response = malformedJson
+        ? Response.json({ ok: false, error: 'Request body must be valid JSON object', code: 'VALIDATION_ERROR', correlationId: requestId }, { status: 400 })
+        : Response.json({ ok: false, error: 'EARTH service is temporarily unavailable', code: 'SERVICE_UNAVAILABLE', correlationId: requestId }, { status: 503 });
     }
     const headers = new Headers(response.headers);
     const origin = request.headers.get('Origin');
