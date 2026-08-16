@@ -59,6 +59,14 @@ The documents define the tested feature domains as identity/session security, st
 - Updated `docs/API_SPECIFICATION.json` server URL to canonical `https://earthuc.com`.
 - Verified in `test/api-contract-schema.test.mjs`.
 
+### FEAT-001 — Nano Markup Data Serialization Migration (Resolved)
+- Integrated `nanomarkup` package by `nohainc` in Node/TypeScript backend and Flutter client.
+- Serialized event details (`world_events.details`), contract terms (`terms_json`), governance rule values (`value_json`), and municipal tax charters (`charter_rules`) using canonical Nano Markup strings.
+- Implemented `NanoMarkupHelper` in Flutter client and `toNanoMarkup`/`fromNanoMarkup` in Cloudflare Worker with JSON backwards compatibility fallback.
+- Added tests in `test/nano-markup.test.mjs` and `flutter_client/test/nano_markup_helper_test.dart` (100% pass).
+- Updated repository documentation, architecture guides, and API contracts to specify Nano Markup serialization.
+
+
 ### GAP-001 — Reference simulator feature surface (Resolved)
 - Populated reference simulator endpoints in `server.js` for `/api/production/catalog`, `/api/ownership/events`, `/api/membership/events`, `/api/governance/authority/events`, and `/api/market/book`.
 - Verified in `test/worker-endpoints-comprehensive.test.mjs`.

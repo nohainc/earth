@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
 import { centsToMoney, moneyToCents } from './money';
+import { toNanoMarkup } from './nano-markup.ts';
 
 export async function acceptContract(repository: PostgresRepository, contractId: string, actorId: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -21,7 +22,7 @@ export async function acceptContract(repository: PostgresRepository, contractId:
     await tx.query("UPDATE negotiated_contracts SET status = 'accepted', accepted_game_day = $1 WHERE id = $2 AND status = 'proposed'", [day, row.id]);
     await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [amount, day, row.proposer_id]);
     await tx.query("UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [amount, day, row.counterparty_id]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.accepted', 'A negotiated contract was accepted', JSON.stringify({ contractId: row.id, amount })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.accepted', 'A negotiated contract was accepted', toNanoMarkup({ contractId: row.id, amount })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), row.proposer_id, 'contract', 'Contract accepted', `${row.title} was accepted and ${amount} Credits were settled.`, row.id]);
     return { ok: true, status: 'accepted', contract: (await tx.query('SELECT * FROM negotiated_contracts WHERE id = $1', [row.id])).rows[0] };
   });
@@ -36,8 +37,8 @@ export async function createContract(repository: PostgresRepository, input: { pr
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     const contractId = 'CON-' + crypto.randomUUID().slice(0, 8).toUpperCase();
-    await tx.query('INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, starts_game_day, ends_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [contractId, input.kind, input.proposerId, input.counterpartyId, input.title, JSON.stringify(input.terms), input.amount, day, day + input.durationDays, input.correlationId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.proposed', 'A negotiated contract was proposed', JSON.stringify({ contractId, kind: input.kind, proposer: input.proposerId, counterparty: input.counterpartyId })]);
+    await tx.query('INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, starts_game_day, ends_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [contractId, input.kind, input.proposerId, input.counterpartyId, input.title, toNanoMarkup(input.terms), input.amount, day, day + input.durationDays, input.correlationId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.proposed', 'A negotiated contract was proposed', toNanoMarkup({ contractId, kind: input.kind, proposer: input.proposerId, counterparty: input.counterpartyId })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.counterpartyId, 'contract', 'Contract proposal received', input.title + ' was proposed for your acceptance.', contractId]);
     return { ok: true, contract: (await tx.query('SELECT * FROM negotiated_contracts WHERE id = $1', [contractId])).rows[0], correlationId: input.correlationId };
   });
@@ -65,7 +66,7 @@ export async function openDispute(repository: PostgresRepository, input: { contr
     const disputeId = 'DISPUTE-' + crypto.randomUUID().slice(0, 8).toUpperCase();
     await tx.query('INSERT INTO contract_disputes (id, contract_id, claimant_id, respondent_id, reason) VALUES ($1,$2,$3,$4,$5)', [disputeId, input.contractId, input.claimantId, input.claimantId === contract.rows[0].proposer_id ? contract.rows[0].counterparty_id : contract.rows[0].proposer_id, input.reason]);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'arbitration.opened', 'A contract dispute was opened', JSON.stringify({ disputeId, contractId: input.contractId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'arbitration.opened', 'A contract dispute was opened', toNanoMarkup({ disputeId, contractId: input.contractId })]);
     return { ok: true, dispute: (await tx.query('SELECT * FROM contract_disputes WHERE id = $1', [disputeId])).rows[0] };
   });
 }

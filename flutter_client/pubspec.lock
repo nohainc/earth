@@ -155,6 +155,14 @@ packages:
       url: "https://pub.dev"
     source: hosted
     version: "1.18.0"
+  nanomarkup:
+    dependency: "direct main"
+    description:
+      name: nanomarkup
+      sha256: "520a44300a0874bcd8a8ac58dd45c64fed8488c1a9df4abce8275537eec3b812"
+      url: "https://pub.dev"
+    source: hosted
+    version: "1.0.0"
   path:
     dependency: transitive
     description:
@@ -265,5 +273,5 @@ packages:
     source: hosted
     version: "3.0.3"
 sdks:
-  dart: ">=3.10.0-0 <4.0.0"
+  dart: ">=3.12.0 <4.0.0"
   flutter: ">=3.18.0-18.0.pre.54"

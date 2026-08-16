@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { distributeDividends, issueShares } from '../cloudflare/src/business-postgres.ts';
 import { setCityTaxCharter } from '../cloudflare/src/institutions-postgres.ts';
+import { fromNanoMarkup } from '../cloudflare/src/nano-markup.ts';
 
 function createMockRepository(queries) {
   return {
@@ -142,7 +143,7 @@ test('setCityTaxCharter updates municipal tax rules and clamps rates within safe
       return { rows: [{ game_day: 42 }] };
     }
     if (sql.includes('UPDATE institutions SET charter_rules = $1')) {
-      updatedCharter = JSON.parse(params[0]);
+      updatedCharter = fromNanoMarkup(params[0]);
       return { rows: [], rowCount: 1 };
     }
     return { rows: [], rowCount: 1 };
@@ -160,10 +161,10 @@ test('setCityTaxCharter updates municipal tax rules and clamps rates within safe
 
   assert.equal(result.ok, true);
   assert.equal(result.cityId, 'CITY-1');
-  assert.equal(updatedCharter.incomeTaxBps, 1500);
-  assert.equal(updatedCharter.salesTaxBps, 800);
-  assert.equal(updatedCharter.corporateTaxBps, 2000);
-  assert.equal(updatedCharter.propertyTaxBps, 500);
+  assert.equal(Number(updatedCharter.incomeTaxBps), 1500);
+  assert.equal(Number(updatedCharter.salesTaxBps), 800);
+  assert.equal(Number(updatedCharter.corporateTaxBps), 2000);
+  assert.equal(Number(updatedCharter.propertyTaxBps), 500);
   assert.equal(updatedCharter.updatedBy, 'H-MAYOR');
-  assert.equal(updatedCharter.updatedGameDay, 42);
+  assert.equal(Number(updatedCharter.updatedGameDay), 42);
 });

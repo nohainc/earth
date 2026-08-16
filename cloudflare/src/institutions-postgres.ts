@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
+import { toNanoMarkup } from './nano-markup.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
   const result = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -43,7 +44,7 @@ export async function createCity(repository: PostgresRepository, input: { founde
       await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CITY',$3,'joined',$4,'city_formation')", [crypto.randomUUID(), member.human_id, cityId, gameDay]);
       await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [`CITY-FORMED-${member.human_id}-${cityId}`, member.human_id, 'institution', 'City founded', `City ${cityId} was founded and you became a resident.`, cityId]);
     }
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'city.formed', `${name} was founded`, JSON.stringify({ cityId, communityId: input.communityId, residents })]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'city.formed', `${name} was founded`, toNanoMarkup({ cityId, communityId: input.communityId, residents })]);
     return { ok: true, city: (await tx.query('SELECT * FROM cities WHERE id = $1', [cityId])).rows[0] };
   });
 }
@@ -79,7 +80,7 @@ export async function createCorporation(repository: PostgresRepository, input: {
       await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CORPORATION',$3,'joined',$4,'corporation_formation')", [crypto.randomUUID(), member.human_id, corporationId, gameDay]);
       await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [`CORP-FORMED-${member.human_id}-${corporationId}`, member.human_id, 'institution', 'Corporation formed', `Corporation ${corporationId} was formed and you became a member.`, corporationId]);
     }
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation.formed', `${name} was formed`, JSON.stringify({ corporationId, cityId: input.cityId, members: Number(city.rows[0].residents) })]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation.formed', `${name} was formed`, toNanoMarkup({ corporationId, cityId: input.cityId, members: Number(city.rows[0].residents) })]);
     return { ok: true, corporation: (await tx.query('SELECT * FROM corporations WHERE id = $1', [corporationId])).rows[0] };
   });
 }
@@ -206,7 +207,7 @@ export async function spendCorporationTreasury(repository: PostgresRepository, i
     await tx.query('UPDATE corporations SET treasury = treasury - $1 WHERE id = $2', [amount, input.corporationId]);
     await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [amount, input.cityId]);
     await tx.query('INSERT INTO budgets (id,institution_id,category,amount,game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = budgets.amount + excluded.amount, game_day = excluded.game_day', [`CORP-SPEND-${input.correlationId}`, input.cityId, input.category, amount, gameDay]);
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation_public_spending', `Corporation funding reached ${input.cityId}`, JSON.stringify({ corporationId: input.corporationId, cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation_public_spending', `Corporation funding reached ${input.cityId}`, toNanoMarkup({ corporationId: input.corporationId, cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId })]);
     return { ok: true, amount: Number(amount), category: input.category, cityId: input.cityId, corporation: (await tx.query('SELECT id, treasury FROM corporations WHERE id = $1', [input.corporationId])).rows[0], city: (await tx.query('SELECT id, treasury FROM cities WHERE id = $1', [input.cityId])).rows[0], correlationId: input.correlationId };
   });
 }
@@ -254,8 +255,8 @@ export async function setCityTaxCharter(repository: PostgresRepository, input: {
       updatedBy: input.humanId,
       updatedGameDay: gameDay,
     };
-    await tx.query('UPDATE institutions SET charter_rules = $1 WHERE id = $2', [JSON.stringify(charter), input.cityId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'city.tax_charter_updated', `Municipal Tax Charter updated for ${input.cityId}`, JSON.stringify({ cityId: input.cityId, charter, correlationId: input.correlationId })]);
+    await tx.query('UPDATE institutions SET charter_rules = $1 WHERE id = $2', [toNanoMarkup(charter), input.cityId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'city.tax_charter_updated', `Municipal Tax Charter updated for ${input.cityId}`, toNanoMarkup({ cityId: input.cityId, charter, correlationId: input.correlationId })]);
     return { ok: true, cityId: input.cityId, charter, correlationId: input.correlationId };
   });
 }

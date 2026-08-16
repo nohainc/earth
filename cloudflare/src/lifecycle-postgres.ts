@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents, taxToCents } from './money.ts';
+import { toNanoMarkup } from './nano-markup.ts';
 
 export async function registerSuccessor(repository: PostgresRepository, input: { humanId: string; successorName: string; estatePeriodDays: number; successorHumanId: string | null; currentLifeStatus: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -75,7 +76,7 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     for (const business of businesses.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUSINESS\',$2,$3,$4,1,\'late_inheritance\',$5,$6)', [crypto.randomUUID(), business.id, input.predecessorId, input.successorId, eventId, input.day]);
     for (const share of shares.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUSINESS_SHARES\',$2,$3,$4,$5,\'late_inheritance\',$6,$7)', [crypto.randomUUID(), share.business_id, input.predecessorId, input.successorId, share.shares, eventId, input.day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'life\',\'Inheritance received\',$3,$4)', [crypto.randomUUID(), input.successorId, `You received ${inherited} Credits and the registered assets of ${predecessor.rows[0].display_name}.`, eventId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'human.life_event\',\'An Estate completed succession\',$3) ON CONFLICT (id) DO NOTHING', [`LATE-INHERITANCE-${input.predecessorId}-${input.day}`, input.day, JSON.stringify({ predecessor: input.predecessorId, successor: input.successorId, inherited, tax })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'human.life_event\',\'An Estate completed succession\',$3) ON CONFLICT (id) DO NOTHING', [`LATE-INHERITANCE-${input.predecessorId}-${input.day}`, input.day, toNanoMarkup({ predecessor: input.predecessorId, successor: input.successorId, inherited, tax })]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [input.predecessorId]);
     return { ok: true, lateSuccession: true, successorHumanId: input.successorId, inherited, tax, eventId, assets: { machines: machines.rows.length, businesses: businesses.rows.length, shareLots: shares.rows.length, resourceTypes: resources.rows.length } };
   });
@@ -134,9 +135,9 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
     if (successorRow) {
       await tx.query('INSERT INTO deceased_profiles (human_id,display_name,death_game_day,final_standing,final_legacy,successor_name) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name', [human.id, human.display_name, day, human.standing, human.legacy, human.successor_name]);
       await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [human.id]);
-      await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered the archive\',$3) ON CONFLICT (id) DO NOTHING', [`DEATH-${human.id}-${day}`, day, JSON.stringify({ humanId: human.id, successor: human.successor_name })]);
+      await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered the archive\',$3) ON CONFLICT (id) DO NOTHING', [`DEATH-${human.id}-${day}`, day, toNanoMarkup({ humanId: human.id, successor: human.successor_name })]);
     } else {
-      await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered an Estate Period\',$3) ON CONFLICT (id) DO NOTHING', [`ESTATE-${human.id}-${day}`, day, JSON.stringify({ humanId: human.id, estatePeriodDays: human.estate_period_days ?? 30 })]);
+      await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered an Estate Period\',$3) ON CONFLICT (id) DO NOTHING', [`ESTATE-${human.id}-${day}`, day, toNanoMarkup({ humanId: human.id, estatePeriodDays: human.estate_period_days ?? 30 })]);
       await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'life\',\'Estate Period started\',$3,$2)', [crypto.randomUUID(), human.id, `Your estate remains available for ${human.estate_period_days ?? 30} game days before liquidation.`]);
     }
     processed += 1;
@@ -165,7 +166,7 @@ export async function liquidateExpiredEstates(repository: PostgresRepository, da
       await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [estate.id]);
       await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [estate.id]);
       await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, NULL FROM humans WHERE id = $1 ON CONFLICT (human_id) DO NOTHING', [estate.id]);
-      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`ESTATE-LIQUIDATION-${estate.id}-${day}`, day, 'human.estate_liquidated', 'An unclaimed estate was liquidated', JSON.stringify({ humanId: estate.id, credits: balance, businessCount: businesses.rows.length })]);
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`ESTATE-LIQUIDATION-${estate.id}-${day}`, day, 'human.estate_liquidated', 'An unclaimed estate was liquidated', toNanoMarkup({ humanId: estate.id, credits: balance, businessCount: businesses.rows.length })]);
       await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [estate.id]);
     });
     processed += 1;

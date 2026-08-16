@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository';
 import { enqueueOutbox } from './outbox-postgres.ts';
+import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -18,7 +19,7 @@ async function eligible(tx: PostgresRepository, humanId: string, institutionId: 
 function jsonObject(value: unknown): Record<string, unknown> {
   if (value && typeof value === 'object') return value as Record<string, unknown>;
   if (typeof value === 'string') {
-    try { return JSON.parse(value) as Record<string, unknown>; } catch (_error) { return {}; }
+    try { return fromNanoMarkup<Record<string, unknown>>(value); } catch (_error) { return {}; }
   }
   return {};
 }
@@ -46,7 +47,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const closesGameMinute = closesAbsoluteMinute % 1440;
     const implementationGameDay = Math.floor(implementationAbsoluteMinute / 1440);
     const implementationGameMinute = implementationAbsoluteMinute % 1440;
-    await tx.query("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, closes_game_day, closes_game_minute, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, implementation_game_day, implementation_game_minute, target_category, target_value_json, correlation_id) VALUES ($1,$2,$3,$4,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + ($5 * INTERVAL '1 hour'),$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + (($5 + $11 * 24) * INTERVAL '1 hour'),$12,$13,$14,$15,$16)", [proposalId, input.institutionId, input.title, input.body, input.durationHours, closesGameDay, closesGameMinute, rule.rows[0].id, quorum, approvalThreshold, implementationDelay, implementationGameDay, implementationGameMinute, input.targetCategory, input.targetValue ? JSON.stringify(input.targetValue) : null, input.correlationId]);
+    await tx.query("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, closes_game_day, closes_game_minute, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, implementation_game_day, implementation_game_minute, target_category, target_value_json, correlation_id) VALUES ($1,$2,$3,$4,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + ($5 * INTERVAL '1 hour'),$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + (($5 + $11 * 24) * INTERVAL '1 hour'),$12,$13,$14,$15,$16)", [proposalId, input.institutionId, input.title, input.body, input.durationHours, closesGameDay, closesGameMinute, rule.rows[0].id, quorum, approvalThreshold, implementationDelay, implementationGameDay, implementationGameMinute, input.targetCategory, input.targetValue ? toNanoMarkup(input.targetValue) : null, input.correlationId]);
     return { ok: true, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [proposalId])).rows[0], createdBy: input.humanId, correlationId: input.correlationId };
   });
 }
@@ -114,10 +115,10 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     const previous = await tx.query<{ version: number }>('SELECT version FROM governance_rules WHERE institution_id = $1 AND category = $2 ORDER BY version DESC LIMIT 1', [current.institution_id, category]);
     const version = Number(previous.rows[0]?.version ?? 0) + 1;
     const ruleId = `RULE-${current.institution_id}-${category}-${version}`;
-    await tx.query('INSERT INTO governance_rules (id, institution_id, name, category, value_json, version, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,\'active\',$7)', [ruleId, current.institution_id, current.title, category, JSON.stringify(value), version, input.humanId]);
+    await tx.query('INSERT INTO governance_rules (id, institution_id, name, category, value_json, version, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,\'active\',$7)', [ruleId, current.institution_id, current.title, category, toNanoMarkup(value), version, input.humanId]);
     await tx.query("UPDATE governance_rules SET status = 'superseded' WHERE institution_id = $1 AND category = $2 AND status = 'active' AND id <> $3", [current.institution_id, category, ruleId]);
     await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'executed' WHERE id = $1", [current.id]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'rule.changed', `Rule ${category} changed`, JSON.stringify({ proposalId: current.id, ruleId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'rule.changed', `Rule ${category} changed`, toNanoMarkup({ proposalId: current.id, ruleId })]);
     return { ok: true, executionStatus: 'executed', rule: (await tx.query('SELECT * FROM governance_rules WHERE id = $1', [ruleId])).rows[0], proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
   });
 }
@@ -134,7 +135,7 @@ export async function challengeProposal(repository: PostgresRepository, input: {
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     await tx.query("UPDATE proposals SET execution_status = 'challenged' WHERE id = $1", [input.proposalId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.challenge_filed', `Constitutional challenge filed for proposal ${input.proposalId}`, JSON.stringify({ proposalId: input.proposalId, challenger: input.humanId, reason: input.reason, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.challenge_filed', `Constitutional challenge filed for proposal ${input.proposalId}`, toNanoMarkup({ proposalId: input.proposalId, challenger: input.humanId, reason: input.reason, correlationId: input.correlationId })]);
     await enqueueOutbox(tx, {
       eventKey: `governance-challenge:${input.correlationId}`,
       topic: 'world_activity',
@@ -161,7 +162,7 @@ export async function resolveConstitutionalAppeal(repository: PostgresRepository
     } else {
       await tx.query("UPDATE proposals SET execution_status = 'ready' WHERE id = $1", [input.proposalId]);
     }
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.ruling_issued', `Constitutional ruling for proposal ${input.proposalId}: ${input.ruling.toUpperCase()}`, JSON.stringify({ proposalId: input.proposalId, jurist: input.humanId, ruling: input.ruling, rationale: input.rationale, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.ruling_issued', `Constitutional ruling for proposal ${input.proposalId}: ${input.ruling.toUpperCase()}`, toNanoMarkup({ proposalId: input.proposalId, jurist: input.humanId, ruling: input.ruling, rationale: input.rationale, correlationId: input.correlationId })]);
     await enqueueOutbox(tx, {
       eventKey: `governance-ruling:${input.correlationId}`,
       topic: 'world_activity',

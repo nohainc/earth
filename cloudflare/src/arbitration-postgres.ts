@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { toNanoMarkup } from './nano-markup.ts';
 
 export async function resolveContractDispute(
   repository: PostgresRepository,
@@ -14,7 +15,7 @@ export async function resolveContractDispute(
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     await tx.query("UPDATE contract_disputes SET status = 'resolved', outcome = $1, resolved_by = $2, resolved_game_day = $3, resolution = $4 WHERE id = $5 AND status = 'open'", [input.outcome, input.resolverId, day, input.resolution, dispute.rows[0].id]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'arbitration.resolved', 'A contract dispute was resolved', JSON.stringify({ disputeId: dispute.rows[0].id, contractId: input.contractId, outcome: input.outcome, resolvedBy: input.resolverId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'arbitration.resolved', 'A contract dispute was resolved', toNanoMarkup({ disputeId: dispute.rows[0].id, contractId: input.contractId, outcome: input.outcome, resolvedBy: input.resolverId })]);
     if (input.outcome === 'void') {
       const payer = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [contract.rows[0].counterparty_id]);
       const receiver = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [contract.rows[0].proposer_id]);

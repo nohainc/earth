@@ -36,6 +36,12 @@ SQL, credentials, and stack traces never cross the API boundary.
 | 429 | `RATE_LIMITED` |
 | 503 | `SERVICE_UNAVAILABLE` |
 
+## Serialization and Data Formats
+
+While external HTTP requests accept standard REST payloads, internal serialized strings, event details (`world_events.details`), negotiated contract terms (`terms_json`), governance rule values (`value_json`), and municipal tax charters (`charter_rules`) are canonically encoded using **Nano Markup** (`nanomarkup` by `nohainc`).
+
+Nano Markup provides high-density, human-readable structured serialization using 4-space indentation without type coercion ambiguity. Clients utilize `NanoMarkupHelper` or `nanomarkup` package decoders with automatic JSON backwards-compatibility fallback.
+
 ## Authority and persistence
 
 The Worker accepts data requests only when `PERSISTENCE_AUTHORITY=postgres` and

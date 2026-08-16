@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, marketValueToCents, moneyToCents } from './money.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
+import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
 const sectors = new Set(['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d']);
 
@@ -26,7 +27,7 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
     await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,100)', [businessId, input.ownerId]);
     await tx.query('INSERT INTO business_constitutions (business_id, updated_by, updated_game_day) VALUES ($1,$2,$3)', [businessId, input.ownerId, day]);
     await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, input.ownerId, day]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.formed', `${input.name} was registered`, JSON.stringify({ businessId, sector: input.sector, founder: input.ownerId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.formed', `${input.name} was registered`, toNanoMarkup({ businessId, sector: input.sector, founder: input.ownerId })]);
     return { ok: true, business: (await tx.query('SELECT * FROM businesses WHERE id = $1', [businessId])).rows[0], shares: 100, fee: Number(fee), correlationId: input.correlationId };
   });
 }
@@ -119,7 +120,7 @@ export async function distributeDividends(repository: PostgresRepository, input:
       await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [crypto.randomUUID(), row.holder_id, 'business', 'Dividend payout received', `You received ${payoutAmount} Credits in dividend distribution from ${input.businessId}.`, input.businessId]);
     }
     await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [centsToMoney(totalCents), day, input.businessId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.dividend_distributed', `Dividends distributed for ${input.businessId}`, JSON.stringify({ businessId: input.businessId, totalAmount: input.totalAmount, recipientsCount: payouts.length, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.dividend_distributed', `Dividends distributed for ${input.businessId}`, toNanoMarkup({ businessId: input.businessId, totalAmount: input.totalAmount, recipientsCount: payouts.length, correlationId: input.correlationId })]);
     await enqueueOutbox(tx, {
       eventKey: `business-dividend:${input.correlationId}`,
       topic: 'world_activity',
@@ -162,7 +163,7 @@ export async function liquidateBusiness(repository: PostgresRepository, input: {
     await tx.query("UPDATE financial_states SET status = 'dissolved', recovery_game_day = $1, last_reason = 'Owner-authorized business liquidation', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND status IN ('distressed','insolvent')", [day, input.businessId]);
     const eventId = `BUSINESS-LIQUIDATION-${input.businessId}-${day}`;
     await tx.query("INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason,correlation_id) VALUES ($1,$2,'BUSINESS',$3,'dissolved',$4,$5,$6) ON CONFLICT (id) DO NOTHING", [eventId, input.businessId, business.rows[0].financial_status ?? business.rows[0].status, day, 'Owner-authorized business liquidation', input.correlationId]);
-    await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'business.liquidated',$3,$4) ON CONFLICT (id) DO NOTHING", [eventId, day, `Business ${input.businessId} was liquidated`, JSON.stringify({ businessId: input.businessId, releasedMachines: machines.rows.length, ownerId: input.ownerId })]);
+    await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'business.liquidated',$3,$4) ON CONFLICT (id) DO NOTHING", [eventId, day, `Business ${input.businessId} was liquidated`, toNanoMarkup({ businessId: input.businessId, releasedMachines: machines.rows.length, ownerId: input.ownerId })]);
     await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'business',$3,$4,$5) ON CONFLICT DO NOTHING", [crypto.randomUUID(), input.ownerId, 'Business liquidation recorded', `${input.businessId} was closed. ${machines.rows.length} productive machine(s) were detached and preserved under your Human ownership for future disposition.`, input.businessId]);
     return { ok: true, businessId: input.businessId, releasedMachines: machines.rows.length, gameDay: day, correlationId: input.correlationId };
   });
@@ -176,7 +177,7 @@ export async function appointManager(repository: PostgresRepository, input: { ow
     if (!(await tx.query("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [input.managerId])).rows[0]) throw new Error('Active manager Human not found');
     const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
     await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(business_id) DO UPDATE SET manager_id = EXCLUDED.manager_id, appointed_by = EXCLUDED.appointed_by, appointed_game_day = EXCLUDED.appointed_game_day, updated_at = CURRENT_TIMESTAMP', [input.businessId, input.managerId, input.ownerId, day]);
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.manager_appointed', `Manager appointed for ${input.businessId}`, JSON.stringify({ businessId: input.businessId, managerId: input.managerId, appointedBy: input.ownerId })]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.manager_appointed', `Manager appointed for ${input.businessId}`, toNanoMarkup({ businessId: input.businessId, managerId: input.managerId, appointedBy: input.ownerId })]);
     return { ok: true, management: (await tx.query('SELECT * FROM business_management WHERE business_id = $1', [input.businessId])).rows[0] };
   });
 }
@@ -190,7 +191,7 @@ export async function updateConstitution(repository: PostgresRepository, input: 
     const version = Number(current.rows[0]?.version ?? 0) + 1;
     const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
     await tx.query('INSERT INTO business_constitutions (business_id,version,shareholder_vote_threshold,board_approval_threshold,dilution_notice_days,updated_by,updated_game_day) VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT(business_id) DO UPDATE SET version=EXCLUDED.version, shareholder_vote_threshold=EXCLUDED.shareholder_vote_threshold, board_approval_threshold=EXCLUDED.board_approval_threshold, dilution_notice_days=EXCLUDED.dilution_notice_days, updated_by=EXCLUDED.updated_by, updated_game_day=EXCLUDED.updated_game_day, updated_at=CURRENT_TIMESTAMP', [input.businessId, version, input.shareholderVoteThreshold, input.boardApprovalThreshold, input.dilutionNoticeDays, input.ownerId, day]);
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.constitution_changed', `Business Constitution updated for ${input.businessId}`, JSON.stringify({ businessId: input.businessId, version, updatedBy: input.ownerId })]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.constitution_changed', `Business Constitution updated for ${input.businessId}`, toNanoMarkup({ businessId: input.businessId, version, updatedBy: input.ownerId })]);
     return { ok: true, constitution: (await tx.query('SELECT * FROM business_constitutions WHERE business_id = $1', [input.businessId])).rows[0] };
   });
 }
@@ -226,8 +227,8 @@ export async function proposeMerger(repository: PostgresRepository, input: { acq
     const day = Number(world.rows[0]?.game_day ?? 0);
     const mergerId = `MERGER-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const terms = { acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, pricePerShare: input.pricePerShare, totalShares: Number(totalShares), totalAmount: Number(total) };
-    await tx.query("INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, status, starts_game_day, ends_game_day, correlation_id) VALUES ($1,'strategic',$2,$3,'Merger Tender Offer',$4,$5,'proposed',$6,$7,$8)", [mergerId, input.acquirerId, target.rows[0].owner_id, JSON.stringify(terms), total, day, day + 30, input.correlationId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merger_proposed', `Merger tender offer for ${input.targetBusinessId}`, JSON.stringify({ mergerId, acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, totalAmount: Number(total) })]);
+    await tx.query("INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, status, starts_game_day, ends_game_day, correlation_id) VALUES ($1,'strategic',$2,$3,'Merger Tender Offer',$4,$5,'proposed',$6,$7,$8)", [mergerId, input.acquirerId, target.rows[0].owner_id, toNanoMarkup(terms), total, day, day + 30, input.correlationId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merger_proposed', `Merger tender offer for ${input.targetBusinessId}`, toNanoMarkup({ mergerId, acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, totalAmount: Number(total) })]);
     await enqueueOutbox(tx, {
       eventKey: `business-merger-proposal:${input.correlationId}`,
       topic: 'world_activity',
@@ -246,7 +247,7 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
     const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; status: string; terms_json: unknown }>('SELECT id, proposer_id, counterparty_id, amount, status, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.mergerId]);
     if (!contract.rows[0] || contract.rows[0].status === 'cancelled') throw new Error('Merger contract not found or cancelled');
     if (contract.rows[0].counterparty_id !== input.callerId) throw new Error('Only target business owner may accept and execute merger');
-    const terms = typeof contract.rows[0].terms_json === 'string' ? JSON.parse(contract.rows[0].terms_json) : (contract.rows[0].terms_json as Record<string, unknown>);
+    const terms = typeof contract.rows[0].terms_json === 'string' ? fromNanoMarkup<Record<string, unknown>>(contract.rows[0].terms_json) : (contract.rows[0].terms_json as Record<string, unknown>);
     const acquirerBusinessId = String(terms.acquirerBusinessId);
     const targetBusinessId = String(terms.targetBusinessId);
     const totalAmount = Number(contract.rows[0].amount);
@@ -279,7 +280,7 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
     await tx.query("UPDATE businesses SET status = 'bankrupt' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE negotiated_contracts SET status = 'completed', accepted_game_day = $1 WHERE id = $2", [day, input.mergerId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, JSON.stringify({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, toNanoMarkup({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId })]);
     await enqueueOutbox(tx, {
       eventKey: `business-merger:${input.correlationId}`,
       topic: 'world_activity',

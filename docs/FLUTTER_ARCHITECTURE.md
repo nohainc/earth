@@ -25,6 +25,7 @@ lib/
   core/
     api/               HTTP client, API errors, request identity
     models/            EarthState and transport DTOs
+    nano_markup_helper.dart Nano Markup encoder/decoder with fallback support
   features/
     auth/              session bootstrap, sign-in, registration, recovery
     command_center/    state coordinator, dashboard composition, navigation

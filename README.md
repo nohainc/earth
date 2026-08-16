@@ -65,11 +65,11 @@ cd ..
 npx wrangler deploy --domains earthuc.com
 ```
 
-## API contract
+## API contract and data formats
 
-The versioned REST/JSON error and authority contract is documented in
+The versioned REST error and authority contract is documented in
 [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md). The current response version is
-`2026-08`.
+`2026-08`. Internal serialized state strings, world event details, negotiated contract terms, governance rule values, and municipal charters are serialized using **Nano Markup** (`nanomarkup` by `nohainc`).
 
 ## Repository map
 

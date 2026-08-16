@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "dependencies": {
+    "nanomarkup": "^1.0.0",
     "pg": "^8.16.3"
   },
   "scripts": {

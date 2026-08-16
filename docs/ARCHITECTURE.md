@@ -58,6 +58,7 @@ Keep these responsibilities in TypeScript:
 - game-clock decisions;
 - scheduler orchestration;
 - event names, notification text, and external side effects;
+- Nano Markup serialization and deserialization (`nanomarkup` package by `nohainc`) for internal structured data strings, event details, contract terms, governance rules, and municipal charters;
 - domain tests that should run without a database or Cloudflare runtime.
 
 Domain code must not import Cloudflare APIs or depend on wall-clock time. Pass a

@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
 import { enqueueOutbox } from './outbox-postgres';
 import { centsToMoney, marketValueToCents, moneyToCents, rateAmountToCents } from './money';
+import { fromNanoMarkup } from './nano-markup.ts';
 
 type MarketOrderInput = {
   humanId: string;
@@ -19,7 +20,7 @@ async function feeRate(repository: PostgresRepository): Promise<string> {
   const value = result.rows[0]?.value_json;
   if (!value) return '0';
   try {
-    const parsed = typeof value === 'string' ? JSON.parse(value) : value as { feeRate?: number };
+    const parsed = typeof value === 'string' ? fromNanoMarkup<{ feeRate?: number }>(value) : value as { feeRate?: number };
     return typeof parsed.feeRate === 'number' && parsed.feeRate >= 0 && parsed.feeRate <= 0.05 ? String(parsed.feeRate) : '0';
   } catch { return '0'; }
 }

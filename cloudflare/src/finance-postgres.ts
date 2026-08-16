@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
 import { centsToMoney, moneyToCents, taxToCents } from './money';
+import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
 export async function publicSpending(
   repository: PostgresRepository,
@@ -24,7 +25,7 @@ export async function publicSpending(
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: treasury.rows[0].account_id, creditAccount: cityAccount.rows[0].account_id, amount, reasonType: 'public_spending', reasonId: input.cityId, ruleVersion: 'finance-v2', correlationId: input.correlationId });
     await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [amount, input.cityId]);
     await tx.query('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = budgets.amount + EXCLUDED.amount, game_day = EXCLUDED.game_day', [`SPEND-${input.cityId}-${input.category}`, input.cityId, input.category, amount, day]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, JSON.stringify({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, toNanoMarkup({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.actorId, 'finance', 'Public spending recorded', `${amount} Credits were routed from the OUC treasury to ${input.cityId} for ${input.category}.`, input.correlationId]);
     const members = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 AND human_id <> $2', [input.cityId, input.actorId]);
     for (const member of members.rows) {
@@ -45,8 +46,8 @@ export async function settleTax(repository: PostgresRepository, humanId: string,
     const configured = financeRule.rows[0]?.value_json;
     if (configured) {
       try {
-        const value = typeof configured === 'string' ? JSON.parse(configured) : configured as { rate?: number };
-        if (typeof value.rate === 'number' && value.rate >= 0 && value.rate <= 0.25) { rate = String(value.rate); version = Number(financeRule.rows[0].version); }
+        const value = typeof configured === 'string' ? fromNanoMarkup<{ rate?: number }>(configured) : configured as { rate?: number };
+        if (typeof value?.rate === 'number' && value.rate >= 0 && value.rate <= 0.25) { rate = String(value.rate); version = Number(financeRule.rows[0].version); }
       } catch { /* retain the canonical tax rule */ }
     }
     const amountCents = taxToCents(taxableAmount, rate);
@@ -109,7 +110,7 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     await tx.query('DELETE FROM businesses WHERE owner_id = $1', [humanId]);
     for (const business of businesses.rows) await tx.query("DELETE FROM institutions WHERE id = $1 AND kind = 'BUSINESS'", [business.id]);
     await tx.query('INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1,\'bankrupt\',$2,100,$3) ON CONFLICT(human_id) DO UPDATE SET status = EXCLUDED.status, since_game_day = EXCLUDED.since_game_day, last_reason = EXCLUDED.last_reason, updated_at = CURRENT_TIMESTAMP', [humanId, day, reason]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', JSON.stringify({ humanId, liquidationValue, protectedTopUp: Number(centsToMoney(protectedTopUpCents)), reason })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', toNanoMarkup({ humanId, liquidationValue, protectedTopUp: Number(centsToMoney(protectedTopUpCents)), reason })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), humanId, 'finance', 'Personal insolvency recorded', 'Non-protected productive assets were liquidated. Your basic service robot and 100 Credit protected minimum remain.', `PERSONAL-BANKRUPTCY-${humanId}-${day}`]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [humanId]);
     return { ok: true, state: (await tx.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [humanId])).rows[0], protectedCredits: 100, liquidated: { machines: machines.rows.length, businesses: businesses.rows.length, estimatedValue: liquidationValue } };
@@ -138,7 +139,7 @@ export async function recoverInstitution(repository: PostgresRepository, input: 
     await tx.query(`UPDATE ${table} SET treasury = treasury + $1 WHERE id = $2`, [amount, input.institutionId]);
     await tx.query("UPDATE financial_states SET status = 'active', recovery_game_day = $1, last_reason = 'Player-authorized crisis recovery', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2", [gameDay, input.institutionId]);
     await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,$4,\'active\',$5,$6)', [crypto.randomUUID(), input.institutionId, institution.rows[0].kind, state.rows[0].status, gameDay, 'Player-authorized crisis recovery']);
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'financial_recovery', `${institution.rows[0].kind} ${input.institutionId} recovered`, JSON.stringify({ institutionId: input.institutionId, amount: input.amount, humanId: input.humanId })]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'financial_recovery', `${institution.rows[0].kind} ${input.institutionId} recovered`, toNanoMarkup({ institutionId: input.institutionId, amount: input.amount, humanId: input.humanId })]);
     await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.humanId, 'finance', 'Institution recovered', `${institution.rows[0].kind} ${input.institutionId} returned to active status after your ${amount} Credit recovery contribution.`, input.institutionId]);
     return { ok: true, institutionId: input.institutionId, amount: Number(amount), status: 'active', correlationId: input.correlationId };
   });
