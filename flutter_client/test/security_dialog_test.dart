@@ -112,16 +112,12 @@ void main() {
 
   testWidgets('showSecurityDialog displays session list and enables revoking',
       (tester) async {
-    bool loggedOut = false;
-
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
-              onPressed: () => showSecurityDialog(context, api, () {
-                loggedOut = true;
-              }),
+              onPressed: () => showSecurityDialog(context, api, () {}),
               child: const Text('Open Security Dialog'),
             ),
           ),
