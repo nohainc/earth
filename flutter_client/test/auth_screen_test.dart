@@ -4,6 +4,27 @@ import 'package:earth_client/core/api/earth_api.dart';
 import 'package:earth_client/features/auth/auth_screen.dart';
 
 void main() {
+  test('auth validation rejects incomplete credentials before transport', () {
+    expect(
+      validateAuthInput(email: '', password: 'short'),
+      'Email is required',
+    );
+    expect(
+      validateAuthInput(email: 'human@example.com', password: 'short'),
+      'Password must be at least 12 characters',
+    );
+    expect(
+      validateAuthInput(
+        email: 'human@example.com',
+        password: 'a' * 12,
+        displayName: '',
+        passwordConfirmation: 'a' * 12,
+        registration: true,
+      ),
+      'Display name is required',
+    );
+  });
+
   testWidgets('AuthScreen renders sign-in form by default and toggles registration',
       (tester) async {
     const api = EarthApi(baseUrl: 'http://127.0.0.1:8899');

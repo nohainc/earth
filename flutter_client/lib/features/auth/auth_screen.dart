@@ -2,6 +2,26 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 
+String? validateAuthInput({
+  required String email,
+  required String password,
+  String displayName = '',
+  String passwordConfirmation = '',
+  bool registration = false,
+  bool passwordReset = false,
+}) {
+  if (!passwordReset && email.trim().isEmpty) return 'Email is required';
+  if (password.length < 12) return 'Password must be at least 12 characters';
+  if ((registration || passwordReset) &&
+      password != passwordConfirmation) {
+    return 'Passwords do not match';
+  }
+  if (registration && displayName.trim().isEmpty) {
+    return 'Display name is required';
+  }
+  return null;
+}
+
 class AuthScreen extends StatefulWidget {
   final EarthApi api;
   final ValueChanged<Map<String, dynamic>> onAuthenticated;
@@ -52,12 +72,13 @@ class _AuthScreenState extends State<AuthScreen> {
     });
     try {
       if (resetMode) {
-        if (password.text.length < 12) {
-          throw Exception('Password must be at least 12 characters');
-        }
-        if (password.text != passwordConfirmation.text) {
-          throw Exception('Passwords do not match');
-        }
+        final validation = validateAuthInput(
+          email: email.text,
+          password: password.text,
+          passwordConfirmation: passwordConfirmation.text,
+          passwordReset: true,
+        );
+        if (validation != null) throw Exception(validation);
         final result =
             await widget.api.completePasswordReset(resetToken!, password.text);
         if (mounted) {
@@ -74,7 +95,8 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       if (recoveryMode) {
-        await widget.api.requestPasswordReset(email.text);
+        if (email.text.trim().isEmpty) throw Exception('Email is required');
+        await widget.api.requestPasswordReset(email.text.trim());
         if (mounted) {
           setState(() {
             error = 'If the identity exists, recovery instructions were sent.';
@@ -85,10 +107,16 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       if (registerMode) {
-        if (password.text != passwordConfirmation.text) {
-          throw Exception('Passwords do not match');
-        }
-        await widget.api.register(email.text, password.text, displayName.text,
+        final validation = validateAuthInput(
+          email: email.text,
+          password: password.text,
+          displayName: displayName.text,
+          passwordConfirmation: passwordConfirmation.text,
+          registration: true,
+        );
+        if (validation != null) throw Exception(validation);
+        await widget.api.register(email.text.trim(), password.text,
+            displayName.text.trim(),
             passwordConfirmation: passwordConfirmation.text);
         if (mounted) {
           setState(() {
@@ -100,8 +128,13 @@ class _AuthScreenState extends State<AuthScreen> {
           });
         }
       } else {
-        final result =
-            await widget.api.login(email.text, password.text, otp: otp.text);
+        final validation = validateAuthInput(
+          email: email.text,
+          password: password.text,
+        );
+        if (validation != null) throw Exception(validation);
+        final result = await widget.api.login(email.text.trim(), password.text,
+            otp: otp.text.trim());
         if (mounted) {
           widget.onAuthenticated(
               {'authenticated': true, 'human': result['human']});
@@ -123,13 +156,20 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> resendVerification() async {
+    if (email.text.trim().isEmpty) {
+      setState(() {
+        error = 'Email is required';
+        noticeIsSuccess = false;
+      });
+      return;
+    }
     setState(() {
       busy = true;
       error = null;
       noticeIsSuccess = false;
     });
     try {
-      final result = await widget.api.resendVerification(email.text);
+      final result = await widget.api.resendVerification(email.text.trim());
       if (mounted) {
         setState(() {
           error = result['message']?.toString() ??
