@@ -591,6 +591,7 @@ const worker = {
         checks: { ...checks, postgresConfigured: postgres.configured, postgresReachable: postgres.reachable, postgresSchemaReady: postgres.schemaReady, postgresDataReady: postgres.dataReady, postgresShadowParity: Boolean(shadow && postgres.dataReady) },
         postgres: { serverVersion: postgres.serverVersion ?? null, featureTableCount: postgres.featureTableCount ?? 0, dataReady: postgres.dataReady },
         shadow: { postgres: shadow, parity: Boolean(shadow && postgres.dataReady) },
+        readiness: postgresChecks?.readiness ?? null,
         persistence: 'planetscale-postgres',
         migration: { target: 'planetscale-postgres', stage: postgres.schemaReady && postgres.dataReady ? 'postgres-authority-active' : postgres.schemaReady ? 'schema-ready-awaiting-data-verification' : 'connectivity-probe' },
         authority: 'postgres',
