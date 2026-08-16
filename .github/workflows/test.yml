@@ -32,8 +32,8 @@ jobs:
           --health-timeout 5s
           --health-retries 5
     steps:
-      - uses: actions/checkout@v7
-      - uses: actions/setup-node@v7
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
@@ -44,7 +44,7 @@ jobs:
           DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth
         run: |
           npm run db:migrate:postgres
-          PGPASSWORD=earth_ci psql -h localhost -U earth -d earth -f db/seed.sql
+          npm run db:seed:postgres
           npm run db:verify:manifest
           npm run db:verify:invariants
       - run: npm run check
@@ -61,7 +61,7 @@ jobs:
       run:
         working-directory: flutter_client
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@v4
       - uses: subosito/flutter-action@v2
         with:
           channel: stable
