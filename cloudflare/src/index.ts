@@ -312,45 +312,6 @@ const worker = {
       }
     }
     if (url.pathname === '/api/health') return healthResponse(request, env);
-    if (url.pathname === '/api/world/activity' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, async (repository) => {
-        const [world, technology] = await Promise.all([
-          repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
-          repository.query('SELECT progress FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewer.id]),
-        ]);
-        return { activity: [{ type: 'world_clock', day: world.rows[0]?.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 }] };
-      });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/events' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-      const result = await withRepository(env, (repository) => listEventsPostgres(repository, viewer.id, limit));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/notifications' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-      const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.id, limit));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    const notificationReadMatch = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
-    if (notificationReadMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, (repository) => markNotificationReadPostgres(repository, viewer.id, notificationReadMatch[1]));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if ((url.pathname === '/api/audit' || url.pathname === '/api/world/audit') && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
     if (url.pathname === '/api/governance/roles' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listRolesPostgres(repository));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
