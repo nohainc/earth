@@ -1090,6 +1090,15 @@ class CommandCenter extends StatefulWidget {
 
 class _CommandCenterState extends State<CommandCenter> {
   final api = const EarthApi();
+  final _scrollController = ScrollController();
+  final _sectionKeys = <String, GlobalKey>{
+    'command': GlobalKey(),
+    'market': GlobalKey(),
+    'business': GlobalKey(),
+    'civic': GlobalKey(),
+    'city': GlobalKey(),
+    'technology': GlobalKey(),
+  };
   EarthState? state;
   String? error;
   bool busy = false;
@@ -1226,7 +1235,20 @@ class _CommandCenterState extends State<CommandCenter> {
     eventTimer?.cancel();
     liveReconnectTimer?.cancel();
     liveChannel?.sink.close();
+    _scrollController.dispose();
     super.dispose();
+  }
+
+  void _navigateToSection(BuildContext context, String section,
+      {required bool closeDrawer}) {
+    if (closeDrawer) Navigator.of(context).pop();
+    final target = _sectionKeys[section]?.currentContext;
+    if (target != null) {
+      Scrollable.ensureVisible(target,
+          duration: const Duration(milliseconds: 420),
+          curve: Curves.easeOutCubic,
+          alignment: .04);
+    }
   }
 
   @override
@@ -1245,7 +1267,12 @@ class _CommandCenterState extends State<CommandCenter> {
           drawer: current != null && compact
               ? Drawer(
                   backgroundColor: _canvas,
-                  child: SafeArea(child: _Sidebar(state: current)),
+                  child: SafeArea(
+                      child: _Sidebar(
+                          state: current,
+                          onNavigate: (section) => _navigateToSection(
+                              context, section,
+                              closeDrawer: true))),
                 )
               : null,
           appBar: AppBar(
@@ -1297,9 +1324,15 @@ class _CommandCenterState extends State<CommandCenter> {
                         ),
                       ),
                       child: Row(children: [
-                        if (!compact) _Sidebar(state: current),
+                        if (!compact)
+                          _Sidebar(
+                              state: current,
+                              onNavigate: (section) => _navigateToSection(
+                                  context, section,
+                                  closeDrawer: false)),
                         Expanded(
                             child: ListView(
+                                controller: _scrollController,
                                 padding: EdgeInsets.fromLTRB(compact ? 16 : 34,
                                     compact ? 16 : 26, compact ? 16 : 42, 56),
                                 children: [
@@ -1324,6 +1357,7 @@ class _CommandCenterState extends State<CommandCenter> {
                                   authorityEvents: authorityEvents,
                                   productionCatalog: productionCatalog,
                                   unreadNotifications: unreadNotifications,
+                                  sectionKeys: _sectionKeys,
                                   action: _run)
                             ]))
                       ]))));
@@ -1592,6 +1626,7 @@ class _Dashboard extends StatelessWidget {
   final List<dynamic> authorityEvents;
   final List<dynamic> productionCatalog;
   final int unreadNotifications;
+  final Map<String, GlobalKey> sectionKeys;
   final Future<void> Function(Future<EarthState> Function()) action;
   const _Dashboard(
       {required this.state,
@@ -1606,6 +1641,7 @@ class _Dashboard extends StatelessWidget {
       required this.authorityEvents,
       required this.productionCatalog,
       required this.unreadNotifications,
+      required this.sectionKeys,
       required this.action});
   @override
   Widget build(BuildContext context) {
@@ -1636,7 +1672,7 @@ class _Dashboard extends StatelessWidget {
         .map((e) => '${e.key}: ${e.value}')
         .join('  ·  ');
     return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _HeroCard(state: state),
+      _HeroCard(key: sectionKeys['command'], state: state),
       const SizedBox(height: 16),
       Text('The world is moving.',
           style: Theme.of(context).textTheme.displaySmall?.copyWith(
@@ -1694,6 +1730,7 @@ class _Dashboard extends StatelessWidget {
                   ]))),
       const SizedBox(height: 14),
       _Panel(
+          key: sectionKeys['city'],
           title: 'INSTITUTIONS / CAPACITY',
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1790,6 +1827,7 @@ class _Dashboard extends StatelessWidget {
       const SizedBox(height: 14),
       Wrap(spacing: 14, runSpacing: 14, children: [
         _Panel(
+            key: sectionKeys['business'],
             title: 'BUSINESS / KLINE WORKS',
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -1893,6 +1931,7 @@ class _Dashboard extends StatelessWidget {
                       .toList())
             ])),
         _Panel(
+            key: sectionKeys['technology'],
             title: 'ADAPTIVE MAINTENANCE AI',
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -2165,6 +2204,7 @@ class _Dashboard extends StatelessWidget {
               Chip(label: Text('R&D')),
             ])),
         _Panel(
+            key: sectionKeys['civic'],
             title: 'HUMAN SERVICES / CURRENT ACCESS',
             child: Wrap(
                 spacing: 8,
@@ -2184,6 +2224,7 @@ class _Dashboard extends StatelessWidget {
                             ))
                         .toList())),
         _Panel(
+            key: sectionKeys['market'],
             title: 'CENTRAL MARKET / LIVE SIGNALS',
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -3784,7 +3825,8 @@ Future<void> _showProposalComposer(BuildContext context,
 
 class _Sidebar extends StatelessWidget {
   final EarthState state;
-  const _Sidebar({required this.state});
+  final ValueChanged<String> onNavigate;
+  const _Sidebar({required this.state, required this.onNavigate});
   @override
   Widget build(BuildContext context) {
     final name = '${state.human['name'] ?? 'Human'}';
@@ -3837,23 +3879,31 @@ class _Sidebar extends StatelessWidget {
                   ]))
             ])),
         const SizedBox(height: 22),
-        for (final item in [
-          '✦  Command center',
-          '⌁  Central Market',
-          '◈  Kline Works',
-          '⊙  Civic life',
-          '⌖  New Carthage',
-          '✧  Technology'
+        for (final item in const [
+          ('command', '✦  Command center'),
+          ('market', '⌁  Central Market'),
+          ('business', '◈  Kline Works'),
+          ('civic', '⊙  Civic life'),
+          ('city', '⌖  New Carthage'),
+          ('technology', '✧  Technology')
         ])
           Padding(
               padding: const EdgeInsets.only(bottom: 5),
-              child: Text(item,
-                  style: TextStyle(
-                      color: item.startsWith('✦') ? _violet : _muted,
-                      fontSize: 11,
-                      fontWeight: item.startsWith('✦')
-                          ? FontWeight.w700
-                          : FontWeight.w500))),
+              child: Align(
+                  alignment: Alignment.centerLeft,
+                  child: TextButton(
+                      onPressed: () => onNavigate(item.$1),
+                      style: TextButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 5),
+                          alignment: Alignment.centerLeft),
+                      child: Text(item.$2,
+                          style: TextStyle(
+                              color: item.$1 == 'command' ? _violet : _muted,
+                              fontSize: 11,
+                              fontWeight: item.$1 == 'command'
+                                  ? FontWeight.w700
+                                  : FontWeight.w500))))),
         const Spacer(),
         const Divider(color: Colors.white12),
         const Text('●  WORLD CLOCK',
@@ -3876,7 +3926,7 @@ class NumberFormatHelper {
 
 class _HeroCard extends StatelessWidget {
   final EarthState state;
-  const _HeroCard({required this.state});
+  const _HeroCard({super.key, required this.state});
   @override
   Widget build(BuildContext context) => Container(
       height: 218,
@@ -3943,7 +3993,7 @@ class _HeroCard extends StatelessWidget {
 class _Panel extends StatelessWidget {
   final String title;
   final Widget child;
-  const _Panel({required this.title, required this.child});
+  const _Panel({super.key, required this.title, required this.child});
   @override
   Widget build(BuildContext context) {
     final width =
