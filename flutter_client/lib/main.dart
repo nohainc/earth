@@ -131,10 +131,14 @@ class EarthApi {
   Future<dynamic> _request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
+    final headers = <String, String>{'content-type': 'application/json'};
+    final correlationId = body?['correlationId']?.toString().trim();
+    if (method == 'POST' && correlationId != null && correlationId.isNotEmpty) {
+      headers['Idempotency-Key'] = correlationId;
+    }
     final response = method == 'POST'
         ? await _earthHttpClient.post(uri,
-            headers: {'content-type': 'application/json'},
-            body: jsonEncode(body ?? {}))
+            headers: headers, body: jsonEncode(body ?? {}))
         : method == 'DELETE'
             ? await _earthHttpClient.delete(uri)
             : await _earthHttpClient.get(uri);

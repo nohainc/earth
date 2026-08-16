@@ -1658,7 +1658,7 @@ export default {
       return new Response(null, { status: 204, headers: {
         'Access-Control-Allow-Origin': request.headers.get('Origin') ?? '*',
         'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Request-ID',
         'Access-Control-Expose-Headers': 'X-Request-ID',
         'Access-Control-Max-Age': '86400',
         'X-Request-ID': requestId,
@@ -1691,7 +1691,7 @@ export default {
       headers.set('Vary', 'Origin');
     }
     headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID');
     headers.set('Access-Control-Expose-Headers', 'X-Request-ID');
     headers.set('X-Request-ID', requestId);
     headers.set('X-EARTH-API-Version', '2026-08');
