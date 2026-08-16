@@ -4,7 +4,7 @@ import { withPostgresRepository } from './repository';
 export async function healthResponse(request: Request, env: Env): Promise<Response> {
   const postgres = await probePostgres(env.HYPERDRIVE);
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
-    const [core, feature, maintenance, reservations, governance, financial, assets, taxed, balances, machines, scheduler, outbox, counts] = await Promise.all([
+    const [core, feature, maintenance, reservations, governance, financial, assets, taxed, balances, machines, scheduler, outbox, migrations, counts] = await Promise.all([
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events', 'authority_events']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['recycling_events', 'ai_assistants', 'machine_upgrade_events', 'machine_sales', 'production_events']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'maintenance_events' AND column_name = 'correlation_id'"),
@@ -17,6 +17,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       repository.query('SELECT COUNT(*)::integer AS invalid FROM machines WHERE condition < 0 OR condition > 100'),
       repository.query("SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_scheduler_at)) AS age_seconds FROM world_state WHERE id = 'WORLD'"),
       repository.query("SELECT COUNT(*)::integer AS pending, COUNT(*) FILTER (WHERE attempts >= 5)::integer AS failed FROM event_outbox WHERE processed_at IS NULL AND available_at <= CURRENT_TIMESTAMP"),
+      repository.query('SELECT COALESCE(MAX(version), 0)::integer AS version FROM earth_schema_migrations'),
       Promise.all([
         repository.query('SELECT COUNT(*)::integer AS count FROM humans'),
         repository.query('SELECT COUNT(*)::integer AS count FROM businesses'),
@@ -43,11 +44,13 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         schedulerFresh: schedulerAgeSeconds <= 900,
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
+        migrationManifest: Number(migrations.rows[0]?.version ?? 0) === 17,
       },
       readiness: {
         schedulerAgeSeconds: Number.isFinite(schedulerAgeSeconds) ? schedulerAgeSeconds : null,
         outboxPending,
         outboxRetryFailures,
+        migrationVersion: Number(migrations.rows[0]?.version ?? 0),
         invariantScan: {
           ok: Number(balances.rows[0]?.invalid ?? 0) === 0 && Number(machines.rows[0]?.invalid ?? 0) === 0,
           balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0,
@@ -66,7 +69,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
     database: false, coreSchema: false, featureSchema: false, maintenanceIdempotency: false,
     marketCreditReservations: false, businessGovernanceSchema: false, businessFinancialSchema: false,
     businessAssetSchema: false, businessTaxSchema: false, balancesNonNegative: false,
-    machineConditionsBounded: false,
+    machineConditionsBounded: false, migrationManifest: false,
   };
   const shadow = postgresChecks?.counts ?? null;
   return Response.json({
