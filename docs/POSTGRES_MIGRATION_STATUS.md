@@ -45,6 +45,7 @@ database.
 | City budget accounts | Implemented | Migration 013 backfills BUDGET-* earmarks and budget increases/releases use atomic city-account transfers |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
 | Indexed Human starter package | Implemented | PostgreSQL world and market indices deterministically scale the initial Credit and resource reserve; bounds and calculation are unit-tested |
+| Business financial lifecycle | Implemented | Scheduler uses business profit and condition for distress/insolvency transitions and preserves auditable dissolution boundaries |
 
 ## Required migration gates
 

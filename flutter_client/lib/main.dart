@@ -1754,6 +1754,7 @@ class _Dashboard extends StatelessWidget {
             child:
                 Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Policy: ${state.business['policy']}'),
+              Text('Financial status: ${state.business['status'] ?? 'active'}', style: const TextStyle(color: _muted, fontSize: 11)),
               Text('Condition: ${state.business['condition']}%'),
               if (businessProfile['business'] is Map)
                 Text(

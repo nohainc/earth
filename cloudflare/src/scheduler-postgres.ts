@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository';
 import { settleMarket } from './market-postgres';
 import { processMortality } from './lifecycle-postgres';
 import { transferCredits } from './financial-postgres';
+import { classifyBusinessFinancialStatus } from './business-finance';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money';
 
 const products = ['material', 'components', 'energy', 'compute'];
@@ -98,13 +99,15 @@ async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): P
 }
 
 async function updateFinancialStates(tx: PostgresRepository, day: number): Promise<void> {
-  const candidates = await tx.query<{ id: string; kind: string; value: string; current: string }>("SELECT id, 'BUSINESS' AS kind, condition AS value, status AS current FROM businesses UNION ALL SELECT id, 'CITY', treasury, 'active' FROM cities UNION ALL SELECT id, 'CORPORATION', treasury, 'active' FROM corporations");
+  const candidates = await tx.query<{ id: string; kind: string; value: string; profit: string | null; condition: string | null; current: string }>("SELECT businesses.id, 'BUSINESS' AS kind, business_financials.profit AS value, business_financials.profit, businesses.condition, businesses.status AS current FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id UNION ALL SELECT id, 'CITY', treasury, NULL, NULL, 'active' FROM cities UNION ALL SELECT id, 'CORPORATION', treasury, NULL, NULL, 'active' FROM corporations");
   for (const candidate of candidates.rows) {
     const existing = await tx.query<{ status: string; since_game_day: number }>('SELECT status, since_game_day FROM financial_states WHERE institution_id = $1 FOR UPDATE', [candidate.id]);
     const current = existing.rows[0]?.status ?? candidate.current;
     if (current === 'dissolved') continue;
     const numeric = Number(candidate.value);
-    const target = numeric <= 0 ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed') : 'active';
+    const target = candidate.kind === 'BUSINESS'
+      ? classifyBusinessFinancialStatus({ profit: candidate.profit, condition: candidate.condition, currentStatus: current, sinceGameDay: existing.rows[0] ? Number(existing.rows[0].since_game_day) : null, gameDay: day })
+      : numeric <= 0 ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed') : 'active';
     if (target === current && existing.rows[0]) continue;
     const reason = target === 'active' ? 'Positive operating position restored' : 'Operating reserve is depleted';
     await tx.query('INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,recovery_game_day,last_reason) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(institution_id) DO UPDATE SET status=EXCLUDED.status,recovery_game_day=EXCLUDED.recovery_game_day,last_reason=EXCLUDED.last_reason,updated_at=CURRENT_TIMESTAMP', [candidate.id, candidate.kind, target, existing.rows[0]?.since_game_day ?? day, target === 'active' ? day : null, reason]);
