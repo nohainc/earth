@@ -99,6 +99,20 @@ class BusinessPanel extends StatelessWidget {
                 busy ? null : () => showShareTransferDialog(context, action),
             child: const Text('TRANSFER SHARES'),
           ),
+          OutlinedButton(
+            onPressed: busy
+                ? null
+                : () => showDividendDialog(
+                    context, action, state.business['id'] as String?),
+            child: const Text('DISTRIBUTE DIVIDENDS'),
+          ),
+          OutlinedButton(
+            onPressed: busy
+                ? null
+                : () => showMergerDialog(
+                    context, action, state.business['id'] as String?),
+            child: const Text('PROPOSE MERGER'),
+          ),
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: busy

@@ -309,3 +309,99 @@ Future<void> showBusinessComposerDialog(BuildContext context,
               )));
   name.dispose();
 }
+
+Future<void> showDividendDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    String? businessId) async {
+  if (businessId == null || businessId.isEmpty) return;
+  final amount = TextEditingController(text: '100');
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Distribute dividends'),
+      content: TextField(
+        controller: amount,
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        decoration: const InputDecoration(labelText: 'Total distribution (C)'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('CANCEL'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final value = double.tryParse(amount.text.trim());
+            if (value == null || value <= 0) return;
+            await action(() => const EarthApi().distributeDividends(
+                businessId, value));
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          },
+          child: const Text('DISTRIBUTE'),
+        ),
+      ],
+    ),
+  );
+  amount.dispose();
+}
+
+Future<void> showMergerDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    String? acquirerBusinessId) async {
+  if (acquirerBusinessId == null || acquirerBusinessId.isEmpty) return;
+  final target = TextEditingController();
+  final price = TextEditingController(text: '10');
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Propose merger tender offer'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'The target owner must accept the offer before ownership and assets transfer.',
+            style: TextStyle(color: mutedColor, fontSize: 12),
+          ),
+          TextField(
+            controller: target,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Target business ID'),
+          ),
+          TextField(
+            controller: price,
+            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            decoration: const InputDecoration(labelText: 'Price per share (C)'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('CANCEL'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            final value = double.tryParse(price.text.trim());
+            if (target.text.trim().isEmpty || value == null || value <= 0) {
+              return;
+            }
+            await action(() async {
+              await const EarthApi().proposeMerger(
+                acquirerBusinessId: acquirerBusinessId,
+                targetBusinessId: target.text.trim(),
+                pricePerShare: value,
+              );
+              return const EarthApi().world();
+            });
+            if (dialogContext.mounted) Navigator.pop(dialogContext);
+          },
+          child: const Text('PROPOSE'),
+        ),
+      ],
+    ),
+  );
+  target.dispose();
+  price.dispose();
+}
