@@ -32,7 +32,6 @@ Future<void> showFormationComposer(BuildContext context,
                   child: const Text('Submit')),
             ],
           ));
-  name.dispose();
 }
 
 Future<void> showCommunityComposer(BuildContext context,
@@ -63,7 +62,6 @@ Future<void> showCommunityComposer(BuildContext context,
       ],
     ),
   );
-  name.dispose();
 }
 
 Future<void> showCommunityContributionDialog(
@@ -98,7 +96,6 @@ Future<void> showCommunityContributionDialog(
       ],
     ),
   );
-  amount.dispose();
 }
 
 Future<void> showTaxCharterDialog(
@@ -173,8 +170,4 @@ Future<void> showTaxCharterDialog(
       ],
     ),
   );
-  income.dispose();
-  sales.dispose();
-  corporate.dispose();
-  property.dispose();
 }

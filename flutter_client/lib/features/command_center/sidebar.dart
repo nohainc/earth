@@ -113,42 +113,50 @@ class Sidebar extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 22),
-          for (final item in items)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 5),
-              child: Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: () => onNavigate(item.$1),
-                  style: TextButton.styleFrom(
-                    backgroundColor: item.$1 == selectedSection
-                        ? violetColor.withValues(alpha: .14)
-                        : Colors.transparent,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
+          Expanded(
+            child: SingleChildScrollView(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  for (final item in items)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 5),
+                      child: Align(
+                        alignment: Alignment.centerLeft,
+                        child: TextButton(
+                          onPressed: () => onNavigate(item.$1),
+                          style: TextButton.styleFrom(
+                            backgroundColor: item.$1 == selectedSection
+                                ? violetColor.withValues(alpha: .14)
+                                : Colors.transparent,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 5,
+                            ),
+                            alignment: Alignment.centerLeft,
+                          ),
+                          child: Text(
+                            item.$2,
+                            style: TextStyle(
+                              color: item.$1 == selectedSection
+                                  ? violetColor
+                                  : mutedColor,
+                              fontSize: 11,
+                              fontWeight: item.$1 == selectedSection
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      ),
                     ),
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 5,
-                    ),
-                    alignment: Alignment.centerLeft,
-                  ),
-              child: Text(
-                    item.$2,
-                    style: TextStyle(
-                      color: item.$1 == selectedSection
-                          ? violetColor
-                          : mutedColor,
-                      fontSize: 11,
-                      fontWeight: item.$1 == selectedSection
-                          ? FontWeight.w700
-                          : FontWeight.w500,
-                    ),
-                  ),
-                ),
+                ],
               ),
             ),
-          const Spacer(),
+          ),
           const Divider(color: Colors.white12),
           const Text(
             '●  WORLD CLOCK',

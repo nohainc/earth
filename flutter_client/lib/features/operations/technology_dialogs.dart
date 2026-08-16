@@ -62,8 +62,6 @@ Future<void> showResearchComposerDialog(BuildContext context,
                       child: const Text('Start')),
                 ],
               )));
-  name.dispose();
-  budget.dispose();
 }
 
 Future<void> showLicenseComposerDialog(BuildContext context,
@@ -111,7 +109,4 @@ Future<void> showLicenseComposerDialog(BuildContext context,
                   child: const Text('License')),
             ],
           ));
-  licensee.dispose();
-  fee.dispose();
-  otp.dispose();
 }

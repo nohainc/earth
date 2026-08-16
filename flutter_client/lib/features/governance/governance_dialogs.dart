@@ -62,9 +62,6 @@ Future<void> showProposalComposer(BuildContext context,
                   child: const Text('Submit proposal')),
             ],
           ));
-  title.dispose();
-  body.dispose();
-  targetRate.dispose();
 }
 
 Future<void> showDelegateDialog(
@@ -94,7 +91,6 @@ Future<void> showDelegateDialog(
                   child: const Text('Delegate')),
             ],
           ));
-  delegate.dispose();
 }
 
 Future<void> showChallengeDialog(
@@ -127,7 +123,6 @@ Future<void> showChallengeDialog(
                   child: const Text('File challenge')),
             ],
           ));
-  reason.dispose();
 }
 
 Future<void> showAppealRulingDialog(
@@ -176,7 +171,6 @@ Future<void> showAppealRulingDialog(
                       child: const Text('Issue ruling')),
                 ],
               )));
-  rationale.dispose();
 }
 
 Future<void> showDisputeDialog(
@@ -207,7 +201,6 @@ Future<void> showDisputeDialog(
                   child: const Text('Submit dispute')),
             ],
           ));
-  reason.dispose();
 }
 
 Future<void> showResolveDialog(
@@ -252,5 +245,4 @@ Future<void> showResolveDialog(
                       child: const Text('Resolve')),
                 ],
               )));
-  resolution.dispose();
 }

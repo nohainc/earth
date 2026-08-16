@@ -334,6 +334,14 @@ function command(path, body, req = null) {
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
+  if (path === '/api/market/book' && body.method === 'GET') {
+    return {
+      feeRate: 0.005,
+      orders: state.market?.orders || [],
+      trades: state.market?.trades || [],
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
   if (path === '/api/market/history' && body.method === 'GET') {
     const product = body.product || 'energy';
     const current = state.market?.prices?.[product] ?? 1.0;

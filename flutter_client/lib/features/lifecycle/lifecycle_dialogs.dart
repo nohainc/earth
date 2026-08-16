@@ -220,8 +220,6 @@ Future<void> showRecoveryDialog(
       ],
     ),
   );
-  amount.dispose();
-  otp.dispose();
 }
 
 Future<void> showContractComposerDialog(BuildContext context,
@@ -285,7 +283,4 @@ Future<void> showContractComposerDialog(BuildContext context,
                       child: const Text('Propose')),
                 ],
               )));
-  counterparty.dispose();
-  title.dispose();
-  amount.dispose();
 }

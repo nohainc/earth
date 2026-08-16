@@ -24,6 +24,34 @@ The `earthuc.com` custom domain is attached to the `earth-world-production`
 Worker. If the direct Worker URL and custom domain ever show different UI
 versions, inspect the custom-domain attachment before debugging Flutter code.
 
+## Manual GitHub deployments
+
+Deployments are intentionally manual. GitHub pushes and pull requests run the
+test workflow only; they do not publish production changes.
+
+From the repository's GitHub Actions tab, run one of these workflows with
+`workflow_dispatch`:
+
+- **Deploy EARTH web app** (`deploy-web.yml`) — builds and deploys only the
+  Flutter app Worker for `/app`.
+- **Deploy EARTH API** — validates and deploys only the API Worker for `/api/*`,
+  `/edge/*`, `/health`, and `/ready`.
+- **Deploy EARTH landing and static files** — copies and deploys only the
+  landing/static Worker for the public catch-all route.
+
+Both workflows support the configured `staging` and `production` Wrangler
+environments. Configure these GitHub Actions secrets before running them:
+
+- `CLOUDFLARE_API_TOKEN` — a token permitted to deploy Workers and Static Assets
+- `CLOUDFLARE_ACCOUNT_ID` — the Cloudflare account containing the Worker
+
+The three Workers use Cloudflare route patterns so the same `earthuc.com` domain
+is split by responsibility. The API and app workflows do not rebuild or upload
+landing/static files, and the landing/static workflow does not rebuild Flutter.
+The Cloudflare zone must have the route patterns from `wrangler.api.jsonc`,
+`wrangler.app.jsonc`, and `wrangler.static.jsonc` available to the deployment
+account before the first production run.
+
 ## Cloudflare target
 
 - Cloudflare Workers Static Assets: unified Flutter client, edge API, and static routing

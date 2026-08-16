@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "earth-world-static",
+  "main": "cloudflare/src/static-assets.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-08-13",
+  "assets": {
+    "directory": "./static-site",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "earthuc.com/*", "zone_name": "earthuc.com" }
+  ]
+}

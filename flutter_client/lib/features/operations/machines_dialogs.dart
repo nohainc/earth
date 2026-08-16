@@ -35,7 +35,6 @@ Future<void> showDecommissionDialog(
                   child: const Text('Recycle')),
             ],
           ));
-  otp.dispose();
 }
 
 Future<void> showMachineUpgradeDialog(
@@ -72,7 +71,6 @@ Future<void> showMachineUpgradeDialog(
                   child: const Text('Upgrade')),
             ],
           ));
-  otp.dispose();
 }
 
 Future<void> showMachineSaleDialog(
@@ -121,9 +119,6 @@ Future<void> showMachineSaleDialog(
                   child: const Text('Sell')),
             ],
           ));
-  buyer.dispose();
-  price.dispose();
-  otp.dispose();
 }
 
 Future<void> showMachineAcquisitionDialog(

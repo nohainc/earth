@@ -1,0 +1,21 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "earth-world-api",
+  "main": "cloudflare/src/index.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-08-13",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+  "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres", "EMAIL_FROM": "earth@auth.earthuc.com", "EMAIL_REPLY_TO": "earth@nohainc.com" },
+  "send_email": [{ "name": "EMAIL" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
+  "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],
+  "triggers": { "crons": ["*/5 * * * *"] },
+  "routes": [
+    { "pattern": "earthuc.com/api/*", "zone_name": "earthuc.com" },
+    { "pattern": "earthuc.com/edge/*", "zone_name": "earthuc.com" },
+    { "pattern": "earthuc.com/health", "zone_name": "earthuc.com" },
+    { "pattern": "earthuc.com/ready", "zone_name": "earthuc.com" }
+  ]
+}

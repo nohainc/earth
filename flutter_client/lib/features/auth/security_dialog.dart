@@ -45,8 +45,6 @@ Future<void> showMfaDialog(BuildContext context, EarthApi api) async {
           content:
               Text(exception.toString().replaceFirst('Exception: ', ''))));
     }
-  } finally {
-    code.dispose();
   }
 }
 
@@ -90,9 +88,7 @@ Future<void> showDisableMfaDialog(BuildContext context, EarthApi api) async {
         ],
       ),
     );
-  } finally {
-    code.dispose();
-  }
+  } catch (_) {}
 }
 
 Future<void> showSecurityDialog(

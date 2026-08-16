@@ -33,7 +33,6 @@ Future<void> showBusinessManagerDialog(
                   child: const Text('APPOINT')),
             ],
           ));
-  manager.dispose();
 }
 
 Future<void> showBusinessLiquidationDialog(
@@ -73,7 +72,6 @@ Future<void> showBusinessLiquidationDialog(
                   child: const Text('LIQUIDATE')),
             ],
           ));
-  otp.dispose();
 }
 
 Future<void> showBusinessConstitutionDialog(
@@ -136,9 +134,6 @@ Future<void> showBusinessConstitutionDialog(
                   child: const Text('SAVE CONSTITUTION')),
             ],
           ));
-  shareholder.dispose();
-  board.dispose();
-  notice.dispose();
 }
 
 Future<void> showShareTransferDialog(BuildContext context,
@@ -193,9 +188,6 @@ Future<void> showShareTransferDialog(BuildContext context,
                   child: const Text('Transfer')),
             ],
           ));
-  recipient.dispose();
-  shares.dispose();
-  otp.dispose();
 }
 
 Future<void> showShareIssueDialog(
@@ -257,10 +249,6 @@ Future<void> showShareIssueDialog(
                   child: const Text('Issue')),
             ],
           ));
-  recipient.dispose();
-  shares.dispose();
-  price.dispose();
-  otp.dispose();
 }
 
 Future<void> showBusinessComposerDialog(BuildContext context,
@@ -314,7 +302,6 @@ Future<void> showBusinessComposerDialog(BuildContext context,
                       child: const Text('Register')),
                 ],
               )));
-  name.dispose();
 }
 
 Future<void> showDividendDialog(
@@ -350,7 +337,6 @@ Future<void> showDividendDialog(
       ],
     ),
   );
-  amount.dispose();
 }
 
 Future<void> showMergerDialog(
@@ -410,6 +396,4 @@ Future<void> showMergerDialog(
       ],
     ),
   );
-  target.dispose();
-  price.dispose();
 }

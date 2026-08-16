@@ -7,19 +7,24 @@ test('production Flutter assets are executable JavaScript and readiness aliases 
   let localServer = null;
 
   if (!baseUrl) {
-    const port = 8993;
+    const port = 9100 + Math.floor(Math.random() * 800);
     localServer = spawn('node', ['server.js'], {
       env: { ...process.env, PORT: String(port), NODE_ENV: 'test', EARTH_READ_ONLY_MODE: 'true' },
       stdio: 'ignore',
     });
     baseUrl = `http://127.0.0.1:${port}`;
-    for (let i = 0; i < 30; i++) {
+    let ready = false;
+    for (let i = 0; i < 40; i++) {
       try {
         const res = await fetch(`${baseUrl}/api/health`);
-        if (res.ok) break;
+        if (res.ok) {
+          ready = true;
+          break;
+        }
       } catch {}
-      await new Promise((r) => setTimeout(r, 150));
+      await new Promise((r) => setTimeout(r, 100));
     }
+    assert.ok(ready, 'Local server failed to start');
   }
 
   try {

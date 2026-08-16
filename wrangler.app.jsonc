@@ -1,0 +1,16 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "earth-world-app",
+  "main": "cloudflare/src/app-assets.ts",
+  "workers_dev": true,
+  "compatibility_date": "2026-08-13",
+  "assets": {
+    "directory": "./flutter_client/build/web",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page"
+  },
+  "routes": [
+    { "pattern": "earthuc.com/app", "zone_name": "earthuc.com" },
+    { "pattern": "earthuc.com/app/*", "zone_name": "earthuc.com" }
+  ]
+}

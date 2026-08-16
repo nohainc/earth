@@ -15,15 +15,17 @@ part 'earth_api_personal_finance.dart';
 
 class EarthApi {
   final String baseUrl;
-  const EarthApi({String? baseUrl})
+  final EarthApiTransport? _customTransport;
+  const EarthApi({String? baseUrl, EarthApiTransport? transport})
       : baseUrl = baseUrl ??
-            const String.fromEnvironment('EARTH_API_URL', defaultValue: '');
+            const String.fromEnvironment('EARTH_API_URL', defaultValue: ''),
+        _customTransport = transport;
 
-  EarthApiTransport get _transport => EarthApiTransport(baseUrl: baseUrl);
+  EarthApiTransport get _transport =>
+      _customTransport ?? EarthApiTransport(baseUrl: baseUrl);
 
   Future<dynamic> _request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
     return _transport.request(path, method: method, body: body);
   }
-
 }
