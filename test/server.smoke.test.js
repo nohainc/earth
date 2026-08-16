@@ -11,10 +11,11 @@ const request = async (path, options) => {
 };
 
 before(async () => {
-  processHandle = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url), env: { ...process.env, PORT: String(port) } });
+  processHandle = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url), env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' } });
   await new Promise((resolve, reject) => {
     const timer = setTimeout(() => reject(new Error('server did not start')), 5000);
     processHandle.stdout.on('data', data => { if (String(data).includes('listening')) { clearTimeout(timer); resolve(); } });
+    processHandle.stderr.on('data', data => { if (String(data).includes('failed to listen') || String(data).includes('hydration failed')) { clearTimeout(timer); reject(new Error(String(data))); } });
     processHandle.on('error', reject);
   });
 });
@@ -26,6 +27,7 @@ test('health endpoint reports operational checks and request tracing', async () 
   assert.equal(result.status, 200);
   assert.equal(result.body.ok, true);
   assert.ok(result.body.checks);
+  assert.equal(result.body.authority, 'non-production');
   assert.equal(result.headers.get('x-earth-api-version'), '2026-08');
 });
 
@@ -112,4 +114,14 @@ test('public landing page and game client are served from the same entrypoint', 
   const game = await fetch(`http://127.0.0.1:${port}/prototype3.html`);
   assert.equal(game.status, 200);
   assert.match(await game.text(), /The world is moving/);
+});
+
+test('new user-facing product copy uses UC terminology', async () => {
+  const landingHtml = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+  const prototypeHtml = await (await fetch(`http://127.0.0.1:${port}/prototype3.html`)).text();
+  assert.match(landingHtml, /A UC WORLD/);
+  assert.match(landingHtml, />UC</);
+  assert.match(prototypeHtml, /A UC WORLD/);
+  assert.doesNotMatch(landingHtml, /AN OUC WORLD|THE OUC WORLD|>OUC</);
+  assert.doesNotMatch(prototypeHtml, /AN OUC WORLD|OUC \/ CENTRAL MARKET/);
 });
