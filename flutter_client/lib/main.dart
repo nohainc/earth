@@ -4,6 +4,8 @@ import 'package:web_socket_channel/web_socket_channel.dart';
 import 'core/models/earth_state.dart';
 import 'core/api/earth_api_transport.dart';
 
+part 'features/auth/auth_gate.dart';
+
 const _violet = Color(0xff8b7cf6);
 const _ink = Color(0xfff1f0ff);
 const _canvas = Color(0xff111327);
@@ -635,67 +637,6 @@ class EarthApi {
   Future<EarthState> recallRole(String roleId) async {
     await _request('/api/governance/roles/$roleId/recall', method: 'POST');
     return world();
-  }
-}
-
-class AuthGate extends StatefulWidget {
-  const AuthGate({super.key});
-  @override
-  State<AuthGate> createState() => _AuthGateState();
-}
-
-class _AuthGateState extends State<AuthGate> {
-  final api = const EarthApi();
-  Map<String, dynamic>? session;
-  String? error;
-  String? actionMessage;
-
-  @override
-  void initState() {
-    super.initState();
-    _bootstrap();
-  }
-
-  Future<void> _bootstrap() async {
-    final parameters = Uri.base.queryParameters;
-    final verifyToken = parameters['verify_token'];
-    if (verifyToken != null && verifyToken.isNotEmpty) {
-      try {
-        final result = await api.verifyEmail(verifyToken);
-        actionMessage = result['message']?.toString() ??
-            'Email verified. You can now sign in.';
-      } catch (exception) {
-        actionMessage = exception.toString().replaceFirst('Exception: ', '');
-      }
-    }
-    try {
-      final value = await api.session();
-      if (mounted) setState(() => session = value);
-    } catch (_) {
-      if (mounted) setState(() => session = {'authenticated': false});
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final current = session;
-    final resetToken = Uri.base.queryParameters['reset_token'];
-    if (current == null) {
-      return AuthScreen(
-          api: api,
-          onAuthenticated: (value) => setState(() => session = value),
-          initialResetToken: resetToken,
-          initialMessage: actionMessage);
-    }
-    if (current['authenticated'] != true) {
-      return AuthScreen(
-          api: api,
-          onAuthenticated: (value) => setState(() => session = value),
-          initialResetToken: resetToken,
-          initialMessage: actionMessage);
-    }
-    return CommandCenter(
-        onLogout: () => setState(() => session = {'authenticated': false}));
   }
 }
 
