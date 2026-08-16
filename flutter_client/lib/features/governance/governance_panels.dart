@@ -34,6 +34,18 @@ class ProposalPanel extends StatelessWidget {
     final votes = Map<String, dynamic>.from(
         (proposal['votes'] as Map<String, dynamic>?) ?? const {});
     final hasProposal = proposal['id'].toString().isNotEmpty;
+    final proposalId = proposal['id'].toString();
+    final isPassed = proposal['outcome'] == 'passed';
+    final isChallenged = proposal['execution_status'] == 'challenged';
+    final hasJudicialAuthority = state.roles.any((raw) {
+      final role = raw as Map<String, dynamic>;
+      final holder = role['human_id']?.toString();
+      final name = role['name']?.toString().toLowerCase() ?? '';
+      return holder == state.human['id'] &&
+          (name.contains('court') ||
+              name.contains('judge') ||
+              name.contains('jurist'));
+    });
 
     return EarthPanel(
       title: 'UC PROPOSAL ${proposal['id']}',
@@ -72,9 +84,28 @@ class ProposalPanel extends StatelessWidget {
           ),
           const SizedBox(height: 10),
           OutlinedButton(
-            onPressed: busy ? null : () => showProposalComposer(context, action),
+            onPressed:
+                busy ? null : () => showProposalComposer(context, action),
             child: const Text('CREATE PROPOSAL'),
           ),
+          if (hasProposal && isPassed && !isChallenged) ...[
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: busy
+                  ? null
+                  : () => showChallengeDialog(context, action, proposalId),
+              child: const Text('FILE CONSTITUTIONAL CHALLENGE'),
+            ),
+          ],
+          if (hasProposal && isChallenged && hasJudicialAuthority) ...[
+            const SizedBox(height: 8),
+            OutlinedButton(
+              onPressed: busy
+                  ? null
+                  : () => showAppealRulingDialog(context, action, proposalId),
+              child: const Text('ISSUE HIGH COURT RULING'),
+            ),
+          ],
         ],
       ),
     );

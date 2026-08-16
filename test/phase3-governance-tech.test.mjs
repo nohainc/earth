@@ -39,8 +39,8 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };
     }
-    if (sql.includes("UPDATE proposals SET execution_status = 'not_ready'")) {
-      updatedStatus = 'not_ready';
+    if (sql.includes("UPDATE proposals SET execution_status = 'challenged'")) {
+      updatedStatus = 'challenged';
       return { rows: [], rowCount: 1 };
     }
     return { rows: [], rowCount: 1 };
@@ -56,7 +56,7 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
   assert.equal(result.ok, true);
   assert.equal(result.proposalId, 'P-123');
   assert.equal(result.executionStatus, 'challenged');
-  assert.equal(updatedStatus, 'not_ready');
+  assert.equal(updatedStatus, 'challenged');
 });
 
 test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => {

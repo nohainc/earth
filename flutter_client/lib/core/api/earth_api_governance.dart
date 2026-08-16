@@ -25,6 +25,30 @@ extension EarthApiGovernance on EarthApi {
     return world();
   }
 
+  Future<EarthState> challengeProposal(String proposalId, String reason) async {
+    await _request('/api/governance/proposals/$proposalId/challenge',
+        method: 'POST',
+        body: {
+          'reason': reason.trim(),
+          'correlationId':
+              'governance-challenge-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
+  Future<EarthState> resolveConstitutionalAppeal(
+      String proposalId, String ruling, String rationale) async {
+    await _request('/api/governance/proposals/$proposalId/appeal-ruling',
+        method: 'POST',
+        body: {
+          'ruling': ruling,
+          'rationale': rationale.trim(),
+          'correlationId':
+              'governance-ruling-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
   Future<EarthState> claimRole(String roleId) async {
     await _request('/api/governance/roles/$roleId/claim', method: 'POST');
     return world();
@@ -45,5 +69,4 @@ extension EarthApiGovernance on EarthApi {
     await _request('/api/governance/roles/$roleId/recall', method: 'POST');
     return world();
   }
-
 }

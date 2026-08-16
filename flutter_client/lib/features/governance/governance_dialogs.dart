@@ -2,8 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 
-Future<void> showProposalComposer(
-    BuildContext context,
+Future<void> showProposalComposer(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action) async {
   final title = TextEditingController();
   final body = TextEditingController();
@@ -96,6 +95,88 @@ Future<void> showDelegateDialog(
             ],
           ));
   delegate.dispose();
+}
+
+Future<void> showChallengeDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    String proposalId) async {
+  final reason = TextEditingController();
+  await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+            title: const Text('File constitutional challenge'),
+            content: TextField(
+                controller: reason,
+                minLines: 3,
+                maxLines: 6,
+                maxLength: 2000,
+                decoration: const InputDecoration(
+                    labelText: 'Constitutional grounds (10–2000 characters)')),
+            actions: [
+              TextButton(
+                  onPressed: () => Navigator.pop(dialogContext),
+                  child: const Text('Cancel')),
+              FilledButton(
+                  onPressed: () async {
+                    if (reason.text.trim().length < 10) return;
+                    await action(() => const EarthApi()
+                        .challengeProposal(proposalId, reason.text));
+                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                  },
+                  child: const Text('File challenge')),
+            ],
+          ));
+  reason.dispose();
+}
+
+Future<void> showAppealRulingDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    String proposalId) async {
+  final rationale = TextEditingController();
+  var ruling = 'uphold';
+  await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+                title: const Text('Issue High Court ruling'),
+                content: Column(mainAxisSize: MainAxisSize.min, children: [
+                  DropdownButtonFormField<String>(
+                      initialValue: ruling,
+                      items: const [
+                        DropdownMenuItem(
+                            value: 'uphold', child: Text('Uphold proposal')),
+                        DropdownMenuItem(
+                            value: 'void', child: Text('Void proposal')),
+                      ],
+                      onChanged: (value) =>
+                          setState(() => ruling = value ?? ruling)),
+                  TextField(
+                      controller: rationale,
+                      minLines: 3,
+                      maxLines: 6,
+                      maxLength: 2000,
+                      decoration: const InputDecoration(
+                          labelText:
+                              'Judicial rationale (10–2000 characters)')),
+                ]),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(dialogContext),
+                      child: const Text('Cancel')),
+                  FilledButton(
+                      onPressed: () async {
+                        if (rationale.text.trim().length < 10) return;
+                        await action(() => const EarthApi()
+                            .resolveConstitutionalAppeal(
+                                proposalId, ruling, rationale.text));
+                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                      },
+                      child: const Text('Issue ruling')),
+                ],
+              )));
+  rationale.dispose();
 }
 
 Future<void> showDisputeDialog(
