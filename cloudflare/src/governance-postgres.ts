@@ -1,8 +1,14 @@
 import type { PostgresRepository } from './repository';
 
+export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
+  return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
+}
+
 async function eligible(tx: PostgresRepository, humanId: string, institutionId: string): Promise<boolean> {
   const institution = await tx.query<{ kind: string; status: string }>('SELECT kind, status FROM institutions WHERE id = $1', [institutionId]);
   if (!institution.rows[0] || institution.rows[0].status !== 'active') return false;
+  const maturity = await tx.query<{ game_day: number; political_eligibility_game_day: number }>("SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h ON h.id = $1 WHERE w.id = 'WORLD' AND h.life_status = 'active'", [humanId]);
+  if (!maturity.rows[0] || !politicalMaturityReached(Number(maturity.rows[0].game_day), Number(maturity.rows[0].political_eligibility_game_day ?? 0))) return false;
   if (institution.rows[0].kind === 'CORPORATION') return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND corporation_id = $2', [humanId, institutionId])).rows[0]);
   if (institution.rows[0].kind === 'CITY') return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND city_id = $2', [humanId, institutionId])).rows[0]);
   return Boolean((await tx.query("SELECT 1 FROM role_assignments WHERE human_id = $1 AND institution_id = $2 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT 1 FROM authority_delegations WHERE delegate_id = $1 AND institution_id = $2 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [humanId, institutionId])).rows[0]);
