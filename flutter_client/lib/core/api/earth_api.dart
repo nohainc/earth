@@ -7,6 +7,7 @@ part 'earth_api_business.dart';
 part 'earth_api_technology.dart';
 part 'earth_api_machines.dart';
 part 'earth_api_market.dart';
+part 'earth_api_lifecycle.dart';
 
 class EarthApi {
   final String baseUrl;
@@ -19,18 +20,6 @@ class EarthApi {
   Future<dynamic> _request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
     return _transport.request(path, method: method, body: body);
-  }
-
-  // --- Lifecycle ---
-
-  Future<EarthState> registerSuccessor(String name,
-      {String? successorHumanId}) async {
-    await _request('/api/successor', method: 'POST', body: {
-      'name': name,
-      if (successorHumanId != null && successorHumanId.isNotEmpty)
-        'successorHumanId': successorHumanId,
-    });
-    return world();
   }
 
   // --- Governance ---
