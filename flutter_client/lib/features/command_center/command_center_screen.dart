@@ -66,8 +66,8 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   void _connectLiveChannel() {
-    final base = api.baseUrl;
-    if (base.isEmpty) return;
+    final base = api.baseUrl.isNotEmpty ? api.baseUrl : Uri.base.origin;
+    if (!base.startsWith('http')) return;
     final uri =
         Uri.parse('${base.replaceFirst(RegExp(r'^http'), 'ws')}/edge/events');
     try {
