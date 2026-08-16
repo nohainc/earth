@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository';
-import { calculateStarterPackage, economicStartIndex } from './starter-package';
+import { calculateStarterPackage, economicStartIndex } from './starter-package.ts';
 
 const encoder = new TextEncoder();
 const SESSION_DAYS = 7;
