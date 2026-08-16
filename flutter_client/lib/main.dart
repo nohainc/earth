@@ -2724,7 +2724,7 @@ class _Dashboard extends StatelessWidget {
               })) ...[
                 const SizedBox(height: 8),
                 const Text(
-                    'As an active city finance role, you can route OUC funds into local services.',
+                    'As an active city finance role, you can route UC funds into local services.',
                     style: TextStyle(color: _muted, fontSize: 10)),
                 const SizedBox(height: 8),
                 OutlinedButton(
@@ -2733,7 +2733,7 @@ class _Dashboard extends StatelessWidget {
                         : () => action(() => const EarthApi()
                             .spendPublicFinance(
                                 'CITY-0084', 'public-services', 100)),
-                    child: const Text('FUND CITY SERVICES FROM OUC · 100 C')),
+                    child: const Text('FUND CITY SERVICES FROM UC · 100 C')),
               ],
             ]))
       ]),
@@ -3598,7 +3598,7 @@ Future<void> _showDisputeDialog(
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Open OUC arbitration'),
+            title: const Text('Open UC arbitration'),
             content: TextField(
                 controller: reason,
                 maxLines: 4,
@@ -3682,7 +3682,7 @@ Future<void> _showResolveDialog(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
           builder: (context, setState) => AlertDialog(
-                title: const Text('Resolve OUC arbitration'),
+                title: const Text('Resolve UC arbitration'),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
                   DropdownButtonFormField<String>(
                       initialValue: outcome,
@@ -3725,7 +3725,7 @@ Future<void> _showProposalComposer(BuildContext context,
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Create OUC proposal'),
+            title: const Text('Create UC proposal'),
             content: SizedBox(
               width: 420,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -3748,7 +3748,7 @@ Future<void> _showProposalComposer(BuildContext context,
                     keyboardType:
                         const TextInputType.numberWithOptions(decimal: true),
                     decoration: const InputDecoration(
-                        labelText: 'Optional OUC finance rate (0–0.25)')),
+                        labelText: 'Optional UC finance rate (0–0.25)')),
               ]),
             ),
             actions: [
