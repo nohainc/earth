@@ -9,31 +9,33 @@ final http.Client _sharedClient = createEarthHttpClient();
 
 class EarthApiTransport {
   final String baseUrl;
-  http.Client get client => _sharedClient;
+  final http.Client? _clientOverride;
+  http.Client get client => _clientOverride ?? _sharedClient;
 
-  const EarthApiTransport({String? baseUrl})
+  EarthApiTransport({String? baseUrl, http.Client? client})
       : baseUrl = baseUrl ??
-            const String.fromEnvironment('EARTH_API_URL', defaultValue: '');
+            const String.fromEnvironment('EARTH_API_URL', defaultValue: ''),
+        _clientOverride = client;
 
   Future<dynamic> request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{'content-type': 'application/json'};
     final correlationId = body?['correlationId']?.toString().trim();
-    if (method == 'POST') {
+    if (method == 'POST' || method == 'DELETE') {
       // The compatibility API accepts body correlationId values, but the
-      // canonical command contract is the Idempotency-Key header. Generate a
-      // client identity for commands that have not yet migrated their body
-      // shape so retries remain distinguishable at the Worker boundary.
+      // canonical command contract is the Idempotency-Key header. Every
+      // mutating request, including DELETE commands, must be distinguishable
+      // at the Worker boundary for safe retries.
       headers['Idempotency-Key'] =
           correlationId != null && correlationId.isNotEmpty
               ? correlationId
-              : 'flutter-${DateTime.now().microsecondsSinceEpoch}';
+              : 'flutter-${DateTime.now().microsecondsSinceEpoch}-${method.toLowerCase()}';
     }
     final response = method == 'POST'
         ? await client.post(uri, headers: headers, body: jsonEncode(body ?? {}))
         : method == 'DELETE'
-            ? await client.delete(uri)
+            ? await client.delete(uri, headers: headers)
             : await client.get(uri);
     final apiVersion = response.headers['x-earth-api-version'];
     if (apiVersion != null && apiVersion != _apiVersion) {
