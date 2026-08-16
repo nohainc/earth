@@ -11,7 +11,6 @@ import { recycleMachine as recycleMachinePostgres } from './machines-recycling-p
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
-import { loginIdentity as loginIdentityPostgres, registerIdentity as registerIdentityPostgres } from './auth-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
 import { changeDelegation as changeDelegationPostgres, changeRole as changeRolePostgres, listRoles as listRolesPostgres } from './roles-postgres';
@@ -25,6 +24,7 @@ import { bytesToBase64, derivePassword, digest, validTotp } from './auth-crypto'
 import { cookieValue, currentHuman, issueActionToken, sensitiveActionAllowed, sessionCookie } from './auth-session';
 import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
+import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -237,119 +237,9 @@ const worker = {
     if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);
     const authRouteResponse = await authenticatedAuthRoute(request, env, url);
     if (authRouteResponse) return authRouteResponse;
-    if (url.pathname === '/api/auth/register' && request.method === 'POST') {
-      const parsed = await parseJsonBody<{ email?: string; password?: string; passwordConfirmation?: string; displayName?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const email = body.email?.trim().toLowerCase();
-      const displayName = body.displayName?.trim();
-      const password = body.password ?? '';
-      if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return Response.json({ ok: false, error: 'A valid email is required' }, { status: 400 });
-      if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
-      if (password.length < 12) return Response.json({ ok: false, error: 'Password must be at least 12 characters' }, { status: 400 });
-      if (password !== (body.passwordConfirmation ?? '')) return Response.json({ ok: false, error: 'Passwords do not match' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => registerIdentityPostgres(repository, { email, displayName, password }));
-        if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
-        try {
-          const identity = result.human as { id: string; email: string };
-          await issueActionToken(env, identity.id, 'verify_email', identity.email);
-        } catch {
-          return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
-        }
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Identity creation failed';
-        return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });
-      }
-    }
-    if (url.pathname === '/api/auth/verify-email/resend' && request.method === 'POST') {
-      const parsed = await parseJsonBody<{ email?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const email = body.email?.trim().toLowerCase();
-      if (email) {
-        const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
-        if (credential && !credential.email_verified_at) {
-          const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
-          if (!recentlySent) {
-            try {
-              await issueActionToken(env, credential.human_id, 'verify_email', credential.email);
-            } catch {
-              return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 });
-            }
-          }
-        }
-      }
-      return Response.json({ ok: true, message: 'If that identity exists and needs verification, a new email has been sent.' });
-    }
-    if (url.pathname === '/api/auth/verify-email' && request.method === 'GET') {
-      const token = url.searchParams.get('token');
-      if (!token) return Response.json({ ok: false, error: 'Verification token is required' }, { status: 400 });
-      const tokenHash = await digest(token);
-      const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'verify_email' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
-      if (!action) return Response.json({ ok: false, error: 'Verification link is invalid or expired' }, { status: 400 });
-      const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-        await tx.query('UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1', [action.human_id]);
-        await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
-        return true;
-      }));
-      if (!updated) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
-      return Response.json({ ok: true, message: 'Email verified. You can now sign in.' });
-    }
-    if (url.pathname === '/api/auth/password-reset/request' && request.method === 'POST') {
-      const parsed = await parseJsonBody<{ email?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const email = body.email?.trim().toLowerCase();
-      const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [email])))?.rows[0] : null;
-      if (credential) {
-        try { await issueActionToken(env, credential.human_id, 'reset_password', credential.email); } catch { /* Keep recovery responses generic. */ }
-      }
-      return Response.json({ ok: true, message: 'If that identity exists, recovery instructions have been sent.' });
-    }
-    if (url.pathname === '/api/auth/password-reset/complete' && request.method === 'POST') {
-      const parsed = await parseJsonBody<{ token?: string; password?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!body.token || (body.password ?? '').length < 12) return Response.json({ ok: false, error: 'A valid token and 12-character password are required' }, { status: 400 });
-      const tokenHash = await digest(body.token);
-      const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
-      if (!action) return Response.json({ ok: false, error: 'Recovery link is invalid or expired' }, { status: 400 });
-      const salt = crypto.getRandomValues(new Uint8Array(16));
-      const iterations = 100000;
-      const passwordHash = await derivePassword(body.password, salt, iterations);
-      const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-        await tx.query('UPDATE auth_credentials SET password_hash = $1, password_salt = $2, password_iterations = $3 WHERE human_id = $4', [passwordHash, bytesToBase64(salt), iterations, action.human_id]);
-        await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
-        await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [action.human_id]);
-        return true;
-      }));
-      if (!updated) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
-      return Response.json({ ok: true, message: 'Password reset. All previous sessions were revoked.' });
-    }
-    if (url.pathname === '/api/auth/login' && request.method === 'POST') {
-      const parsed = await parseJsonBody<{ email?: string; password?: string; otp?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const email = body.email?.trim().toLowerCase();
-      if (!email || !body.password) return Response.json({ ok: false, error: 'Invalid email or password' }, { status: 401 });
-      try {
-        const result = await withRepository(env, (repository) => loginIdentityPostgres(repository, { email, password: body.password ?? '', otp: body.otp ?? '', validTotp }));
-        if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
-        return new Response(JSON.stringify({ ok: result.ok, human: result.human, expiresAt: result.expiresAt }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Invalid email or password';
-        const status = /too many/i.test(message) ? 429 : /verify|active/i.test(message) ? 403 : 401;
-        return Response.json({ ok: false, error: message }, { status });
-      }
-    }
-    if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
-      const token = cookieValue(request, 'earth_session');
-      if (token) await withRepository(env, async (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1', [await digest(token)]));
-      return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
-    }
-    const publicMutation = url.pathname === '/api/auth/register' || url.pathname === '/api/auth/login' || url.pathname === '/api/auth/logout' || url.pathname === '/api/auth/verify-email/resend' || url.pathname === '/api/auth/password-reset/request' || url.pathname === '/api/auth/password-reset/complete';
+    const publicAuthResponse = await publicAuthRoute(request, env, url);
+    if (publicAuthResponse) return publicAuthResponse;
+    const publicMutation = isPublicAuthMutation(url.pathname);
     const estateMutation = url.pathname === '/api/life/successor' || url.pathname === '/api/successor';
     if (url.pathname.startsWith('/api/') && request.method === 'POST' && !publicMutation && !(await currentHuman(request, env, estateMutation))) {
       return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
