@@ -20,8 +20,15 @@ class EarthApiTransport {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{'content-type': 'application/json'};
     final correlationId = body?['correlationId']?.toString().trim();
-    if (method == 'POST' && correlationId != null && correlationId.isNotEmpty) {
-      headers['Idempotency-Key'] = correlationId;
+    if (method == 'POST') {
+      // The compatibility API accepts body correlationId values, but the
+      // canonical command contract is the Idempotency-Key header. Generate a
+      // client identity for commands that have not yet migrated their body
+      // shape so retries remain distinguishable at the Worker boundary.
+      headers['Idempotency-Key'] =
+          correlationId != null && correlationId.isNotEmpty
+              ? correlationId
+              : 'flutter-${DateTime.now().microsecondsSinceEpoch}';
     }
     final response = method == 'POST'
         ? await client.post(uri, headers: headers, body: jsonEncode(body ?? {}))

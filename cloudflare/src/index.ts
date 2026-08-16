@@ -964,8 +964,8 @@ const worker = {
       const name = body.name?.trim();
       const budget = Math.round(Number(body.budget ?? 240) * 100) / 100;
       const focus = body.focus?.trim() ?? 'efficiency';
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!name || name.length < 3 || name.length > 120 || !Number.isFinite(budget) || budget < 240 || budget > 100000 || !['efficiency','durability','safety','cost'].includes(focus) || correlationId.length > 120) return Response.json({ ok: false, error: 'Research parameters are invalid' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!name || name.length < 3 || name.length > 120 || !Number.isFinite(budget) || budget < 240 || budget > 100000 || !['efficiency','durability','safety','cost'].includes(focus) || !correlationId) return Response.json({ ok: false, error: 'Research parameters or Idempotency-Key are invalid' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => createResearchProjectPostgres(repository, { ownerId: viewer.id, name, budget, focus, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -979,8 +979,8 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const body = await request.json<{ amount?: number; correlationId?: string }>();
       const amount = Number(body.amount ?? 240);
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (!Number.isFinite(amount) || amount <= 0 || correlationId.length > 120) return Response.json({ ok: false, error: 'Funding parameters are invalid' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!Number.isFinite(amount) || amount <= 0 || !correlationId) return Response.json({ ok: false, error: 'Funding parameters or Idempotency-Key are invalid' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => fundResearchProjectPostgres(repository, { ownerId: viewer.id, amount, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1004,12 +1004,12 @@ const worker = {
     if ((url.pathname === '/api/technology/TECH-001/license' || url.pathname === '/api/technology/me/license') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const body = await request.json<{ licenseeId?: string; royaltyRate?: number; licenseFee?: number; otp?: string }>();
+      const body = await request.json<{ licenseeId?: string; royaltyRate?: number; licenseFee?: number; otp?: string; correlationId?: string }>();
       const licenseeId = body.licenseeId || viewer.id;
       const royaltyRate = Number(body.royaltyRate ?? 0.05);
       const licenseFee = Math.round(Number(body.licenseFee ?? (licenseeId === viewer.id ? 0 : 100)) * 100) / 100;
-      const correlationId = crypto.randomUUID();
-      if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0 || licenseFee > 100000 || (licenseeId !== viewer.id && licenseFee < 50)) return Response.json({ ok: false, error: 'License terms are invalid' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0 || licenseFee > 100000 || (licenseeId !== viewer.id && licenseFee < 50) || !correlationId) return Response.json({ ok: false, error: 'License terms or Idempotency-Key are invalid' }, { status: 400 });
       if (licenseeId !== viewer.id && !(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for external IP licensing' }, { status: 401 });
       try {
         const result = await withRepository(env, (repository) => licenseTechnologyPostgres(repository, { ownerId: viewer.id, licenseeId, royaltyRate, licenseFee, correlationId }));
