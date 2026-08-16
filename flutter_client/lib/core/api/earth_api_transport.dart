@@ -20,7 +20,12 @@ class EarthApiTransport {
   Future<dynamic> request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
-    final headers = <String, String>{'content-type': 'application/json'};
+    final requestId =
+        'flutter-${DateTime.now().microsecondsSinceEpoch}-${method.toLowerCase()}';
+    final headers = <String, String>{
+      'content-type': 'application/json',
+      'X-Request-ID': requestId,
+    };
     final correlationId = body?['correlationId']?.toString().trim();
     if (method == 'POST' || method == 'DELETE') {
       // The compatibility API accepts body correlationId values, but the
@@ -30,7 +35,7 @@ class EarthApiTransport {
       headers['Idempotency-Key'] =
           correlationId != null && correlationId.isNotEmpty
               ? correlationId
-              : 'flutter-${DateTime.now().microsecondsSinceEpoch}-${method.toLowerCase()}';
+              : requestId;
     }
     final response = method == 'POST'
         ? await client.post(uri, headers: headers, body: jsonEncode(body ?? {}))

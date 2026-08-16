@@ -22,5 +22,6 @@ void main() {
     expect(result, {'ok': true});
     expect(captured.method, 'DELETE');
     expect(captured.headers['idempotency-key'], startsWith('flutter-'));
+    expect(captured.headers['x-request-id'], startsWith('flutter-'));
   });
 }
