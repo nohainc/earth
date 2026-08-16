@@ -103,4 +103,24 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
+  Future<EarthState> setCityTaxCharter({
+    String cityId = 'CITY-0084',
+    int incomeTaxBps = 0,
+    int salesTaxBps = 0,
+    int corporateTaxBps = 0,
+    int propertyTaxBps = 0,
+  }) async {
+    await _request('/api/cities/$cityId/tax-charter',
+        method: 'POST',
+        body: {
+          'incomeTaxBps': incomeTaxBps,
+          'salesTaxBps': salesTaxBps,
+          'corporateTaxBps': corporateTaxBps,
+          'propertyTaxBps': propertyTaxBps,
+          'correlationId':
+              'tax-charter-$cityId-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
 }

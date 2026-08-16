@@ -123,5 +123,43 @@ extension EarthApiBusiness on EarthApi {
     return world();
   }
 
-}
+  Future<EarthState> distributeDividends(
+      String businessId, double amount) async {
+    await _request('/api/businesses/$businessId/dividends',
+        method: 'POST',
+        body: {
+          'amount': amount,
+          'correlationId':
+              'dividends-$businessId-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
 
+  Future<Map<String, dynamic>> proposeMerger({
+    required String acquirerBusinessId,
+    required String targetBusinessId,
+    required double pricePerShare,
+  }) async {
+    return (await _request(
+      '/api/businesses/$acquirerBusinessId/merger/propose',
+      method: 'POST',
+      body: {
+        'targetBusinessId': targetBusinessId.trim(),
+        'pricePerShare': pricePerShare,
+        'correlationId':
+            'merger-$acquirerBusinessId-${DateTime.now().microsecondsSinceEpoch}',
+      },
+    )) as Map<String, dynamic>;
+  }
+
+  Future<EarthState> executeMerger(String mergerId) async {
+    await _request('/api/businesses/merger/$mergerId/execute',
+        method: 'POST',
+        body: {
+          'correlationId':
+              'merger-execute-$mergerId-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
+}

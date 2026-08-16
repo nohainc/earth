@@ -27,5 +27,15 @@ extension EarthApiMarket on EarthApi {
     return world();
   }
 
-}
+  Future<Map<String, dynamic>> marketPriceHistory(String product,
+      {int days = 30}) async {
+    final encodedProduct = Uri.encodeQueryComponent(product.trim());
+    return (await _request(
+            '/api/market/history?product=$encodedProduct&days=$days'))
+        as Map<String, dynamic>;
+  }
 
+  Future<Map<String, dynamic>> pantheon() async =>
+      (await _request('/api/pantheon')) as Map<String, dynamic>;
+
+}
