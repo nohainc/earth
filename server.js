@@ -1305,7 +1305,17 @@ async function serveStatic(res, pathname) {
   }
   if (!file) return false;
   try {
-    const content = await readFile(file);
+    let content;
+    try {
+      content = await readFile(file);
+    } catch (readErr) {
+      if (pathname === '/app' || pathname === '/app/' || pathname === '/app.html') {
+        const fallbackSource = resolve('flutter_client/web/app.html');
+        content = (await readFile(fallbackSource, 'utf8')).replaceAll('$FLUTTER_BASE_HREF', '/app/');
+      } else {
+        throw readErr;
+      }
+    }
     const types = {
       '.html': 'text/html; charset=utf-8',
       '.css': 'text/css; charset=utf-8',

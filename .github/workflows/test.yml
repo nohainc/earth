@@ -50,6 +50,7 @@ jobs:
       - run: npm run check
       - run: npm run cf:assert-postgres
       - run: npm run audit:mutation-boundaries
+      - run: npm run flutter:prepare
       - run: npm test
         env:
           DATABASE_URL: postgres://earth:earth_ci@localhost:5432/earth
