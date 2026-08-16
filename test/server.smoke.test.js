@@ -4,20 +4,27 @@ import { spawn } from 'node:child_process';
 
 const port = 8899;
 let processHandle;
-const request = async (path, options) => {
-  const response = await fetch(`http://127.0.0.1:${port}${path}`, options);
+const request = async (path, options = {}) => {
+  const headers = { accept: 'application/json', ...(options.headers || {}) };
+  const response = await fetch(`http://127.0.0.1:${port}${path}`, { ...options, headers });
   const body = await response.json();
   return { status: response.status, body, headers: response.headers };
 };
 
 before(async () => {
-  processHandle = spawn(process.execPath, ['server.js'], { cwd: new URL('..', import.meta.url), env: { ...process.env, PORT: String(port), HOST: '127.0.0.1' } });
-  await new Promise((resolve, reject) => {
-    const timer = setTimeout(() => reject(new Error('server did not start')), 5000);
-    processHandle.stdout.on('data', data => { if (String(data).includes('listening')) { clearTimeout(timer); resolve(); } });
-    processHandle.stderr.on('data', data => { if (String(data).includes('failed to listen') || String(data).includes('hydration failed')) { clearTimeout(timer); reject(new Error(String(data))); } });
-    processHandle.on('error', reject);
+  processHandle = spawn(process.execPath, ['server.js'], {
+    cwd: new URL('..', import.meta.url),
+    env: { ...process.env, PORT: String(port), HOST: '127.0.0.1', EARTH_READ_ONLY_MODE: 'true' },
+    stdio: 'ignore',
   });
+  for (let i = 0; i < 40; i++) {
+    try {
+      const res = await fetch(`http://127.0.0.1:${port}/api/health`);
+      if (res.ok) return;
+    } catch {}
+    await new Promise((r) => setTimeout(r, 150));
+  }
+  throw new Error('server did not start');
 });
 
 after(() => processHandle?.kill());
@@ -124,4 +131,116 @@ test('new user-facing product copy uses UC terminology', async () => {
   assert.match(prototypeHtml, /A UC WORLD/);
   assert.doesNotMatch(landingHtml, /AN OUC WORLD|THE OUC WORLD|>OUC</);
   assert.doesNotMatch(prototypeHtml, /AN OUC WORLD|OUC \/ CENTRAL MARKET/);
+});
+
+test('authentication flow supports register, login, session lookup, and logout', async () => {
+  // 1. Unauthenticated /api/auth/me returns authenticated: false
+  const unauthMe = await request('/api/auth/me');
+  assert.equal(unauthMe.status, 200);
+  assert.equal(unauthMe.body.authenticated, false);
+  assert.equal(unauthMe.body.human, null);
+
+  // 2. Register a new user
+  const regPayload = {
+    email: 'newuser@earthuc.com',
+    password: 'Password123456',
+    passwordConfirmation: 'Password123456',
+    displayName: 'Test Human',
+  };
+  const regRes = await request('/api/auth/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(regPayload),
+  });
+  assert.equal(regRes.status, 201);
+  assert.equal(regRes.body.ok, true);
+  assert.equal(regRes.body.human.email, 'newuser@earthuc.com');
+  const cookie = regRes.headers.get('set-cookie') || (regRes.headers.getSetCookie && regRes.headers.getSetCookie().join('; ')) || '';
+  assert.ok(cookie);
+
+  // 3. Authenticated session lookup via cookie
+  const authMe = await request('/api/auth/me', {
+    headers: { cookie },
+  });
+  assert.equal(authMe.status, 200);
+  assert.equal(authMe.body.authenticated, true);
+  assert.equal(authMe.body.human.email, 'newuser@earthuc.com');
+  assert.equal(authMe.body.human.id, regRes.body.human.id);
+
+  // 4. Duplicate registration returns 409 CONFLICT
+  const dupReg = await request('/api/auth/register', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify(regPayload),
+  });
+  assert.equal(dupReg.status, 409);
+  assert.equal(dupReg.body.code, 'CONFLICT');
+
+  // 5. Login with invalid password returns 401 AUTHENTICATION_REQUIRED
+  const badLogin = await request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'newuser@earthuc.com', password: 'wrongpassword' }),
+  });
+  assert.equal(badLogin.status, 401);
+  assert.equal(badLogin.body.code, 'AUTHENTICATION_REQUIRED');
+
+  // 6. Login with valid password returns 200
+  const goodLogin = await request('/api/auth/login', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ email: 'newuser@earthuc.com', password: 'Password123456' }),
+  });
+  assert.equal(goodLogin.status, 200);
+  assert.equal(goodLogin.body.ok, true);
+  assert.equal(goodLogin.body.human.email, 'newuser@earthuc.com');
+
+  // 7. Logout clears session
+  const logoutRes = await request('/api/auth/logout', {
+    method: 'POST',
+    headers: { cookie },
+  });
+  assert.equal(logoutRes.status, 200);
+  assert.equal(logoutRes.body.ok, true);
+});
+
+test('live event stream and JSON endpoints support event replay after reconnect', async () => {
+  // Advance day to trigger published events
+  await request('/api/day/advance', { method: 'POST' });
+  await request('/api/life/successor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Replay Test Successor' }) });
+
+  // Query events JSON with cursor / after
+  const jsonEvents = await request('/api/events?limit=10');
+  assert.equal(jsonEvents.status, 200);
+  assert.ok(jsonEvents.body.events.length > 0);
+  const firstEventId = jsonEvents.body.events[0].id;
+
+  // Replay events after firstEventId
+  const replayed = await request(`/api/events?after=${firstEventId}`);
+  assert.equal(replayed.status, 200);
+  assert.ok(replayed.body.events.every((e) => e.id > firstEventId));
+});
+
+test('API error responses follow the standard production error envelope and status codes', async () => {
+  // 1. Malformed JSON returns 400 VALIDATION_ERROR with correlationId
+  const malformed = await request('/api/market/orders', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', 'x-request-id': 'req-test-uuid-123' },
+    body: '{ malformed json payload',
+  });
+  assert.equal(malformed.status, 400);
+  assert.equal(malformed.body.ok, false);
+  assert.equal(malformed.body.code, 'VALIDATION_ERROR');
+  assert.equal(malformed.body.correlationId, 'req-test-uuid-123');
+
+  // 2. Route not found returns 404 NOT_FOUND with correlationId
+  const notFound = await request('/api/non-existent-endpoint');
+  assert.equal(notFound.status, 404);
+  assert.equal(notFound.body.ok, false);
+  assert.equal(notFound.body.code, 'NOT_FOUND');
+  assert.ok(notFound.body.correlationId);
+
+  // 3. No stack traces, SQL, or passwords returned in errors
+  assert.equal(typeof notFound.body.error, 'string');
+  assert.doesNotMatch(notFound.body.error, /SELECT|INSERT|UPDATE|password_hash|at Server\./i);
 });

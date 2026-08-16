@@ -3,43 +3,172 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 
+class _SuccessorComposerDialog extends StatefulWidget {
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const _SuccessorComposerDialog({required this.action});
+
+  @override
+  State<_SuccessorComposerDialog> createState() => _SuccessorComposerDialogState();
+}
+
+class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
+  final _name = TextEditingController();
+  final _humanId = TextEditingController();
+  final _estateDays = TextEditingController(text: '30');
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _humanId.dispose();
+    _estateDays.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Plan succession'),
+      content: Column(mainAxisSize: MainAxisSize.min, children: [
+        TextField(
+            controller: _name,
+            decoration: const InputDecoration(labelText: 'Successor name')),
+        const SizedBox(height: 10),
+        TextField(
+            controller: _humanId,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Existing Human ID (optional)')),
+        const SizedBox(height: 10),
+        TextField(
+            controller: _estateDays,
+            keyboardType: TextInputType.number,
+            decoration: const InputDecoration(labelText: 'Estate period (7–90 days)')),
+      ]),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Cancel')),
+        FilledButton(
+            onPressed: () async {
+              if (_name.text.trim().length < 2) return;
+              final parsedDays = int.tryParse(_estateDays.text.trim()) ?? 30;
+              final clampedDays = parsedDays.clamp(7, 90);
+              final n = _name.text.trim();
+              final hId = _humanId.text.trim();
+              Navigator.pop(context);
+              await widget.action(() => const EarthApi().registerSuccessor(
+                  n,
+                  successorHumanId: hId,
+                  estatePeriodDays: clampedDays));
+            },
+            child: const Text('Save plan')),
+      ],
+    );
+  }
+}
+
 Future<void> showSuccessorComposerDialog(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action) async {
-  final name = TextEditingController();
-  final humanId = TextEditingController();
   await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-            title: const Text('Plan succession'),
-            content: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(
-                  controller: name,
-                  decoration:
-                      const InputDecoration(labelText: 'Successor name')),
-              const SizedBox(height: 10),
-              TextField(
-                  controller: humanId,
-                  textCapitalization: TextCapitalization.characters,
-                  decoration: const InputDecoration(
-                      labelText: 'Existing Human ID (optional)')),
-            ]),
-            actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                  onPressed: () async {
-                    if (name.text.trim().length < 2) return;
-                    await action(() => const EarthApi().registerSuccessor(
-                        name.text,
-                        successorHumanId: humanId.text.trim()));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
-                  },
-                  child: const Text('Save plan')),
-            ],
-          ));
-  name.dispose();
-  humanId.dispose();
+    context: context,
+    builder: (dialogContext) => _SuccessorComposerDialog(action: action),
+  );
+}
+
+class _SettleInheritanceDialog extends StatefulWidget {
+  final Future<void> Function(Future<EarthState> Function()) action;
+  final String predecessorId;
+  final String defaultSuccessorName;
+
+  const _SettleInheritanceDialog({
+    required this.action,
+    required this.predecessorId,
+    required this.defaultSuccessorName,
+  });
+
+  @override
+  State<_SettleInheritanceDialog> createState() => _SettleInheritanceDialogState();
+}
+
+class _SettleInheritanceDialogState extends State<_SettleInheritanceDialog> {
+  late final TextEditingController _successorName;
+  final _successorId = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _successorName = TextEditingController(text: widget.defaultSuccessorName);
+  }
+
+  @override
+  void dispose() {
+    _successorName.dispose();
+    _successorId.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Settle Estate Inheritance'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Text(
+            'Transfer estate balances and assets to the designated successor. This operation is authoritative and final.',
+            style: TextStyle(color: mutedColor, fontSize: 11),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _successorName,
+            decoration: const InputDecoration(labelText: 'Successor name'),
+          ),
+          const SizedBox(height: 10),
+          TextField(
+            controller: _successorId,
+            textCapitalization: TextCapitalization.characters,
+            decoration: const InputDecoration(labelText: 'Successor Human ID'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        FilledButton(
+          onPressed: () async {
+            if (_successorName.text.trim().length < 2 || _successorId.text.trim().isEmpty) return;
+            final sName = _successorName.text.trim();
+            final sId = _successorId.text.trim();
+            Navigator.pop(context);
+            await widget.action(() => const EarthApi().settleInheritance(
+                  predecessorId: widget.predecessorId,
+                  successorId: sId,
+                  successorName: sName,
+                ));
+          },
+          child: const Text('Execute inheritance'),
+        ),
+      ],
+    );
+  }
+}
+
+Future<void> showSettleInheritanceDialog(
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action, {
+  required String predecessorId,
+  required String defaultSuccessorName,
+}) async {
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => _SettleInheritanceDialog(
+      action: action,
+      predecessorId: predecessorId,
+      defaultSuccessorName: defaultSuccessorName,
+    ),
+  );
 }
 
 Future<void> showRecoveryDialog(
@@ -74,18 +203,20 @@ Future<void> showRecoveryDialog(
       ]),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CANCEL')),
+          onPressed: () => Navigator.pop(dialogContext),
+          child: const Text('CANCEL'),
+        ),
         FilledButton(
-            onPressed: () async {
-              final parsed = double.tryParse(amount.text.trim());
-              if (parsed == null || parsed <= 0) return;
-              Navigator.pop(dialogContext);
-              await action(() => const EarthApi().recoverInstitution(
-                  institutionId, parsed,
-                  otp: otp.text.trim()));
-            },
-            child: const Text('AUTHORIZE RECOVERY')),
+          onPressed: () async {
+            final parsed = double.tryParse(amount.text.trim());
+            if (parsed == null || parsed <= 0) return;
+            Navigator.pop(dialogContext);
+            await action(() => const EarthApi().recoverInstitution(
+                institutionId, parsed,
+                otp: otp.text.trim()));
+          },
+          child: const Text('AUTHORIZE RECOVERY'),
+        ),
       ],
     ),
   );
@@ -147,9 +278,9 @@ Future<void> showContractComposerDialog(BuildContext context,
                             value < 0) {
                           return;
                         }
+                        Navigator.pop(dialogContext);
                         await action(() => const EarthApi().createContract(
                             kind, counterparty.text, title.text, value));
-                        if (dialogContext.mounted) Navigator.pop(dialogContext);
                       },
                       child: const Text('Propose')),
                 ],

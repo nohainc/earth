@@ -1,0 +1,126 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_test/flutter_test.dart';
+import 'package:earth_client/core/models/earth_state.dart';
+import 'package:earth_client/features/operations/technology_panel.dart';
+
+void main() {
+  testWidgets('TechnologyPanel renders research progress, budget, and triggers funding',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {
+        'research': {
+          'id': 'TECH-001',
+          'name': 'Adaptive Maintenance AI',
+          'progress': 72,
+          'budget': 1440,
+          'focus': 'efficiency',
+          'status': 'active',
+        },
+        'activePatents': 0,
+        'activeLicenses': 0,
+      },
+      'technologyRegistry': {
+        'activePatents': 0,
+        'activeLicenses': 0,
+      },
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+    });
+
+    bool fundTriggered = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TechnologyPanel(
+              state: state,
+              busy: false,
+              action: (cb) async {
+                fundTriggered = true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('TECHNOLOGY / RESEARCH & PATENTS'), findsOneWidget);
+    expect(find.text('ADAPTIVE MAINTENANCE AI'), findsOneWidget);
+    expect(find.text('72%'), findsOneWidget);
+    expect(find.textContaining('Focus: efficiency · Budget: 1440 C'), findsOneWidget);
+    expect(find.text('FUND 240 C'), findsOneWidget);
+
+    await tester.tap(find.text('FUND 240 C'));
+    await tester.pumpAndSettle();
+
+    expect(fundTriggered, isTrue);
+  });
+
+  testWidgets('TechnologyPanel enables patent grant when research reaches 100%',
+      (tester) async {
+    const completedState = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {
+        'research': {
+          'id': 'TECH-001',
+          'name': 'Adaptive Maintenance AI',
+          'progress': 100,
+          'budget': 2400,
+          'focus': 'efficiency',
+          'status': 'completed',
+        },
+        'activePatents': 1,
+        'activeLicenses': 1,
+      },
+      'technologyRegistry': {
+        'activePatents': 1,
+        'activeLicenses': 1,
+      },
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+    });
+
+    bool patentTriggered = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TechnologyPanel(
+              state: completedState,
+              busy: false,
+              action: (cb) async {
+                patentTriggered = true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('100%'), findsOneWidget);
+    expect(find.textContaining('Status: COMPLETED'), findsOneWidget);
+    expect(find.text('Patents granted: 1'), findsOneWidget);
+
+    final grantButton = find.widgetWithText(OutlinedButton, 'GRANT PATENT');
+    expect(grantButton, findsOneWidget);
+    await tester.tap(grantButton);
+    await tester.pumpAndSettle();
+
+    expect(patentTriggered, isTrue);
+  });
+}

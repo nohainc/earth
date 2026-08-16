@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../activity/activity_panel.dart';
+import '../contracts/contracts_panel.dart';
+import '../finance/personal_finance_panel.dart';
 import '../governance/governance_panels.dart';
 import '../institutions/institutions_panels.dart';
 import '../lifecycle/lifecycle_panels.dart';
@@ -21,6 +24,8 @@ String dashboardSectionTitle(String section) => switch (section) {
       'technology' => 'TECHNOLOGY',
       'life' => 'LIFE & LEGACY',
       'contracts' => 'CONTRACTS',
+      'finance' => 'PERSONAL FINANCE',
+      'activity' => 'ACTIVITY & NOTIFICATIONS',
       _ => 'COMMAND CENTER',
     };
 
@@ -38,10 +43,17 @@ class Dashboard extends StatelessWidget {
   final List<dynamic> productionCatalog;
   final Map<String, dynamic> marketHistory;
   final Map<String, dynamic> pantheon;
+  final Map<String, dynamic> personalFinanceData;
+  final List<dynamic> contracts;
+  final bool isLiveConnected;
+  final bool isReconnecting;
   final int unreadNotifications;
   final Map<String, GlobalKey> sectionKeys;
   final String selectedSection;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final VoidCallback? onRefreshEvents;
+  final Future<void> Function(String)? onMarkNotificationRead;
+  final Future<void> Function()? onMarkAllNotificationsRead;
 
   const Dashboard({
     super.key,
@@ -58,10 +70,17 @@ class Dashboard extends StatelessWidget {
     required this.productionCatalog,
     this.marketHistory = const {},
     this.pantheon = const {},
+    this.personalFinanceData = const {},
+    this.contracts = const [],
+    this.isLiveConnected = true,
+    this.isReconnecting = false,
     required this.unreadNotifications,
     required this.sectionKeys,
     this.selectedSection = 'command',
     required this.action,
+    this.onRefreshEvents,
+    this.onMarkNotificationRead,
+    this.onMarkAllNotificationsRead,
   });
 
   @override
@@ -288,25 +307,72 @@ class Dashboard extends StatelessWidget {
         ];
       case 'contracts':
         return [
-          NegotiatedContractsPanel(
+          ContractsPanel(
+            panelKey: sectionKeys['contracts'],
             state: state,
             busy: busy,
+            contracts: contracts,
             action: action,
           ),
           AuthorityHistoryPanel(authorityEvents: authorityEvents),
+        ];
+      case 'finance':
+        return [
+          PersonalFinancePanel(
+            panelKey: sectionKeys['finance'],
+            state: state,
+            busy: busy,
+            personalFinanceData: personalFinanceData,
+            action: action,
+          ),
+          LedgerPanel(state: state),
+        ];
+      case 'activity':
+        return [
+          ActivityPanel(
+            panelKey: sectionKeys['activity'],
+            events: events,
+            notifications: notifications,
+            unreadCount: unreadNotifications,
+            isLiveConnected: isLiveConnected,
+            isReconnecting: isReconnecting,
+            onRefresh: onRefreshEvents ?? () {},
+            onMarkRead: onMarkNotificationRead ?? (_) async {},
+            onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
+          ),
+          OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
+          HistoryArchivePanel(state: state),
         ];
       case 'command':
       default:
         return [
           OpportunityPanel(opportunities: state.opportunities),
-          WorldFeedPanel(events: events),
-          NotificationsPanel(
-            notifications: notifications,
-            unreadNotifications: unreadNotifications,
-            busy: busy,
-            action: action,
+          PersonalFinancePanel(
+            panelKey: sectionKeys['finance'],
             state: state,
+            busy: busy,
+            personalFinanceData: personalFinanceData,
+            action: action,
           ),
+          ActivityPanel(
+            panelKey: sectionKeys['activity'],
+            events: events,
+            notifications: notifications,
+            unreadCount: unreadNotifications,
+            isLiveConnected: isLiveConnected,
+            isReconnecting: isReconnecting,
+            onRefresh: onRefreshEvents ?? () {},
+            onMarkRead: onMarkNotificationRead ?? (_) async {},
+            onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
+          ),
+          ContractsPanel(
+            panelKey: sectionKeys['contracts'],
+            state: state,
+            busy: busy,
+            contracts: contracts,
+            action: action,
+          ),
+          WorldFeedPanel(events: events),
           OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
           WorldIntegrityPanel(state: state),
           HistoryArchivePanel(state: state),
@@ -314,5 +380,4 @@ class Dashboard extends StatelessWidget {
         ];
     }
   }
-
 }

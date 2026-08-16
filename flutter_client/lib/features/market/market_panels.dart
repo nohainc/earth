@@ -370,33 +370,120 @@ class MyMarketOrdersPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final orders = state.marketOrders;
     return EarthPanel(
-      title: 'MY OPEN MARKET ORDERS',
-      child: state.marketOrders.isEmpty
-          ? const Text('No open orders.',
+      title: 'MY MARKET ORDERS / LIFECYCLE',
+      child: orders.isEmpty
+          ? const Text('No market orders on record.',
               style: TextStyle(color: mutedColor, fontSize: 11))
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: state.marketOrders.map((raw) {
+              children: orders.map((raw) {
                 final order = raw as Map<String, dynamic>;
-                final remaining = (order['quantity'] as num) -
-                    (order['filled_quantity'] as num);
-                return Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${order['side']} ${order['product']} · $remaining remaining · ${order['limit_price']} C',
-                        style: const TextStyle(fontSize: 11),
+                final id = order['id']?.toString() ?? '';
+                final side = (order['side']?.toString() ?? 'buy').toUpperCase();
+                final product = (order['product']?.toString() ?? '').toUpperCase();
+                final quantity = (order['quantity'] as num?)?.toInt() ?? 1;
+                final filledQty = (order['filled_quantity'] as num?)?.toInt() ??
+                    (order['filled'] as num?)?.toInt() ??
+                    0;
+                final remaining = (quantity - filledQty).clamp(0, quantity);
+                final limitPrice = (order['limit_price'] as num?)?.toDouble() ??
+                    (order['limitPrice'] as num?)?.toDouble() ??
+                    0.0;
+                final settlementPrice = (order['settlement_price'] as num?)?.toDouble() ??
+                    (order['clearing_price'] as num?)?.toDouble() ??
+                    (order['price'] as num?)?.toDouble();
+                final status = (order['status']?.toString() ?? 'open').toLowerCase();
+                final reservedCredits = (order['reserved_credits'] as num?)?.toDouble() ??
+                    (order['reservedCredits'] as num?)?.toDouble() ??
+                    (side == 'BUY' && (status == 'open' || status == 'partial')
+                        ? remaining * limitPrice
+                        : 0.0);
+                final releasedEscrow = (order['released_escrow'] as num?)?.toDouble() ??
+                    (order['releasedEscrow'] as num?)?.toDouble() ??
+                    (status == 'cancelled' || status == 'refunded' ? remaining * limitPrice : 0.0);
+                final fee = (order['fee'] as num?)?.toDouble() ?? 0.0;
+                final totalValue = filledQty > 0
+                    ? filledQty * (settlementPrice ?? limitPrice)
+                    : quantity * limitPrice;
+
+                final canCancel = (status == 'open' || status == 'partial') && !busy;
+
+                Color statusColor = mutedColor;
+                if (status == 'open') statusColor = Colors.lightBlueAccent;
+                if (status == 'partial') statusColor = Colors.orangeAccent;
+                if (status == 'filled') statusColor = cyanAccentColor;
+                if (status == 'cancelled' || status == 'rejected') statusColor = Colors.redAccent;
+                if (status == 'refunded') statusColor = Colors.tealAccent;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(6),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '$side $product · $quantity units @ ${limitPrice.toStringAsFixed(2)} C',
+                              style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 11),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Text(
+                            status.toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: statusColor,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => action(() => const EarthApi()
-                              .cancelOrder(order['id'] as String)),
-                      child: const Text('CANCEL'),
-                    ),
-                  ],
+                      const SizedBox(height: 4),
+                      Text(
+                        'Filled: $filledQty / $quantity ($remaining remaining) · Total: ${totalValue.toStringAsFixed(2)} C',
+                        style: const TextStyle(fontSize: 10, color: mutedColor),
+                      ),
+                      if (settlementPrice != null && filledQty > 0)
+                        Text(
+                          'Settlement price: ${settlementPrice.toStringAsFixed(2)} C · Fee paid: ${fee.toStringAsFixed(2)} C',
+                          style: const TextStyle(fontSize: 10, color: cyanAccentColor),
+                        ),
+                      if (reservedCredits > 0)
+                        Text(
+                          'Reserved Credits in escrow: ${reservedCredits.toStringAsFixed(2)} C',
+                          style: const TextStyle(fontSize: 10, color: Colors.lightBlueAccent),
+                        ),
+                      if (releasedEscrow > 0)
+                        Text(
+                          'Released escrow refund: ${releasedEscrow.toStringAsFixed(2)} C',
+                          style: const TextStyle(fontSize: 10, color: Colors.tealAccent),
+                        ),
+                      if (canCancel) ...[
+                        const SizedBox(height: 8),
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: OutlinedButton(
+                            style: OutlinedButton.styleFrom(
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+                            ),
+                            onPressed: () => action(() => const EarthApi().cancelOrder(id)),
+                            child: const Text('CANCEL ORDER', style: TextStyle(fontSize: 10)),
+                          ),
+                        ),
+                      ],
+                    ],
+                  ),
                 );
               }).toList(),
             ),

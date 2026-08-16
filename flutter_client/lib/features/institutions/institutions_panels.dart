@@ -22,125 +22,150 @@ class InstitutionsCapacityPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cityId = state.institutions['city']['id']?.toString() ?? 'CITY-0084';
-    final corporationId =
-        state.institutions['corporation']['id']?.toString() ?? 'CORP-001';
+    final city = state.institutions['city'] is Map<String, dynamic>
+        ? (state.institutions['city'] as Map<String, dynamic>)
+        : <String, dynamic>{};
+    final cityId = city['id']?.toString() ?? 'CITY-0084';
+    final cityName = (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
+    final residents = city['residents'] ?? 100;
+    final housingCap = city['housing_capacity'] ?? 120;
+    final energyCap = city['energy_capacity'] ?? 200;
+
+    final corp = state.institutions['corporation'] is Map<String, dynamic>
+        ? (state.institutions['corporation'] as Map<String, dynamic>)
+        : <String, dynamic>{};
+    final corporationId = corp['id']?.toString() ?? 'CORP-001';
+    final corpName = (corp['name']?.toString() ?? 'CARTHAGE DYNAMICS').toUpperCase();
+    final corpMembers = corp['member_count'] ?? 42;
+    final corpVersion = corp['constitution_version'] ?? 1;
+
+    final isCityResident = state.membership?['city_id'] != null;
+    final isCorpMember = state.membership?['corporation_id'] != null;
+
+    final housingRatio = formatPercent(state.world['serviceRatios']?['housing']);
+    final energyRatio = formatPercent(state.world['serviceRatios']?['energy']);
+    final connectRatio = formatPercent(state.world['serviceRatios']?['connectivity']);
+    final healthRatio = formatPercent(state.world['serviceRatios']?['health']);
 
     return EarthPanel(
       key: panelKey,
-      title: 'INSTITUTIONS / CAPACITY',
+      title: 'INSTITUTIONS / CITY & CORP',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // City Section
           Text(
-              'CITY  ${state.institutions['city']['residents']} residents  ·  housing ${state.institutions['city']['housing_capacity']}  ·  energy ${state.institutions['city']['energy_capacity']}'),
-          const SizedBox(height: 6),
+            'CITY: $cityName ($cityId)',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
           Text(
-            'SERVICE PRESSURE  housing ${formatPercent(state.world['serviceRatios']?['housing'])}  ·  energy ${formatPercent(state.world['serviceRatios']?['energy'])}  ·  connectivity ${formatPercent(state.world['serviceRatios']?['connectivity'])}  ·  health ${formatPercent(state.world['serviceRatios']?['health'])}',
+            '$residents residents · Housing cap: $housingCap · Energy cap: $energyCap',
             style: const TextStyle(color: mutedColor, fontSize: 10),
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 4),
           Text(
-            'CITY QUALIFICATION  ${((state.world['cityQualification'] as Map<String, dynamic>?)?.values.every((value) => value == true) ?? false) ? 'QUALIFIED' : 'IN PROGRESS'}',
-            style: const TextStyle(
-                color: mutedColor, fontSize: 10, letterSpacing: .5),
+            'Service pressure: Housing $housingRatio · Energy $energyRatio · Connect $connectRatio · Health $healthRatio',
+            style: const TextStyle(color: mutedColor, fontSize: 10),
           ),
+          const SizedBox(height: 8),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => action(() => isCityResident
+                        ? const EarthApi().leaveCity(cityId: cityId)
+                        : const EarthApi().joinCity(cityId: cityId)),
+                child: Text(isCityResident ? 'LEAVE CITY' : 'JOIN CITY'),
+              ),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => action(() => const EarthApi()
+                        .setCityBudget('maintenance', cityId: cityId)),
+                child: const Text('PROPOSE BUDGET'),
+              ),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => showTaxCharterDialog(context, action, cityId),
+                child: const Text('TAX CHARTER'),
+              ),
+              if (state.communities.isNotEmpty)
+                OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => showFormationComposer(
+                            context,
+                            action,
+                            city: true,
+                            communityId: (state.communities.first
+                                as Map<String, dynamic>)['id'] as String,
+                          ),
+                  child: const Text('FORM CITY'),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          const Divider(height: 1, color: Colors.white10),
           const SizedBox(height: 10),
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => action(() => const EarthApi()
-                    .setCityBudget('maintenance', cityId: cityId)),
-            child: const Text('PROPOSE MAINTENANCE BUDGET'),
-          ),
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => showTaxCharterDialog(context, action, cityId),
-            child: const Text('SET CITY TAX CHARTER'),
-          ),
-          const SizedBox(height: 8),
+
+          // Corporation Section
           Text(
-              'CORPORATION  ${state.institutions['corporation']['member_count']} members  ·  constitution v${state.institutions['corporation']['constitution_version']}'),
-          const SizedBox(height: 6),
+            'CORPORATION: $corpName ($corporationId)',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
           Text(
-            'CORPORATION QUALIFICATION  ${((state.world['corporationQualification'] as Map<String, dynamic>?)?.values.every((value) => value == true) ?? false) ? 'QUALIFIED' : 'IN PROGRESS'}',
-            style: const TextStyle(
-                color: mutedColor, fontSize: 10, letterSpacing: .5),
-          ),
-          const SizedBox(height: 10),
-          Text(
-            state.membership?['corporation_id'] == null
-                ? 'Independent membership · eligible to join'
-                : 'Member since game day ${state.membership?['joined_game_day']}',
-            style: const TextStyle(color: mutedColor, fontSize: 11),
-          ),
-          const SizedBox(height: 10),
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => action(() => state.membership?['corporation_id'] == null
-                    ? const EarthApi()
-                        .joinCorporation(corporationId: corporationId)
-                    : const EarthApi()
-                        .leaveCorporation(corporationId: corporationId)),
-            child: Text(state.membership?['corporation_id'] == null
-                ? 'JOIN CORPORATION'
-                : 'LEAVE CORPORATION'),
+            '$corpMembers members · Constitution v$corpVersion · Status: ${isCorpMember ? 'MEMBER' : 'INDEPENDENT'}',
+            style: const TextStyle(color: mutedColor, fontSize: 10),
           ),
           const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => action(() => state.membership?['city_id'] == null
-                    ? const EarthApi().joinCity(cityId: cityId)
-                    : const EarthApi().leaveCity(cityId: cityId)),
-            child: Text(state.membership?['city_id'] == null
-                ? 'JOIN CITY'
-                : 'LEAVE CITY'),
-          ),
-          const SizedBox(height: 8),
-          if (state.communities.isNotEmpty)
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => showFormationComposer(
-                        context,
-                        action,
-                        city: true,
-                        communityId: (state.communities.first
-                            as Map<String, dynamic>)['id'] as String,
-                      ),
-              child: const Text('FORM CITY FROM COMMUNITY'),
-            ),
-          if (state.membership?['city_id'] != null)
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => showFormationComposer(
-                        context,
-                        action,
-                        city: false,
-                        cityId: state.membership?['city_id'] as String,
-                      ),
-              child: const Text('FORM CORPORATION'),
-            ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => action(() => const EarthApi().spendCorporationTreasury(
-                    100,
-                    corporationId: corporationId)),
-            child: const Text('FUND CITY SERVICES · 100 C'),
-          ),
-          const SizedBox(height: 8),
-          OutlinedButton(
-            onPressed: busy
-                ? null
-                : () => action(() => const EarthApi().contributeCorporation(100,
-                    corporationId: corporationId)),
-            child: const Text('CONTRIBUTE TO TREASURY · 100 C'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => action(() => isCorpMember
+                        ? const EarthApi()
+                            .leaveCorporation(corporationId: corporationId)
+                        : const EarthApi()
+                            .joinCorporation(corporationId: corporationId)),
+                child: Text(isCorpMember ? 'LEAVE CORP' : 'JOIN CORP'),
+              ),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => action(() => const EarthApi().spendCorporationTreasury(
+                        100,
+                        corporationId: corporationId)),
+                child: const Text('FUND SERVICES · 100 C'),
+              ),
+              OutlinedButton(
+                onPressed: busy
+                    ? null
+                    : () => action(() => const EarthApi().contributeCorporation(100,
+                        corporationId: corporationId)),
+                child: const Text('CONTRIBUTE · 100 C'),
+              ),
+              if (isCityResident)
+                OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => showFormationComposer(
+                            context,
+                            action,
+                            city: false,
+                            cityId: cityId,
+                          ),
+                  child: const Text('FORM CORP'),
+                ),
+            ],
           ),
         ],
       ),
@@ -162,71 +187,107 @@ class CommunitiesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final communities = state.communities;
     return EarthPanel(
       title: 'COMMUNITIES / SHARED LIFE',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (state.communities.isEmpty)
-            const Text('No communities registered yet.')
-          else
-            ...state.communities.take(5).map((raw) {
-              final community = raw as Map<String, dynamic>;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
-                child: Text(
-                  '${community['name']}  ·  ${community['status']}',
-                  style: const TextStyle(fontSize: 11),
-                ),
-              );
-            }),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+          Row(
             children: [
+              Expanded(
+                child: Text(
+                  '${communities.length} registered communities',
+                  style: const TextStyle(color: mutedColor, fontSize: 11),
+                ),
+              ),
+              const SizedBox(width: 8),
               OutlinedButton(
                 onPressed: busy
                     ? null
-                    : () => action(() => const EarthApi().createCommunity()),
-                child: const Text('FOUND CARTHAGE MAKERS'),
+                    : () => showCommunityComposer(context, action),
+                child: const Text('FOUND COMMUNITY'),
               ),
-              if (state.communities.isNotEmpty)
-                OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => action(() {
-                            final id = (state.communities.first
-                                as Map<String, dynamic>)['id'] as String;
-                            return const EarthApi()
-                                .contributeToCommunity(id, 50);
-                          }),
-                  child: const Text('CONTRIBUTE 50 C'),
-                ),
-              if (state.communities.isNotEmpty)
-                OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => action(() {
-                            final id = (state.communities.first
-                                as Map<String, dynamic>)['id'] as String;
-                            return const EarthApi().joinCommunity(id);
-                          }),
-                  child: const Text('JOIN COMMUNITY'),
-                ),
-              if (state.communities.isNotEmpty)
-                OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => action(() {
-                            final id = (state.communities.first
-                                as Map<String, dynamic>)['id'] as String;
-                            return const EarthApi().leaveCommunity(id);
-                          }),
-                  child: const Text('LEAVE COMMUNITY'),
-                ),
             ],
           ),
+          const SizedBox(height: 10),
+          if (communities.isEmpty)
+            const Text('No communities registered yet.',
+                style: TextStyle(color: mutedColor, fontSize: 11))
+          else
+            ...communities.take(4).map((raw) {
+              final community = raw as Map<String, dynamic>;
+              final id = community['id']?.toString() ?? 'COM-001';
+              final name = community['name']?.toString() ?? 'Community';
+              final status = (community['status']?.toString() ?? 'active').toUpperCase();
+              final members = (community['member_count'] as num?)?.toInt() ?? 12;
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withAlpha(6),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '$name ($id)',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                          ),
+                        ),
+                        Text(status, style: const TextStyle(fontSize: 9, color: mutedColor)),
+                      ],
+                    ),
+                    const SizedBox(height: 2),
+                    Text('$members active members',
+                        style: const TextStyle(fontSize: 10, color: mutedColor)),
+                    const SizedBox(height: 6),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 4,
+                      children: [
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          ),
+                          onPressed: busy
+                              ? null
+                              : () => action(() => const EarthApi().joinCommunity(id)),
+                          child: const Text('JOIN', style: TextStyle(fontSize: 10)),
+                        ),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          ),
+                          onPressed: busy
+                              ? null
+                              : () => action(() => const EarthApi().leaveCommunity(id)),
+                          child: const Text('LEAVE', style: TextStyle(fontSize: 10)),
+                        ),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                          ),
+                          onPressed: busy
+                              ? null
+                              : () => showCommunityContributionDialog(context, action, id),
+                          child: const Text('CONTRIBUTE', style: TextStyle(fontSize: 10)),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              );
+            }),
         ],
       ),
     );

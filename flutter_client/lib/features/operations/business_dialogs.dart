@@ -24,10 +24,11 @@ Future<void> showBusinessManagerDialog(
                   child: const Text('CANCEL')),
               FilledButton(
                   onPressed: () async {
-                    if (manager.text.trim().isEmpty) return;
+                    final targetManager = manager.text.trim();
+                    if (targetManager.isEmpty) return;
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
-                        .appointBusinessManager(businessId, manager.text));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        .appointBusinessManager(businessId, targetManager));
                   },
                   child: const Text('APPOINT')),
             ],
@@ -62,9 +63,10 @@ Future<void> showBusinessLiquidationDialog(
                   child: const Text('CANCEL')),
               FilledButton(
                   onPressed: () async {
+                    final otpCode = otp.text.trim();
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
-                        .liquidateBusiness(businessId, otp: otp.text));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        .liquidateBusiness(businessId, otp: otpCode));
                   },
                   style:
                       FilledButton.styleFrom(backgroundColor: Colors.redAccent),
@@ -126,10 +128,10 @@ Future<void> showBusinessConstitutionDialog(
                         noticeValue == null) {
                       return;
                     }
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
                         .updateBusinessConstitution(
                             businessId, shareValue, boardValue, noticeValue));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
                   },
                   child: const Text('SAVE CONSTITUTION')),
             ],
@@ -177,14 +179,16 @@ Future<void> showShareTransferDialog(BuildContext context,
               FilledButton(
                   onPressed: () async {
                     final amount = int.tryParse(shares.text.trim());
-                    if (recipient.text.trim().isEmpty ||
+                    final targetRecipient = recipient.text.trim();
+                    if (targetRecipient.isEmpty ||
                         amount == null ||
                         amount < 1) {
                       return;
                     }
+                    final otpCode = otp.text.trim();
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
-                        .transferShares(recipient.text, amount, otp: otp.text));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        .transferShares(targetRecipient, amount, otp: otpCode));
                   },
                   child: const Text('Transfer')),
             ],
@@ -236,17 +240,19 @@ Future<void> showShareIssueDialog(
                   onPressed: () async {
                     final count = int.tryParse(shares.text.trim());
                     final value = double.tryParse(price.text.trim());
-                    if (recipient.text.trim().isEmpty ||
+                    final targetRecipient = recipient.text.trim();
+                    if (targetRecipient.isEmpty ||
                         count == null ||
                         count < 1 ||
                         value == null ||
                         value <= 0) {
                       return;
                     }
+                    final otpCode = otp.text.trim();
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi().issueShares(
-                        businessId, recipient.text, count, value,
-                        otp: otp.text));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        businessId, targetRecipient, count, value,
+                        otp: otpCode));
                   },
                   child: const Text('Issue')),
             ],
@@ -299,10 +305,11 @@ Future<void> showBusinessComposerDialog(BuildContext context,
                       child: const Text('Cancel')),
                   FilledButton(
                       onPressed: () async {
-                        if (name.text.trim().length < 3) return;
+                        final bName = name.text.trim();
+                        if (bName.length < 3) return;
+                        Navigator.pop(dialogContext);
                         await action(() => const EarthApi()
-                            .createBusiness(name.text.trim(), sector));
-                        if (dialogContext.mounted) Navigator.pop(dialogContext);
+                            .createBusiness(bName, sector));
                       },
                       child: const Text('Register')),
                 ],
@@ -334,9 +341,9 @@ Future<void> showDividendDialog(
           onPressed: () async {
             final value = double.tryParse(amount.text.trim());
             if (value == null || value <= 0) return;
+            Navigator.pop(dialogContext);
             await action(() => const EarthApi().distributeDividends(
                 businessId, value));
-            if (dialogContext.mounted) Navigator.pop(dialogContext);
           },
           child: const Text('DISTRIBUTE'),
         ),
@@ -384,18 +391,19 @@ Future<void> showMergerDialog(
         FilledButton(
           onPressed: () async {
             final value = double.tryParse(price.text.trim());
-            if (target.text.trim().isEmpty || value == null || value <= 0) {
+            final targetId = target.text.trim();
+            if (targetId.isEmpty || value == null || value <= 0) {
               return;
             }
+            Navigator.pop(dialogContext);
             await action(() async {
               await const EarthApi().proposeMerger(
                 acquirerBusinessId: acquirerBusinessId,
-                targetBusinessId: target.text.trim(),
+                targetBusinessId: targetId,
                 pricePerShare: value,
               );
               return const EarthApi().world();
             });
-            if (dialogContext.mounted) Navigator.pop(dialogContext);
           },
           child: const Text('PROPOSE'),
         ),

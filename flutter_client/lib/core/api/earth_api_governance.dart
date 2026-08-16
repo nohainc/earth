@@ -69,4 +69,10 @@ extension EarthApiGovernance on EarthApi {
     await _request('/api/governance/roles/$roleId/recall', method: 'POST');
     return world();
   }
+
+  Future<EarthState> executeProposal(String proposalId) async {
+    await _request('/api/governance/proposals/$proposalId/execute',
+        method: 'POST');
+    return world();
+  }
 }

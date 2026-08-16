@@ -24,6 +24,18 @@ extension EarthApiWorld on EarthApi {
     await _request('/api/notifications/$id/read', method: 'POST');
   }
 
+  Future<void> markAllNotificationsRead() async {
+    await _request('/api/notifications/read-all', method: 'POST');
+  }
+
+  Future<List<dynamic>> publicActivity() async {
+    final response = await _request('/api/world/activity');
+    if (response is Map<String, dynamic>) {
+      return (response['activity'] as List<dynamic>?) ?? const [];
+    }
+    return response is List<dynamic> ? response : const [];
+  }
+
   Future<List<dynamic>> ownershipEvents() async {
     final response = (await _request('/api/ownership/events?limit=20'))
         as Map<String, dynamic>;
@@ -49,5 +61,15 @@ extension EarthApiWorld on EarthApi {
     return (response['sectors'] as List<dynamic>?) ?? const [];
   }
 
-}
+  Future<Map<String, dynamic>> pantheon() async =>
+      (await _request('/api/pantheon')) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> rankings() async =>
+      (await _request('/api/rankings')) as Map<String, dynamic>;
+
+  Future<List<dynamic>> worldHistory({int limit = 30}) async {
+    final response =
+        (await _request('/api/history?limit=$limit')) as Map<String, dynamic>;
+    return (response['history'] as List<dynamic>?) ?? const [];
+  }
+}

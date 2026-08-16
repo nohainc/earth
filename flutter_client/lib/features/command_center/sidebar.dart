@@ -37,7 +37,9 @@ class Sidebar extends StatelessWidget {
       ('city', '⌖  $city'),
       ('technology', '✧  $technologyName'),
       ('life', '◒  Life & legacy'),
+      ('finance', '⛁  Personal finance'),
       ('contracts', '⇄  Contracts'),
+      ('activity', '⌕  Activity & alerts'),
     ];
 
     return Container(

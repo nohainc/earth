@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import '../../app/theme.dart';
@@ -37,7 +38,9 @@ class _CommandCenterState extends State<CommandCenter> {
     'city': GlobalKey(),
     'technology': GlobalKey(),
     'life': GlobalKey(),
+    'finance': GlobalKey(),
     'contracts': GlobalKey(),
+    'activity': GlobalKey(),
   };
   EarthState? state;
   String? error;
@@ -53,11 +56,14 @@ class _CommandCenterState extends State<CommandCenter> {
   List<dynamic> productionCatalog = const [];
   Map<String, dynamic> marketHistory = const {};
   Map<String, dynamic> pantheon = const {};
+  Map<String, dynamic> personalFinanceData = const {};
+  List<dynamic> contractsList = const [];
   int unreadNotifications = 0;
   String selectedSection = 'command';
   Timer? eventTimer;
   Timer? liveReconnectTimer;
   WebSocketChannel? liveChannel;
+  final Set<String> _seenEventKeys = <String>{};
   int _requestGeneration = 0;
 
   @override
@@ -80,13 +86,38 @@ class _CommandCenterState extends State<CommandCenter> {
     }
   }
 
+  bool handleLiveMessage(dynamic rawMessage) {
+    if (rawMessage == null) return false;
+    try {
+      final decoded = rawMessage is String ? jsonDecode(rawMessage) : rawMessage;
+      if (decoded is Map<String, dynamic>) {
+        final key = (decoded['eventKey'] ?? decoded['id'] ?? decoded['eventId'])?.toString();
+        if (key != null && key.isNotEmpty) {
+          if (_seenEventKeys.contains(key)) {
+            return false; // Duplicate delivery: ignore without duplicating state
+          }
+          if (_seenEventKeys.length > 500) _seenEventKeys.clear();
+          _seenEventKeys.add(key);
+        }
+        final type = decoded['type']?.toString();
+        final topic = decoded['topic']?.toString();
+        if (type == 'world_day_started' || type == 'world_tick' || topic == 'world_activity' || topic == 'market') {
+          _run(api.world);
+        }
+      }
+    } catch (_) {}
+    if (mounted) _refreshEvents();
+    return true;
+  }
+
   void _connectLiveChannel() {
     final uri = liveEventsUri(configuredBase: api.baseUrl, pageUri: Uri.base);
     if (uri == null) return;
     try {
       liveChannel = WebSocketChannel.connect(uri);
-      liveChannel!.stream.listen((_) {
-        if (mounted) _refreshEvents();
+      _refreshEvents();
+      liveChannel!.stream.listen((message) {
+        handleLiveMessage(message);
       }, onError: (_) {
         liveChannel = null;
         _scheduleLiveReconnect();
@@ -114,16 +145,28 @@ class _CommandCenterState extends State<CommandCenter> {
       final ownership = await api.ownershipEvents();
       final memberships = await api.membershipEvents();
       final authority = await api.authorityEvents();
+      Map<String, dynamic> finData = personalFinanceData;
+      List<dynamic> cList = contractsList;
+      try {
+        finData = await api.personalFinance();
+      } catch (_) {}
+      try {
+        cList = await api.contracts();
+      } catch (_) {}
       if (mounted) {
         setState(() {
           events = latest;
           ownershipEvents = ownership;
           membershipEvents = memberships;
           authorityEvents = authority;
+          personalFinanceData = finData;
+          contractsList = cList;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
           unreadNotifications =
-              (notificationData['unread'] as num?)?.toInt() ?? 0;
+              (notificationData['unread'] as num?)?.toInt() ??
+              (notificationData['unreadCount'] as num?)?.toInt() ??
+              0;
         });
       }
     } catch (_) {
@@ -360,9 +403,22 @@ class _CommandCenterState extends State<CommandCenter> {
                               productionCatalog: productionCatalog,
                               marketHistory: marketHistory,
                               pantheon: pantheon,
+                              personalFinanceData: personalFinanceData,
+                              contracts: contractsList,
+                              isLiveConnected: liveChannel != null,
+                              isReconnecting: liveReconnectTimer?.isActive == true,
                               unreadNotifications: unreadNotifications,
                               sectionKeys: _sectionKeys,
                               action: _run,
+                              onRefreshEvents: _refreshEvents,
+                              onMarkNotificationRead: (id) async {
+                                await api.markNotificationRead(id);
+                                await _refreshEvents();
+                              },
+                              onMarkAllNotificationsRead: () async {
+                                await api.markAllNotificationsRead();
+                                await _refreshEvents();
+                              },
                             ),
                           ],
                         ),

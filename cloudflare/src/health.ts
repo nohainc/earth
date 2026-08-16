@@ -16,7 +16,17 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       repository.query('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
       repository.query('SELECT COUNT(*)::integer AS invalid FROM machines WHERE condition < 0 OR condition > 100'),
       repository.query("SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_scheduler_at)) AS age_seconds FROM world_state WHERE id = 'WORLD'"),
-      repository.query("SELECT COUNT(*)::integer AS pending, COUNT(*) FILTER (WHERE attempts >= 5)::integer AS failed FROM event_outbox WHERE processed_at IS NULL AND available_at <= CURRENT_TIMESTAMP"),
+      repository.query(`
+        SELECT
+          COUNT(*) FILTER (WHERE processed_at IS NULL)::integer AS pending,
+          COUNT(*) FILTER (WHERE processed_at IS NULL AND attempts > 0)::integer AS retrying,
+          COUNT(*) FILTER (WHERE processed_at IS NULL AND locked_at IS NOT NULL AND locked_at < CURRENT_TIMESTAMP - INTERVAL '5 minutes')::integer AS stale_locks,
+          COUNT(*) FILTER (WHERE last_error LIKE 'DEAD_LETTER%')::integer AS dead_lettered,
+          COUNT(*) FILTER (WHERE attempts >= 5)::integer AS failed,
+          EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - MIN(created_at) FILTER (WHERE processed_at IS NULL)))::numeric AS oldest_pending_age,
+          MAX(processed_at)::text AS last_delivery
+        FROM event_outbox
+      `),
       repository.query('SELECT COALESCE(MAX(version), 0)::integer AS version FROM earth_schema_migrations'),
       Promise.all([
         repository.query('SELECT COUNT(*)::integer AS count FROM humans'),
@@ -26,8 +36,14 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       ]),
     ]);
     const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
-    const outboxPending = Number(outbox.rows[0]?.pending ?? 0);
-    const outboxRetryFailures = Number(outbox.rows[0]?.failed ?? 0);
+    const outboxRow = outbox.rows[0];
+    const outboxPending = Number(outboxRow?.pending ?? 0);
+    const outboxRetrying = Number(outboxRow?.retrying ?? 0);
+    const outboxStaleLocks = Number(outboxRow?.stale_locks ?? 0);
+    const outboxDeadLettered = Number(outboxRow?.dead_lettered ?? 0);
+    const outboxRetryFailures = Number(outboxRow?.failed ?? 0);
+    const outboxOldestAgeSeconds = outboxRow?.oldest_pending_age != null ? Number(outboxRow.oldest_pending_age) : null;
+    const outboxLastDeliveryAt = outboxRow?.last_delivery ?? null;
     return {
       checks: {
         database: true,
@@ -50,6 +66,14 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         schedulerAgeSeconds: Number.isFinite(schedulerAgeSeconds) ? schedulerAgeSeconds : null,
         outboxPending,
         outboxRetryFailures,
+        outboxMetrics: {
+          pendingCount: outboxPending,
+          retryCount: outboxRetrying,
+          staleLocksCount: outboxStaleLocks,
+          deadLetterCount: outboxDeadLettered,
+          oldestPendingAgeSeconds: outboxOldestAgeSeconds,
+          lastSuccessfulDeliveryAt: outboxLastDeliveryAt,
+        },
         migrationVersion: Number(migrations.rows[0]?.version ?? 0),
         invariantScan: {
           ok: Number(balances.rows[0]?.invalid ?? 0) === 0 && Number(machines.rows[0]?.invalid ?? 0) === 0,

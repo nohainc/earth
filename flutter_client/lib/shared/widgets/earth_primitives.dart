@@ -17,26 +17,30 @@ class EarthPanel extends StatelessWidget {
         (MediaQuery.sizeOf(context).width - 32).clamp(0.0, 360.0).toDouble();
     final muted = Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurfaceVariant;
-    return SizedBox(
-      width: width,
-      child: Card(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                title,
-                style: TextStyle(
-                  color: muted,
-                  fontSize: 10,
-                  letterSpacing: 1.1,
-                  fontWeight: FontWeight.w700,
+    return Semantics(
+      container: true,
+      label: title,
+      child: SizedBox(
+        width: width,
+        child: Card(
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    color: muted,
+                    fontSize: 10,
+                    letterSpacing: 1.1,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 14),
-              child,
-            ],
+                const SizedBox(height: 14),
+                child,
+              ],
+            ),
           ),
         ),
       ),
@@ -57,26 +61,29 @@ class EarthMetric extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) => SizedBox(
-        width: 210,
-        child: Card(
-          child: Padding(
-            padding: const EdgeInsets.all(18),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  label,
-                  style:
-                      TextStyle(fontSize: 10, letterSpacing: 1, color: accent),
-                ),
-                const SizedBox(height: 12),
-                Text(
-                  value,
-                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w700, letterSpacing: -.5),
-                ),
-              ],
+  Widget build(BuildContext context) => Semantics(
+        label: '$label: $value',
+        child: SizedBox(
+          width: 210,
+          child: Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: TextStyle(
+                        fontSize: 10, letterSpacing: 1, color: accent),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    value,
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                        fontWeight: FontWeight.w700, letterSpacing: -.5),
+                  ),
+                ],
+              ),
             ),
           ),
         ),
@@ -91,12 +98,19 @@ class EarthErrorState extends StatelessWidget {
       {super.key, required this.message, required this.retry});
 
   @override
-  Widget build(BuildContext context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(message),
-          const SizedBox(height: 12),
-          FilledButton(onPressed: retry, child: const Text('RECONNECT')),
-        ],
+  Widget build(BuildContext context) => Semantics(
+        liveRegion: true,
+        label: 'Error alert: $message',
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message),
+            const SizedBox(height: 12),
+            FilledButton(
+              onPressed: retry,
+              child: const Text('RECONNECT'),
+            ),
+          ],
+        ),
       );
 }

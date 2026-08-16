@@ -13,6 +13,14 @@ class EarthApiException implements Exception {
   const EarthApiException(this.message,
       {this.code = 'REQUEST_FAILED', this.correlationId, this.statusCode});
 
+  bool get isValidationError => statusCode == 400 || code == 'VALIDATION_ERROR';
+  bool get isAuthenticationError => statusCode == 401 || code == 'AUTHENTICATION_REQUIRED';
+  bool get isAuthorizationError => statusCode == 403 || code == 'FORBIDDEN';
+  bool get isNotFoundError => statusCode == 404 || code == 'NOT_FOUND';
+  bool get isConflictError => statusCode == 409 || code == 'CONFLICT';
+  bool get isRateLimitError => statusCode == 429 || code == 'RATE_LIMITED';
+  bool get isServiceUnavailable => statusCode == 503 || code == 'SERVICE_UNAVAILABLE';
+
   @override
   String toString() => 'EarthApiException($code): $message';
 }

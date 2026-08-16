@@ -11,6 +11,7 @@ part 'earth_api_lifecycle.dart';
 part 'earth_api_governance.dart';
 part 'earth_api_institutions.dart';
 part 'earth_api_contracts.dart';
+part 'earth_api_personal_finance.dart';
 
 class EarthApi {
   final String baseUrl;

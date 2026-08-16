@@ -13,7 +13,7 @@ Future<void> showDecommissionDialog(
             title: const Text('Recycle machine?'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               const Text(
-                  'This permanently decommissions the machine and returns a condition-based fraction of its embedded resources.'),
+                  'This permanently decommissions the machine and salvages 25 Material and 5 Components.'),
               const SizedBox(height: 12),
               TextField(
                   controller: otp,
@@ -27,9 +27,10 @@ Future<void> showDecommissionDialog(
                   child: const Text('Cancel')),
               FilledButton(
                   onPressed: () async {
+                    final otpCode = otp.text.trim();
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
-                        .decommissionMachine(machineId, otp: otp.text.trim()));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        .decommissionMachine(machineId, otp: otpCode));
                   },
                   child: const Text('Recycle')),
             ],
@@ -48,7 +49,7 @@ Future<void> showMachineUpgradeDialog(
             title: const Text('Upgrade machine'),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               const Text(
-                  'Upgrade cost: 600 Credits and 20 Components. Capacity increases by 0.2 and installation reduces condition by 5%.',
+                  'Upgrade cost: 600 Credits and 20 Components. Capacity increases by +0.2 and installation reduces condition by 5%.',
                   style: TextStyle(fontSize: 13)),
               const SizedBox(height: 12),
               TextField(
@@ -63,9 +64,10 @@ Future<void> showMachineUpgradeDialog(
                   child: const Text('Cancel')),
               FilledButton(
                   onPressed: () async {
+                    final otpCode = otp.text.trim();
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
-                        .upgradeMachine(machineId, otp: otp.text.trim()));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        .upgradeMachine(machineId, otp: otpCode));
                   },
                   child: const Text('Upgrade')),
             ],
@@ -107,16 +109,14 @@ Future<void> showMachineSaleDialog(
                   child: const Text('Cancel')),
               FilledButton(
                   onPressed: () async {
-                    final value = double.tryParse(price.text.trim());
-                    if (buyer.text.trim().isEmpty ||
-                        value == null ||
-                        value <= 0) {
-                      return;
-                    }
+                    final targetBuyer = buyer.text.trim();
+                    final parsedPrice = double.tryParse(price.text.trim());
+                    if (targetBuyer.isEmpty || parsedPrice == null || parsedPrice <= 0) return;
+                    final otpCode = otp.text.trim();
+                    Navigator.pop(dialogContext);
                     await action(() => const EarthApi().sellMachine(
-                        machineId, buyer.text, value,
-                        otp: otp.text.trim()));
-                    if (dialogContext.mounted) Navigator.pop(dialogContext);
+                        machineId, targetBuyer, parsedPrice,
+                        otp: otpCode));
                   },
                   child: const Text('Sell')),
             ],
@@ -124,4 +124,68 @@ Future<void> showMachineSaleDialog(
   buyer.dispose();
   price.dispose();
   otp.dispose();
+}
+
+Future<void> showMachineAcquisitionDialog(
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action,
+  List<dynamic> productionCatalog,
+) async {
+  String selectedType = 'fabrication-rig';
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Acquire Machine'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Select a production unit from the machine catalog to expand capacity.',
+              style: TextStyle(fontSize: 12),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              initialValue: selectedType,
+              items: const [
+                DropdownMenuItem(
+                  value: 'fabrication-rig',
+                  child: Text('Fabrication Rig · 850 C + 50 Material'),
+                ),
+                DropdownMenuItem(
+                  value: 'extraction-unit',
+                  child: Text('Extraction Unit · 600 C + 40 Material'),
+                ),
+                DropdownMenuItem(
+                  value: 'refining-matrix',
+                  child: Text('Refining Matrix · 1200 C + 80 Material'),
+                ),
+                DropdownMenuItem(
+                  value: 'compute-cluster',
+                  child: Text('Compute Cluster · 950 C + 30 Material'),
+                ),
+              ],
+              onChanged: (val) {
+                if (val != null) setState(() => selectedType = val);
+              },
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await action(() => const EarthApi().acquireMachine(selectedType));
+            },
+            child: const Text('Acquire'),
+          ),
+        ],
+      ),
+    ),
+  );
 }

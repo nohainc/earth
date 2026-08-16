@@ -20,31 +20,112 @@ class SuccessionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final life = state.life;
+    final human = state.human;
+    final lifeStatus = (life['status']?.toString() ?? human['life_status']?.toString() ?? 'active').toLowerCase();
+    final age = life['ageYears'] ?? human['age_years'] ?? human['ageYears'] ?? 31;
+    final politicalEligibleDay = life['politicalEligibilityDay'] ?? 180;
+    final currentDay = state.clock['day'] ?? 184;
+    final isPoliticallyEligible = (currentDay is num && currentDay >= politicalEligibleDay) || (age is num && age >= 25);
+
+    final rawSuccessor = life['successor'];
+    final successor = rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
+    final successorName = successor?['successor_name']?.toString() ?? successor?['name']?.toString();
+    final successorHumanId = successor?['successor_human_id']?.toString() ?? successor?['successorHumanId']?.toString();
+    final registeredDay = successor?['registered_game_day'] ?? successor?['registeredOnDay'];
+    final estatePeriodDays = successor?['estate_period_days'] ?? life['estatePeriodDays'] ?? 30;
+
+    final isEstatePeriod = lifeStatus == 'estate';
+    final isDeceased = lifeStatus == 'deceased';
+
+    Color statusColor = cyanAccentColor;
+    if (isEstatePeriod) statusColor = Colors.orangeAccent;
+    if (isDeceased) statusColor = Colors.redAccent;
+
     return EarthPanel(
-      title: 'LIFE / SUCCESSION',
+      title: 'LIFE / SUCCESSION & ESTATE',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Status: ${state.life['status']}  ·  age ${state.life['ageYears']} years',
-            style: const TextStyle(color: mutedColor, fontSize: 11),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            state.life['successor'] == null
-                ? 'No successor registered.'
-                : 'Successor: ${(state.life['successor'] as Map<String, dynamic>)['successor_name']}',
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Estate period: ${state.life['estatePeriodDays']} days',
-            style: const TextStyle(fontSize: 12),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  'Age: $age years · ${isPoliticallyEligible ? 'Politically mature' : 'Political lock (Day $politicalEligibleDay)'}',
+                  style: const TextStyle(color: mutedColor, fontSize: 11),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                lifeStatus.toUpperCase(),
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: statusColor,
+                ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
-          OutlinedButton(
-            onPressed:
-                busy ? null : () => showSuccessorComposerDialog(context, action),
-            child: const Text('PLAN SUCCESSION'),
+          if (successorName != null) ...[
+            Container(
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: Colors.white.withAlpha(6),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Successor: $successorName ${successorHumanId != null ? '($successorHumanId)' : ''}',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Registered on Day $registeredDay · Estate buffer: $estatePeriodDays days',
+                    style: const TextStyle(fontSize: 10, color: mutedColor),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    isEstatePeriod
+                        ? 'Estate state: ACTIVE ESTATE PERIOD (Awaiting settlement or liquidation)'
+                        : 'Estate state: PENDING (Protected transition ready upon mortality)',
+                    style: TextStyle(fontSize: 10, color: isEstatePeriod ? Colors.orangeAccent : cyanAccentColor),
+                  ),
+                ],
+              ),
+            ),
+          ] else ...[
+            const Text(
+              'No succession plan registered. In the event of mortality, unclaimed assets will be liquidated to the municipal treasury after the estate period.',
+              style: TextStyle(color: mutedColor, fontSize: 11),
+            ),
+          ],
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              OutlinedButton(
+                onPressed: busy ? null : () => showSuccessorComposerDialog(context, action),
+                child: Text(successorName == null ? 'PLAN SUCCESSION' : 'UPDATE SUCCESSION PLAN'),
+              ),
+              if (isEstatePeriod && successorName != null)
+                OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => showSettleInheritanceDialog(
+                            context,
+                            action,
+                            predecessorId: human['id']?.toString() ?? 'H-0044',
+                            defaultSuccessorName: successorName,
+                          ),
+                  child: const Text('SETTLE ESTATE INHERITANCE'),
+                ),
+            ],
           ),
         ],
       ),
@@ -52,12 +133,12 @@ class SuccessionPanel extends StatelessWidget {
   }
 }
 
-class PersonalFinancePanel extends StatelessWidget {
+class LegacyPersonalFinancePanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
 
-  const PersonalFinancePanel({
+  const LegacyPersonalFinancePanel({
     super.key,
     required this.state,
     required this.busy,
@@ -481,16 +562,19 @@ class RankingLine extends StatelessWidget {
             ? '${first['id']}  ·  ${first['residents']} residents'
             : '${first['id']}  ·  ${first['member_count']} members';
     return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Text(
           label,
           style:
               const TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1),
         ),
-        Text(
-          value,
-          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Text(
+            value,
+            textAlign: TextAlign.right,
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+          ),
         ),
       ],
     );
@@ -504,14 +588,27 @@ class WorldRankingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final cities = state.rankings['cities'] is List ? state.rankings['cities'] as List : [];
+    final corps = state.rankings['corporations'] is List ? state.rankings['corporations'] as List : [];
+    final humans = state.rankings['humans'] is List ? state.rankings['humans'] as List : [];
+    final tech = state.rankings['technologies'] is List ? state.rankings['technologies'] as List : [];
+
     return EarthPanel(
       title: 'WORLD RANKINGS / POSTGRES LIVE',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          RankingLine('CITIES', state.rankings['cities']),
-          const SizedBox(height: 12),
-          RankingLine('CORPORATIONS', state.rankings['corporations']),
+          RankingLine('CITIES', cities),
+          const SizedBox(height: 8),
+          RankingLine('CORPORATIONS', corps),
+          if (humans.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            RankingLine('HUMANS', humans),
+          ],
+          if (tech.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            RankingLine('TECHNOLOGY', tech),
+          ],
         ],
       ),
     );
@@ -525,22 +622,21 @@ class HistoryArchivePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final events = (state.history['events'] as List<dynamic>?) ?? const [];
     return EarthPanel(
       title: 'HISTORY / ARCHIVE',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if ((state.history['events'] as List<dynamic>?)?.isEmpty ?? true)
+          if (events.isEmpty)
             const Text('The archive is waiting for the first recorded world day.')
           else
-            ...((state.history['events'] as List<dynamic>?) ?? const [])
-                .take(5)
-                .map((raw) {
+            ...events.take(6).map((raw) {
               final event = raw as Map<String, dynamic>;
               return Padding(
-                padding: const EdgeInsets.only(bottom: 7),
+                padding: const EdgeInsets.only(bottom: 6),
                 child: Text(
-                  'DAY ${event['game_day']}  ·  ${event['title']}',
+                  'DAY ${event['game_day'] ?? '—'}  ·  ${event['title'] ?? event['type'] ?? 'Historical Event'}',
                   style: const TextStyle(fontSize: 11),
                 ),
               );
@@ -565,6 +661,7 @@ class PantheonPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final deceased = (pantheon['deceasedPantheon'] as List<dynamic>?) ?? const [];
     final living = (pantheon['livingLeaders'] as List<dynamic>?) ?? const [];
+    final achievements = (pantheon['achievements'] as List<dynamic>?) ?? const [];
     return EarthPanel(
       title: 'PANTHEON / ACHIEVEMENTS',
       child: Column(
@@ -575,7 +672,7 @@ class PantheonPanel extends StatelessWidget {
             style: TextStyle(color: mutedColor, fontSize: 10),
           ),
           const SizedBox(height: 10),
-          if (deceased.isEmpty && living.isEmpty)
+          if (deceased.isEmpty && living.isEmpty && achievements.isEmpty)
             const Text('No recorded achievements yet.'),
           if (deceased.isNotEmpty) ...[
             const Text('DECEASED PANTHEON',
@@ -596,6 +693,18 @@ class PantheonPanel extends StatelessWidget {
               final entry = raw as Map<String, dynamic>;
               return Text(
                 '${entry['display_name']}  ·  score ${entry['composite_legacy_score'] ?? 0}',
+                style: const TextStyle(fontSize: 11),
+              );
+            }),
+          ],
+          if (achievements.isNotEmpty) ...[
+            const SizedBox(height: 8),
+            const Text('ACHIEVEMENTS UNLOCKED',
+                style: TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1)),
+            ...achievements.take(3).map((raw) {
+              final entry = raw as Map<String, dynamic>;
+              return Text(
+                '${entry['name']}  ·  ${entry['description'] ?? 'Completed'}',
                 style: const TextStyle(fontSize: 11),
               );
             }),

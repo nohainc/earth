@@ -28,6 +28,7 @@ class ProposalPanel extends StatelessWidget {
             'title': 'No open proposal is currently available.',
             'status': 'waiting',
             'outcome': 'pending',
+            'execution_status': 'pending',
             'votes': <String, dynamic>{'support': 0, 'oppose': 0, 'uncast': 0},
           }
         : Map<String, dynamic>.from(proposals.first as Map);
@@ -36,7 +37,11 @@ class ProposalPanel extends StatelessWidget {
     final hasProposal = proposal['id'].toString().isNotEmpty;
     final proposalId = proposal['id'].toString();
     final isPassed = proposal['outcome'] == 'passed';
-    final isChallenged = proposal['execution_status'] == 'challenged';
+    final executionStatus = (proposal['execution_status']?.toString() ?? 'pending').toLowerCase();
+    final isChallenged = executionStatus == 'challenged';
+    final isVoided = executionStatus == 'voided' || proposal['outcome'] == 'voided';
+    final isExecuted = executionStatus == 'executed';
+
     final hasJudicialAuthority = state.roles.any((raw) {
       final role = raw as Map<String, dynamic>;
       final holder = role['human_id']?.toString();
@@ -47,65 +52,101 @@ class ProposalPanel extends StatelessWidget {
               name.contains('jurist'));
     });
 
+    Color statusColor = cyanAccentColor;
+    if (isChallenged) statusColor = Colors.orangeAccent;
+    if (isVoided) statusColor = Colors.redAccent;
+    if (isExecuted) statusColor = Colors.greenAccent;
+
     return EarthPanel(
-      title: 'UC PROPOSAL ${proposal['id']}',
+      title: 'UC PROPOSAL ${hasProposal ? proposal['id'] : ''}',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(proposal['title']),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Expanded(
+                child: Text(
+                  proposal['title']?.toString() ?? '',
+                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+                ),
+              ),
+              if (hasProposal) ...[
+                const SizedBox(width: 8),
+                Text(
+                  executionStatus.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    color: statusColor,
+                  ),
+                ),
+              ],
+            ],
+          ),
+          const SizedBox(height: 2),
           Text(
-            '${proposal['status']} · ${proposal['outcome'] ?? 'pending'}',
+            'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
             style: const TextStyle(color: mutedColor, fontSize: 11),
           ),
           Text(
             'Quorum ${(((proposal['quorum'] as num?)?.toDouble() ?? .25) * 100).round()}% · approval ${(((proposal['approval_threshold'] as num?)?.toDouble() ?? .5) * 100).round()}%',
             style: const TextStyle(color: mutedColor, fontSize: 11),
           ),
-          if (proposal['deadline'] is Map)
+          if (proposal['deadline'] is Map) ...[
+            const SizedBox(height: 2),
             Text(
               formatProposalDeadline(
                   proposal['deadline'] as Map<String, dynamic>),
               style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
             ),
-          const SizedBox(height: 8),
+          ],
           Text(
-              'Support ${votes['support']}  ·  Oppose ${votes['oppose']}  ·  Uncast ${votes['uncast']}'),
+            'Support ${votes['support']}  ·  Oppose ${votes['oppose']}  ·  Uncast ${votes['uncast']}',
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+          ),
           const SizedBox(height: 12),
           Wrap(
             spacing: 8,
-            children: ['support', 'oppose', 'abstain']
-                .map((choice) => OutlinedButton(
-                    onPressed: busy || !hasProposal
-                        ? null
-                        : () => action(() => const EarthApi()
-                            .vote(proposal['id'] as String, choice)),
-                    child: Text(choice)))
-                .toList(),
+            runSpacing: 6,
+            children: [
+              for (final choice in ['support', 'oppose', 'abstain'])
+                OutlinedButton(
+                  onPressed: busy || !hasProposal || isExecuted || isVoided
+                      ? null
+                      : () => action(() => const EarthApi()
+                          .vote(proposal['id'] as String, choice)),
+                  child: Text(choice),
+                ),
+              OutlinedButton(
+                onPressed:
+                    busy ? null : () => showProposalComposer(context, action),
+                child: const Text('CREATE PROPOSAL'),
+              ),
+              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
+                FilledButton(
+                  onPressed: busy
+                      ? null
+                      : () => action(() => const EarthApi()
+                          .executeProposal(proposalId)),
+                  child: const Text('EXECUTE PROPOSAL'),
+                ),
+              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
+                OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => showChallengeDialog(context, action, proposalId),
+                  child: const Text('CHALLENGE PROPOSAL'),
+                ),
+              if (hasProposal && isChallenged && hasJudicialAuthority)
+                OutlinedButton(
+                  onPressed: busy
+                      ? null
+                      : () => showAppealRulingDialog(context, action, proposalId),
+                  child: const Text('ISSUE RULING'),
+                ),
+            ],
           ),
-          const SizedBox(height: 10),
-          OutlinedButton(
-            onPressed:
-                busy ? null : () => showProposalComposer(context, action),
-            child: const Text('CREATE PROPOSAL'),
-          ),
-          if (hasProposal && isPassed && !isChallenged) ...[
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => showChallengeDialog(context, action, proposalId),
-              child: const Text('FILE CONSTITUTIONAL CHALLENGE'),
-            ),
-          ],
-          if (hasProposal && isChallenged && hasJudicialAuthority) ...[
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => showAppealRulingDialog(context, action, proposalId),
-              child: const Text('ISSUE HIGH COURT RULING'),
-            ),
-          ],
         ],
       ),
     );
@@ -127,7 +168,7 @@ class RolesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return EarthPanel(
-      title: 'AUTHORITY / ACTIVE TERMS',
+      title: 'AUTHORITY / ACTIVE TERMS & DELEGATION',
       child: state.roles.isEmpty
           ? const Text('No institutional terms are active yet.',
               style: TextStyle(color: mutedColor, fontSize: 11))
@@ -137,52 +178,76 @@ class RolesPanel extends StatelessWidget {
                 final role = raw as Map<String, dynamic>;
                 final holder = role['human_id'] as String?;
                 final isMine = holder == state.human['id'];
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: Row(
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withAlpha(6),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Text(
-                          '${role['name']}  ·  ${holder ?? 'OPEN'}  ·  until day ${role['ends_game_day'] ?? '—'}',
-                          style: const TextStyle(fontSize: 11),
-                        ),
+                      Text(
+                        '${role['name']} · Holder: ${holder ?? 'OPEN'} · Until day ${role['ends_game_day'] ?? '—'}',
+                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
                       ),
-                      if (isMine)
-                        Wrap(
-                          spacing: 6,
-                          children: [
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          if (isMine) ...[
                             OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              ),
                               onPressed: busy
                                   ? null
                                   : () => action(() => const EarthApi()
                                       .resignRole(role['id'] as String)),
-                              child: const Text('RESIGN'),
+                              child: const Text('RESIGN', style: TextStyle(fontSize: 10)),
                             ),
                             OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              ),
                               onPressed: busy
                                   ? null
                                   : () => showDelegateDialog(
                                       context, action, role['id'] as String),
-                              child: const Text('DELEGATE'),
+                              child: const Text('DELEGATE', style: TextStyle(fontSize: 10)),
+                            ),
+                          ] else if (holder == null) ...[
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              ),
+                              onPressed: busy
+                                  ? null
+                                  : () => action(() => const EarthApi()
+                                      .claimRole(role['id'] as String)),
+                              child: const Text('CLAIM', style: TextStyle(fontSize: 10)),
+                            ),
+                          ] else ...[
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                              ),
+                              onPressed: busy
+                                  ? null
+                                  : () => action(() => const EarthApi()
+                                      .recallRole(role['id'] as String)),
+                              child: const Text('RECALL', style: TextStyle(fontSize: 10)),
                             ),
                           ],
-                        )
-                      else if (holder == null)
-                        OutlinedButton(
-                          onPressed: busy
-                              ? null
-                              : () => action(() => const EarthApi()
-                                  .claimRole(role['id'] as String)),
-                          child: const Text('CLAIM'),
-                        ),
-                      if (!isMine && holder != null)
-                        OutlinedButton(
-                          onPressed: busy
-                              ? null
-                              : () => action(() => const EarthApi()
-                                  .recallRole(role['id'] as String)),
-                          child: const Text('RECALL'),
-                        ),
+                        ],
+                      ),
                     ],
                   ),
                 );

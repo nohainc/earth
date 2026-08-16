@@ -72,4 +72,92 @@ void main() {
     await tester.tap(find.text('BUY 1'));
     expect(executedAction, 'called');
   });
+
+  testWidgets('MyMarketOrdersPanel renders complete lifecycle, reserved escrow, and allows cancellation',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 18420},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {'research': {}},
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {
+        'orders': [
+          {
+            'id': 'ORD-01',
+            'side': 'buy',
+            'product': 'components',
+            'quantity': 10,
+            'filled_quantity': 4,
+            'limit_price': 120.0,
+            'settlement_price': 118.0,
+            'status': 'partial',
+            'reserved_credits': 720.0,
+            'fee': 14.16,
+          },
+          {
+            'id': 'ORD-02',
+            'side': 'buy',
+            'product': 'material',
+            'quantity': 50,
+            'filled_quantity': 50,
+            'limit_price': 30.0,
+            'settlement_price': 28.5,
+            'status': 'filled',
+            'fee': 28.5,
+          },
+          {
+            'id': 'ORD-03',
+            'side': 'buy',
+            'product': 'energy',
+            'quantity': 100,
+            'filled_quantity': 0,
+            'limit_price': 0.85,
+            'status': 'cancelled',
+            'released_escrow': 85.0,
+          },
+        ],
+      },
+    });
+
+    String? cancelledOrderId;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: MyMarketOrdersPanel(
+              state: state,
+              busy: false,
+              action: (cb) async {
+                cancelledOrderId = 'ORD-01';
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('MY MARKET ORDERS / LIFECYCLE'), findsOneWidget);
+    expect(find.textContaining('BUY COMPONENTS · 10 units @ 120.00 C'), findsOneWidget);
+    expect(find.text('PARTIAL'), findsOneWidget);
+    expect(find.textContaining('Filled: 4 / 10 (6 remaining)'), findsOneWidget);
+    expect(find.textContaining('Settlement price: 118.00 C'), findsOneWidget);
+    expect(find.textContaining('Reserved Credits in escrow: 720.00 C'), findsOneWidget);
+
+    expect(find.text('FILLED'), findsOneWidget);
+    expect(find.text('CANCELLED'), findsOneWidget);
+    expect(find.textContaining('Released escrow refund: 85.00 C'), findsOneWidget);
+
+    // Cancel order button appears only for the open/partial order
+    expect(find.text('CANCEL ORDER'), findsOneWidget);
+    await tester.tap(find.text('CANCEL ORDER'));
+    await tester.pumpAndSettle();
+
+    expect(cancelledOrderId, 'ORD-01');
+  });
 }

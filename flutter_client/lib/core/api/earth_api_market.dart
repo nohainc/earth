@@ -34,8 +34,4 @@ extension EarthApiMarket on EarthApi {
             '/api/market/history?product=$encodedProduct&days=$days'))
         as Map<String, dynamic>;
   }
-
-  Future<Map<String, dynamic>> pantheon() async =>
-      (await _request('/api/pantheon')) as Map<String, dynamic>;
-
 }

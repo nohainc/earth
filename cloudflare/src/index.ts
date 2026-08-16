@@ -28,6 +28,8 @@ import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
 export class MarketCoordinator extends DurableObject<Env> {
+  private sseControllers: Set<ReadableStreamDefaultController<Uint8Array>> = new Set();
+
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     ctx.blockConcurrencyWhile(async () => {
@@ -49,17 +51,55 @@ export class MarketCoordinator extends DurableObject<Env> {
     for (const socket of this.ctx.getWebSockets()) {
       try { socket.send(message); } catch { socket.close(1011, 'Live channel unavailable'); }
     }
+    const encoder = new TextEncoder();
+    const sseChunk = encoder.encode(`data: ${message}\n\n`);
+    for (const controller of this.sseControllers) {
+      try {
+        controller.enqueue(sseChunk);
+      } catch {
+        this.sseControllers.delete(controller);
+      }
+    }
   }
 
   async fetch(request: Request): Promise<Response> {
-    if (request.headers.get('Upgrade')?.toLowerCase() !== 'websocket') {
-      return new Response('WebSocket upgrade required', { status: 426 });
+    const isWebSocket = request.headers.get('Upgrade')?.toLowerCase() === 'websocket';
+    const acceptsSSE = request.headers.get('Accept')?.includes('text/event-stream') || new URL(request.url).searchParams.get('format') === 'sse';
+
+    if (isWebSocket) {
+      const pair = new WebSocketPair();
+      const [client, server] = Object.values(pair);
+      this.ctx.acceptWebSocket(server);
+      server.send(JSON.stringify({ type: 'ready', channel: 'earth-world', coordinator: 'market' }));
+      return new Response(null, { status: 101, webSocket: client });
     }
-    const pair = new WebSocketPair();
-    const [client, server] = Object.values(pair);
-    this.ctx.acceptWebSocket(server);
-    server.send(JSON.stringify({ type: 'ready', channel: 'earth-world', coordinator: 'market' }));
-    return new Response(null, { status: 101, webSocket: client });
+
+    if (acceptsSSE || request.method === 'GET') {
+      const encoder = new TextEncoder();
+      let streamController: ReadableStreamDefaultController<Uint8Array>;
+      const stream = new ReadableStream<Uint8Array>({
+        start: (controller) => {
+          streamController = controller;
+          this.sseControllers.add(controller);
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ type: 'ready', channel: 'earth-world', coordinator: 'market' })}\n\n`));
+        },
+        cancel: () => {
+          if (streamController) this.sseControllers.delete(streamController);
+        },
+      });
+
+      return new Response(stream, {
+        status: 200,
+        headers: {
+          'Content-Type': 'text/event-stream; charset=utf-8',
+          'Cache-Control': 'no-cache, no-transform',
+          'Connection': 'keep-alive',
+          'Access-Control-Allow-Origin': '*',
+        },
+      });
+    }
+
+    return new Response('WebSocket upgrade or SSE request required', { status: 426 });
   }
 
   async webSocketMessage(socket: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -1471,7 +1511,16 @@ const worker = {
       await resolveProposalsPostgres(repository);
       const world = await advanceWorldPostgres(repository, 5, String(_event.scheduledTime));
       await repository.query('UPDATE world_state SET last_scheduler_at = to_timestamp($1 / 1000.0) WHERE id = \'WORLD\'', [_event.scheduledTime]);
-      const outboxDelivered = await deliverOutbox(repository, (outboxEvent) => env.MARKET_COORDINATOR.getByName('events-global').broadcast(outboxEvent.payload));
+      const outboxDelivered = await deliverOutbox(repository, (outboxEvent) =>
+        env.MARKET_COORDINATOR.getByName('events-global').broadcast({
+          ...outboxEvent.payload,
+          id: outboxEvent.id,
+          eventKey: outboxEvent.event_key,
+          topic: outboxEvent.topic,
+          aggregateType: outboxEvent.aggregate_type,
+          aggregateId: outboxEvent.aggregate_id,
+        }),
+      );
       return { ...world, outboxDelivered };
     });
     if (!result) throw new Error('PostgreSQL repository is unavailable for scheduled world advancement');
@@ -1515,6 +1564,25 @@ export default {
         : url.pathname.startsWith('/app/')
           ? await env.ASSETS.fetch(new Request(new URL(`${url.pathname.slice(4)}?v=${WEB_ASSET_VERSION}`, request.url), request))
           : await env.ASSETS.fetch(request);
+      if ((request.method === 'POST' || request.method === 'DELETE') && response.status < 400 && url.pathname.startsWith('/api/')) {
+        const deliverPromise = withRepository(env, (repository) =>
+          deliverOutbox(repository, (outboxEvent) =>
+            env.MARKET_COORDINATOR.getByName('events-global').broadcast({
+              ...outboxEvent.payload,
+              id: outboxEvent.id,
+              eventKey: outboxEvent.event_key,
+              topic: outboxEvent.topic,
+              aggregateType: outboxEvent.aggregate_type,
+              aggregateId: outboxEvent.aggregate_id,
+            }),
+          ),
+        ).catch((err) => {
+          console.error(JSON.stringify({ event: 'outbox_dispatch_error', error: err instanceof Error ? err.message : String(err) }));
+        });
+        if (ctx && typeof ctx.waitUntil === 'function') {
+          ctx.waitUntil(deliverPromise);
+        }
+      }
     } catch (error) {
       console.error(JSON.stringify({ event: 'worker_request_failed', requestId, path: url.pathname, method: request.method, error: error instanceof Error ? error.message : 'unknown' }));
       const malformedJson = error instanceof SyntaxError && /json|unexpected end|unexpected token/i.test(error.message);

@@ -1,0 +1,141 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "EARTH — United Corporations API",
+    "version": "2026-08",
+    "description": "Versioned REST & Live Event API Contract for the EARTH simulation and economic platform."
+  },
+  "servers": [
+    {
+      "url": "https://earth.nohainc.com",
+      "description": "Production Edge Worker"
+    },
+    {
+      "url": "http://127.0.0.1:8787",
+      "description": "Local Simulator"
+    }
+  ],
+  "paths": {
+    "/api/health": {
+      "get": {
+        "summary": "Health and operational readiness status",
+        "responses": {
+          "200": { "description": "System operational" },
+          "503": { "description": "Service unavailable" }
+        }
+      }
+    },
+    "/api/world": {
+      "get": {
+        "summary": "Full command-center world snapshot",
+        "responses": {
+          "200": { "description": "Snapshot payload" }
+        }
+      }
+    },
+    "/api/market/orders": {
+      "post": {
+        "summary": "Place a buy or sell limit market order",
+        "parameters": [
+          { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["product", "quantity", "limitPrice"],
+                "properties": {
+                  "product": { "type": "string" },
+                  "quantity": { "type": "number", "minimum": 0.000001 },
+                  "limitPrice": { "type": "number", "minimum": 0.01 },
+                  "side": { "type": "string", "enum": ["buy", "sell"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Order accepted and processed" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Authentication required" }
+        }
+      }
+    },
+    "/api/governance/proposals/{id}/vote": {
+      "post": {
+        "summary": "Cast a canonical weighted vote on a proposal",
+        "parameters": [
+          { "name": "id", "in": "path", "required": true, "schema": { "type": "string" } },
+          { "name": "Idempotency-Key", "in": "header", "required": true, "schema": { "type": "string" } }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["vote"],
+                "properties": {
+                  "vote": { "type": "string", "enum": ["support", "oppose", "abstain"] }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Vote recorded" },
+          "400": { "description": "Proposal closed or invalid choice" },
+          "401": { "description": "Authentication required" }
+        }
+      }
+    },
+    "/api/history": {
+      "get": {
+        "summary": "Immutable append-only world and audit history",
+        "parameters": [
+          { "name": "limit", "in": "query", "schema": { "type": "integer", "default": 20, "maximum": 50 } },
+          { "name": "cursor", "in": "query", "schema": { "type": "string" } }
+        ],
+        "responses": {
+          "200": { "description": "History events, rankings, and deceased pantheon" }
+        }
+      }
+    },
+    "/api/events": {
+      "get": {
+        "summary": "Server-Sent Events (SSE) live outbox event delivery stream",
+        "responses": {
+          "200": { "description": "text/event-stream" }
+        }
+      }
+    }
+  },
+  "components": {
+    "schemas": {
+      "ErrorEnvelope": {
+        "type": "object",
+        "required": ["ok", "error", "code", "correlationId"],
+        "properties": {
+          "ok": { "type": "boolean", "const": false },
+          "error": { "type": "string" },
+          "code": {
+            "type": "string",
+            "enum": [
+              "VALIDATION_ERROR",
+              "AUTHENTICATION_REQUIRED",
+              "FORBIDDEN",
+              "NOT_FOUND",
+              "CONFLICT",
+              "RATE_LIMITED",
+              "INTERNAL_ERROR",
+              "SERVICE_UNAVAILABLE"
+            ]
+          },
+          "correlationId": { "type": "string" }
+        }
+      }
+    }
+  }
+}
