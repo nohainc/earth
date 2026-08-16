@@ -44,4 +44,6 @@ jobs:
         run: npx wrangler deploy --config wrangler.app.jsonc
       - name: Verify app route
         working-directory: .
-        run: node -e "fetch('https://earthuc.com/app').then(async r=>{if(!r.ok)throw Error('app returned '+r.status); console.log('Flutter app route:',r.status,r.headers.get('content-type'))})"
+        env:
+          DEPLOY_URL: https://earthuc.com
+        run: node -e "const url=process.env.DEPLOY_URL+'/app'; fetch(url).then(async r=>{if(!r.ok)throw Error('app returned '+r.status+' from '+url); console.log('Flutter app route:',r.status,r.headers.get('content-type'))})"
