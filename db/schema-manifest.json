@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 15,
+  "migrationVersion": 17,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -63,7 +63,7 @@
     "technologies": ["id", "name", "progress", "version"],
     "technology_licenses": ["id", "patent_id", "licensor_id", "licensee_id"],
     "world_events": ["id", "game_day", "event_type"],
-    "world_state": ["id", "game_day", "health", "essential_services_index"]
+    "world_state": ["id", "game_day", "health", "essential_services_index", "last_scheduler_at"]
   },
   "requiredUniqueConstraints": [
     ["humans", "account_id"],
