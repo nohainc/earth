@@ -47,6 +47,12 @@ DATABASE_URL="$DATABASE_URL" npm run db:verify:manifest
 npm run cf:smoke
 ```
 
+Local databases also need the canonical starter world after migrations:
+
+```bash
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:seed:postgres
+```
+
 The release is blocked if PostgreSQL connectivity, schema/data readiness, or
 the stable API error contract fails.
 

@@ -38,6 +38,15 @@ psql -d earth -f db/seed.sql
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
 ```
 
+For an existing local database, apply the migrations and load the canonical
+starter world explicitly:
+
+```bash
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:seed:postgres
+DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:verify:manifest
+```
+
 The Flutter client in `flutter_client/` is the production web application. It reads canonical state from the Cloudflare Worker API backed by PlanetScale PostgreSQL through Hyperdrive. The public landing page is served at `/landing`; the authenticated application is served at `/app`.
 
 To run Flutter against the deployed Worker and PostgreSQL-backed API:

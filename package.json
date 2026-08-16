@@ -17,6 +17,7 @@
     "flutter:prepare:web": "node scripts/prepare-flutter-assets.mjs",
     "cf:types": "wrangler types",
     "db:migrate:postgres": "node scripts/migrate-postgres.mjs",
+    "db:seed:postgres": "node scripts/seed-postgres.mjs",
     "db:verify:manifest": "node scripts/verify-schema-manifest.mjs",
     "db:verify:invariants": "node scripts/verify-postgres-invariants.mjs",
     "test:postgres": "node --test test/postgres-integration.test.mjs",
