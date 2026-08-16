@@ -159,3 +159,14 @@ export async function readBusinessProfile(repository: PostgresRepository, busine
     access: { viewerId, isOwner: access.rows[0].owner_id === viewerId, isManager: access.rows[0].manager_id === viewerId },
   };
 }
+
+export async function listPantheonOfAchievements(repository: PostgresRepository): Promise<Record<string, unknown>> {
+  const [deceased, active] = await Promise.all([
+    repository.query('SELECT * FROM deceased_profiles ORDER BY final_legacy DESC, final_standing DESC LIMIT 20'),
+    repository.query("SELECT id, display_name, age_years, standing, legacy, (standing * 10 + legacy * 50 + age_years * 2) AS composite_legacy_score FROM humans WHERE life_status = 'active' ORDER BY legacy DESC, standing DESC LIMIT 20"),
+  ]);
+  return {
+    deceasedPantheon: deceased.rows,
+    livingLeaders: active.rows,
+  };
+}

@@ -1,6 +1,6 @@
-import type { PostgresRepository } from './repository';
-import { transferCredits } from './financial-postgres';
-import { centsToMoney, moneyToCents } from './money';
+import type { PostgresRepository } from './repository.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { centsToMoney, moneyToCents } from './money.ts';
 
 export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; budget: number; focus: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {

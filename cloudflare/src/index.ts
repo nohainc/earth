@@ -9,7 +9,7 @@ import { appointManager as appointManagerPostgres, createBusiness as createBusin
 import { acquireMachine as acquireMachinePostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
 import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
-import { castVote as castVotePostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
+import { castVote as castVotePostgres, challengeProposal as challengeProposalPostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveConstitutionalAppeal as resolveConstitutionalAppealPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
@@ -17,7 +17,7 @@ import { changeDelegation as changeDelegationPostgres, changeRole as changeRoleP
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
-import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
+import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
@@ -1038,6 +1038,54 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Proposal execution failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
+    }
+    const challengeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/challenge$/);
+    if (challengeProposalMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ reason?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const reason = body.reason?.trim() ?? 'Constitutional appeal filed during delay window';
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => challengeProposalPostgres(repository, { humanId: viewer.id, proposalId: challengeProposalMatch[1], reason, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Constitutional challenge failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
+    }
+    const appealRulingMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/appeal-ruling$/);
+    if (appealRulingMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ ruling?: string; rationale?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const ruling = body.ruling === 'void' ? 'void' : 'uphold';
+      const rationale = body.rationale?.trim() ?? 'High Court appeal determination';
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => resolveConstitutionalAppealPostgres(repository, { humanId: viewer.id, proposalId: appealRulingMatch[1], ruling, rationale, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Appeal resolution failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
+    }
+    if (url.pathname === '/api/pantheon' && request.method === 'GET') {
+      try {
+        const result = await withRepository(env, (repository) => listPantheonOfAchievementsPostgres(repository));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Pantheon fetch failed' }, { status: 500 });
       }
     }
     if (url.pathname === '/api/businesses' && request.method === 'POST') {

@@ -1,10 +1,10 @@
-import type { PostgresRepository } from './repository';
-import { settleMarket } from './market-postgres';
-import { processMortality } from './lifecycle-postgres';
-import { transferCredits } from './financial-postgres';
-import { classifyBusinessFinancialStatus } from './business-finance';
-import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money';
-import { validateWorldAdvanceMinutes } from './scheduler-rules';
+import type { PostgresRepository } from './repository.ts';
+import { settleMarket } from './market-postgres.ts';
+import { processMortality } from './lifecycle-postgres.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { classifyBusinessFinancialStatus } from './business-finance.ts';
+import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
+import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 
 const products = ['material', 'components', 'energy', 'compute'];
 
@@ -185,6 +185,21 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
   }
 }
 
+async function processPatentExpirations(tx: PostgresRepository, day: number): Promise<void> {
+  const expiredPatents = await tx.query<{ id: string; technology_id: string }>("SELECT id, technology_id FROM patents WHERE expiry_game_day <= $1 AND status = 'active'", [day]);
+  if (expiredPatents.rows.length > 0) {
+    await tx.query("UPDATE patents SET status = 'expired' WHERE expiry_game_day <= $1 AND status = 'active'", [day]);
+    await tx.query("UPDATE technology_licenses SET status = 'expired' WHERE patent_id = ANY($1::text[]) AND status = 'active'", [expiredPatents.rows.map((p) => p.id)]);
+    for (const patent of expiredPatents.rows) {
+      await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'patent.expired','Patent entered public domain',$3) ON CONFLICT (id) DO NOTHING", [`PATENT-EXPIRED-${patent.id}`, day, JSON.stringify({ patentId: patent.id, technologyId: patent.technology_id })]);
+    }
+  }
+}
+
+async function ensureMarketLiquidity(tx: PostgresRepository, day: number): Promise<void> {
+  await tx.query("UPDATE market_prices SET supply = GREATEST(supply, 10), demand = GREATEST(demand, 10), game_day = $1 WHERE supply <= 1 OR demand <= 1", [day]);
+}
+
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
   const machines = await tx.query<{ id: string; owner_id: string; business_id: string | null; productive_capacity: string; utilization: string; condition: string; output_resource: string; input_resource: string; input_per_output: string; focus: string }>("SELECT machines.id, machines.owner_id, business_assets.business_id, machines.productive_capacity, machines.utilization, machines.condition, machines.output_resource, machines.input_resource, machines.input_per_output, COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC, started_game_day DESC LIMIT 1), 'efficiency') AS focus FROM machines LEFT JOIN business_assets ON business_assets.machine_id = machines.id WHERE machines.condition > 0 AND machines.utilization > 0");
   let events = 0;
@@ -249,10 +264,12 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
       await processCityDynamics(tx, day);
+      await processPatentExpirations(tx, day);
       await updateFinancialStates(tx, day);
       await dissolveInstitutions(tx, day);
       await snapshotRankings(tx, day);
     }
+    await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
     await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM machines) * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'world_clock','A new game tick begins',$3) ON CONFLICT (id) DO NOTHING", [`CLOCK-${day}-${minute}`, day, JSON.stringify({ newDay })]);
