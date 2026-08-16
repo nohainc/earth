@@ -6,7 +6,7 @@ import {
   derivePassword,
   digest,
   SESSION_DAYS,
-} from './auth-crypto';
+} from './auth-crypto.ts';
 
 export async function registerIdentity(repository: PostgresRepository, input: { email: string; displayName: string; password: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -30,9 +30,14 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO auth_credentials (human_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5)', [humanId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,$3,'CREDIT')", [accountId, humanId, starter.credits]);
     for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
+    await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, `${input.displayName} Works`]);
     await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, humanId, `${input.displayName} Works`]);
     await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
     await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,100)', [businessId, humanId]);
+    await tx.query('INSERT INTO business_constitutions (business_id, updated_by, updated_game_day) VALUES ($1,$2,$3)', [businessId, humanId, worldDay]);
+    await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, humanId, worldDay]);
+    await tx.query("INSERT INTO financial_states (institution_id, institution_kind, status, since_game_day, last_reason) VALUES ($1, 'BUSINESS', 'active', $2, 'starter-package')", [businessId, worldDay]);
+    await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
     await tx.query('INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,$2,$3,0)', [technologyId, `${input.displayName} Adaptive System`, humanId]);
     await tx.query("INSERT INTO machines (id,owner_id,name,machine_type,condition,utilization,maintenance_due,productive_capacity) VALUES ($1,$2,$3,'service-robot',100,25,0,1)", [machineId, humanId, `${input.displayName} Service Unit`]);
     await tx.query("INSERT INTO business_assets (business_id,machine_id,assigned_game_day,assigned_by) VALUES ($1,$2,$3,'starter-package')", [businessId, machineId, worldDay]);
