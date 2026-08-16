@@ -10,6 +10,6 @@
     "not_found_handling": "404-page"
   },
   "routes": [
-    { "pattern": "earthuc.com/*", "zone_name": "earthuc.com" }
+    { "pattern": "earthuc.com", "custom_domain": true }
   ]
 }
