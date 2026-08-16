@@ -1,18 +1,14 @@
-import 'dart:convert';
 import 'dart:async';
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'earth_http_client.dart';
 import 'core/models/earth_state.dart';
+import 'core/api/earth_api_transport.dart';
 
 const _violet = Color(0xff8b7cf6);
 const _ink = Color(0xfff1f0ff);
 const _canvas = Color(0xff111327);
 const _surface = Color(0xff1b1e38);
 const _muted = Color(0xff9698b5);
-const _apiVersion = '2026-08';
-final http.Client _earthHttpClient = createEarthHttpClient();
 
 void main() => runApp(const EarthApp());
 
@@ -59,44 +55,11 @@ class EarthApi {
       : baseUrl = baseUrl ??
             const String.fromEnvironment('EARTH_API_URL', defaultValue: '');
 
+  EarthApiTransport get _transport => EarthApiTransport(baseUrl: baseUrl);
+
   Future<dynamic> _request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {
-    final uri = Uri.parse('$baseUrl$path');
-    final headers = <String, String>{'content-type': 'application/json'};
-    final correlationId = body?['correlationId']?.toString().trim();
-    if (method == 'POST' && correlationId != null && correlationId.isNotEmpty) {
-      headers['Idempotency-Key'] = correlationId;
-    }
-    final response = method == 'POST'
-        ? await _earthHttpClient.post(uri,
-            headers: headers, body: jsonEncode(body ?? {}))
-        : method == 'DELETE'
-            ? await _earthHttpClient.delete(uri)
-            : await _earthHttpClient.get(uri);
-    final apiVersion = response.headers['x-earth-api-version'];
-    if (apiVersion != null && apiVersion != _apiVersion) {
-      throw Exception(
-          'Incompatible EARTH API version $apiVersion (expected $_apiVersion)');
-    }
-    dynamic decoded;
-    try {
-      decoded = jsonDecode(response.body);
-    } catch (_) {
-      throw EarthApiException(
-          'The server returned an unexpected response (HTTP ${response.statusCode})',
-          statusCode: response.statusCode);
-    }
-    if (response.statusCode >= 400) {
-      final requestId = response.headers['x-request-id'];
-      final payload = decoded is Map ? decoded : const <String, dynamic>{};
-      throw EarthApiException(
-        '${payload['error'] ?? 'Request failed'}',
-        code: '${payload['code'] ?? 'REQUEST_FAILED'}',
-        correlationId: '${payload['correlationId'] ?? requestId ?? ''}',
-        statusCode: response.statusCode,
-      );
-    }
-    return decoded;
+    return _transport.request(path, method: method, body: body);
   }
 
   Future<Map<String, dynamic>> session() async =>
