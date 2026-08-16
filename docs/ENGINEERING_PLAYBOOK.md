@@ -213,6 +213,8 @@ PostgreSQL transaction slices currently live in production:
   completion, financial-state transitions, and ranking snapshots.
 - starter-package onboarding with live market, production, governance, and
   Community opportunity signals in the authenticated command center.
+- indexed starter packages using the live living-cost and productive-economy
+  indices, with bounded reserves shown in the command center.
 
 The remaining entries are feature-completion slices, not persistence-authority
 promotion gates.

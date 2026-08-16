@@ -44,6 +44,7 @@ database.
 | Insolvency accounting | Implemented | Protected-minimum and asset-liquidation credits are source-backed atomic transfers rather than balance creation |
 | City budget accounts | Implemented | Migration 013 backfills BUDGET-* earmarks and budget increases/releases use atomic city-account transfers |
 | Landing page and Flutter `/app` shell | Implemented | Independent of persistence cutover |
+| Indexed Human starter package | Implemented | PostgreSQL world and market indices deterministically scale the initial Credit and resource reserve; bounds and calculation are unit-tested |
 
 ## Required migration gates
 

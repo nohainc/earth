@@ -1640,9 +1640,18 @@ class _Dashboard extends StatelessWidget {
       Card(
           child: Padding(
               padding: const EdgeInsets.all(20),
-              child: Text('RESOURCE RESERVES   $resourceText',
-                  style: const TextStyle(
-                      fontSize: 11, letterSpacing: .8, color: _muted)))),
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('RESOURCE RESERVES   $resourceText',
+                        style: const TextStyle(
+                            fontSize: 11, letterSpacing: .8, color: _muted)),
+                    const SizedBox(height: 8),
+                    Text(
+                        'STARTER ECONOMY   living-cost ${state.world['livingCostIndex'] ?? '—'}  ·  productive ${state.world['economicStartIndex'] ?? '—'}',
+                        style: const TextStyle(
+                            fontSize: 10, letterSpacing: .6, color: _muted)),
+                  ]))),
       const SizedBox(height: 14),
       _Panel(
           title: 'INSTITUTIONS / CAPACITY',

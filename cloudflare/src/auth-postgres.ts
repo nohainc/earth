@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { calculateStarterPackage, economicStartIndex } from './starter-package';
 
 const encoder = new TextEncoder();
 const SESSION_DAYS = 7;
@@ -25,8 +26,10 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
   return repository.transaction(async (tx) => {
     const existing = await tx.query('SELECT human_id FROM auth_credentials WHERE email = $1', [input.email]);
     if (existing.rows[0]) throw new Error('Email is already registered');
-    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const world = await tx.query<{ game_day: number; living_cost_index: string }>("SELECT game_day, living_cost_index FROM world_state WHERE id = 'WORLD'");
+    const referencePrice = await tx.query<{ reference_price: string }>("SELECT COALESCE(AVG(price), 50) AS reference_price FROM market_prices WHERE product IN ('components', 'energy')");
     const worldDay = Number(world.rows[0]?.game_day ?? 184);
+    const starter = calculateStarterPackage(world.rows[0]?.living_cost_index ?? 1, economicStartIndex(referencePrice.rows[0]?.reference_price ?? 50));
     const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const accountId = `account-${humanId.toLowerCase()}`;
     const businessId = `B-${humanId.slice(2)}`;
@@ -39,8 +42,8 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const passwordHash = await derivePassword(input.password, salt, iterations);
     await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,political_eligibility_game_day) VALUES ($1,$2,$3,31,0,0,$4)', [humanId, accountId, input.displayName, worldDay + 3]);
     await tx.query('INSERT INTO auth_credentials (human_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5)', [humanId, input.email, passwordHash, bytesToBase64(salt), iterations]);
-    await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,18420,'CREDIT')", [accountId, humanId]);
-    for (const [resource, amount] of [['material', 420], ['components', 86], ['energy', 92], ['compute', 64]] as const) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
+    await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,$3,'CREDIT')", [accountId, humanId, starter.credits]);
+    for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
     await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, humanId, `${input.displayName} Works`]);
     await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
     await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,100)', [businessId, humanId]);
@@ -50,7 +53,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query("INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,status,started_game_day) VALUES ($1,$2,$3,0,0,'active',$4)", [researchId, technologyId, humanId, worldDay]);
     await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
     await tx.query("INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,'BUSINESS',$2,NULL,$3,1,'starter_package',$3,$4),($5,'BUSINESS_SHARES',$2,NULL,$3,100,'starter_package',$3,$4),($6,'MACHINE',$7,NULL,$3,1,'starter_package',$3,$4)", [crypto.randomUUID(), businessId, humanId, worldDay, crypto.randomUUID(), crypto.randomUUID(), machineId]);
-    return { ok: true, human: { id: humanId, displayName: input.displayName, email: input.email } };
+    return { ok: true, human: { id: humanId, displayName: input.displayName, email: input.email }, starterPackage: starter };
   });
 }
 

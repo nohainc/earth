@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { projectGameDeadline } from './game-clock';
 import { rankOpportunities } from './opportunities';
+import { economicStartIndex } from './starter-package';
 
 type Row = Record<string, any>;
 
@@ -46,6 +47,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     return all;
   }, {});
   const products = Object.fromEntries((prices.rows as Row[]).map((row) => [row.product, { price: row.price, supply: row.supply, demand: row.demand }]));
+  const referencePrice = (prices.rows as Row[])
+    .filter((row) => row.product === 'components' || row.product === 'energy')
+    .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
+  const startIndex = economicStartIndex(referencePrice || 50);
   const feeRule = (await repository.query<{ value_json: unknown }>("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1")).rows[0]?.value_json;
   let feeRate = 0;
   try { const parsed = typeof feeRule === 'string' ? JSON.parse(feeRule) : feeRule; feeRate = typeof parsed?.feeRate === 'number' ? Math.min(0.05, Math.max(0, parsed.feeRate)) : 0; } catch { /* retain default */ }
@@ -106,7 +111,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   }));
   return {
     clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 60 },
-    world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
+    world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, economicStartIndex: startIndex, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
     human: { id: humanRow.id, name: humanRow.display_name, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
     life: { generation: 1, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
     membership: membership.rows[0] ?? null,
