@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "earth-world-static",
+  "name": "earth-static",
   "main": "cloudflare/src/static-assets.ts",
   "workers_dev": true,
   "compatibility_date": "2026-08-13",
