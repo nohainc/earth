@@ -4,6 +4,7 @@ const wrangler = await readFile(new URL('../wrangler.jsonc', import.meta.url), '
 const workerTypes = await readFile(new URL('../worker-configuration.d.ts', import.meta.url), 'utf8');
 const repository = await readFile(new URL('../cloudflare/src/repository.ts', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../cloudflare/src/index.ts', import.meta.url), 'utf8');
+const authSession = await readFile(new URL('../cloudflare/src/auth-session.ts', import.meta.url), 'utf8');
 const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
 
 if (/d1_databases|"DB"\s*:/.test(wrangler)) throw new Error('D1 bindings must not be configured for EARTH');
@@ -42,5 +43,5 @@ for (const [handler, route] of [
 }
 if (!wrangler.includes('"EMAIL_FROM": "earth@auth.earthuc.com"')) throw new Error('EARTH transactional sender must use the authenticated Cloudflare sending domain');
 if (!wrangler.includes('"EMAIL_REPLY_TO": "earth@nohainc.com"')) throw new Error('EARTH transactional reply-to must remain earth@nohainc.com');
-if (!worker.includes('from: { email: env.EMAIL_FROM')) throw new Error('EARTH transactional sender must be configuration-driven');
+if (!authSession.includes('from: { email: env.EMAIL_FROM')) throw new Error('EARTH transactional sender must be configuration-driven');
 console.log(JSON.stringify({ ok: true, authority: 'postgres', d1Binding: false, hyperdrive: true }));
