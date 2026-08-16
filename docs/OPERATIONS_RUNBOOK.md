@@ -30,7 +30,7 @@
    npm run cf:assert-postgres
    ```
 **Resolution**:
-1. If Hyperdrive pool is hung, rotate or refresh the Hyperdrive configuration ID in `wrangler.jsonc`.
+1. If Hyperdrive pool is hung, rotate or refresh the Hyperdrive configuration ID in `wrangler.api.jsonc`.
 2. If direct database failover occurred, update the database connection string secret in Hyperdrive.
 3. Validate restoration:
    ```bash

@@ -1,6 +1,6 @@
 import { readFile } from 'node:fs/promises';
 
-const wrangler = await readFile(new URL('../wrangler.jsonc', import.meta.url), 'utf8');
+const wrangler = await readFile(new URL('../wrangler.api.jsonc', import.meta.url), 'utf8');
 const workerTypes = await readFile(new URL('../worker-configuration.d.ts', import.meta.url), 'utf8');
 const repository = await readFile(new URL('../cloudflare/src/repository.ts', import.meta.url), 'utf8');
 const worker = await readFile(new URL('../cloudflare/src/index.ts', import.meta.url), 'utf8');

@@ -186,7 +186,7 @@ vertical slice when possible.
    push the branch.
 2. Deploy with `npx wrangler deploy --env production --keep-vars`.
 3. Confirm the custom domain `earthuc.com` is attached to
-   `earth-world-production`, not the legacy `earth-world` service.
+   `earth-world-api`, using the separated deployment workflow rather than the deleted legacy `earth-world` service.
 4. Run `npm run cf:smoke` and verify `/api/health` on `https://earthuc.com`.
 5. Test the changed user journey in the browser using the public URL. Record
    the Worker version ID and any migration version in the handoff.

@@ -42,7 +42,7 @@ export function runPreflightChecks(options = { dryRun: true }) {
 
   // 3. Verify Wrangler dry-run deployment
   try {
-    execSync('npx wrangler deploy --dry-run', { stdio: 'pipe' });
+    execSync('npx wrangler deploy --dry-run --config wrangler.api.jsonc', { stdio: 'pipe' });
     report.checks.wranglerDryRun = 'PASSED';
   } catch (err) {
     report.checks.wranglerDryRun = 'FAILED';

@@ -17,13 +17,13 @@ test('Configuration, Persistence Authority, and Secret Safety Validation', async
   assert.equal(authorityMode({ PERSISTENCE_AUTHORITY: 'postgres' }), 'postgres');
 
   // 2. Wrangler Configuration & Binding Validation
-  const wranglerRaw = await readFile(resolve('wrangler.jsonc'), 'utf8');
-  assert.ok(wranglerRaw.includes('HYPERDRIVE'), 'wrangler.jsonc must configure HYPERDRIVE binding');
-  assert.ok(wranglerRaw.includes('MARKET_COORDINATOR'), 'wrangler.jsonc must configure MARKET_COORDINATOR Durable Object');
-  assert.ok(wranglerRaw.includes('EMAIL'), 'wrangler.jsonc must configure EMAIL binding');
+  const wranglerRaw = await readFile(resolve('wrangler.api.jsonc'), 'utf8');
+  assert.ok(wranglerRaw.includes('HYPERDRIVE'), 'wrangler.api.jsonc must configure HYPERDRIVE binding');
+  assert.ok(wranglerRaw.includes('MARKET_COORDINATOR'), 'wrangler.api.jsonc must configure MARKET_COORDINATOR Durable Object');
+  assert.ok(wranglerRaw.includes('EMAIL'), 'wrangler.api.jsonc must configure EMAIL binding');
   assert.ok(wranglerRaw.includes('auth.earthuc.com'), 'Email domain must match approved sender');
 
-  // 3. Verify no secrets or credentials appear in wrangler.jsonc or public code
-  assert.equal(wranglerRaw.includes('postgres://'), false, 'wrangler.jsonc must never contain hardcoded database URIs');
-  assert.equal(wranglerRaw.includes('password='), false, 'wrangler.jsonc must never contain raw passwords');
+  // 3. Verify no secrets or credentials appear in the API config or public code
+  assert.equal(wranglerRaw.includes('postgres://'), false, 'wrangler.api.jsonc must never contain hardcoded database URIs');
+  assert.equal(wranglerRaw.includes('password='), false, 'wrangler.api.jsonc must never contain raw passwords');
 });
