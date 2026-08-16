@@ -829,6 +829,7 @@ class _AuthScreenState extends State<AuthScreen> {
   bool verificationPending = false;
   bool busy = false;
   String? error;
+  bool noticeIsSuccess = false;
 
   @override
   void initState() {
@@ -836,12 +837,14 @@ class _AuthScreenState extends State<AuthScreen> {
     resetToken = widget.initialResetToken;
     resetMode = resetToken != null && resetToken!.isNotEmpty;
     error = widget.initialMessage;
+    noticeIsSuccess = widget.initialMessage != null;
   }
 
   Future<void> submit() async {
     setState(() {
       busy = true;
       error = null;
+      noticeIsSuccess = false;
     });
     try {
       if (resetMode) {
@@ -861,6 +864,7 @@ class _AuthScreenState extends State<AuthScreen> {
             passwordConfirmation.clear();
             error = result['message']?.toString() ??
                 'Password reset. You can now sign in.';
+            noticeIsSuccess = true;
           });
         }
         return;
@@ -870,6 +874,7 @@ class _AuthScreenState extends State<AuthScreen> {
         if (mounted) {
           setState(() {
             error = 'If the identity exists, recovery instructions were sent.';
+            noticeIsSuccess = true;
             recoveryMode = false;
           });
         }
@@ -887,6 +892,7 @@ class _AuthScreenState extends State<AuthScreen> {
             verificationPending = true;
             error =
                 'Identity created. Check your email to verify it, then sign in.';
+            noticeIsSuccess = true;
           });
         }
       } else {
@@ -902,6 +908,7 @@ class _AuthScreenState extends State<AuthScreen> {
       if (mounted) {
         setState(() {
           error = message;
+          noticeIsSuccess = false;
           verificationPending =
               message.toLowerCase().contains('verify your email');
         });
@@ -915,17 +922,23 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() {
       busy = true;
       error = null;
+      noticeIsSuccess = false;
     });
     try {
       final result = await widget.api.resendVerification(email.text);
       if (mounted) {
-        setState(() => error = result['message']?.toString() ??
-            'If the identity exists, a new verification email was sent.');
+        setState(() {
+          error = result['message']?.toString() ??
+              'If the identity exists, a new verification email was sent.';
+          noticeIsSuccess = true;
+        });
       }
     } catch (exception) {
       if (mounted) {
-        setState(
-            () => error = exception.toString().replaceFirst('Exception: ', ''));
+        setState(() {
+          error = exception.toString().replaceFirst('Exception: ', '');
+          noticeIsSuccess = false;
+        });
       }
     } finally {
       if (mounted) setState(() => busy = false);
@@ -1016,7 +1029,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       if (error != null) ...[
                         const SizedBox(height: 12),
                         Text(error!,
-                            style: const TextStyle(color: Colors.redAccent))
+                            style: TextStyle(
+                                color: noticeIsSuccess
+                                    ? _cyanAccent
+                                    : Colors.redAccent))
                       ],
                       const SizedBox(height: 20),
                       FilledButton(
