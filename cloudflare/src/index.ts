@@ -97,11 +97,13 @@ async function issueActionToken(env: Env, humanId: string, action: 'verify_email
   if (!env.EMAIL || !env.EMAIL_FROM) {
     throw new Error('Transactional email is not configured');
   }
-  const path = action === 'verify_email' ? '/api/auth/verify-email' : '/api/auth/reset-password';
+  const path = action === 'verify_email'
+    ? `/app?verify_token=${encodeURIComponent(token)}`
+    : `/app?reset_token=${encodeURIComponent(token)}`;
   const subject = action === 'verify_email' ? 'Verify your EARTH identity' : 'Reset your EARTH password';
-  const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}?token=${encodeURIComponent(token)}\n\nThis link expires soon and can only be used once.`;
+  const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}\n\nThis link expires soon and can only be used once.`;
   try {
-    const delivery = await env.EMAIL.send({ to: email, from: { email: env.EMAIL_FROM, name: 'EARTH Identity' }, replyTo: env.EMAIL_REPLY_TO, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}?token=${encodeURIComponent(token)}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
+    const delivery = await env.EMAIL.send({ to: email, from: { email: env.EMAIL_FROM, name: 'EARTH Identity' }, replyTo: env.EMAIL_REPLY_TO, subject, text, html: `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>` });
     console.info(JSON.stringify({ event: 'transactional_email_accepted', action, messageId: delivery?.messageId ?? null }));
   } catch (error) {
     const details = error && typeof error === 'object' ? error as { code?: unknown; message?: unknown } : {};
