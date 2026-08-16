@@ -351,10 +351,6 @@ const worker = {
       const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
-    if (url.pathname === '/api/institutions' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
     if (url.pathname === '/api/governance/roles' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listRolesPostgres(repository));
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -469,39 +465,6 @@ const worker = {
         const message = error instanceof Error ? error.message : 'Community contribution failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /insufficient|member|active/i.test(message) ? 409 : 400 });
       }
-    }
-    if (url.pathname === '/api/rankings' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/history' && request.method === 'GET') {
-      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 25)));
-      const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/ownership/events' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-      const result = await withRepository(env, (repository) => listOwnershipEventsPostgres(repository, viewer.id, limit));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/membership/events' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-      const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-      const result = await withRepository(env, (repository) => listAuthorityEventsPostgres(repository, viewer.id, limit));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/cities' && request.method === 'GET') {
       const result = await withRepository(env, (repository) => listCitiesPostgres(repository));
