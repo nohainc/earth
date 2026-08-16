@@ -1,5 +1,14 @@
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
+export function resolveIdempotencyKey(request: Request,
+    bodyCorrelationId?: string): string | null {
+  const header = request.headers.get('Idempotency-Key')?.trim() || '';
+  const body = bodyCorrelationId?.trim() || '';
+  if (header && body && header !== body) return null;
+  const value = header || body || crypto.randomUUID();
+  return value.length > 160 ? null : value;
+}
+
 function validationResponse(request: Request, error: string, status: number): Response {
   return Response.json({
     ok: false,

@@ -1,6 +1,21 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { parseJsonBody } from '../cloudflare/src/request-validation.ts';
+import { parseJsonBody, resolveIdempotencyKey } from '../cloudflare/src/request-validation.ts';
+
+test('resolves Idempotency-Key and rejects conflicting legacy correlation IDs', () => {
+  const header = new Request('https://earth.test/api', {
+    headers: { 'Idempotency-Key': 'header-command-1' },
+  });
+  const matching = new Request('https://earth.test/api', {
+    headers: { 'Idempotency-Key': 'same-command' },
+  });
+  const conflicting = new Request('https://earth.test/api', {
+    headers: { 'Idempotency-Key': 'header-command-2' },
+  });
+  assert.equal(resolveIdempotencyKey(header), 'header-command-1');
+  assert.equal(resolveIdempotencyKey(matching, 'same-command'), 'same-command');
+  assert.equal(resolveIdempotencyKey(conflicting, 'body-command-2'), null);
+});
 
 test('parses JSON object bodies', async () => {
   const result = await parseJsonBody(new Request('https://earth.test/api', { method: 'POST', body: JSON.stringify({ amount: 12 }) }));

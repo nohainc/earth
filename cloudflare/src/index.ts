@@ -20,7 +20,7 @@ import { changeCommunityMembership as changeCommunityMembershipPostgres, contrib
 import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
-import { parseJsonBody } from './request-validation';
+import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 
 const SESSION_DAYS = 7;
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
@@ -678,8 +678,8 @@ const worker = {
       const name = body.name?.trim();
       const founderId = viewer.id;
       if (!name || name.length < 3 || name.length > 80) return Response.json({ ok: false, error: 'Community name must be 3–80 characters' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => createCommunityPostgres(repository, { founderId, name, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -940,8 +940,8 @@ const worker = {
       const type = body.machineType?.trim() ?? '';
       const spec = MACHINE_CATALOG[type];
       if (!spec) return Response.json({ ok: false, error: 'Unsupported machine type' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: 'energy', correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1249,8 +1249,8 @@ const worker = {
       const quantity = Number(body.quantity);
       const limitPrice = Number(body.limitPrice);
       if (!['material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => submitMarketOrderPostgres(repository, { humanId: viewer.id, product: product!, side, quantity, limitPrice, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1310,8 +1310,8 @@ const worker = {
       if (!title || title.length < 8 || title.length > 140) return Response.json({ ok: false, error: 'Proposal title must be 8–140 characters' }, { status: 400 });
       if (!proposalBody || proposalBody.length < 20 || proposalBody.length > 4000) return Response.json({ ok: false, error: 'Proposal body must be 20–4000 characters' }, { status: 400 });
       if (!Number.isInteger(durationHours) || durationHours < 24 || durationHours > 168) return Response.json({ ok: false, error: 'Decision window must be between 24 and 168 hours' }, { status: 400 });
-      const correlationId = body.correlationId?.trim() || crypto.randomUUID();
-      if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       const targetCategory = body.target?.category?.trim() || null;
       if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
       try {
