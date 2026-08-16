@@ -38,9 +38,12 @@ SQL, credentials, and stack traces never cross the API boundary.
 
 ## Serialization and Data Formats
 
-While external HTTP requests accept standard REST payloads, internal serialized strings, event details (`world_events.details`), negotiated contract terms (`terms_json`), governance rule values (`value_json`), and municipal tax charters (`charter_rules`) are canonically encoded using **Nano Markup** (`nanomarkup` by `nohainc`).
+EARTH natively supports the **Nano Markup** (`application/nanomarkup`) HTTP protocol:
+- **Request Bodies**: Clients send requests with `Content-Type: application/nanomarkup` containing canonical Nano Markup text mappings (`..\n    key value`).
+- **Response Bodies**: The Worker supports content negotiation; when requests include `Accept: application/nanomarkup` or `Content-Type: application/nanomarkup`, responses are returned with `Content-Type: application/nanomarkup; charset=utf-8` formatted as Nano Markup.
+- **Internal State & Events**: Event details (`world_events.details`), negotiated contract terms (`terms_json`), governance rule values (`value_json`), and municipal tax charters (`charter_rules`) are canonically encoded using **Nano Markup** (`nanomarkup` by `nohainc`).
 
-Nano Markup provides high-density, human-readable structured serialization using 4-space indentation without type coercion ambiguity. Clients utilize `NanoMarkupHelper` or `nanomarkup` package decoders with automatic JSON backwards-compatibility fallback.
+Clients utilize `NanoMarkupHelper` (Flutter) or the `nanomarkup` package (Node/TypeScript) with automatic fallback support for `application/json`.
 
 ## Authority and persistence
 

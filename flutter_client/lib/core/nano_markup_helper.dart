@@ -3,6 +3,20 @@ import 'package:nanomarkup/nanomarkup.dart' as nm;
 
 /// Utility for serializing and deserializing payloads using Nano Markup.
 class NanoMarkupHelper {
+  static dynamic _normalize(dynamic val) {
+    if (val is Map) {
+      final map = <String, dynamic>{};
+      for (final entry in val.entries) {
+        map[entry.key.toString()] = _normalize(entry.value);
+      }
+      return map;
+    }
+    if (val is List) {
+      return val.map((item) => _normalize(item)).toList();
+    }
+    return val;
+  }
+
   /// Encodes a Dart Map, List, or primitive to a Nano Markup formatted string.
   static String encode(dynamic data) {
     if (data == null) return 'null';
@@ -22,7 +36,8 @@ class NanoMarkupHelper {
     if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
         (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
       try {
-        return jsonDecode(trimmed);
+        final decoded = jsonDecode(trimmed);
+        return _normalize(decoded);
       } catch (_) {
         // Fall through to nanomarkup
       }
@@ -30,10 +45,11 @@ class NanoMarkupHelper {
 
     try {
       final result = nm.decode(trimmed);
-      return result;
+      return _normalize(result);
     } catch (_) {
       try {
-        return jsonDecode(trimmed);
+        final decoded = jsonDecode(trimmed);
+        return _normalize(decoded);
       } catch (_) {
         return trimmed;
       }

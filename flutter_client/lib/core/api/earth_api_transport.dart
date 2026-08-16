@@ -1,8 +1,7 @@
-import 'dart:convert';
-
 import 'package:http/http.dart' as http;
 
 import '../../earth_http_client.dart';
+import '../nano_markup_helper.dart';
 
 const _apiVersion = '2026-08';
 final http.Client _sharedClient = createEarthHttpClient();
@@ -23,25 +22,23 @@ class EarthApiTransport {
     final requestId =
         'flutter-${DateTime.now().microsecondsSinceEpoch}-${method.toLowerCase()}';
     final headers = <String, String>{
-      'content-type': 'application/json',
+      'content-type': 'application/nanomarkup',
+      'accept': 'application/nanomarkup, application/json',
       'X-Request-ID': requestId,
     };
     final correlationId = body?['correlationId']?.toString().trim();
     if (method == 'POST' || method == 'DELETE') {
-      // The compatibility API accepts body correlationId values, but the
-      // canonical command contract is the Idempotency-Key header. Every
-      // mutating request, including DELETE commands, must be distinguishable
-      // at the Worker boundary for safe retries.
       headers['Idempotency-Key'] =
           correlationId != null && correlationId.isNotEmpty
               ? correlationId
               : requestId;
     }
+    final encodedBody = NanoMarkupHelper.encode(body ?? {});
     final response = method == 'POST'
-        ? await client.post(uri, headers: headers, body: jsonEncode(body ?? {}))
+        ? await client.post(uri, headers: headers, body: encodedBody)
         : method == 'DELETE'
             ? await client.delete(uri, headers: headers)
-            : await client.get(uri);
+            : await client.get(uri, headers: headers);
     final apiVersion = response.headers['x-earth-api-version'];
     if (apiVersion != null && apiVersion != _apiVersion) {
       throw EarthApiException(
@@ -49,7 +46,7 @@ class EarthApiTransport {
     }
     dynamic decoded;
     try {
-      decoded = jsonDecode(response.body);
+      decoded = NanoMarkupHelper.decode(response.body);
     } catch (_) {
       throw EarthApiException(
           'The server returned an unexpected response (HTTP ${response.statusCode})',

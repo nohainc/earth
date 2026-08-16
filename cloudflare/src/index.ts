@@ -24,6 +24,7 @@ import { currentHuman, sensitiveActionAllowed } from './auth-session';
 import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
+import { toNanoMarkup } from './nano-markup.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -1598,28 +1599,50 @@ export default {
       headers.set('Vary', 'Origin');
     }
     headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID');
-    headers.set('Access-Control-Expose-Headers', 'X-Request-ID');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, Accept');
+    headers.set('Access-Control-Expose-Headers', 'X-Request-ID, X-EARTH-API-Version');
     headers.set('X-Request-ID', requestId);
     headers.set('X-EARTH-API-Version', '2026-08');
-    if (response.status >= 400 && response.headers.get('content-type')?.includes('application/json')) {
+
+    const acceptHeader = request.headers.get('Accept') ?? '';
+    const requestContentType = request.headers.get('Content-Type') ?? '';
+    const prefersNano = acceptHeader.includes('application/nanomarkup') ||
+      requestContentType.includes('application/nanomarkup');
+
+    const isJsonResponse = response.headers.get('content-type')?.includes('application/json') ||
+      response.headers.get('content-type')?.includes('application/nanomarkup');
+
+    if (isJsonResponse) {
       try {
-        const payload = await response.clone().json() as Record<string, unknown>;
+        let payload: Record<string, unknown> | null = null;
+        try {
+          payload = await response.clone().json() as Record<string, unknown>;
+        } catch {
+          // not json
+        }
         if (payload && typeof payload === 'object') {
-          const codeByStatus: Record<number, string> = {
-            400: 'VALIDATION_ERROR',
-            401: 'AUTHENTICATION_REQUIRED',
-            403: 'FORBIDDEN',
-            404: 'NOT_FOUND',
-            409: 'CONFLICT',
-            429: 'RATE_LIMITED',
-            500: 'INTERNAL_ERROR',
-            503: 'SERVICE_UNAVAILABLE',
-          };
-          if (typeof payload.code !== 'string' || !payload.code) payload.code = codeByStatus[response.status] ?? 'REQUEST_FAILED';
-          if (typeof payload.correlationId !== 'string' || !payload.correlationId) payload.correlationId = requestId;
-          headers.set('content-type', 'application/json');
-          return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
+          if (response.status >= 400) {
+            const codeByStatus: Record<number, string> = {
+              400: 'VALIDATION_ERROR',
+              401: 'AUTHENTICATION_REQUIRED',
+              403: 'FORBIDDEN',
+              404: 'NOT_FOUND',
+              409: 'CONFLICT',
+              429: 'RATE_LIMITED',
+              500: 'INTERNAL_ERROR',
+              503: 'SERVICE_UNAVAILABLE',
+            };
+            if (typeof payload.code !== 'string' || !payload.code) payload.code = codeByStatus[response.status] ?? 'REQUEST_FAILED';
+            if (typeof payload.correlationId !== 'string' || !payload.correlationId) payload.correlationId = requestId;
+          }
+
+          if (prefersNano) {
+            headers.set('content-type', 'application/nanomarkup; charset=utf-8');
+            return new Response(toNanoMarkup(payload), { status: response.status, statusText: response.statusText, headers });
+          } else {
+            headers.set('content-type', 'application/json');
+            return new Response(JSON.stringify(payload), { status: response.status, statusText: response.statusText, headers });
+          }
         }
       } catch {
         // Preserve non-JSON or malformed error responses unchanged.
@@ -1631,3 +1654,4 @@ export default {
     return worker.scheduled(event, env, ctx);
   },
 };
+

@@ -2,7 +2,41 @@ import { createServer } from 'node:http';
 import { randomUUID, pbkdf2Sync, randomBytes, createHash } from 'node:crypto';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, resolve } from 'node:path';
+import { parse as parseNano, stringify as stringifyNano } from 'nanomarkup';
 import { createDatabase } from './database.js';
+
+function toNanoTree(val) {
+  if (val === null || val === undefined) return 'null';
+  if (typeof val === 'number' || typeof val === 'boolean' || typeof val === 'bigint') return String(val);
+  if (typeof val === 'string') return val;
+  if (Array.isArray(val)) return val.map((item) => toNanoTree(item));
+  if (typeof val === 'object') {
+    const res = {};
+    for (const [k, v] of Object.entries(val)) res[k] = toNanoTree(v);
+    return res;
+  }
+  return String(val);
+}
+
+function toNano(val) {
+  try {
+    const tree = toNanoTree(val);
+    if (typeof tree === 'string') return tree;
+    return stringifyNano(tree);
+  } catch {
+    return JSON.stringify(val);
+  }
+}
+
+function fromNano(str) {
+  const text = (str || '').trim();
+  if (!text) return {};
+  try {
+    return parseNano(text);
+  } catch {
+    return JSON.parse(text);
+  }
+}
 
 // EARTH prototype server: commands mutate canonical state; clients only submit intent.
 const PORT = Number(process.env.PORT || 8787);
@@ -1199,21 +1233,32 @@ function audit() {
   return { ok: ordersValid && ledgerValid && balancesValid && ballotUniqueness, checks: { ordersValid, ledgerValid, balancesValid, ballotUniqueness }, inspected: { orders: state.market.orders.length, ledgerEntries: state.ledger.length, humans: Object.keys(state.humans).length, ballots: ballots.length }, gameDay: state.clock.day };
 }
 
-function send(res, status, data, extraHeaders = {}) {
+function send(res, status, data, extraHeaders = {}, req = null) {
+  const acceptHeader = req?.headers?.accept || '';
+  const requestContentType = req?.headers?.['content-type'] || '';
+  const prefersNano = acceptHeader.includes('application/nanomarkup') ||
+    requestContentType.includes('application/nanomarkup');
+
   const headers = {
-    'content-type': 'application/json',
+    'content-type': prefersNano ? 'application/nanomarkup; charset=utf-8' : 'application/json',
     'access-control-allow-origin': '*',
-    'access-control-allow-headers': 'content-type, authorization, idempotency-key, x-request-id',
+    'access-control-allow-headers': 'content-type, authorization, idempotency-key, x-request-id, accept',
     'access-control-allow-methods': 'GET, POST, DELETE, OPTIONS',
-    'access-control-expose-headers': 'x-request-id',
+    'access-control-expose-headers': 'x-request-id, x-earth-api-version',
     'x-earth-api-version': '2026-08',
     ...extraHeaders,
   };
   res.writeHead(status, headers);
-  res.end(typeof data === 'string' ? data : JSON.stringify(data));
+  if (typeof data === 'string') {
+    res.end(data);
+  } else if (prefersNano) {
+    res.end(toNano(data));
+  } else {
+    res.end(JSON.stringify(data));
+  }
 }
 
-function sendError(res, status, message, code = null, correlationId = null) {
+function sendError(res, status, message, code = null, correlationId = null, req = null) {
   const codeByStatus = {
     400: 'VALIDATION_ERROR',
     401: 'AUTHENTICATION_REQUIRED',
@@ -1232,7 +1277,7 @@ function sendError(res, status, message, code = null, correlationId = null) {
     code: finalCode,
     correlationId: finalCorrelationId,
   };
-  send(res, status, payload, { 'x-request-id': finalCorrelationId });
+  send(res, status, payload, { 'x-request-id': finalCorrelationId }, req);
 }
 
 async function serveStatic(res, pathname) {

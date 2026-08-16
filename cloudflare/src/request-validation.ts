@@ -1,3 +1,5 @@
+import { fromNanoMarkup } from './nano-markup.ts';
+
 const MAX_JSON_BODY_BYTES = 64 * 1024;
 
 export function resolveIdempotencyKey(request: Request,
@@ -34,6 +36,19 @@ export async function parseJsonBody<T>(request: Request, maxBytes = MAX_JSON_BOD
   }
 
   if (!text.trim()) return { ok: true, value: {} as T };
+  const contentType = request.headers.get('content-type') || '';
+  const isNano = contentType.includes('nanomarkup') || text.trim().startsWith('..') || text.trim().startsWith(':');
+
+  if (isNano) {
+    try {
+      const value: unknown = fromNanoMarkup(text);
+      if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('Body must be a valid mapping object');
+      return { ok: true, value: value as T };
+    } catch {
+      return { ok: false, response: validationResponse(request, 'Request body must be valid Nano Markup object', 400) };
+    }
+  }
+
   try {
     const value: unknown = JSON.parse(text);
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('JSON body must be an object');
@@ -42,3 +57,4 @@ export async function parseJsonBody<T>(request: Request, maxBytes = MAX_JSON_BOD
     return { ok: false, response: validationResponse(request, 'Request body must be valid JSON object', 400) };
   }
 }
+
