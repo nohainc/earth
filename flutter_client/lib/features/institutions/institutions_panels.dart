@@ -53,6 +53,12 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                     .setCityBudget('maintenance', cityId: cityId)),
             child: const Text('PROPOSE MAINTENANCE BUDGET'),
           ),
+          OutlinedButton(
+            onPressed: busy
+                ? null
+                : () => showTaxCharterDialog(context, action, cityId),
+            child: const Text('SET CITY TAX CHARTER'),
+          ),
           const SizedBox(height: 8),
           Text(
               'CORPORATION  ${state.institutions['corporation']['member_count']} members  ·  constitution v${state.institutions['corporation']['constitution_version']}'),
