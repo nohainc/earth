@@ -150,6 +150,10 @@ async function snapshotRankings(tx: PostgresRepository, day: number): Promise<vo
   ]);
   for (const [index, row] of cities.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'city_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CITY-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
   for (const [index, row] of corporations.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'corporation_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CORP-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
+  const prices = await tx.query<{ product: string; price: string }>('SELECT product, price FROM market_prices');
+  for (const p of prices.rows) {
+    await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,$3,$4,1,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`PRICE-${day}-${p.product}`, day, `market_price_${p.product}`, p.product, Number(p.price)]);
+  }
 }
 
 async function processCityDynamics(tx: PostgresRepository, day: number): Promise<void> {
@@ -158,6 +162,9 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
     const res = Math.max(1, Number(city.residents));
     if (Number(city.energy_capacity) < res) {
       await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING', [`BROWNOUT-${city.id}-${day}`, day, 'city.brownout', `Power grid deficit in ${city.id}`, JSON.stringify({ cityId: city.id, capacity: city.energy_capacity, demand: city.residents })]);
+    }
+    if (Number(city.health_capacity) < res * 0.5) {
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING', [`HEALTH-CRISIS-${city.id}-${day}`, day, 'city.healthcare_crisis', `Hospital capacity deficit in ${city.id}`, JSON.stringify({ cityId: city.id, healthCapacity: city.health_capacity, residents: city.residents })]);
     }
   }
   if (cities.rows.length >= 2) {

@@ -170,3 +170,16 @@ export async function listPantheonOfAchievements(repository: PostgresRepository)
     livingLeaders: active.rows,
   };
 }
+
+export async function listMarketPriceHistory(repository: PostgresRepository, product: string, limitDays = 30): Promise<Record<string, unknown>> {
+  const boundedDays = Math.max(1, Math.min(365, limitDays));
+  const current = await repository.query<{ price: string; supply: string; demand: string }>('SELECT price, supply, demand FROM market_prices WHERE product = $1', [product]);
+  const history = await repository.query<{ game_day: number; score: string }>('SELECT game_day, score AS price FROM rankings_snapshots WHERE ranking_type = $1 ORDER BY game_day DESC LIMIT $2', [`market_price_${product}`, boundedDays]);
+  return {
+    product,
+    currentPrice: Number(current.rows[0]?.price ?? 1),
+    supply: Number(current.rows[0]?.supply ?? 0),
+    demand: Number(current.rows[0]?.demand ?? 0),
+    history: history.rows.map((row) => ({ gameDay: Number(row.game_day), price: Number(row.price) })),
+  };
+}

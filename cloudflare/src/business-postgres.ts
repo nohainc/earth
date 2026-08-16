@@ -194,3 +194,77 @@ export async function ownershipRegistry(repository: PostgresRepository, business
   const total = holders.rows.reduce((sum, holder) => sum + Number(holder.shares), 0);
   return { business: business.rows[0], totalIssuedShares: total, controllingHumanId: holders.rows[0]?.holder_id ?? null, holders: holders.rows.map((holder) => ({ ...holder, percentage: total > 0 ? Math.round(Number(holder.shares) / total * 10000) / 100 : 0 })), ownershipAndManagementAreSeparate: true };
 }
+
+export async function proposeMerger(repository: PostgresRepository, input: { acquirerId: string; acquirerBusinessId: string; targetBusinessId: string; pricePerShare: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ id: string }>('SELECT id FROM negotiated_contracts WHERE proposer_id = $1 AND correlation_id = $2', [input.acquirerId, input.correlationId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, mergerId: prior.rows[0].id, correlationId: input.correlationId };
+    const [acquirer, target] = await Promise.all([
+      tx.query<{ id: string; owner_id: string; status: string }>('SELECT id, owner_id, status FROM businesses WHERE id = $1 FOR UPDATE', [input.acquirerBusinessId]),
+      tx.query<{ id: string; owner_id: string; status: string }>('SELECT id, owner_id, status FROM businesses WHERE id = $1 FOR UPDATE', [input.targetBusinessId]),
+    ]);
+    if (!acquirer.rows[0] || acquirer.rows[0].status !== 'active') throw new Error('Acquiring business not found or inactive');
+    if (!target.rows[0] || target.rows[0].status !== 'active') throw new Error('Target business not found or inactive');
+    if (acquirer.rows[0].owner_id !== input.acquirerId) throw new Error('Only acquiring business owner may propose merger');
+    if (input.acquirerBusinessId === input.targetBusinessId) throw new Error('Cannot merge business with itself');
+    const targetShares = await tx.query<{ shares: string }>('SELECT shares FROM business_shares WHERE business_id = $1', [input.targetBusinessId]);
+    const totalShares = targetShares.rows.reduce((sum, r) => sum + BigInt(r.shares), 0n);
+    if (totalShares <= 0n) throw new Error('Target business has no shares');
+    const totalCents = marketValueToCents(Number(totalShares), input.pricePerShare);
+    const total = centsToMoney(totalCents);
+    const acquirerAccount = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.acquirerId]);
+    if (!acquirerAccount.rows[0] || moneyToCents(acquirerAccount.rows[0].balance) < totalCents) throw new Error('Insufficient Credits to fund merger tender offer');
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 0);
+    const mergerId = `MERGER-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const terms = { acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, pricePerShare: input.pricePerShare, totalShares: Number(totalShares), totalAmount: Number(total) };
+    await tx.query("INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, status, starts_game_day, ends_game_day, correlation_id) VALUES ($1,'strategic',$2,$3,'Merger Tender Offer',$4,$5,'proposed',$6,$7,$8)", [mergerId, input.acquirerId, target.rows[0].owner_id, JSON.stringify(terms), total, day, day + 30, input.correlationId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merger_proposed', `Merger tender offer for ${input.targetBusinessId}`, JSON.stringify({ mergerId, acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, totalAmount: Number(total) })]);
+    return { ok: true, mergerId, terms, correlationId: input.correlationId };
+  });
+}
+
+export async function executeMerger(repository: PostgresRepository, input: { callerId: string; mergerId: string; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'business.merged' AND details->>'correlationId' = $1", [input.correlationId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, mergerId: input.mergerId, correlationId: input.correlationId };
+    const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; status: string; terms_json: unknown }>('SELECT id, proposer_id, counterparty_id, amount, status, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.mergerId]);
+    if (!contract.rows[0] || contract.rows[0].status === 'cancelled') throw new Error('Merger contract not found or cancelled');
+    if (contract.rows[0].counterparty_id !== input.callerId) throw new Error('Only target business owner may accept and execute merger');
+    const terms = typeof contract.rows[0].terms_json === 'string' ? JSON.parse(contract.rows[0].terms_json) : (contract.rows[0].terms_json as Record<string, unknown>);
+    const acquirerBusinessId = String(terms.acquirerBusinessId);
+    const targetBusinessId = String(terms.targetBusinessId);
+    const totalAmount = Number(contract.rows[0].amount);
+    const totalCents = moneyToCents(totalAmount);
+    const [acquirerAccount, targetShares] = await Promise.all([
+      tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [contract.rows[0].proposer_id]),
+      tx.query<{ holder_id: string; shares: string }>('SELECT holder_id, shares FROM business_shares WHERE business_id = $1 ORDER BY shares DESC FOR UPDATE', [targetBusinessId]),
+    ]);
+    if (!acquirerAccount.rows[0] || moneyToCents(acquirerAccount.rows[0].balance) < totalCents) throw new Error('Acquirer has insufficient Credits to complete merger');
+    if (!targetShares.rows.length) throw new Error('Target business has no shares');
+    const totalShares = targetShares.rows.reduce((sum, r) => sum + BigInt(r.shares), 0n);
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 0);
+    let distributedCents = 0n;
+    for (let i = 0; i < targetShares.rows.length; i++) {
+      const row = targetShares.rows[i];
+      const rowShares = BigInt(row.shares);
+      const holderCents = i === targetShares.rows.length - 1 ? totalCents - distributedCents : (totalCents * rowShares) / totalShares;
+      if (holderCents <= 0n) continue;
+      distributedCents += holderCents;
+      const holderAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.holder_id]);
+      if (holderAccount.rows[0]) {
+        const payout = centsToMoney(holderCents);
+        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: acquirerAccount.rows[0].account_id, creditAccount: holderAccount.rows[0].account_id, amount: payout, reasonType: 'merger_acquisition_payout', reasonId: targetBusinessId, ruleVersion: 'merger-v1', correlationId: `${input.correlationId}-${row.holder_id}` });
+      }
+    }
+    const machines = await tx.query<{ machine_id: string }>('SELECT machine_id FROM business_assets WHERE business_id = $1 FOR UPDATE', [targetBusinessId]);
+    await tx.query('UPDATE business_assets SET business_id = $1 WHERE business_id = $2', [acquirerBusinessId, targetBusinessId]);
+    await tx.query('UPDATE machines SET owner_id = $1 WHERE id IN (SELECT machine_id FROM business_assets WHERE business_id = $2)', [contract.rows[0].proposer_id, acquirerBusinessId]);
+    await tx.query("UPDATE businesses SET status = 'bankrupt' WHERE id = $1", [targetBusinessId]);
+    await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [targetBusinessId]);
+    await tx.query("UPDATE negotiated_contracts SET status = 'completed', accepted_game_day = $1 WHERE id = $2", [day, input.mergerId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, JSON.stringify({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId })]);
+    return { ok: true, mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId };
+  });
+}
