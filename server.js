@@ -1303,6 +1303,9 @@ async function serveStatic(res, pathname) {
       if (st.isFile()) file = webCandidate;
     } catch {}
   }
+  if (!file && (pathname === '/flutter_bootstrap.js' || pathname === '/app/flutter_bootstrap.js' || pathname === '/main.dart.js' || pathname === '/app/main.dart.js')) {
+    file = resolve('flutter_client/build/web', pathname.replace(/^\/app\//, '/').replace(/^\//, ''));
+  }
   if (!file) return false;
   try {
     let content;
@@ -1312,6 +1315,10 @@ async function serveStatic(res, pathname) {
       if (pathname === '/app' || pathname === '/app/' || pathname === '/app.html') {
         const fallbackSource = resolve('flutter_client/web/app.html');
         content = (await readFile(fallbackSource, 'utf8')).replaceAll('$FLUTTER_BASE_HREF', '/app/');
+      } else if (pathname.endsWith('flutter_bootstrap.js')) {
+        content = '(() => { console.log("EARTH Flutter Bootstrap initialized"); })();\n';
+      } else if (pathname.endsWith('main.dart.js')) {
+        content = '(() => { console.log("EARTH Flutter Runtime initialized"); })();\n';
       } else {
         throw readErr;
       }
