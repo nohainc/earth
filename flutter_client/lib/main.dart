@@ -1275,38 +1275,50 @@ class _CommandCenterState extends State<CommandCenter> {
               child: error == null
                   ? const CircularProgressIndicator()
                   : _ErrorState(message: error!, retry: () => _run(api.world)))
-          : RefreshIndicator(
-              onRefresh: () async => _run(api.world),
-              child: Container(
-                  decoration: const BoxDecoration(
-                    gradient: LinearGradient(
-                      colors: [_canvas, Color(0xff171936), _canvas],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                  ),
-                  child: Row(children: [
-                    _Sidebar(state: current),
-                    Expanded(
-                        child: ListView(
-                            padding: const EdgeInsets.fromLTRB(34, 26, 42, 56),
-                            children: [
-                          _Dashboard(
-                              state: current,
-                              busy: busy,
-                              events: events,
-                              notifications: notifications,
-                              ownershipEvents: ownershipEvents,
-                              businessOwnership: businessOwnership,
-                              businessFinancials: businessFinancials,
-                              businessProfile: businessProfile,
-                              membershipEvents: membershipEvents,
-                              authorityEvents: authorityEvents,
-                              productionCatalog: productionCatalog,
-                              unreadNotifications: unreadNotifications,
-                              action: _run)
-                        ]))
-                  ]))),
+          : LayoutBuilder(builder: (context, constraints) {
+              final compact = constraints.maxWidth < 900;
+              return RefreshIndicator(
+                  onRefresh: () async => _run(api.world),
+                  child: Container(
+                      decoration: const BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [_canvas, Color(0xff171936), _canvas],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                      ),
+                      child: Row(children: [
+                        if (!compact) _Sidebar(state: current),
+                        Expanded(
+                            child: ListView(
+                                padding: EdgeInsets.fromLTRB(compact ? 16 : 34,
+                                    compact ? 16 : 26, compact ? 16 : 42, 56),
+                                children: [
+                              if (compact)
+                                const Padding(
+                                    padding: EdgeInsets.only(bottom: 12),
+                                    child: Text('COMPACT COMMAND VIEW',
+                                        style: TextStyle(
+                                            color: _muted,
+                                            fontSize: 9,
+                                            letterSpacing: 1.1))),
+                              _Dashboard(
+                                  state: current,
+                                  busy: busy,
+                                  events: events,
+                                  notifications: notifications,
+                                  ownershipEvents: ownershipEvents,
+                                  businessOwnership: businessOwnership,
+                                  businessFinancials: businessFinancials,
+                                  businessProfile: businessProfile,
+                                  membershipEvents: membershipEvents,
+                                  authorityEvents: authorityEvents,
+                                  productionCatalog: productionCatalog,
+                                  unreadNotifications: unreadNotifications,
+                                  action: _run)
+                            ]))
+                      ])));
+            }),
     );
   }
 
@@ -3925,23 +3937,27 @@ class _Panel extends StatelessWidget {
   final Widget child;
   const _Panel({required this.title, required this.child});
   @override
-  Widget build(BuildContext context) => SizedBox(
-      width: 360,
-      child: Card(
-          child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(title,
-                        style: const TextStyle(
-                            color: _muted,
-                            fontSize: 10,
-                            letterSpacing: 1.1,
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(height: 14),
-                    child
-                  ]))));
+  Widget build(BuildContext context) {
+    final width =
+        (MediaQuery.sizeOf(context).width - 32).clamp(0.0, 360.0).toDouble();
+    return SizedBox(
+        width: width,
+        child: Card(
+            child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title,
+                          style: const TextStyle(
+                              color: _muted,
+                              fontSize: 10,
+                              letterSpacing: 1.1,
+                              fontWeight: FontWeight.w700)),
+                      const SizedBox(height: 14),
+                      child
+                    ]))));
+  }
 }
 
 class _Metric extends StatelessWidget {
