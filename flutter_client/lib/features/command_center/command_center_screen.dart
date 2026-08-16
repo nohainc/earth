@@ -54,6 +54,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Timer? eventTimer;
   Timer? liveReconnectTimer;
   WebSocketChannel? liveChannel;
+  int _requestGeneration = 0;
 
   @override
   void initState() {
@@ -127,6 +128,7 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   Future<void> _run(Future<EarthState> Function() action) async {
+    final requestGeneration = ++_requestGeneration;
     setState(() {
       busy = true;
       error = null;
@@ -148,7 +150,7 @@ class _CommandCenterState extends State<CommandCenter> {
           financials = await api.businessFinancials(businessId);
         } catch (_) {/* Keep the canonical world snapshot usable. */}
       }
-      if (mounted) {
+      if (mounted && requestGeneration == _requestGeneration) {
         setState(() {
           state = value;
           businessProfile = profile;
@@ -158,12 +160,14 @@ class _CommandCenterState extends State<CommandCenter> {
       }
       await _refreshEvents();
     } catch (exception) {
-      if (mounted) {
+      if (mounted && requestGeneration == _requestGeneration) {
         setState(
             () => error = exception.toString().replaceFirst('Exception: ', ''));
       }
     } finally {
-      if (mounted) setState(() => busy = false);
+      if (mounted && requestGeneration == _requestGeneration) {
+        setState(() => busy = false);
+      }
     }
   }
 
@@ -296,6 +300,22 @@ class _CommandCenterState extends State<CommandCenter> {
                             56,
                           ),
                           children: [
+                            if (error != null)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 16),
+                                child: MaterialBanner(
+                                  content: Text(error!),
+                                  leading: const Icon(Icons.warning_amber),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: busy
+                                          ? null
+                                          : () => _run(api.world),
+                                      child: const Text('RETRY'),
+                                    ),
+                                  ],
+                                ),
+                              ),
                             if (compact)
                               const Padding(
                                 padding: EdgeInsets.only(bottom: 12),
