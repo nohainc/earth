@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
 import 'core/models/earth_state.dart';
 import 'core/api/earth_api_transport.dart';
+import 'shared/widgets/earth_primitives.dart';
 
 part 'features/auth/auth_gate.dart';
 
@@ -3845,68 +3846,8 @@ class _HeroCard extends StatelessWidget {
       ]));
 }
 
-class _Panel extends StatelessWidget {
-  final String title;
-  final Widget child;
-  const _Panel({super.key, required this.title, required this.child});
-  @override
-  Widget build(BuildContext context) {
-    final width =
-        (MediaQuery.sizeOf(context).width - 32).clamp(0.0, 360.0).toDouble();
-    return SizedBox(
-        width: width,
-        child: Card(
-            child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(title,
-                          style: const TextStyle(
-                              color: _muted,
-                              fontSize: 10,
-                              letterSpacing: 1.1,
-                              fontWeight: FontWeight.w700)),
-                      const SizedBox(height: 14),
-                      child
-                    ]))));
-  }
-}
-
-class _Metric extends StatelessWidget {
-  final String label;
-  final String value;
-  final Color accent;
-  const _Metric(
-      {required this.label, required this.value, required this.accent});
-  @override
-  Widget build(BuildContext context) => SizedBox(
-      width: 210,
-      child: Card(
-          child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(label,
-                        style: TextStyle(
-                            fontSize: 10, letterSpacing: 1, color: accent)),
-                    const SizedBox(height: 12),
-                    Text(value,
-                        style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                            fontWeight: FontWeight.w700, letterSpacing: -.5))
-                  ]))));
-}
-
-class _ErrorState extends StatelessWidget {
-  final String message;
-  final VoidCallback retry;
-  const _ErrorState({required this.message, required this.retry});
-  @override
-  Widget build(BuildContext context) =>
-      Column(mainAxisSize: MainAxisSize.min, children: [
-        Text(message),
-        const SizedBox(height: 12),
-        FilledButton(onPressed: retry, child: const Text('RECONNECT'))
-      ]);
-}
+// Compatibility aliases keep the existing feature composition stable while
+// shared presentation primitives live in their documented boundary.
+typedef _Panel = EarthPanel;
+typedef _Metric = EarthMetric;
+typedef _ErrorState = EarthErrorState;
