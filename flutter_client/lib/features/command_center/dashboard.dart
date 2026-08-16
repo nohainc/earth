@@ -36,6 +36,7 @@ class Dashboard extends StatelessWidget {
   final List<dynamic> membershipEvents;
   final List<dynamic> authorityEvents;
   final List<dynamic> productionCatalog;
+  final Map<String, dynamic> marketHistory;
   final int unreadNotifications;
   final Map<String, GlobalKey> sectionKeys;
   final String selectedSection;
@@ -54,6 +55,7 @@ class Dashboard extends StatelessWidget {
     required this.membershipEvents,
     required this.authorityEvents,
     required this.productionCatalog,
+    this.marketHistory = const {},
     required this.unreadNotifications,
     required this.sectionKeys,
     this.selectedSection = 'command',
@@ -188,6 +190,7 @@ class Dashboard extends StatelessWidget {
             panelKey: sectionKeys['market'],
             state: state,
             busy: busy,
+            priceHistory: marketHistory,
             action: action,
           ),
           MarketOrderBookPanel(state: state),

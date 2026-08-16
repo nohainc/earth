@@ -44,6 +44,14 @@ void main() {
           body: MarketSignalsPanel(
             state: state,
             busy: false,
+            priceHistory: const {
+              'energy': {
+                'history': [
+                  {'gameDay': 10, 'price': 12.5},
+                  {'gameDay': 9, 'price': 10.0},
+                ],
+              },
+            },
             action: (callback) async {
               executedAction = 'called';
             },
@@ -56,6 +64,7 @@ void main() {
     expect(find.text('ENERGY'), findsOneWidget);
     expect(find.text('12.5 C'), findsOneWidget);
     expect(find.text('S 100  ·  D 80'), findsOneWidget);
+    expect(find.text('▲ 2.50 C / 2d'), findsOneWidget);
     expect(find.text('BUY 1'), findsOneWidget);
     expect(find.text('SELL 1'), findsOneWidget);
     expect(find.text('SETTLE'), findsOneWidget);

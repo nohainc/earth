@@ -51,6 +51,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> businessFinancials = const {};
   Map<String, dynamic> businessProfile = const {};
   List<dynamic> productionCatalog = const [];
+  Map<String, dynamic> marketHistory = const {};
   int unreadNotifications = 0;
   String selectedSection = 'command';
   Timer? eventTimer;
@@ -140,6 +141,7 @@ class _CommandCenterState extends State<CommandCenter> {
       Map<String, dynamic> ownership = const {};
       Map<String, dynamic> financials = const {};
       Map<String, dynamic> profile = const {};
+      final history = <String, dynamic>{};
       final businessId = value.business['id'] as String?;
       if (businessId != null && businessId.isNotEmpty) {
         try {
@@ -152,12 +154,20 @@ class _CommandCenterState extends State<CommandCenter> {
           financials = await api.businessFinancials(businessId);
         } catch (_) {/* Keep the canonical world snapshot usable. */}
       }
+      await Future.wait(value.market.keys.map((product) async {
+        try {
+          history[product] = await api.marketPriceHistory(product);
+        } catch (_) {
+          // Analytics are optional; live market data remains authoritative.
+        }
+      }));
       if (mounted && requestGeneration == _requestGeneration) {
         setState(() {
           state = value;
           businessProfile = profile;
           businessOwnership = ownership;
           businessFinancials = financials;
+          marketHistory = history;
         });
       }
       await _refreshEvents();
@@ -340,6 +350,7 @@ class _CommandCenterState extends State<CommandCenter> {
                               membershipEvents: membershipEvents,
                               authorityEvents: authorityEvents,
                               productionCatalog: productionCatalog,
+                              marketHistory: marketHistory,
                               unreadNotifications: unreadNotifications,
                               sectionKeys: _sectionKeys,
                               action: _run,

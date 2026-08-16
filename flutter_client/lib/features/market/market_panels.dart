@@ -156,6 +156,7 @@ class MarketSignalsPanel extends StatelessWidget {
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
   final Key? panelKey;
+  final Map<String, dynamic> priceHistory;
 
   const MarketSignalsPanel({
     super.key,
@@ -163,6 +164,7 @@ class MarketSignalsPanel extends StatelessWidget {
     required this.state,
     required this.busy,
     required this.action,
+    this.priceHistory = const {},
   });
 
   @override
@@ -229,6 +231,7 @@ class MarketSignalsPanel extends StatelessWidget {
                       'S ${product['supply']}  ·  D ${product['demand']}',
                       style: const TextStyle(fontSize: 11),
                     ),
+                    _PriceTrend(history: priceHistory[entry.key]),
                     const SizedBox(height: 6),
                     Row(
                       children: [
@@ -293,6 +296,32 @@ class MarketSignalsPanel extends StatelessWidget {
             }).toList(),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _PriceTrend extends StatelessWidget {
+  final dynamic history;
+
+  const _PriceTrend({required this.history});
+
+  @override
+  Widget build(BuildContext context) {
+    if (history is! Map || history['history'] is! List) {
+      return const SizedBox.shrink();
+    }
+    final points = (history['history'] as List).whereType<Map>().toList();
+    if (points.length < 2) return const SizedBox.shrink();
+    final latest = (points.first['price'] as num?)?.toDouble();
+    final oldest = (points.last['price'] as num?)?.toDouble();
+    if (latest == null || oldest == null) return const SizedBox.shrink();
+    final change = latest - oldest;
+    return Text(
+      '${change >= 0 ? '▲' : '▼'} ${change.abs().toStringAsFixed(2)} C / ${points.length}d',
+      style: TextStyle(
+        fontSize: 10,
+        color: change >= 0 ? Colors.teal : Colors.orange,
       ),
     );
   }
