@@ -1339,10 +1339,11 @@ class _CommandCenterState extends State<CommandCenter> {
                 ],
               ));
     } catch (exception) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
             content:
                 Text(exception.toString().replaceFirst('Exception: ', ''))));
+      }
     }
   }
 
@@ -1399,8 +1400,9 @@ class _CommandCenterState extends State<CommandCenter> {
                                     await api.revokeSession(
                                         session['id'].toString());
                                     sessions = await api.sessions();
-                                    if (dialogContext.mounted)
+                                    if (dialogContext.mounted) {
                                       setDialogState(() {});
+                                    }
                                   } catch (exception) {
                                     if (dialogContext.mounted) {
                                       ScaffoldMessenger.of(dialogContext)
@@ -2932,7 +2934,9 @@ Future<void> _showBusinessConstitution(
                     if (businessId == null ||
                         shareValue == null ||
                         boardValue == null ||
-                        noticeValue == null) return;
+                        noticeValue == null) {
+                      return;
+                    }
                     await action(() => const EarthApi()
                         .updateBusinessConstitution(
                             businessId, shareValue, boardValue, noticeValue));
@@ -2986,7 +2990,9 @@ Future<void> _showShareTransfer(BuildContext context,
                     final amount = int.tryParse(shares.text.trim());
                     if (recipient.text.trim().isEmpty ||
                         amount == null ||
-                        amount < 1) return;
+                        amount < 1) {
+                      return;
+                    }
                     await action(() => const EarthApi()
                         .transferShares(recipient.text, amount, otp: otp.text));
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -3045,7 +3051,9 @@ Future<void> _showShareIssue(
                         count == null ||
                         count < 1 ||
                         value == null ||
-                        value <= 0) return;
+                        value <= 0) {
+                      return;
+                    }
                     await action(() => const EarthApi().issueShares(
                         businessId, recipient.text, count, value,
                         otp: otp.text));
@@ -3242,7 +3250,9 @@ Future<void> _showMachineSaleDialog(
                     final value = double.tryParse(price.text.trim());
                     if (buyer.text.trim().isEmpty ||
                         value == null ||
-                        value <= 0) return;
+                        value <= 0) {
+                      return;
+                    }
                     await action(() => const EarthApi().sellMachine(
                         machineId, buyer.text, value,
                         otp: otp.text.trim()));
@@ -3391,7 +3401,9 @@ Future<void> _showResearchComposer(BuildContext context,
                         final amount = double.tryParse(budget.text.trim());
                         if (name.text.trim().length < 3 ||
                             amount == null ||
-                            amount < 240) return;
+                            amount < 240) {
+                          return;
+                        }
                         await action(() => const EarthApi().startResearch(
                             name.text.trim(), amount,
                             focus: focus));
@@ -3439,7 +3451,9 @@ Future<void> _showLicenseComposer(BuildContext context,
                     final amount = double.tryParse(fee.text.trim());
                     if (licensee.text.trim().isEmpty ||
                         amount == null ||
-                        amount < 50) return;
+                        amount < 50) {
+                      return;
+                    }
                     await action(() => const EarthApi()
                         .licenseTechnologyTo(licensee.text, amount, otp.text));
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -3533,7 +3547,9 @@ Future<void> _showContractComposer(BuildContext context,
                         if (counterparty.text.trim().isEmpty ||
                             title.text.trim().length < 3 ||
                             value == null ||
-                            value < 0) return;
+                            value < 0) {
+                          return;
+                        }
                         await action(() => const EarthApi().createContract(
                             kind, counterparty.text, title.text, value));
                         if (dialogContext.mounted) Navigator.pop(dialogContext);
@@ -3714,12 +3730,16 @@ Future<void> _showProposalComposer(BuildContext context,
               FilledButton(
                   onPressed: () async {
                     if (title.text.trim().length < 8 ||
-                        body.text.trim().length < 20) return;
+                        body.text.trim().length < 20) {
+                      return;
+                    }
                     final rate = targetRate.text.trim().isEmpty
                         ? null
                         : double.tryParse(targetRate.text.trim());
                     if (targetRate.text.trim().isNotEmpty &&
-                        (rate == null || rate < 0 || rate > .25)) return;
+                        (rate == null || rate < 0 || rate > .25)) {
+                      return;
+                    }
                     await action(() => const EarthApi().createProposal(
                         title.text.trim(), body.text.trim(),
                         targetCategory: rate == null ? null : 'finance',
