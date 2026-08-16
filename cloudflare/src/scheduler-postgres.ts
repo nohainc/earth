@@ -219,7 +219,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await dissolveInstitutions(tx, day);
       await snapshotRankings(tx, day);
     }
-    await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0)), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
+    await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
     await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM machines) * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'world_clock','A new game tick begins',$3) ON CONFLICT (id) DO NOTHING", [`CLOCK-${day}-${minute}`, day, JSON.stringify({ newDay })]);
     const productionEvents = await settleProduction(tx, day);
