@@ -27,9 +27,11 @@ class BusinessPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final businessName =
+        (state.business['name'] as String?)?.toUpperCase() ?? 'ENTERPRISE';
     return EarthPanel(
       key: panelKey,
-      title: 'BUSINESS / KLINE WORKS',
+      title: 'BUSINESS / $businessName',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

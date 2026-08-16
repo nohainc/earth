@@ -4,6 +4,153 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 
+Future<void> showPlaceOrderDialog(
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action, {
+  required String initialProduct,
+  required double initialPrice,
+  required double feeRate,
+  String initialSide = 'buy',
+}) async {
+  String selectedProduct = initialProduct;
+  String side = initialSide;
+  final qtyController = TextEditingController(text: '10');
+  final priceController =
+      TextEditingController(text: initialPrice > 0 ? initialPrice.toString() : '50');
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        final qty = int.tryParse(qtyController.text.trim()) ?? 0;
+        final price = double.tryParse(priceController.text.trim()) ?? 0.0;
+        final baseTotal = qty * price;
+        final fee = side == 'buy' ? baseTotal * feeRate : 0.0;
+        final grandTotal = side == 'buy' ? baseTotal + fee : baseTotal;
+
+        return AlertDialog(
+          title: Text('PLACE ${side.toUpperCase()} ORDER · ${selectedProduct.toUpperCase()}'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: SegmentedButton<String>(
+                        segments: const [
+                          ButtonSegment(value: 'buy', label: Text('BUY')),
+                          ButtonSegment(value: 'sell', label: Text('SELL')),
+                        ],
+                        selected: {side},
+                        onSelectionChanged: (set) =>
+                            setDialogState(() => side = set.first),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                DropdownButtonFormField<String>(
+                  initialValue: selectedProduct,
+                  decoration: const InputDecoration(labelText: 'COMMODITY'),
+                  items: const [
+                    DropdownMenuItem(value: 'material', child: Text('MATERIALS (MATR)')),
+                    DropdownMenuItem(value: 'components', child: Text('COMPONENTS (FABR)')),
+                    DropdownMenuItem(value: 'energy', child: Text('ENERGY (ENGY)')),
+                    DropdownMenuItem(value: 'compute', child: Text('COMPUTE (INFO)')),
+                  ],
+                  onChanged: (value) {
+                    if (value != null) {
+                      setDialogState(() => selectedProduct = value);
+                    }
+                  },
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: qtyController,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(
+                    labelText: 'QUANTITY (UNITS)',
+                    hintText: 'e.g. 10',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: priceController,
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  decoration: const InputDecoration(
+                    labelText: 'LIMIT PRICE (CREDITS / UNIT)',
+                    hintText: 'e.g. 45.00',
+                  ),
+                  onChanged: (_) => setDialogState(() {}),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.05),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Base value: ${baseTotal.toStringAsFixed(2)} C',
+                        style: const TextStyle(fontSize: 11, color: mutedColor),
+                      ),
+                      if (side == 'buy' && feeRate > 0)
+                        Text(
+                          'Exchange fee (${(feeRate * 100).toStringAsFixed(2)}%): ${fee.toStringAsFixed(2)} C',
+                          style: const TextStyle(fontSize: 11, color: mutedColor),
+                        ),
+                      const SizedBox(height: 4),
+                      Text(
+                        side == 'buy'
+                            ? 'Total required escrow: ${grandTotal.toStringAsFixed(2)} C'
+                            : 'Expected gross proceeds: ${grandTotal.toStringAsFixed(2)} C',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: qty <= 0 || price <= 0
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      await action(() => const EarthApi().submitOrder(
+                            selectedProduct,
+                            price,
+                            side: side,
+                            quantity: qty,
+                          ));
+                    },
+              child: const Text('SUBMIT ORDER'),
+            ),
+          ],
+        );
+      },
+    ),
+  );
+
+  qtyController.dispose();
+  priceController.dispose();
+}
+
 class MarketSignalsPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -26,9 +173,30 @@ class MarketSignalsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Settlement fee: ${(state.marketFeeRate * 100).toStringAsFixed(2)}% · buyer total includes the disclosed fee',
-            style: const TextStyle(color: mutedColor, fontSize: 10),
+          Wrap(
+            spacing: 12,
+            runSpacing: 8,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            alignment: WrapAlignment.spaceBetween,
+            children: [
+              Text(
+                'Settlement fee: ${(state.marketFeeRate * 100).toStringAsFixed(2)}% · buyer total includes the disclosed fee',
+                style: const TextStyle(color: mutedColor, fontSize: 10),
+              ),
+              OutlinedButton.icon(
+                icon: const Icon(Icons.add_shopping_cart, size: 14),
+                label: const Text('CUSTOM LIMIT ORDER'),
+                onPressed: busy
+                    ? null
+                    : () => showPlaceOrderDialog(
+                          context,
+                          action,
+                          initialProduct: state.market.keys.firstOrNull ?? 'material',
+                          initialPrice: (state.market.values.firstOrNull?['price'] as num?)?.toDouble() ?? 50.0,
+                          feeRate: state.marketFeeRate,
+                        ),
+              ),
+            ],
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -62,31 +230,62 @@ class MarketSignalsPanel extends StatelessWidget {
                       style: const TextStyle(fontSize: 11),
                     ),
                     const SizedBox(height: 6),
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => action(() => const EarthApi().submitOrder(
-                                entry.key,
-                                (product['price'] as num).toDouble(),
-                              )),
-                      child: const Text('BUY 1'),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: busy
+                                ? null
+                                : () => action(() => const EarthApi().submitOrder(
+                                      entry.key,
+                                      (product['price'] as num).toDouble(),
+                                    )),
+                            child: const Text('BUY 1'),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: busy
+                                ? null
+                                : () => action(() => const EarthApi().submitOrder(
+                                      entry.key,
+                                      (product['price'] as num).toDouble(),
+                                      side: 'sell',
+                                    )),
+                            child: const Text('SELL 1'),
+                          ),
+                        ),
+                      ],
                     ),
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => action(() => const EarthApi().submitOrder(
-                                entry.key,
-                                (product['price'] as num).toDouble(),
-                                side: 'sell',
-                              )),
-                      child: const Text('SELL 1'),
-                    ),
-                    OutlinedButton(
-                      onPressed: busy
-                          ? null
-                          : () => action(() =>
-                              const EarthApi().settleMarket(entry.key)),
-                      child: const Text('SETTLE'),
+                    const SizedBox(height: 4),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: busy
+                                ? null
+                                : () => showPlaceOrderDialog(
+                                      context,
+                                      action,
+                                      initialProduct: entry.key,
+                                      initialPrice: (product['price'] as num).toDouble(),
+                                      feeRate: state.marketFeeRate,
+                                    ),
+                            child: const Text('ORDER…'),
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: busy
+                                ? null
+                                : () => action(() =>
+                                    const EarthApi().settleMarket(entry.key)),
+                            child: const Text('SETTLE'),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),

@@ -21,9 +21,11 @@ class TechnologyPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final techName =
+        (state.technology['name'] as String?)?.toUpperCase() ?? 'R&D SYSTEM';
     return EarthPanel(
       key: panelKey,
-      title: 'ADAPTIVE MAINTENANCE AI',
+      title: 'TECHNOLOGY / $techName',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

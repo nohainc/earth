@@ -5,7 +5,7 @@ import '../../core/models/earth_state.dart';
 
 Future<void> showSuccessorComposerDialog(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action) async {
-  final name = TextEditingController(text: 'Alex Kline');
+  final name = TextEditingController();
   final humanId = TextEditingController();
   await showDialog<void>(
       context: context,
