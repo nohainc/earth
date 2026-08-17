@@ -271,28 +271,15 @@ class _ExecutiveCard extends StatelessWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Flexible(
-                              child: Text(
-                                title,
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 1.1,
-                                  color: inkColor,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Icon(
-                              Icons.arrow_forward_rounded,
-                              size: 11,
-                              color: violetColor.withValues(alpha: 0.9),
-                            ),
-                          ],
+                        Text(
+                          title,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                            color: inkColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
                         Text(
                           subtitle,
