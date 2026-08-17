@@ -41,9 +41,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('EARTH'), findsOneWidget);
-    expect(find.text('New Kyoto'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'New Kyoto'), findsOneWidget);
 
-    final marketButton = find.text('Central Market');
+    final marketButton = find.text('Market');
     expect(marketButton, findsOneWidget);
     await tester.tap(marketButton);
     await tester.pumpAndSettle();

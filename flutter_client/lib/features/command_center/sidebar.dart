@@ -189,56 +189,59 @@ class _SidebarState extends State<Sidebar> {
         children: [
           // 1. BRAND HEADER (Horizontally Centered, Thin Crisp Orbit Ring, 1.3 Letter Spacing)
           Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                // Clean thin orbit ring with ambient glow
-                Container(
-                  width: 28,
-                  height: 28,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    border: Border.all(
-                      color: violetColor,
-                      width: 1.75,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  // Clean thin orbit ring with ambient glow
+                  Container(
+                    width: 28,
+                    height: 28,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: violetColor,
+                        width: 1.75,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: violetColor.withValues(alpha: 0.55),
+                          blurRadius: 14,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
-                    boxShadow: [
-                      BoxShadow(
-                        color: violetColor.withValues(alpha: 0.55),
-                        blurRadius: 14,
-                        spreadRadius: 1,
+                  ),
+                  const SizedBox(width: 11),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'EARTH',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 4.0,
+                          color: violetColor,
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'UNITED CORPORATIONS',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w600,
+                          color: mutedColor,
+                          letterSpacing: 1.3,
+                        ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(width: 11),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      'EARTH',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 4.0,
-                        color: violetColor,
-                      ),
-                    ),
-                    const SizedBox(height: 1),
-                    Text(
-                      'UNITED CORPORATIONS',
-                      style: TextStyle(
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w600,
-                        color: mutedColor,
-                        letterSpacing: 1.3,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 16),
