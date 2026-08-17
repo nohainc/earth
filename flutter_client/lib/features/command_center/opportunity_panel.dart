@@ -15,6 +15,29 @@ class OpportunityPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => EarthPanel(
         title: 'LIVE OPPORTUNITIES',
+        width: double.infinity,
+        onInfoTap: () => showEarthInfoDialog(
+          context,
+          title: 'LIVE SIGNALS & OPPORTUNITIES',
+          subtitle: 'Prioritized simulation intelligence alerts',
+          items: [
+            {
+              'label': 'Orange / High Priority',
+              'description':
+                  'Immediate decision vectors (e.g. tight commodity supply, urgent votes closing soon, high market price shifts).',
+            },
+            {
+              'label': 'Violet / Medium Priority',
+              'description':
+                  'Standard operational updates (e.g. pending civic proposals, active commercial contract notices).',
+            },
+            {
+              'label': 'Teal / Low Priority / Tech',
+              'description':
+                  'Longer-term advantages (e.g. ongoing research breakthroughs, R&D funding progress).',
+            },
+          ],
+        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: opportunities.isEmpty

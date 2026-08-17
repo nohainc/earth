@@ -88,10 +88,6 @@ class Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final resourceText = state.resources.entries
-        .map((e) => '${e.key}: ${e.value}')
-        .join('  ·  ');
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -117,6 +113,18 @@ class Dashboard extends StatelessWidget {
                     accent: violetColor,
                     hint:
                         'Personal liquid currency for market trade, machinery, and investments.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'CREDITS & CURRENCY',
+                      subtitle: 'Personal liquid account balance',
+                      items: [
+                        {
+                          'label': 'Liquid Reserve (${state.human['credits']} C)',
+                          'description':
+                              'The non-inflationary base currency of EARTH. Used to purchase physical commodities, machinery, research licenses, and pay city taxes.',
+                        },
+                      ],
+                    ),
                   ),
                   EarthMetric(
                     width: itemWidth,
@@ -125,6 +133,18 @@ class Dashboard extends StatelessWidget {
                     accent: Colors.tealAccent,
                     hint:
                         'Civic reputation within your city, influencing voting weight.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'CIVIC STANDING',
+                      subtitle: 'Municipal influence and reputation',
+                      items: [
+                        {
+                          'label': 'Standing Score (${state.human['standing']})',
+                          'description':
+                              'Earned through active economic production, community contributions, and assembly participation. Enhances your voting weight in local ordinances.',
+                        },
+                      ],
+                    ),
                   ),
                   EarthMetric(
                     width: itemWidth,
@@ -133,6 +153,18 @@ class Dashboard extends StatelessWidget {
                     accent: Colors.indigoAccent,
                     hint:
                         'Dynastic achievement score passed down to designated successors.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'DYNASTIC LEGACY',
+                      subtitle: 'Generational achievement and lineage',
+                      items: [
+                        {
+                          'label': 'Legacy Points (${state.human['legacy']})',
+                          'description':
+                              'Accumulated across lifetimes. Determines your historical standing in the UC Archive and unlocks dynastic foundation privileges.',
+                        },
+                      ],
+                    ),
                   ),
                   EarthMetric(
                     width: itemWidth,
@@ -141,6 +173,18 @@ class Dashboard extends StatelessWidget {
                     accent: Colors.orangeAccent,
                     hint:
                         'Composite simulation health across resource scarcity, energy, and costs.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'WORLD HEALTH SCORE',
+                      subtitle: 'Planetary simulation vitality index',
+                      items: [
+                        {
+                          'label': 'Health Score (${state.world['health']} / 100)',
+                          'description':
+                              'Composite index reflecting ecological stability, machine maintenance rates, and macroeconomic liquidity.',
+                        },
+                      ],
+                    ),
                   ),
                 ],
               );
@@ -159,6 +203,7 @@ class Dashboard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 18),
+          // REDESIGNED RESOURCE RESERVES HUD
           Container(
             width: double.infinity,
             decoration: BoxDecoration(
@@ -170,22 +215,169 @@ class Dashboard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'RESOURCE RESERVES   $resourceText',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    letterSpacing: .8,
-                    color: mutedColor,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Text(
+                          'PHYSICAL COMMODITIES & RESERVES',
+                          style: TextStyle(
+                            fontSize: 10,
+                            letterSpacing: 1.1,
+                            fontWeight: FontWeight.w700,
+                            color: mutedColor,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: Icon(
+                            Icons.info_outline,
+                            size: 13,
+                            color: mutedColor.withValues(alpha: .7),
+                          ),
+                          tooltip: 'Commodity reserves information',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => showEarthInfoDialog(
+                            context,
+                            title: 'PHYSICAL COMMODITIES & RESERVES',
+                            subtitle:
+                                'The 4 fundamental pillars of the physical economy',
+                            items: [
+                              {
+                                'label': 'Materials (M)',
+                                'description':
+                                    'Base matter and raw industrial feedstock utilized to manufacture components and construct city infrastructure.',
+                              },
+                              {
+                                'label': 'Components (C)',
+                                'description':
+                                    'Manufactured precision sub-assemblies and replacement parts required to operate and maintain machinery.',
+                              },
+                              {
+                                'label': 'Energy (E)',
+                                'description':
+                                    'Electrical power consumed per cycle to power machines and support municipal infrastructure grids.',
+                              },
+                              {
+                                'label': 'Compute (Q)',
+                                'description':
+                                    'Processing power utilized for AI assistants and technology R&D progress.',
+                              },
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'LCI ${state.world['livingCostIndex'] ?? '1.00'}  ·  ESI ${state.world['essentialServicesIndex'] ?? '1.00'}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        letterSpacing: .6,
+                        color: mutedColor,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                Text(
-                  'STARTER ECONOMY   living-cost ${state.world['livingCostIndex'] ?? '—'}  ·  productive ${state.world['economicStartIndex'] ?? '—'}',
-                  style: const TextStyle(
-                    fontSize: 10,
-                    letterSpacing: .6,
-                    color: mutedColor,
-                  ),
+                const SizedBox(height: 14),
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final resWidth = constraints.maxWidth >= 600
+                        ? (constraints.maxWidth - 3 * 12) / 4
+                        : (constraints.maxWidth - 12) / 2;
+
+                    final entries = [
+                      {
+                        'key': 'Materials',
+                        'symbol': '❖',
+                        'val': state.resources['materials'] ??
+                            state.resources['material'] ??
+                            '0',
+                        'color': Colors.tealAccent,
+                      },
+                      {
+                        'key': 'Components',
+                        'symbol': '⚙',
+                        'val': state.resources['components'] ?? '0',
+                        'color': cyanAccentColor,
+                      },
+                      {
+                        'key': 'Energy',
+                        'symbol': '⚡',
+                        'val': state.resources['energy'] ?? '0',
+                        'color': Colors.amberAccent,
+                      },
+                      {
+                        'key': 'Compute',
+                        'symbol': '◈',
+                        'val': state.resources['compute'] ??
+                            state.resources['computing'] ??
+                            '0',
+                        'color': violetColor,
+                      },
+                    ];
+
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 12,
+                      children: entries.map((entry) {
+                        final valStr = entry['val'] is num
+                            ? (entry['val'] as num).toInt().toString()
+                            : entry['val'].toString();
+
+                        return Container(
+                          width: resWidth,
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 14, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withAlpha(8),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Row(
+                            children: [
+                              Text(
+                                entry['symbol'] as String,
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: entry['color'] as Color,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                              const SizedBox(width: 10),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment:
+                                      CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      (entry['key'] as String).toUpperCase(),
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        letterSpacing: .8,
+                                        color: mutedColor,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      valStr,
+                                      style: const TextStyle(
+                                        fontSize: 14,
+                                        fontWeight: FontWeight.w800,
+                                        color: inkColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }).toList(),
+                    );
+                  },
                 ),
               ],
             ),

@@ -1,28 +1,113 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 
+void showEarthInfoDialog(
+  BuildContext context, {
+  required String title,
+  required String subtitle,
+  required List<Map<String, String>> items,
+}) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      backgroundColor: surfaceColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: const BorderSide(color: Colors.white12),
+      ),
+      title: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.w800,
+              letterSpacing: 0.5,
+              color: inkColor,
+            ),
+          ),
+          if (subtitle.isNotEmpty) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              style: const TextStyle(fontSize: 11, color: mutedColor),
+            ),
+          ],
+        ],
+      ),
+      content: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: items
+              .map(
+                (item) => Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        item['label'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: violetColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item['description'] ?? '',
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: inkColor,
+                          height: 1.35,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              )
+              .toList(),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Close', style: TextStyle(color: violetColor)),
+        ),
+      ],
+    ),
+  );
+}
+
 /// Reusable presentation primitives shared by feature panels.
-///
-/// These widgets intentionally know nothing about routes, API clients,
-/// PostgreSQL, or domain identifiers. Feature code supplies only display data
-/// and callbacks.
 class EarthPanel extends StatelessWidget {
   final String title;
   final Widget child;
+  final double? width;
+  final VoidCallback? onInfoTap;
+  final String? infoTooltip;
 
-  const EarthPanel({super.key, required this.title, required this.child});
+  const EarthPanel({
+    super.key,
+    required this.title,
+    required this.child,
+    this.width,
+    this.onInfoTap,
+    this.infoTooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
-    final width =
-        (MediaQuery.sizeOf(context).width - 32).clamp(0.0, 360.0).toDouble();
     final muted = Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurfaceVariant;
     return Semantics(
       container: true,
       label: title,
       child: SizedBox(
-        width: width,
+        width: width ?? double.infinity,
         child: Card(
           color: surfaceColor.withValues(alpha: .72),
           surfaceTintColor: Colors.transparent,
@@ -36,14 +121,34 @@ class EarthPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    color: muted,
-                    fontSize: 10,
-                    letterSpacing: 1.1,
-                    fontWeight: FontWeight.w700,
-                  ),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: TextStyle(
+                          color: muted,
+                          fontSize: 10,
+                          letterSpacing: 1.1,
+                          fontWeight: FontWeight.w700,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (onInfoTap != null || infoTooltip != null)
+                      IconButton(
+                        icon: Icon(
+                          Icons.info_outline,
+                          size: 14,
+                          color: mutedColor.withValues(alpha: .8),
+                        ),
+                        tooltip: infoTooltip ?? 'More information',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: onInfoTap,
+                      ),
+                  ],
                 ),
                 const SizedBox(height: 14),
                 child,
@@ -62,6 +167,7 @@ class EarthMetric extends StatelessWidget {
   final Color accent;
   final double? width;
   final String? hint;
+  final VoidCallback? onInfoTap;
 
   const EarthMetric({
     super.key,
@@ -70,6 +176,7 @@ class EarthMetric extends StatelessWidget {
     required this.accent,
     this.width,
     this.hint,
+    this.onInfoTap,
   });
 
   @override
@@ -104,15 +211,17 @@ class EarthMetric extends StatelessWidget {
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                  if (hint != null)
-                    Tooltip(
-                      message: hint!,
-                      preferBelow: false,
-                      child: Icon(
+                  if (hint != null || onInfoTap != null)
+                    IconButton(
+                      icon: Icon(
                         Icons.info_outline,
                         size: 13,
                         color: mutedColor.withValues(alpha: .7),
                       ),
+                      tooltip: hint,
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: onInfoTap,
                     ),
                 ],
               ),

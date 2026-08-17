@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/widgets/earth_primitives.dart';
 
 class CommandExecutiveQuadrant extends StatelessWidget {
   final EarthState state;
@@ -94,6 +95,28 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: cyanAccentColor,
                   title: 'MARKET',
                   subtitle: 'UNIFORM BATCH SETTLEMENT',
+                  onInfoTap: () => showEarthInfoDialog(
+                    context,
+                    title: 'CENTRAL MARKET OVERVIEW',
+                    subtitle: 'Batch auction clearing & spot commodity pricing',
+                    items: [
+                      {
+                        'label': 'Components Price ($componentsPrice C)',
+                        'description':
+                            'Uniform clearing price per unit of manufactured Components in the latest market settlement batch.',
+                      },
+                      {
+                        'label': 'Energy Price ($energyPrice C)',
+                        'description':
+                            'Spot cost per power unit required to run machinery and maintain city operations.',
+                      },
+                      {
+                        'label': 'Materials Price ($materialsPrice C)',
+                        'description':
+                            'Raw physical feedstock price utilized by businesses during manufacturing.',
+                      },
+                    ],
+                  ),
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -118,6 +141,28 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: violetColor,
                   title: 'BUSINESS',
                   subtitle: '$businessName · $businessStatus',
+                  onInfoTap: () => showEarthInfoDialog(
+                    context,
+                    title: 'BUSINESS OPERATIONS',
+                    subtitle: 'Fleet health, production strategy, and revenue',
+                    items: [
+                      {
+                        'label': 'Machine Fleet Condition ($condition%)',
+                        'description':
+                            'Average operational condition of all active production machines. When condition drops below 50%, maintenance is urgently required.',
+                      },
+                      {
+                        'label': 'Projected Net P&L (${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(1)} C)',
+                        'description':
+                            'Estimated net profit generated per cycle after deducting operating costs, input commodities, and taxes.',
+                      },
+                      {
+                        'label': 'Operating Policy ($policy)',
+                        'description':
+                            'Current operational mode: Reliability (protected condition), Margin (higher yield/risk), or Capacity (maximum output/rapid wear).',
+                      },
+                    ],
+                  ),
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -145,6 +190,28 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: Colors.amberAccent,
                   title: cityName,
                   subtitle: 'MUNICIPAL RESIDENCY · HEALTH $cityHealth',
+                  onInfoTap: () => showEarthInfoDialog(
+                    context,
+                    title: 'MUNICIPAL CITY STATUS',
+                    subtitle: 'Infrastructure coverage and civic health',
+                    items: [
+                      {
+                        'label': 'Power Grid Stability (92%)',
+                        'description':
+                            'City-wide electrical power distribution. Grid failures disrupt machine throughput.',
+                      },
+                      {
+                        'label': 'Housing Capacity (76%)',
+                        'description':
+                            'Available residential capacity for human citizens within the city jurisdiction.',
+                      },
+                      {
+                        'label': 'Health Coverage (64%)',
+                        'description':
+                            'Municipal healthcare and medical coverage mitigating human biological aging penalties.',
+                      },
+                    ],
+                  ),
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -169,6 +236,28 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: Colors.tealAccent,
                   title: 'FINANCE & CONTRACTS',
                   subtitle: 'DOUBLE-ENTRY SETTLED LEDGER',
+                  onInfoTap: () => showEarthInfoDialog(
+                    context,
+                    title: 'FINANCE & COMMERCIAL AGREEMENTS',
+                    subtitle: 'Treasury liquidity and binding supply contracts',
+                    items: [
+                      {
+                        'label': 'Liquid Credits (${state.human['credits']} C)',
+                        'description':
+                            'Cash reserves instantly available for orders, equipment acquisition, and dividend distributions.',
+                      },
+                      {
+                        'label': 'Active Agreements ($activeContracts)',
+                        'description':
+                            'Enforceable commercial supply contracts ensuring fixed-price commodity deliveries.',
+                      },
+                      {
+                        'label': 'Ledger Integrity (Audited)',
+                        'description':
+                            'Every credit is double-entry verified against the authoritative database ledger.',
+                      },
+                    ],
+                  ),
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -225,6 +314,7 @@ class _ExecutiveCard extends StatelessWidget {
   final Widget body;
   final String buttonLabel;
   final VoidCallback onTap;
+  final VoidCallback? onInfoTap;
 
   const _ExecutiveCard({
     required this.width,
@@ -236,6 +326,7 @@ class _ExecutiveCard extends StatelessWidget {
     required this.body,
     required this.buttonLabel,
     required this.onTap,
+    this.onInfoTap,
   });
 
   @override
@@ -301,6 +392,18 @@ class _ExecutiveCard extends StatelessWidget {
                         ],
                       ),
                     ),
+                    if (onInfoTap != null)
+                      IconButton(
+                        icon: Icon(
+                          Icons.info_outline,
+                          size: 13,
+                          color: mutedColor.withValues(alpha: .7),
+                        ),
+                        tooltip: 'Details',
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                        onPressed: onInfoTap,
+                      ),
                   ],
                 ),
                 const SizedBox(height: 14),
