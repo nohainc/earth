@@ -24,6 +24,8 @@ class MachinesPanel extends StatelessWidget {
     final machines = state.machines;
     return EarthPanel(
       title: 'AUTOMATION / MACHINE INVENTORY',
+      infoDescription:
+          'Catalog of automated industrial machinery, fabrication rigs, and synthesis equipment with condition monitoring, utilization metrics, and maintenance controls.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
