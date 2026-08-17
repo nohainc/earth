@@ -69,9 +69,9 @@ class CommandExecutiveQuadrant extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final availableWidth = constraints.maxWidth;
-        final numCols = availableWidth >= 1200
+        final numCols = availableWidth >= 1000
             ? 4
-            : availableWidth >= 400
+            : availableWidth >= 500
                 ? 2
                 : 1;
         final cardWidth = numCols == 1
