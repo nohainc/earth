@@ -72,7 +72,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
         final cardWidth = isTwoColumns
             ? (constraints.maxWidth - 16) / 2
             : constraints.maxWidth;
-        final double? minCardHeight = isTwoColumns ? 190.0 : null;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -96,7 +95,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 1. MARKET OVERVIEW CARD
                 _ExecutiveCard(
                   width: cardWidth,
-                  minHeight: minCardHeight,
                   icon: '⌁',
                   iconColor: cyanAccentColor,
                   title: 'MARKET',
@@ -119,7 +117,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 2. BUSINESS & OPERATIONS CARD
                 _ExecutiveCard(
                   width: cardWidth,
-                  minHeight: minCardHeight,
                   icon: '◈',
                   iconColor: violetColor,
                   title: 'BUSINESS',
@@ -145,7 +142,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 3. CIVIC & CITY CARD
                 _ExecutiveCard(
                   width: cardWidth,
-                  minHeight: minCardHeight,
                   icon: '⊙',
                   iconColor: Colors.amberAccent,
                   title: cityName,
@@ -168,7 +164,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 4. FINANCE & CONTRACTS CARD
                 _ExecutiveCard(
                   width: cardWidth,
-                  minHeight: minCardHeight,
                   icon: '§',
                   iconColor: Colors.tealAccent,
                   title: 'FINANCE & CONTRACTS',
@@ -220,7 +215,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
 
 class _ExecutiveCard extends StatelessWidget {
   final double width;
-  final double? minHeight;
   final String icon;
   final Color iconColor;
   final String title;
@@ -230,7 +224,6 @@ class _ExecutiveCard extends StatelessWidget {
 
   const _ExecutiveCard({
     required this.width,
-    this.minHeight,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -245,8 +238,6 @@ class _ExecutiveCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(14),
         child: Container(
           width: width,
-          constraints:
-              minHeight != null ? BoxConstraints(minHeight: minHeight!) : null,
           decoration: BoxDecoration(
             color: surfaceColor.withValues(alpha: .72),
             borderRadius: BorderRadius.circular(14),
