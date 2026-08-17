@@ -485,6 +485,9 @@ class _CommandCenterState extends State<CommandCenter> {
                             Dashboard(
                               state: current,
                               selectedSection: selectedSection,
+                              onNavigate: (section) => _navigateToSection(
+                                  context, section,
+                                  closeDrawer: false),
                               busy: busy,
                               events: events,
                               notifications: notifications,

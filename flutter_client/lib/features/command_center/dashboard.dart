@@ -13,20 +13,21 @@ import '../operations/ai_panel.dart';
 import '../operations/business_panel.dart';
 import '../operations/machines_panel.dart';
 import '../operations/technology_panel.dart';
+import 'command_executive_quadrant.dart';
 import 'hero_card.dart';
 import 'opportunity_panel.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
-      'market' => 'CENTRAL MARKET',
+      'market' => 'MARKET',
       'business' => 'BUSINESS',
-      'civic' => 'CIVIC LIFE',
+      'civic' => 'CIVIC',
       'city' => 'CITY',
       'technology' => 'TECHNOLOGY',
-      'life' => 'LIFE & LEGACY',
+      'life' => 'LEGACY',
       'contracts' => 'CONTRACTS',
-      'finance' => 'PERSONAL FINANCE',
-      'activity' => 'ACTIVITY & NOTIFICATIONS',
-      _ => 'COMMAND CENTER',
+      'finance' => 'FINANCE',
+      'activity' => 'ACTIVITY',
+      _ => 'COMMAND',
     };
 
 class Dashboard extends StatelessWidget {
@@ -50,6 +51,7 @@ class Dashboard extends StatelessWidget {
   final int unreadNotifications;
   final Map<String, GlobalKey> sectionKeys;
   final String selectedSection;
+  final ValueChanged<String>? onNavigate;
   final Future<void> Function(Future<EarthState> Function()) action;
   final VoidCallback? onRefreshEvents;
   final Future<void> Function(String)? onMarkNotificationRead;
@@ -77,6 +79,7 @@ class Dashboard extends StatelessWidget {
     required this.unreadNotifications,
     required this.sectionKeys,
     this.selectedSection = 'command',
+    this.onNavigate,
     required this.action,
     this.onRefreshEvents,
     this.onMarkNotificationRead,
@@ -329,37 +332,17 @@ class Dashboard extends StatelessWidget {
       case 'command':
       default:
         return [
-          OpportunityPanel(opportunities: state.opportunities),
-          PersonalFinancePanel(
-            panelKey: sectionKeys['finance'],
-            state: state,
-            busy: busy,
-            personalFinanceData: personalFinanceData,
-            action: action,
+          OpportunityPanel(
+            opportunities: state.opportunities,
+            onNavigate: onNavigate,
           ),
-          ActivityPanel(
-            panelKey: sectionKeys['activity'],
-            events: events,
-            notifications: notifications,
-            unreadCount: unreadNotifications,
-            isLiveConnected: isLiveConnected,
-            isReconnecting: isReconnecting,
-            onRefresh: onRefreshEvents ?? () {},
-            onMarkRead: onMarkNotificationRead ?? (_) async {},
-            onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
-          ),
-          ContractsPanel(
-            panelKey: sectionKeys['contracts'],
+          const SizedBox(height: 16),
+          CommandExecutiveQuadrant(
             state: state,
-            busy: busy,
+            businessFinancials: businessFinancials,
             contracts: contracts,
-            action: action,
+            onNavigate: onNavigate,
           ),
-          WorldFeedPanel(events: events),
-          OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
-          WorldIntegrityPanel(state: state),
-          HistoryArchivePanel(state: state),
-          LedgerPanel(state: state),
         ];
     }
   }

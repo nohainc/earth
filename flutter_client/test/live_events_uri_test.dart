@@ -5,11 +5,11 @@ import 'package:earth_client/features/command_center/dashboard.dart';
 
 void main() {
   test('maps navigation topics to app section titles', () {
-    expect(dashboardSectionTitle('market'), 'CENTRAL MARKET');
+    expect(dashboardSectionTitle('market'), 'MARKET');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
-    expect(dashboardSectionTitle('life'), 'LIFE & LEGACY');
+    expect(dashboardSectionTitle('life'), 'LEGACY');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
-    expect(dashboardSectionTitle('unknown'), 'COMMAND CENTER');
+    expect(dashboardSectionTitle('unknown'), 'COMMAND');
   });
 
   test('uses configured API origin for live events', () {
