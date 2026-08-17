@@ -557,22 +557,127 @@ class OwnershipTimelinePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'OWNERSHIP / PROVENANCE TIMELINE',
+      infoDescription:
+          '• Asset Provenance & Lineage: Immutable historical record tracking legal titles, transfers, acquisitions, and ownership transitions.\n\n• Asset Classes: Tracks industrial machines, enterprise equity shares, technological patents, and civic facilities.\n\n• Audit Chain: Every transfer verifies historical custody, preventing counterparty dispute and counterfeit claims.',
       child: ownershipEvents.isEmpty
           ? const Text(
-              'Your asset history will appear here after your first acquisition or transfer.',
+              'Your asset provenance history will appear here after your first acquisition or transfer.',
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: ownershipEvents.take(8).map((raw) {
+              children: ownershipEvents.take(10).map((raw) {
                 final event = raw as Map<String, dynamic>;
                 final direction =
-                    event['from_owner_id'] == null ? 'acquired' : 'transferred';
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'DAY ${event['game_day']}  ·  ${event['asset_type']} ${event['asset_id']} $direction  ·  ${event['quantity']}',
-                    style: const TextStyle(fontSize: 11),
+                    event['from_owner_id'] == null ? 'ACQUIRED' : 'TRANSFERRED';
+                final isAcquired = direction == 'ACQUIRED';
+                final assetType =
+                    (event['asset_type']?.toString() ?? 'ASSET').toUpperCase();
+                final assetId = event['asset_id']?.toString() ?? '—';
+                final qty = event['quantity'] ?? 1;
+                final gameDay = event['game_day'] ?? '—';
+                final fromOwner = event['from_owner_id']?.toString() ?? 'ORIGIN_TREASURY';
+                final toOwner = event['to_owner_id']?.toString() ?? 'CURRENT_HOLDER';
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: isAcquired
+                              ? cyanAccentColor.withValues(alpha: .15)
+                              : violetColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          isAcquired
+                              ? Icons.add_circle_outline_rounded
+                              : Icons.swap_horiz_rounded,
+                          size: 14,
+                          color: isAcquired ? cyanAccentColor : violetColor,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 5, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withValues(alpha: .06),
+                                    borderRadius: BorderRadius.circular(3),
+                                  ),
+                                  child: Text(
+                                    'DAY $gameDay',
+                                    style: const TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w700,
+                                      color: mutedColor,
+                                      letterSpacing: .5,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  '$assetType · $assetId ($qty units)',
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    color: inkColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$fromOwner → $toOwner',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                color: mutedColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: (isAcquired ? cyanAccentColor : violetColor)
+                              .withValues(alpha: .12),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: (isAcquired ? cyanAccentColor : violetColor)
+                                .withValues(alpha: .3),
+                          ),
+                        ),
+                        child: Text(
+                          direction,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .6,
+                            color: isAcquired ? cyanAccentColor : violetColor,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
@@ -720,27 +825,84 @@ class HistoryArchivePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final events = (state.history['events'] as List<dynamic>?) ?? const [];
+
     return EarthPanel(
       title: 'HISTORY / ARCHIVE',
+      infoDescription:
+          '• World Chronicle & Epoch Archive: Canonical historical archive recording civilizational milestones, macro crises, planetary ecological tipping points, and generational transitions.\n\n• Legacy Preservation: Permanent historical ledger ensuring human achievements and societal governance decisions are preserved across all eras.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (events.isEmpty)
-            const Text('The archive is waiting for the first recorded world day.')
+            const Text(
+              'The historical chronicle is waiting for the first recorded world day milestone.',
+              style: TextStyle(color: mutedColor, fontSize: 11),
+            )
           else
-            ...events.take(6).map((raw) {
+            ...events.take(8).map((raw) {
               final event = raw as Map<String, dynamic>;
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 6),
-                child: Text(
-                  'DAY ${event['game_day'] ?? '—'}  ·  ${event['title'] ?? event['type'] ?? 'Historical Event'}',
-                  style: const TextStyle(fontSize: 11),
+              final gameDay = event['game_day'] ?? '—';
+              final title =
+                  event['title'] ?? event['type'] ?? 'Historical Epoch Milestone';
+              final desc = event['description']?.toString() ?? '';
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 8),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                decoration: BoxDecoration(
+                  color: surfaceColor.withValues(alpha: .6),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: violetColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: const Icon(
+                        Icons.history_edu_outlined,
+                        size: 14,
+                        color: violetColor,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'DAY $gameDay  ·  $title',
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: inkColor,
+                            ),
+                          ),
+                          if (desc.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              desc,
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                color: mutedColor,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               );
             }),
           const SizedBox(height: 6),
           const Text(
-            'Rankings and Human legacies are preserved as the world changes.',
+            'Rankings and Human legacies are permanently archived as world epochs advance.',
             style: TextStyle(color: mutedColor, fontSize: 10),
           ),
         ],

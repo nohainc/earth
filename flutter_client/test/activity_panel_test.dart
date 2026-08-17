@@ -65,6 +65,14 @@ void main() {
     expect(find.text('Contract Proposed'), findsOneWidget);
     expect(find.text('MARK ALL READ'), findsOneWidget);
 
+    // Verify info icon is present and opens description dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Real-Time Operations Telemetry'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+
     // Tap mark read icon for NOTIF-001
     await tester.tap(find.byTooltip('Mark read').first);
     await tester.pumpAndSettle();

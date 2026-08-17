@@ -30,7 +30,8 @@ class ActivityPanel extends StatefulWidget {
   State<ActivityPanel> createState() => _ActivityPanelState();
 }
 
-class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProviderStateMixin {
+class _ActivityPanelState extends State<ActivityPanel>
+    with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final Set<String> _locallyReadIds = <String>{};
 
@@ -51,7 +52,9 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
     final gameDay = evt['gameDay'] ?? evt['game_day'];
     final dayPrefix = gameDay != null ? '[Day $gameDay] ' : '';
 
-    if (type == 'world_day_started' || type == 'world_tick' || type == 'world.day_advanced') {
+    if (type == 'world_day_started' ||
+        type == 'world_tick' ||
+        type == 'world.day_advanced') {
       return '${dayPrefix}World simulation cycle advanced to Game Day $gameDay';
     }
     if (type == 'market.batch_settled' || type == 'market') {
@@ -66,7 +69,10 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
     if (type == 'business.policy_changed') {
       return '${dayPrefix}Enterprise operational policy adjusted';
     }
-    if (type == 'contract.proposed' || type == 'contract.accepted' || type == 'contract.disputed' || type == 'contract.resolved') {
+    if (type == 'contract.proposed' ||
+        type == 'contract.accepted' ||
+        type == 'contract.disputed' ||
+        type == 'contract.resolved') {
       return '${dayPrefix}Contract lifecycle event ($type) recorded';
     }
     if (type == 'human.bankruptcy') {
@@ -76,9 +82,41 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
       return '${dayPrefix}Public tax assessment settled with municipal authority';
     }
 
-    // Default safe sanitized message without leaking private account hashes/tokens
-    final title = evt['title']?.toString() ?? evt['eventType']?.toString() ?? type;
+    final title =
+        evt['title']?.toString() ?? evt['eventType']?.toString() ?? type;
     return '$dayPrefix$title';
+  }
+
+  IconData _getEventIcon(String type) {
+    if (type.contains('market')) return Icons.storefront_outlined;
+    if (type.contains('world') || type.contains('tick')) {
+      return Icons.public_rounded;
+    }
+    if (type.contains('governance') || type.contains('vote')) {
+      return Icons.how_to_vote_outlined;
+    }
+    if (type.contains('research')) return Icons.biotech_outlined;
+    if (type.contains('business')) return Icons.domain_outlined;
+    if (type.contains('contract')) return Icons.handshake_outlined;
+    if (type.contains('tax')) return Icons.receipt_long_outlined;
+    if (type.contains('bankrupt') || type.contains('insolvency')) {
+      return Icons.warning_amber_rounded;
+    }
+    return Icons.notifications_none_rounded;
+  }
+
+  Color _getEventColor(String type) {
+    if (type.contains('market')) return Colors.tealAccent;
+    if (type.contains('world') || type.contains('tick')) return cyanAccentColor;
+    if (type.contains('governance') || type.contains('vote')) return violetColor;
+    if (type.contains('research')) return Colors.lightGreenAccent;
+    if (type.contains('business')) return Colors.amberAccent;
+    if (type.contains('contract')) return cyanAccentColor;
+    if (type.contains('tax')) return Colors.orangeAccent;
+    if (type.contains('bankrupt') || type.contains('insolvency')) {
+      return Colors.redAccent;
+    }
+    return mutedColor;
   }
 
   @override
@@ -89,140 +127,323 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
     return EarthPanel(
       key: widget.panelKey,
       title: 'ACTIVITY & NOTIFICATIONS CENTER',
+      infoDescription:
+          '• Real-Time Operations Telemetry: Unified stream of private executive alerts and macroscopic planetary simulation events.\n\n• Stream Channels:\n  - PERSONAL ALERTS: Directed high-priority notices including tax assessments, contract proposals, filled trade orders, and enterprise dividends.\n  - PUBLIC FEED: Live global ledger updates, market batch settlement cycles, research milestones, and governance ballots.\n\n• Connection Status: Real-time telemetry pulse displaying WebSocket / SSE streaming health with automatic reconnection and event replay.\n\n• Acknowledgment: Mark individual alerts or batch acknowledge all pending notifications.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Live connection status bar
-          Row(
-            children: [
-              Container(
-                width: 8,
-                height: 8,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: widget.isLiveConnected
-                      ? cyanAccentColor
-                      : (widget.isReconnecting ? Colors.orangeAccent : Colors.redAccent),
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: Text(
-                  widget.isLiveConnected
-                      ? 'LIVE STREAM ACTIVE'
-                      : (widget.isReconnecting ? 'RECONNECTING / REPLAYING...' : 'DISCONNECTED'),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
+          // 1. LIVE CONNECTION & TELEMETRY HEADER
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  width: 8,
+                  height: 8,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
                     color: widget.isLiveConnected
                         ? cyanAccentColor
-                        : (widget.isReconnecting ? Colors.orangeAccent : Colors.redAccent),
-                    letterSpacing: 0.8,
+                        : (widget.isReconnecting
+                            ? Colors.orangeAccent
+                            : Colors.redAccent),
+                    boxShadow: widget.isLiveConnected
+                        ? [
+                            BoxShadow(
+                              color: cyanAccentColor.withValues(alpha: .6),
+                              blurRadius: 6,
+                              spreadRadius: 1,
+                            ),
+                          ]
+                        : null,
                   ),
                 ),
-              ),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 16),
-                tooltip: 'Refresh events & notifications',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: widget.onRefresh,
-              ),
-            ],
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    widget.isLiveConnected
+                        ? 'LIVE STREAM ACTIVE'
+                        : (widget.isReconnecting
+                            ? 'RECONNECTING / REPLAYING...'
+                            : 'DISCONNECTED'),
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      color: widget.isLiveConnected
+                          ? cyanAccentColor
+                          : (widget.isReconnecting
+                              ? Colors.orangeAccent
+                              : Colors.redAccent),
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .04),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Text(
+                    '${widget.events.length} EVENTS BUFFERED',
+                    style: const TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: mutedColor,
+                      letterSpacing: .5,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  tooltip: 'Refresh events & notifications',
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(),
+                  onPressed: widget.onRefresh,
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
-          TabBar(
-            controller: _tabController,
-            isScrollable: false,
-            indicatorColor: cyanAccentColor,
-            labelColor: Colors.white,
-            unselectedLabelColor: mutedColor,
-            labelStyle: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-            tabs: [
-              Tab(
-                text: displayUnread > 0 ? 'ALERTS ($displayUnread)' : 'ALERTS',
-              ),
-              const Tab(text: 'PUBLIC FEED'),
-            ],
+
+          const SizedBox(height: 14),
+
+          // 2. SEGMENTED NAVIGATION TABS
+          Container(
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .5),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: TabBar(
+              controller: _tabController,
+              indicatorColor: cyanAccentColor,
+              indicatorSize: TabBarIndicatorSize.tab,
+              indicatorWeight: 2.5,
+              dividerColor: Colors.transparent,
+              labelColor: inkColor,
+              unselectedLabelColor: mutedColor,
+              labelStyle:
+                  const TextStyle(fontSize: 11, fontWeight: FontWeight.w800),
+              tabs: [
+                Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Icon(Icons.notifications_active_outlined, size: 14),
+                      const SizedBox(width: 6),
+                      Text(displayUnread > 0
+                          ? 'ALERTS ($displayUnread)'
+                          : 'ALERTS'),
+                    ],
+                  ),
+                ),
+                const Tab(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.feed_outlined, size: 14),
+                      SizedBox(width: 6),
+                      Text('PUBLIC FEED'),
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 14),
+
+          // 3. STREAM CONTENT VIEW
           SizedBox(
-            height: 240,
+            height: 320,
             child: TabBarView(
               controller: _tabController,
               children: [
-                // Tab 1: Notifications
+                // TAB 1: PERSONAL ALERTS
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     if (widget.notifications.isNotEmpty && displayUnread > 0)
-                      Align(
-                        alignment: Alignment.centerRight,
-                        child: TextButton(
-                          style: TextButton.styleFrom(padding: EdgeInsets.zero, visualDensity: VisualDensity.compact),
-                          onPressed: () async {
-                            for (final n in widget.notifications) {
-                              if (n is Map<String, dynamic> && n['id'] != null) {
-                                _locallyReadIds.add(n['id'].toString());
-                              }
-                            }
-                            setState(() {});
-                            await widget.onMarkAllRead();
-                          },
-                          child: const Text('MARK ALL READ', style: TextStyle(fontSize: 10, color: cyanAccentColor)),
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Text(
+                              '$displayUnread PENDING NOTIFICATIONS',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: .8,
+                                color: mutedColor,
+                              ),
+                            ),
+                            TextButton.icon(
+                              style: TextButton.styleFrom(
+                                padding: EdgeInsets.zero,
+                                visualDensity: VisualDensity.compact,
+                              ),
+                              onPressed: () async {
+                                for (final n in widget.notifications) {
+                                  if (n is Map<String, dynamic> &&
+                                      n['id'] != null) {
+                                    _locallyReadIds.add(n['id'].toString());
+                                  }
+                                }
+                                setState(() {});
+                                await widget.onMarkAllRead();
+                              },
+                              icon: const Icon(Icons.done_all_rounded,
+                                  size: 13, color: cyanAccentColor),
+                              label: const Text(
+                                'MARK ALL READ',
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: cyanAccentColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
                       ),
                     Expanded(
                       child: widget.notifications.isEmpty
                           ? const Center(
-                              child: Text('No notifications received yet.', style: TextStyle(fontSize: 11, color: mutedColor)),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.check_circle_outline_rounded,
+                                      size: 32, color: mutedColor),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'No notifications received yet.',
+                                    style: TextStyle(
+                                        fontSize: 11, color: mutedColor),
+                                  ),
+                                ],
+                              ),
                             )
                           : ListView.separated(
                               itemCount: widget.notifications.length.clamp(0, 30),
-                              separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 6),
                               itemBuilder: (ctx, i) {
                                 final n = widget.notifications[i];
-                                if (n is! Map<String, dynamic>) return const SizedBox.shrink();
-                                final id = n['id']?.toString() ?? 'NOTIF-$i';
-                                final title = n['title']?.toString() ?? 'Notification';
+                                if (n is! Map<String, dynamic>) {
+                                  return const SizedBox.shrink();
+                                }
+                                final id =
+                                    n['id']?.toString() ?? 'NOTIF-$i';
+                                final title =
+                                    n['title']?.toString() ?? 'Notification';
                                 final body = n['body']?.toString() ?? '';
-                                final isRead = n['read'] == true || _locallyReadIds.contains(id);
+                                final isRead = n['read'] == true ||
+                                    _locallyReadIds.contains(id);
 
-                                return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 6),
+                                return Container(
+                                  padding: const EdgeInsets.all(12),
+                                  decoration: BoxDecoration(
+                                    color: isRead
+                                        ? surfaceColor.withValues(alpha: .4)
+                                        : surfaceColor.withValues(alpha: .85),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isRead
+                                          ? Colors.white10
+                                          : cyanAccentColor
+                                              .withValues(alpha: .3),
+                                    ),
+                                  ),
                                   child: Row(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       Container(
-                                        width: 6,
-                                        height: 6,
-                                        margin: const EdgeInsets.only(top: 4, right: 8),
+                                        padding: const EdgeInsets.all(6),
                                         decoration: BoxDecoration(
-                                          shape: BoxShape.circle,
-                                          color: isRead ? Colors.transparent : cyanAccentColor,
+                                          color: isRead
+                                              ? Colors.white
+                                                  .withValues(alpha: .04)
+                                              : cyanAccentColor
+                                                  .withValues(alpha: .15),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child: Icon(
+                                          isRead
+                                              ? Icons.notifications_none_rounded
+                                              : Icons
+                                                  .notifications_active_outlined,
+                                          size: 14,
+                                          color: isRead
+                                              ? mutedColor
+                                              : cyanAccentColor,
                                         ),
                                       ),
+                                      const SizedBox(width: 10),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
-                                            Text(title, style: TextStyle(fontSize: 11, fontWeight: isRead ? FontWeight.normal : FontWeight.bold)),
-                                            if (body.isNotEmpty)
-                                              Text(body, style: const TextStyle(fontSize: 10, color: mutedColor)),
+                                            Text(
+                                              title,
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                fontWeight: isRead
+                                                    ? FontWeight.w600
+                                                    : FontWeight.w800,
+                                                color: isRead
+                                                    ? mutedColor
+                                                    : inkColor,
+                                              ),
+                                            ),
+                                            if (body.isNotEmpty) ...[
+                                              const SizedBox(height: 3),
+                                              Text(
+                                                body,
+                                                style: TextStyle(
+                                                  fontSize: 10.5,
+                                                  color: isRead
+                                                      ? mutedColor
+                                                          .withValues(alpha: .8)
+                                                      : inkColor
+                                                          .withValues(alpha: .9),
+                                                  height: 1.35,
+                                                ),
+                                              ),
+                                            ],
                                           ],
                                         ),
                                       ),
-                                      if (!isRead)
+                                      if (!isRead) ...[
+                                        const SizedBox(width: 8),
                                         IconButton(
-                                          icon: const Icon(Icons.check, size: 14, color: mutedColor),
+                                          icon: const Icon(
+                                              Icons.check_circle_outline_rounded,
+                                              size: 16,
+                                              color: cyanAccentColor),
                                           tooltip: 'Mark read',
                                           padding: EdgeInsets.zero,
+                                          visualDensity: VisualDensity.compact,
                                           constraints: const BoxConstraints(),
                                           onPressed: () async {
-                                            setState(() => _locallyReadIds.add(id));
+                                            setState(() =>
+                                                _locallyReadIds.add(id));
                                             await widget.onMarkRead(id);
                                           },
                                         ),
+                                      ],
                                     ],
                                   ),
                                 );
@@ -231,22 +452,68 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
                     ),
                   ],
                 ),
-                // Tab 2: Public Activity Feed
+
+                // TAB 2: PUBLIC ACTIVITY FEED
                 widget.events.isEmpty
                     ? const Center(
-                        child: Text('No recent simulation activity recorded.', style: TextStyle(fontSize: 11, color: mutedColor)),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.sensors_off_rounded,
+                                size: 32, color: mutedColor),
+                            SizedBox(height: 8),
+                            Text(
+                              'No recent simulation activity recorded.',
+                              style: TextStyle(
+                                  fontSize: 11, color: mutedColor),
+                            ),
+                          ],
+                        ),
                       )
                     : ListView.separated(
                         itemCount: widget.events.length.clamp(0, 40),
-                        separatorBuilder: (_, __) => const Divider(height: 1, color: Colors.white10),
+                        separatorBuilder: (_, __) => const SizedBox(height: 6),
                         itemBuilder: (ctx, i) {
                           final evt = widget.events[i];
-                          if (evt is! Map<String, dynamic>) return const SizedBox.shrink();
-                          return Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 5),
-                            child: Text(
-                              _formatEventSummary(evt),
-                              style: const TextStyle(fontSize: 11, color: Colors.white70),
+                          if (evt is! Map<String, dynamic>) {
+                            return const SizedBox.shrink();
+                          }
+                          final type = evt['type']?.toString() ?? 'event';
+                          final color = _getEventColor(type);
+                          final icon = _getEventIcon(type);
+                          final summary = _formatEventSummary(evt);
+
+                          return Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 9),
+                            decoration: BoxDecoration(
+                              color: surfaceColor.withValues(alpha: .6),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white10),
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: .15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Icon(icon, size: 14, color: color),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    summary,
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: inkColor,
+                                      fontWeight: FontWeight.w500,
+                                      height: 1.3,
+                                    ),
+                                  ),
+                                ),
+                              ],
                             ),
                           );
                         },
