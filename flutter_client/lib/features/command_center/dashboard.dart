@@ -273,19 +273,45 @@ class Dashboard extends StatelessWidget {
           AiAssistantPanel(state: state, busy: busy, action: action),
           AiRecommendationsPanel(state: state),
           const EarthPanel(
-            title: 'EIGHT-SECTOR ECONOMY',
+            title: 'EIGHT-SECTOR ECONOMY / INTERDEPENDENT MATRIX',
+            infoDescription:
+                '• Eight-Sector Industrial Matrix: The macroeconomic production loop linking raw extraction, power generation, mechanical fabrication, residential housing, computational infrastructure, and research.\n\n• Interdependency Loops:\n  - ENERGY & EXTRACTION: Powers high-capacity mining and bio-nutrient yields.\n  - COMPONENTS & MACHINES: Converts raw ores into precision subassemblies and industrial fabrication rigs.\n  - MAINTENANCE & HOUSING: Preserves fleet condition and citizen vitality.\n  - COMPUTE & R&D: Fuels quantum research algorithms unlocking patentable technologies.',
             child: Wrap(
               spacing: 8,
               runSpacing: 8,
               children: [
-                Chip(label: Text('ENERGY')),
-                Chip(label: Text('EXTRACTION')),
-                Chip(label: Text('COMPONENTS')),
-                Chip(label: Text('MACHINES')),
-                Chip(label: Text('MAINTENANCE')),
-                Chip(label: Text('HOUSING')),
-                Chip(label: Text('COMPUTE')),
-                Chip(label: Text('R&D')),
+                Chip(
+                  avatar: Icon(Icons.bolt_outlined, size: 14, color: Colors.amberAccent),
+                  label: Text('ENERGY', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.terrain_outlined, size: 14, color: Colors.tealAccent),
+                  label: Text('EXTRACTION', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.settings_outlined, size: 14, color: cyanAccentColor),
+                  label: Text('COMPONENTS', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.precision_manufacturing_outlined, size: 14, color: violetColor),
+                  label: Text('MACHINES', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.build_outlined, size: 14, color: Colors.orangeAccent),
+                  label: Text('MAINTENANCE', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.home_work_outlined, size: 14, color: Colors.lightGreenAccent),
+                  label: Text('HOUSING', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.memory_outlined, size: 14, color: cyanAccentColor),
+                  label: Text('COMPUTE', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
+                Chip(
+                  avatar: Icon(Icons.biotech_outlined, size: 14, color: violetColor),
+                  label: Text('R&D', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
+                ),
               ],
             ),
           ),

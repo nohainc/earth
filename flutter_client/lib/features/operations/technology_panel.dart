@@ -29,125 +29,472 @@ class TechnologyPanel extends StatelessWidget {
     final techName = (research['name'] as String?)?.toUpperCase() ??
         (tech['name'] as String?)?.toUpperCase() ??
         'ADAPTIVE MAINTENANCE AI';
+    final techId = research['id']?.toString() ?? 'TECH-001';
     final progress =
-        (asDouble(research['progress']) ?? asDouble(tech['progress']) ?? 0)
+        (asDouble(research['progress']) ?? asDouble(tech['progress']) ?? 0.0)
             .clamp(0.0, 100.0);
-    final focus = research['focus'] ?? tech['focus'] ?? 'efficiency';
-    final budget = research['budget'] ?? research['budgetPerDay'] ?? 240;
+    final focus = (research['focus'] ?? tech['focus'] ?? 'efficiency')
+        .toString()
+        .toUpperCase();
+    final budgetNum = research['budget'] ?? research['budgetPerDay'] ?? 240;
+    final budget = asDoubleOr(budgetNum, 240.0);
     final isComplete = progress >= 100;
 
-    final activePatents =
-        state.technologyRegistry['activePatents'] ?? (isComplete ? 1 : 0);
-    final activeLicenses = state.technologyRegistry['activeLicenses'] ?? 1;
+    final activePatents = asIntOr(
+        state.technologyRegistry['activePatents'], isComplete ? 1 : 0);
+    final activeLicenses =
+        asIntOr(state.technologyRegistry['activeLicenses'], 1);
+
+    Color focusColor = cyanAccentColor;
+    if (focus == 'DURABILITY') focusColor = Colors.tealAccent;
+    if (focus == 'SAFETY') focusColor = Colors.lightGreenAccent;
+    if (focus == 'COST') focusColor = Colors.amberAccent;
 
     return EarthPanel(
       key: panelKey,
       title: 'TECHNOLOGY / RESEARCH & PATENTS',
+      infoDescription:
+          '• Collaborative R&D Laboratory: Planetary technological development funded through citizen and enterprise contributions.\n\n• Focus Specialization:\n  - EFFICIENCY: Boosts machine output per cycle.\n  - DURABILITY: Reduces wear rate and extends mean time between maintenance.\n  - SAFETY: Eliminates catastrophic failure risks during continuous overload.\n  - COST: Minimizes input feedstock requirements.\n\n• Intellectual Property & Patents: Completed research (100% progress) can be registered as canonical patents granting exclusive manufacturing rights or licensed to other citizens for recurring royalties (5.00% standard rate).',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
+          // 1. ACTIVE RESEARCH PROJECT COCKPIT
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .85),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      techName,
-                      style: const TextStyle(
-                          fontWeight: FontWeight.w700, fontSize: 13),
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: violetColor.withValues(alpha: .2),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(
+                            color: violetColor.withValues(alpha: .4)),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Icon(
+                        Icons.biotech_outlined,
+                        size: 22,
+                        color: cyanAccentColor,
+                      ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Focus: $focus · Budget: $budget C · Status: ${isComplete ? 'COMPLETED' : 'IN RESEARCH'}',
-                      style: const TextStyle(color: mutedColor, fontSize: 10),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  techName,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w800,
+                                    color: inkColor,
+                                    letterSpacing: .5,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3.5),
+                                decoration: BoxDecoration(
+                                  color: (isComplete
+                                          ? cyanAccentColor
+                                          : Colors.lightBlueAccent)
+                                      .withValues(alpha: .15),
+                                  borderRadius: BorderRadius.circular(5),
+                                  border: Border.all(
+                                    color: (isComplete
+                                            ? cyanAccentColor
+                                            : Colors.lightBlueAccent)
+                                        .withValues(alpha: .4),
+                                  ),
+                                ),
+                                child: Text(
+                                  isComplete ? 'COMPLETED' : 'IN RESEARCH',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: .8,
+                                    color: isComplete
+                                        ? cyanAccentColor
+                                        : Colors.lightBlueAccent,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'PROJECT ID: $techId  ·  FOCUS: ${focus.toLowerCase()}  ·  STATUS: ${isComplete ? 'COMPLETED' : 'IN RESEARCH'}',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: mutedColor,
+                              letterSpacing: .6,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                '${progress.toStringAsFixed(0)}%',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  color: isComplete ? cyanAccentColor : Colors.white,
+
+                const SizedBox(height: 16),
+
+                // Progress Bar & Percentage
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'RESEARCH PROGRESSION',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .8,
+                        color: mutedColor.withValues(alpha: .9),
+                      ),
+                    ),
+                    Text(
+                      '${progress.toStringAsFixed(0)}%',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: -.3,
+                        color: isComplete ? cyanAccentColor : inkColor,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          LinearProgressIndicator(
-            value: progress / 100,
-            color: isComplete ? cyanAccentColor : Colors.lightBlueAccent,
-            backgroundColor: Colors.white10,
-          ),
-          const SizedBox(height: 10),
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withAlpha(6),
-              borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Text(
-                    'Patents granted: $activePatents',
-                    style: const TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w600),
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: LinearProgressIndicator(
+                    value: progress / 100,
+                    minHeight: 8,
+                    color: isComplete ? cyanAccentColor : Colors.lightBlueAccent,
+                    backgroundColor: Colors.white10,
                   ),
                 ),
-                Expanded(
-                  child: Text(
-                    'Active licenses: $activeLicenses (5.00% royalty)',
-                    style:
-                        const TextStyle(fontSize: 11, color: cyanAccentColor),
-                    textAlign: TextAlign.right,
+
+                const SizedBox(height: 14),
+
+                // Focus & Budget Breakdown Badges (Wrap to prevent horizontal overflow)
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: focusColor.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(
+                            color: focusColor.withValues(alpha: .3)),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.tune_rounded, size: 12, color: focusColor),
+                          const SizedBox(width: 5),
+                          Text(
+                            'FOCUS: $focus',
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: focusColor,
+                              letterSpacing: .5,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .04),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Text(
+                        'Focus: ${focus.toLowerCase()} · Budget: ${formatWholeNumber(budget)} C · Status: ${isComplete ? 'COMPLETED' : 'IN RESEARCH'}',
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: mutedColor,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 18),
+
+          // 2. INTELLECTUAL PROPERTY & LICENSING METRICS
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              'INTELLECTUAL PROPERTY & COMMERCIAL LICENSES',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          LayoutBuilder(
+            builder: (context, ipConstraints) {
+              final ipWidth = ipConstraints.maxWidth;
+              final numCols = ipWidth >= 500 ? 2 : 1;
+              final itemWidth = numCols == 1
+                  ? ipWidth
+                  : (ipWidth - (numCols - 1) * 12) / numCols;
+
+              return Wrap(
+                spacing: 12,
+                runSpacing: 12,
+                children: [
+                  _ipMetricCard(
+                    width: itemWidth,
+                    title: 'PATENTS REGISTERED',
+                    value: '$activePatents',
+                    subtext: 'Patents granted: $activePatents',
+                    accent: violetColor,
+                    icon: Icons.verified_user_outlined,
+                  ),
+                  _ipMetricCard(
+                    width: itemWidth,
+                    title: 'COMMERCIAL LICENSES',
+                    value: '$activeLicenses',
+                    subtext: 'Active licenses: $activeLicenses (5.00% royalty)',
+                    accent: cyanAccentColor,
+                    icon: Icons.gavel_outlined,
+                  ),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 18),
+
+          // 3. R&D ACTIONS & IP MONETIZATION HUB
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 4),
+            child: Text(
+              'R&D OPERATIONS & IP MONETIZATION',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: [
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: cyanAccentColor,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 9),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: busy || isComplete
+                      ? null
+                      : () => action(() => const EarthApi().fundResearch()),
+                  icon: const Icon(Icons.bolt_rounded, size: 15),
+                  label: const Text(
+                    'FUND 240 C',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: .6,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: inkColor,
+                    side: const BorderSide(color: Colors.white24),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 9),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: busy
+                      ? null
+                      : () => showResearchComposerDialog(context, action),
+                  icon: const Icon(Icons.science_outlined, size: 15),
+                  label: const Text(
+                    'NEW PROJECT · 240 C',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .6,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: violetColor,
+                    side: BorderSide(
+                        color: violetColor.withValues(alpha: .4)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 9),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: busy || !isComplete
+                      ? null
+                      : () => action(() => const EarthApi().grantPatent()),
+                  icon: const Icon(Icons.verified_user_outlined, size: 15),
+                  label: const Text(
+                    'GRANT PATENT',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .6,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: cyanAccentColor,
+                    side: BorderSide(
+                        color: cyanAccentColor.withValues(alpha: .3)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 9),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: busy
+                      ? null
+                      : () => action(
+                          () => const EarthApi().licenseTechnology()),
+                  icon: const Icon(Icons.share_outlined, size: 15),
+                  label: const Text(
+                    'LICENSE (5%)',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .6,
+                    ),
+                  ),
+                ),
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.tealAccent,
+                    side: BorderSide(
+                        color: Colors.tealAccent.withValues(alpha: .3)),
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 9),
+                    visualDensity: VisualDensity.compact,
+                  ),
+                  onPressed: busy
+                      ? null
+                      : () => showLicenseComposerDialog(context, action),
+                  icon: const Icon(Icons.person_add_alt_1_outlined, size: 15),
+                  label: const Text(
+                    'LICENSE TO HUMAN',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .6,
+                    ),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
+        ],
+      ),
+    );
+  }
+
+  Widget _ipMetricCard({
+    required double width,
+    required String title,
+    required String value,
+    required String subtext,
+    required Color accent,
+    required IconData icon,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: surfaceColor.withValues(alpha: .75),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              FilledButton(
-                onPressed: busy || isComplete
-                    ? null
-                    : () => action(() => const EarthApi().fundResearch()),
-                child: const Text('FUND 240 C'),
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .9,
+                  color: mutedColor,
+                ),
               ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => showResearchComposerDialog(context, action),
-                child: const Text('NEW PROJECT · 240 C'),
-              ),
-              OutlinedButton(
-                onPressed: busy || !isComplete
-                    ? null
-                    : () => action(() => const EarthApi().grantPatent()),
-                child: const Text('GRANT PATENT'),
-              ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => action(() => const EarthApi().licenseTechnology()),
-                child: const Text('LICENSE (5%)'),
-              ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => showLicenseComposerDialog(context, action),
-                child: const Text('LICENSE TO HUMAN'),
-              ),
+              Icon(icon, size: 14, color: accent),
             ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 18,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -.3,
+              color: accent,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtext,
+            style: const TextStyle(
+              fontSize: 9.5,
+              color: mutedColor,
+              fontWeight: FontWeight.w500,
+            ),
           ),
         ],
       ),

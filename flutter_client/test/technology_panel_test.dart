@@ -58,6 +58,14 @@ void main() {
     expect(find.textContaining('Focus: efficiency · Budget: 1440 C'), findsOneWidget);
     expect(find.text('FUND 240 C'), findsOneWidget);
 
+    // Verify info icon is present and opens description dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Collaborative R&D Laboratory'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('FUND 240 C'));
     await tester.pumpAndSettle();
 
@@ -116,7 +124,7 @@ void main() {
     expect(find.textContaining('Status: COMPLETED'), findsOneWidget);
     expect(find.text('Patents granted: 1'), findsOneWidget);
 
-    final grantButton = find.widgetWithText(OutlinedButton, 'GRANT PATENT');
+    final grantButton = find.text('GRANT PATENT');
     expect(grantButton, findsOneWidget);
     await tester.tap(grantButton);
     await tester.pumpAndSettle();

@@ -60,8 +60,15 @@ void main() {
     expect(find.text('AI ASSISTANT / BOUNDED AUTOMATION'), findsOneWidget);
     expect(find.textContaining('BASIC AI ASSISTANT (AI-01)'), findsOneWidget);
     expect(find.text('ACTIVE'), findsOneWidget);
-    expect(find.text('UPGRADE (2,400 C)'), findsOneWidget);
     expect(find.text('POLICY: MAINTAIN'), findsOneWidget);
+
+    // Verify info icon opens dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Bounded AI Assistants'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
 
     expect(find.text('AI / EXPLAINABLE RECOMMENDATIONS'), findsOneWidget);
     expect(find.textContaining('Machine M-01 condition is 38%'), findsOneWidget);
