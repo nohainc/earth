@@ -73,6 +73,81 @@ void main() {
     expect(executedAction, 'called');
   });
 
+  testWidgets('MarketSignalsPanel preserves and restores quantity and price when switching buy and sell',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 10, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 1500},
+      'world': {'health': 100},
+      'resources': {'energy': 25},
+      'business': {},
+      'technology': {'research': {}},
+      'institutions': {},
+      'market': {
+        'products': {
+          'energy': {'price': 12.5, 'supply': 100, 'demand': 80},
+        },
+        'feeRate': 0.02,
+        'book': [],
+        'trades': [],
+        'orders': [],
+      },
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: MarketSignalsPanel(
+              state: state,
+              busy: false,
+              priceHistory: const {},
+              action: (callback) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Initial buy side: qty 10, price 12.50
+    final qtyField = find.byType(TextField).at(0);
+    final priceField = find.byType(TextField).at(1);
+
+    expect(tester.widget<TextField>(qtyField).controller!.text, '10');
+    expect(tester.widget<TextField>(priceField).controller!.text, '12.50');
+
+    // Change buy qty to 42 and price to 15.00
+    await tester.enterText(qtyField, '42');
+    await tester.enterText(priceField, '15.00');
+    await tester.pumpAndSettle();
+
+    // Switch to SELL
+    await tester.ensureVisible(find.text('SELL ENGY'));
+    await tester.tap(find.text('SELL ENGY'));
+    await tester.pumpAndSettle();
+
+    // Change sell qty to 7 and price to 20.00
+    await tester.enterText(qtyField, '7');
+    await tester.enterText(priceField, '20.00');
+    await tester.pumpAndSettle();
+
+    // Switch back to BUY
+    await tester.tap(find.text('BUY ENGY'));
+    await tester.pumpAndSettle();
+
+    // Verify BUY restored 42 and 15.00
+    expect(tester.widget<TextField>(qtyField).controller!.text, '42');
+    expect(tester.widget<TextField>(priceField).controller!.text, '15.00');
+
+    // Switch back to SELL
+    await tester.tap(find.text('SELL ENGY'));
+    await tester.pumpAndSettle();
+
+    // Verify SELL restored 7 and 20.00
+    expect(tester.widget<TextField>(qtyField).controller!.text, '7');
+    expect(tester.widget<TextField>(priceField).controller!.text, '20.00');
+  });
+
   testWidgets('MyMarketOrdersPanel renders complete lifecycle, reserved escrow, and allows cancellation',
       (tester) async {
     const state = EarthState({
