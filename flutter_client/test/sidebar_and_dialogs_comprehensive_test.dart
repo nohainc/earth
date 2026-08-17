@@ -40,8 +40,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('EARTH'), findsOneWidget);
-    expect(find.widgetWithText(TextButton, 'New Kyoto'), findsOneWidget);
+    expect(find.text('OVERVIEW'), findsOneWidget);
+    expect(find.widgetWithText(TextButton, 'Command'), findsOneWidget);
 
     final marketButton = find.text('Market');
     expect(marketButton, findsOneWidget);

@@ -372,6 +372,12 @@ class _CommandCenterState extends State<CommandCenter> {
                     children: [
                       TopFixedHudPanel(
                         state: current,
+                        unreadNotifications: unreadNotifications,
+                        onNavigate: (section) => _navigateToSection(
+                          context,
+                          section,
+                          closeDrawer: false,
+                        ),
                         onLogout: () async {
                           await api.logout();
                           if (mounted) widget.onLogout();
