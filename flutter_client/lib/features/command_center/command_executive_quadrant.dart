@@ -61,9 +61,11 @@ class CommandExecutiveQuadrant extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final cardWidth = constraints.maxWidth > 760
+        final isTwoColumns = constraints.maxWidth >= 700;
+        final cardWidth = isTwoColumns
             ? (constraints.maxWidth - 16) / 2
             : constraints.maxWidth;
+        final double? minCardHeight = isTwoColumns ? 190.0 : null;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,6 +89,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 1. MARKET OVERVIEW CARD
                 _ExecutiveCard(
                   width: cardWidth,
+                  minHeight: minCardHeight,
                   icon: '⌁',
                   iconColor: cyanAccentColor,
                   title: 'MARKET',
@@ -96,9 +99,9 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     children: [
                       _rowMetric('Components Price', '$componentsPrice C',
                           cyanAccentColor),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       _rowMetric('Energy Price', '$energyPrice C', mutedColor),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       _rowMetric(
                           'Materials Price', '$materialsPrice C', mutedColor),
                     ],
@@ -110,6 +113,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 2. BUSINESS & OPERATIONS CARD
                 _ExecutiveCard(
                   width: cardWidth,
+                  minHeight: minCardHeight,
                   icon: '◈',
                   iconColor: violetColor,
                   title: 'BUSINESS / $businessName',
@@ -119,12 +123,14 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     children: [
                       _rowMetric('Machine Fleet Condition', '$condition%',
                           condition < 50 ? Colors.orangeAccent : cyanAccentColor),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       _rowMetric(
                         'Projected Net P&L',
                         '${profit >= 0 ? '+' : ''}${profit.toStringAsFixed(1)} C / cycle',
                         profit >= 0 ? cyanAccentColor : Colors.redAccent,
                       ),
+                      const SizedBox(height: 5),
+                      _rowMetric('Operating Policy', policy, mutedColor),
                     ],
                   ),
                   buttonLabel: 'Open Business →',
@@ -134,6 +140,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 3. CIVIC & CITY CARD
                 _ExecutiveCard(
                   width: cardWidth,
+                  minHeight: minCardHeight,
                   icon: '⊙',
                   iconColor: Colors.amberAccent,
                   title: 'CITY / $cityName',
@@ -143,9 +150,11 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     children: [
                       _rowMetric('Power Grid Stability', '92% coverage',
                           cyanAccentColor),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       _rowMetric(
                           'Housing Capacity', '76% available', mutedColor),
+                      const SizedBox(height: 5),
+                      _rowMetric('Health Coverage', '64% coverage', mutedColor),
                     ],
                   ),
                   buttonLabel: 'Open Civic & City →',
@@ -155,6 +164,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                 // 4. FINANCE & CONTRACTS CARD
                 _ExecutiveCard(
                   width: cardWidth,
+                  minHeight: minCardHeight,
                   icon: '§',
                   iconColor: Colors.tealAccent,
                   title: 'FINANCE & CONTRACTS',
@@ -164,9 +174,11 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     children: [
                       _rowMetric('Liquid Credits',
                           '${state.human['credits']} C', violetColor),
-                      const SizedBox(height: 4),
+                      const SizedBox(height: 5),
                       _rowMetric('Active Agreements',
                           '$activeContracts active contracts', mutedColor),
+                      const SizedBox(height: 5),
+                      _rowMetric('Ledger Integrity', 'Audited', cyanAccentColor),
                     ],
                   ),
                   buttonLabel: 'Open Finance →',
@@ -205,6 +217,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
 
 class _ExecutiveCard extends StatelessWidget {
   final double width;
+  final double? minHeight;
   final String icon;
   final Color iconColor;
   final String title;
@@ -215,6 +228,7 @@ class _ExecutiveCard extends StatelessWidget {
 
   const _ExecutiveCard({
     required this.width,
+    this.minHeight,
     required this.icon,
     required this.iconColor,
     required this.title,
@@ -227,6 +241,8 @@ class _ExecutiveCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Container(
         width: width,
+        constraints:
+            minHeight != null ? BoxConstraints(minHeight: minHeight!) : null,
         decoration: BoxDecoration(
           color: surfaceColor.withValues(alpha: .72),
           borderRadius: BorderRadius.circular(14),
@@ -235,55 +251,63 @@ class _ExecutiveCard extends StatelessWidget {
         padding: const EdgeInsets.all(18),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Container(
-                  width: 24,
-                  height: 24,
-                  decoration: BoxDecoration(
-                    color: iconColor.withValues(alpha: .15),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    icon,
-                    style: TextStyle(
-                      color: iconColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: const TextStyle(
-                          fontSize: 11,
+                Row(
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: iconColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      alignment: Alignment.center,
+                      child: Text(
+                        icon,
+                        style: TextStyle(
+                          color: iconColor,
+                          fontSize: 12,
                           fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1,
                         ),
                       ),
-                      Text(
-                        subtitle,
-                        style: const TextStyle(
-                          fontSize: 9,
-                          color: mutedColor,
-                          letterSpacing: .8,
-                        ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.1,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          Text(
+                            subtitle,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              color: mutedColor,
+                              letterSpacing: .8,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
+                const SizedBox(height: 14),
+                body,
               ],
             ),
-            const SizedBox(height: 14),
-            body,
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
             Align(
               alignment: Alignment.centerRight,
               child: TextButton(

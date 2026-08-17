@@ -97,47 +97,54 @@ class Dashboard extends StatelessWidget {
       children: [
         if (selectedSection == 'command') ...[
           HeroCard(key: sectionKeys['command'], state: state),
-          const SizedBox(height: 16),
-          Text(
-            'The world is moving.',
-            style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                  color: inkColor,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: -1.2,
-                ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'DAY ${state.clock['day']}  ·  ${state.institutions['city']['name']}  ·  ${state.institutions['corporation']['name']}',
-            style: const TextStyle(
-                color: mutedColor, fontSize: 11, letterSpacing: .7),
-          ),
-          const SizedBox(height: 24),
-          Wrap(
-            spacing: 14,
-            runSpacing: 14,
-            children: [
-              EarthMetric(
-                label: 'CREDITS',
-                value: '${state.human['credits']} C',
-                accent: violetColor,
-              ),
-              EarthMetric(
-                label: 'STANDING',
-                value: '${state.human['standing']}',
-                accent: Colors.teal,
-              ),
-              EarthMetric(
-                label: 'LEGACY',
-                value: '${state.human['legacy']}',
-                accent: Colors.indigo,
-              ),
-              EarthMetric(
-                label: 'WORLD HEALTH',
-                value: '${state.world['health']} / 100',
-                accent: Colors.orange,
-              ),
-            ],
+          const SizedBox(height: 18),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final availableWidth = constraints.maxWidth;
+              final useFourColumns = availableWidth >= 700;
+              final itemWidth = useFourColumns
+                  ? (availableWidth - 3 * 14) / 4
+                  : (availableWidth - 14) / 2;
+
+              return Wrap(
+                spacing: 14,
+                runSpacing: 14,
+                children: [
+                  EarthMetric(
+                    width: itemWidth,
+                    label: 'CREDITS',
+                    value: '${state.human['credits']} C',
+                    accent: violetColor,
+                    hint:
+                        'Personal liquid currency for market trade, machinery, and investments.',
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    label: 'STANDING',
+                    value: '${state.human['standing']}',
+                    accent: Colors.tealAccent,
+                    hint:
+                        'Civic reputation within your city, influencing voting weight.',
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    label: 'LEGACY',
+                    value: '${state.human['legacy']}',
+                    accent: Colors.indigoAccent,
+                    hint:
+                        'Dynastic achievement score passed down to designated successors.',
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    label: 'WORLD HEALTH',
+                    value: '${state.world['health']} / 100',
+                    accent: Colors.orangeAccent,
+                    hint:
+                        'Composite simulation health across resource scarcity, energy, and costs.',
+                  ),
+                ],
+              );
+            },
           ),
           if (state.human['politicalMaturity'] == false)
             Padding(
@@ -153,6 +160,7 @@ class Dashboard extends StatelessWidget {
             ),
           const SizedBox(height: 18),
           Container(
+            width: double.infinity,
             decoration: BoxDecoration(
               color: surfaceColor.withValues(alpha: .72),
               borderRadius: BorderRadius.circular(14),

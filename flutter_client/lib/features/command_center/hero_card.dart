@@ -11,6 +11,7 @@ class HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => Container(
+        width: double.infinity,
         height: 218,
         padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
         decoration: BoxDecoration(

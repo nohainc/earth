@@ -140,7 +140,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('The world is moving.'), findsOneWidget);
+    expect(find.text('EXECUTIVE OVERVIEW'), findsOneWidget);
     expect(find.text('CREDITS'), findsOneWidget);
   });
 }

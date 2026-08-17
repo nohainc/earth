@@ -60,49 +60,85 @@ class EarthMetric extends StatelessWidget {
   final String label;
   final String value;
   final Color accent;
+  final double? width;
+  final String? hint;
 
   const EarthMetric({
     super.key,
     required this.label,
     required this.value,
     required this.accent,
+    this.width,
+    this.hint,
   });
 
   @override
-  Widget build(BuildContext context) => Semantics(
-        label: '$label: $value',
-        child: SizedBox(
-          width: 210,
-          child: Card(
-            color: surfaceColor.withValues(alpha: .72),
-            surfaceTintColor: Colors.transparent,
-            elevation: 0,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(14),
-              side: const BorderSide(color: Colors.white12),
-            ),
-            child: Padding(
-              padding: const EdgeInsets.all(18),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+  Widget build(BuildContext context) {
+    final metricCard = SizedBox(
+      width: width ?? 210,
+      child: Card(
+        color: surfaceColor.withValues(alpha: .72),
+        surfaceTintColor: Colors.transparent,
+        elevation: 0,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(14),
+          side: const BorderSide(color: Colors.white12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    label,
-                    style: TextStyle(
-                        fontSize: 10, letterSpacing: 1, color: accent),
+                  Expanded(
+                    child: Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10,
+                        letterSpacing: 1,
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                   ),
-                  const SizedBox(height: 12),
-                  Text(
-                    value,
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                        fontWeight: FontWeight.w700, letterSpacing: -.5),
-                  ),
+                  if (hint != null)
+                    Tooltip(
+                      message: hint!,
+                      preferBelow: false,
+                      child: Icon(
+                        Icons.info_outline,
+                        size: 13,
+                        color: mutedColor.withValues(alpha: .7),
+                      ),
+                    ),
                 ],
               ),
-            ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                    fontWeight: FontWeight.w700, letterSpacing: -.5),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+
+    return Semantics(
+      label: '$label: $value',
+      child: hint != null
+          ? Tooltip(
+              message: hint!,
+              preferBelow: false,
+              child: metricCard,
+            )
+          : metricCard,
+    );
+  }
 }
 
 class EarthErrorState extends StatelessWidget {
