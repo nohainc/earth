@@ -61,8 +61,8 @@ class Sidebar extends StatelessWidget {
     ];
 
     return Container(
-      width: 244,
-      padding: const EdgeInsets.fromLTRB(16, 16, 16, 16),
+      width: 204,
+      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
       decoration: const BoxDecoration(
         border: Border(right: BorderSide(color: Colors.white12)),
       ),

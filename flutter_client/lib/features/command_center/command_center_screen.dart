@@ -354,62 +354,72 @@ class _CommandCenterState extends State<CommandCenter> {
                             Expanded(
                               child: ListView(
                                 padding: EdgeInsets.fromLTRB(
-                                  compact ? 16 : 34,
-                                  compact ? 16 : 26,
-                                  compact ? 16 : 42,
+                                  compact ? 16 : 28,
+                                  compact ? 14 : 22,
+                                  compact ? 16 : 36,
                                   56,
                                 ),
-                          children: [
-                            if (error != null)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 16),
-                                child: MaterialBanner(
-                                  content: Text(error!),
-                                  leading: const Icon(Icons.warning_amber),
-                                  actions: [
-                                    TextButton(
-                                      onPressed:
-                                          busy ? null : () => _run(api.world),
-                                      child: const Text('RETRY'),
+                                children: [
+                                  if (error != null)
+                                    Padding(
+                                      padding: const EdgeInsets.only(bottom: 16),
+                                      child: MaterialBanner(
+                                        content: Text(error!),
+                                        leading: const Icon(Icons.warning_amber),
+                                        actions: [
+                                          TextButton(
+                                            onPressed:
+                                                busy ? null : () => _run(api.world),
+                                            child: const Text('RETRY'),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ],
-                                ),
+                                  ConstrainedBox(
+                                    constraints: BoxConstraints(
+                                      minWidth: compact ? 320 : 860,
+                                    ),
+                                    child: Dashboard(
+                                      state: current,
+                                      selectedSection: selectedSection,
+                                      onNavigate: (section) => _navigateToSection(
+                                        context,
+                                        section,
+                                        closeDrawer: false,
+                                      ),
+                                      busy: busy,
+                                      events: events,
+                                      notifications: notifications,
+                                      ownershipEvents: ownershipEvents,
+                                      businessOwnership: businessOwnership,
+                                      businessFinancials: businessFinancials,
+                                      businessProfile: businessProfile,
+                                      membershipEvents: membershipEvents,
+                                      authorityEvents: authorityEvents,
+                                      productionCatalog: productionCatalog,
+                                      marketHistory: marketHistory,
+                                      pantheon: pantheon,
+                                      personalFinanceData: personalFinanceData,
+                                      contracts: contractsList,
+                                      isLiveConnected: liveChannel != null,
+                                      isReconnecting:
+                                          liveReconnectTimer?.isActive == true,
+                                      unreadNotifications: unreadNotifications,
+                                      sectionKeys: _sectionKeys,
+                                      action: _run,
+                                      onRefreshEvents: _refreshEvents,
+                                      onMarkNotificationRead: (id) async {
+                                        await api.markNotificationRead(id);
+                                        await _refreshEvents();
+                                      },
+                                      onMarkAllNotificationsRead: () async {
+                                        await api.markAllNotificationsRead();
+                                        await _refreshEvents();
+                                      },
+                                    ),
+                                  ),
+                                ],
                               ),
-                            Dashboard(
-                              state: current,
-                              selectedSection: selectedSection,
-                              onNavigate: (section) => _navigateToSection(
-                                  context, section,
-                                  closeDrawer: false),
-                              busy: busy,
-                              events: events,
-                              notifications: notifications,
-                              ownershipEvents: ownershipEvents,
-                              businessOwnership: businessOwnership,
-                              businessFinancials: businessFinancials,
-                              businessProfile: businessProfile,
-                              membershipEvents: membershipEvents,
-                              authorityEvents: authorityEvents,
-                              productionCatalog: productionCatalog,
-                              marketHistory: marketHistory,
-                              pantheon: pantheon,
-                              personalFinanceData: personalFinanceData,
-                              contracts: contractsList,
-                              isLiveConnected: liveChannel != null,
-                              isReconnecting:
-                                  liveReconnectTimer?.isActive == true,
-                              unreadNotifications: unreadNotifications,
-                              sectionKeys: _sectionKeys,
-                              action: _run,
-                              onRefreshEvents: _refreshEvents,
-                              onMarkNotificationRead: (id) async {
-                                await api.markNotificationRead(id);
-                                await _refreshEvents();
-                              },
-                              onMarkAllNotificationsRead: () async {
-                                await api.markAllNotificationsRead();
-                                await _refreshEvents();
-                              },
                             ),
                           ],
                         ),
@@ -417,10 +427,7 @@ class _CommandCenterState extends State<CommandCenter> {
                     ],
                   ),
                 ),
-              ],
-            ),
-          ),
-        ),
+              ),
       );
     });
   }

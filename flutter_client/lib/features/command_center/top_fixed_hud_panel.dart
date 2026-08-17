@@ -104,7 +104,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     }
   }
 
-  String _formatLiveDateTime() {
+  (YearAndDay, String) _getLiveClockData() {
     try {
       final totalRealSeconds = _baseElapsedRealSeconds + _localElapsedSeconds;
       final totalGameMinutes = totalRealSeconds;
@@ -115,16 +115,15 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
       final timeStr =
           '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
       final res = calculateYearAndDay(totalDays);
-      return 'YEAR ${res.year} · DAY ${res.dayOfYear} · $timeStr';
+      return (res, timeStr);
     } catch (_) {
-      return 'YEAR 1 · DAY 184 · 07:42';
+      return (const YearAndDay(1, 184), '07:42');
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final name = '${widget.state.human['name'] ?? 'Human'}';
-    final initial = name.isNotEmpty ? name.substring(0, 1).toUpperCase() : 'H';
     final city =
         '${(widget.state.institutions['city'] as Map<String, dynamic>?)?['name'] ?? 'Independent'}';
 
@@ -139,152 +138,174 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         ? Colors.greenAccent
         : (widget.isReconnecting ? Colors.orangeAccent : Colors.redAccent);
 
-    return Container(
-      decoration: const BoxDecoration(
-        color: Color(0xff0e1024),
-        border: Border(
-          bottom: BorderSide(color: Colors.white12, width: 1.0),
-        ),
-      ),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          // 1. BRAND HEADER
-          Row(
-            mainAxisSize: MainAxisSize.min,
+    final (clockRes, timeStr) = _getLiveClockData();
+
+    return LayoutBuilder(
+      builder: (context, rootConstraints) {
+        final totalWidth = rootConstraints.maxWidth;
+        final isSingleRow = totalWidth >= 680;
+
+        return Container(
+          decoration: const BoxDecoration(
+            color: Color(0xff0e1024),
+            border: Border(
+              bottom: BorderSide(color: Colors.white12, width: 1.0),
+            ),
+          ),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Container(
-                width: 26,
-                height: 26,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  border: Border.all(
-                    color: violetColor,
-                    width: 1.75,
-                  ),
-                  boxShadow: [
-                    BoxShadow(
-                      color: violetColor.withValues(alpha: 0.55),
-                      blurRadius: 12,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              const Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+              // 1. BRAND HEADER
+              Row(
                 mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  Text(
-                    'EARTH',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 4.0,
-                      color: violetColor,
+                  Container(
+                    width: 26,
+                    height: 26,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: violetColor,
+                        width: 1.75,
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: violetColor.withValues(alpha: 0.55),
+                          blurRadius: 12,
+                          spreadRadius: 1,
+                        ),
+                      ],
                     ),
                   ),
-                  SizedBox(height: 1),
-                  Text(
-                    'UNITED CORPORATIONS',
-                    style: TextStyle(
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w600,
-                      color: mutedColor,
-                      letterSpacing: 1.3,
-                    ),
+                  const SizedBox(width: 10),
+                  const Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'EARTH',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 4.0,
+                          color: violetColor,
+                        ),
+                      ),
+                      SizedBox(height: 1),
+                      Text(
+                        'UNITED CORPORATIONS',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w600,
+                          color: mutedColor,
+                          letterSpacing: 1.3,
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
-            ],
-          ),
 
-          // VERTICAL SEPARATOR 1
-          _verticalSeparator(),
+              // VERTICAL SEPARATOR 1
+              _verticalSeparator(),
 
-          // 2. CURRENT YEAR & DATE TIME
-          Text(
-            _formatLiveDateTime(),
-            style: const TextStyle(
-              fontSize: 10.5,
-              fontWeight: FontWeight.w500,
-              letterSpacing: 1.3,
-              color: mutedColor,
-            ),
-          ),
-
-          // VERTICAL SEPARATOR 2
-          _verticalSeparator(),
-
-          // 3. 6-RESOURCE SECTION (ICONS + NUMBERS ONLY, NO RESOURCE TEXT NAMES)
-          Expanded(
-            child: LayoutBuilder(
-              builder: (context, constraints) {
-                final availableW = constraints.maxWidth;
-                final isSingleRow = availableW >= 320;
-
-                if (isSingleRow) {
-                  return SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: false),
-                        _dotSeparator(),
-                        _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: false),
-                        _dotSeparator(),
-                        _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: false),
-                        _dotSeparator(),
-                        _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: false),
-                        _dotSeparator(),
-                        _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: false),
-                        _dotSeparator(),
-                        _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: false),
-                      ],
+              // 2. CURRENT YEAR & DATE TIME (1-ROW OR 2-ROWS CORRESPONDING TO RESOURCE LAYOUT)
+              if (isSingleRow)
+                Text(
+                  'YEAR ${clockRes.year} · DAY ${clockRes.dayOfYear} · $timeStr',
+                  style: const TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w500,
+                    letterSpacing: 1.3,
+                    color: mutedColor,
+                  ),
+                )
+              else
+                Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'YEAR ${clockRes.year}',
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.1,
+                        color: mutedColor,
+                      ),
                     ),
-                  );
-                } else {
-                  return Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
+                    const SizedBox(height: 2),
+                    Text(
+                      'DAY ${clockRes.dayOfYear} · $timeStr',
+                      style: const TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w600,
+                        letterSpacing: 1.1,
+                        color: mutedColor,
+                      ),
+                    ),
+                  ],
+                ),
+
+              // VERTICAL SEPARATOR 2
+              _verticalSeparator(),
+
+              // 3. 6-RESOURCE SECTION (ICONS + NUMBERS ONLY)
+              Expanded(
+                child: isSingleRow
+                    ? SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: false),
+                            _dotSeparator(),
+                            _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: false),
+                            _dotSeparator(),
+                            _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: false),
+                            _dotSeparator(),
+                            _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: false),
+                            _dotSeparator(),
+                            _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: false),
+                            _dotSeparator(),
+                            _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: false),
+                          ],
+                        ),
+                      )
+                    : Column(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: true)),
+                          Row(
+                            children: [
+                              Expanded(child: _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: true)),
+                              Expanded(child: _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: true)),
+                              Expanded(child: _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: true)),
+                            ],
+                          ),
+                          const SizedBox(height: 3),
+                          Row(
+                            children: [
+                              Expanded(child: _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: true)),
+                              Expanded(child: _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: true)),
+                              Expanded(child: _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: true)),
+                            ],
+                          ),
                         ],
                       ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Expanded(child: _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: true)),
-                        ],
-                      ),
-                    ],
-                  );
-                }
-              },
-            ),
-          ),
+              ),
 
-          const SizedBox(width: 8),
+              const SizedBox(width: 8),
 
-          // 4. ALARM / NOTIFICATIONS ICON WITH CONNECTION STATE COLOR INDICATOR
-          InkWell(
-            onTap: () => widget.onNavigate?.call('activity'),
-            borderRadius: BorderRadius.circular(16),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Stack(
+              // 4. ALARM / NOTIFICATIONS ICON WITH CONNECTION STATE COLOR INDICATOR
+              InkWell(
+                onTap: () => widget.onNavigate?.call('activity'),
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Stack(
                     clipBehavior: Clip.none,
                     children: [
                       const Icon(Icons.notifications_none_outlined, size: 20, color: mutedColor),
@@ -332,127 +353,103 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                         ),
                     ],
                   ),
-                ],
+                ),
               ),
-            ),
-          ),
 
-          const SizedBox(width: 8),
+              const SizedBox(width: 4),
 
-          // 5. USER AVATAR & ACCOUNT MENU
-          PopupMenuButton<String>(
-            position: PopupMenuPosition.under,
-            offset: const Offset(0, 8),
-            color: surfaceColor,
-            elevation: 14,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
-              side: const BorderSide(color: Colors.white12),
-            ),
-            tooltip: '',
-            onSelected: (value) {
-              if (value == 'security') {
-                widget.onSecurity?.call();
-              } else if (value == 'logout') {
-                widget.onLogout?.call();
-              }
-            },
-            itemBuilder: (context) => [
-              PopupMenuItem(
-                enabled: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      name,
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        color: inkColor,
-                      ),
+              // 5. USER ACCOUNT MENU (ICON INSTEAD OF AVATAR CIRCLE)
+              PopupMenuButton<String>(
+                position: PopupMenuPosition.under,
+                offset: const Offset(0, 8),
+                color: surfaceColor,
+                elevation: 14,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: const BorderSide(color: Colors.white12),
+                ),
+                tooltip: '',
+                onSelected: (value) {
+                  if (value == 'security') {
+                    widget.onSecurity?.call();
+                  } else if (value == 'logout') {
+                    widget.onLogout?.call();
+                  }
+                },
+                itemBuilder: (context) => [
+                  PopupMenuItem(
+                    enabled: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          name,
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            color: inkColor,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'Citizen of $city · Standing ${widget.state.human['standing'] ?? 0}',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            color: mutedColor,
+                          ),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'Citizen of $city · Standing ${widget.state.human['standing'] ?? 0}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        color: mutedColor,
-                      ),
+                  ),
+                  const PopupMenuDivider(),
+                  const PopupMenuItem(
+                    value: 'security',
+                    child: Row(
+                      children: [
+                        Icon(Icons.shield_outlined, size: 16, color: mutedColor),
+                        SizedBox(width: 10),
+                        Text('Security & MFA', style: TextStyle(fontSize: 12)),
+                      ],
                     ),
-                  ],
-                ),
-              ),
-              const PopupMenuDivider(),
-              const PopupMenuItem(
-                value: 'security',
-                child: Row(
-                  children: [
-                    Icon(Icons.shield_outlined, size: 16, color: mutedColor),
-                    SizedBox(width: 10),
-                    Text('Security & MFA', style: TextStyle(fontSize: 12)),
-                  ],
-                ),
-              ),
-              const PopupMenuItem(
-                value: 'logout',
-                child: Row(
-                  children: [
-                    Icon(Icons.logout, size: 16, color: Colors.redAccent),
-                    SizedBox(width: 10),
-                    Text('Sign Out',
-                        style: TextStyle(fontSize: 12, color: Colors.redAccent)),
-                  ],
-                ),
-              ),
-            ],
-            child: Container(
-              width: 30,
-              height: 30,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                gradient: LinearGradient(
-                  colors: [
-                    violetColor.withValues(alpha: .8),
-                    cyanAccentColor.withValues(alpha: .7),
-                  ],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                ),
-                border: Border.all(color: Colors.white24, width: 1.5),
-                boxShadow: [
-                  BoxShadow(
-                    color: violetColor.withValues(alpha: .3),
-                    blurRadius: 8,
-                    spreadRadius: 1,
+                  ),
+                  const PopupMenuItem(
+                    value: 'logout',
+                    child: Row(
+                      children: [
+                        Icon(Icons.logout, size: 16, color: Colors.redAccent),
+                        SizedBox(width: 10),
+                        Text('Sign Out',
+                            style: TextStyle(fontSize: 12, color: Colors.redAccent)),
+                      ],
+                    ),
                   ),
                 ],
-              ),
-              alignment: Alignment.center,
-              child: Text(
-                initial,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w800,
-                  fontSize: 12,
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Icon(
+                    Icons.person_outline_rounded,
+                    size: 21,
+                    color: mutedColor,
+                  ),
                 ),
               ),
-            ),
-          ),
 
-          // 6. HAMBURGER MENU (SHOWN ONLY WHEN SIDEBAR IS HIDDEN IN COMPACT MODE)
-          if (widget.showDrawerButton) ...[
-            const SizedBox(width: 6),
-            InkWell(
-              onTap: widget.onOpenDrawer,
-              borderRadius: BorderRadius.circular(8),
-              child: const Padding(
-                padding: EdgeInsets.all(4),
-                child: Icon(Icons.menu_rounded, size: 22, color: inkColor),
-              ),
-            ),
-          ],
-        ],
-      ),
+              // 6. HAMBURGER MENU (SHOWN ONLY WHEN SIDEBAR IS HIDDEN IN COMPACT MODE)
+              if (widget.showDrawerButton) ...[
+                const SizedBox(width: 4),
+                InkWell(
+                  onTap: widget.onOpenDrawer,
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.all(4),
+                    child: Icon(Icons.menu_rounded, size: 21, color: inkColor),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        );
+      },
     );
   }
 
