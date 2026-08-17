@@ -137,7 +137,7 @@ class HeroCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'AGE $citizenAge  ·  $cityName  ·  GEN $citizenGen',
+                  'AGE $citizenAge  ·  GEN $citizenGen  ·  $cityName',
                   style: const TextStyle(
                     color: mutedColor,
                     fontSize: 11,
@@ -177,7 +177,7 @@ class HeroCard extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 16),
-          _earthGlobe(state.clock['day']),
+          _citizenAvatar(citizenName),
         ],
       ),
     );
@@ -209,53 +209,68 @@ class HeroCard extends StatelessWidget {
         ),
       );
 
-  Widget _earthGlobe(dynamic day) => Container(
-        width: 110,
-        height: 110,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: violetColor.withValues(alpha: .5),
-            width: 1,
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: violetColor.withValues(alpha: .22),
-              blurRadius: 30,
-            ),
-          ],
+  Widget _citizenAvatar(String name) {
+    final nameParts = name.trim().split(RegExp(r'\s+'));
+    final initials = nameParts.length >= 2
+        ? '${nameParts[0].isNotEmpty ? nameParts[0][0] : ""}${nameParts[1].isNotEmpty ? nameParts[1][0] : ""}'
+        : (name.isNotEmpty ? name.substring(0, name.length.clamp(1, 2)) : 'UC');
+
+    return Container(
+      width: 110,
+      height: 110,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(
+          color: violetColor.withValues(alpha: .5),
+          width: 1,
         ),
-        child: Center(
-          child: Container(
-            width: 68,
-            height: 68,
-            decoration: const BoxDecoration(
-              shape: BoxShape.circle,
-              gradient: RadialGradient(
-                colors: [violetColor, Color(0xff5145b7)],
+        boxShadow: [
+          BoxShadow(
+            color: violetColor.withValues(alpha: .22),
+            blurRadius: 30,
+          ),
+        ],
+      ),
+      child: Center(
+        child: Container(
+          width: 72,
+          height: 72,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: const RadialGradient(
+              colors: [Color(0xff6c5ce7), Color(0xff3b3086)],
+            ),
+            border: Border.all(
+              color: cyanAccentColor.withValues(alpha: 0.4),
+              width: 1.5,
+            ),
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                initials.toUpperCase(),
+                style: const TextStyle(
+                  fontSize: 22,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.5,
+                  color: Colors.white,
+                ),
               ),
-            ),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                const Text(
-                  'EARTH',
-                  style: TextStyle(fontSize: 8, letterSpacing: 2),
+              const SizedBox(height: 1),
+              Text(
+                'CITIZEN',
+                style: TextStyle(
+                  fontSize: 7.5,
+                  letterSpacing: 1.2,
+                  fontWeight: FontWeight.w600,
+                  color: cyanAccentColor.withValues(alpha: 0.9),
                 ),
-                Text(
-                  '$day',
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-                const Text(
-                  'DAY',
-                  style: TextStyle(fontSize: 8, letterSpacing: 1),
-                ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }

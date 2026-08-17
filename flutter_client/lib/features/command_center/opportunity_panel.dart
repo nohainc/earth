@@ -80,68 +80,102 @@ class OpportunityPanel extends StatelessWidget {
 
                   return Padding(
                     padding: const EdgeInsets.only(bottom: 12),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 7,
-                          height: 7,
-                          margin: const EdgeInsets.only(top: 5, right: 10),
-                          decoration: BoxDecoration(
-                              color: color, shape: BoxShape.circle),
-                        ),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
+                    child: InkWell(
+                      onTap: onNavigate != null && targetSection != 'command'
+                          ? () => onNavigate!(targetSection)
+                          : null,
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 4),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Container(
+                              width: 7,
+                              height: 7,
+                              margin: const EdgeInsets.only(top: 6, right: 10),
+                              decoration: BoxDecoration(
+                                  color: color, shape: BoxShape.circle),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Expanded(
-                                    child: Text(
-                                      opportunity['title']?.toString() ??
-                                          'World signal',
-                                      style: const TextStyle(
-                                          fontWeight: FontWeight.w700),
-                                    ),
-                                  ),
-                                  if (onNavigate != null &&
-                                      targetSection != 'command')
-                                    InkWell(
-                                      onTap: () => onNavigate!(targetSection),
-                                      child: Padding(
-                                        padding: const EdgeInsets.symmetric(
-                                            horizontal: 4, vertical: 2),
+                                  Row(
+                                    children: [
+                                      Expanded(
                                         child: Text(
-                                          actionText,
+                                          opportunity['title']?.toString() ??
+                                              'World signal',
                                           style: const TextStyle(
-                                            fontSize: 10,
                                             fontWeight: FontWeight.w700,
-                                            color: violetColor,
+                                            fontSize: 12.5,
+                                            color: inkColor,
                                           ),
                                         ),
                                       ),
-                                    ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    opportunity['detail']?.toString() ?? '',
+                                    style: const TextStyle(
+                                        color: mutedColor, fontSize: 11),
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Wrap(
+                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    spacing: 6,
+                                    children: [
+                                      Text(
+                                        signal.toUpperCase(),
+                                        style: TextStyle(
+                                          color: color,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 1.1,
+                                        ),
+                                      ),
+                                      const Text(
+                                        '·',
+                                        style: TextStyle(
+                                          color: Colors.white24,
+                                          fontSize: 10,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${priority.toUpperCase()} PRIORITY',
+                                        style: const TextStyle(
+                                          color: mutedColor,
+                                          fontSize: 9,
+                                          letterSpacing: .8,
+                                        ),
+                                      ),
+                                      if (targetSection != 'command') ...[
+                                        const Text(
+                                          '·',
+                                          style: TextStyle(
+                                            color: Colors.white24,
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        Text(
+                                          actionText,
+                                          style: const TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: violetColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ],
+                                  ),
                                 ],
                               ),
-                              const SizedBox(height: 3),
-                              Text(
-                                opportunity['detail']?.toString() ?? '',
-                                style: const TextStyle(
-                                    color: mutedColor, fontSize: 11),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                signal.toUpperCase(),
-                                style: TextStyle(
-                                  color: color,
-                                  fontSize: 9,
-                                  letterSpacing: 1.1,
-                                ),
-                              ),
-                            ],
-                          ),
+                            ),
+                          ],
                         ),
-                      ],
+                      ),
                     ),
                   );
                 }).toList(),

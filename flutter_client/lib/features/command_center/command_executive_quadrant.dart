@@ -136,7 +136,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                           'Materials Price', '$materialsPrice C', mutedColor),
                     ],
                   ),
-                  buttonLabel: 'Open Market →',
                   onTap: () => onNavigate?.call('market'),
                 ),
 
@@ -185,7 +184,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                       _rowMetric('Operating Policy', policy, mutedColor),
                     ],
                   ),
-                  buttonLabel: 'Open Business →',
                   onTap: () => onNavigate?.call('business'),
                 ),
 
@@ -231,7 +229,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                       _rowMetric('Health Coverage', '64% coverage', mutedColor),
                     ],
                   ),
-                  buttonLabel: 'Open Civic →',
                   onTap: () => onNavigate?.call('civic'),
                 ),
 
@@ -278,7 +275,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                       _rowMetric('Ledger Integrity', 'Audited', cyanAccentColor),
                     ],
                   ),
-                  buttonLabel: 'Open Finance →',
                   onTap: () => onNavigate?.call('finance'),
                 ),
               ],
@@ -320,7 +316,6 @@ class _ExecutiveCard extends StatelessWidget {
   final String title;
   final String subtitle;
   final Widget body;
-  final String buttonLabel;
   final VoidCallback onTap;
   final VoidCallback? onInfoTap;
 
@@ -332,114 +327,104 @@ class _ExecutiveCard extends StatelessWidget {
     required this.title,
     required this.subtitle,
     required this.body,
-    required this.buttonLabel,
     required this.onTap,
     this.onInfoTap,
   });
 
   @override
-  Widget build(BuildContext context) => Container(
-        width: width,
-        constraints:
-            minHeight != null ? BoxConstraints(minHeight: minHeight!) : null,
-        decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .72),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: Colors.white12),
-        ),
-        padding: const EdgeInsets.all(18),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: iconColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      alignment: Alignment.center,
-                      child: Text(
-                        icon,
-                        style: TextStyle(
-                          color: iconColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                        ),
+  Widget build(BuildContext context) => InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(14),
+        child: Container(
+          width: width,
+          constraints:
+              minHeight != null ? BoxConstraints(minHeight: minHeight!) : null,
+          decoration: BoxDecoration(
+            color: surfaceColor.withValues(alpha: .72),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: Colors.white12),
+          ),
+          padding: const EdgeInsets.all(18),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    width: 24,
+                    height: 24,
+                    decoration: BoxDecoration(
+                      color: iconColor.withValues(alpha: .15),
+                      borderRadius: BorderRadius.circular(6),
+                    ),
+                    alignment: Alignment.center,
+                    child: Text(
+                      icon,
+                      style: TextStyle(
+                        color: iconColor,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            title,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              letterSpacing: 1.1,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            subtitle,
-                            style: const TextStyle(
-                              fontSize: 9,
-                              color: mutedColor,
-                              letterSpacing: .8,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ],
-                      ),
-                    ),
-                    if (onInfoTap != null)
-                      IconButton(
-                        icon: Icon(
-                          Icons.info_outline,
-                          size: 13,
-                          color: mutedColor.withValues(alpha: .7),
-                        ),
-                        tooltip: 'Details',
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: onInfoTap,
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                body,
-              ],
-            ),
-            const SizedBox(height: 12),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: onTap,
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: Text(
-                  buttonLabel,
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: violetColor,
                   ),
-                ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Flexible(
+                              child: Text(
+                                title,
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  letterSpacing: 1.1,
+                                  color: inkColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 4),
+                            Icon(
+                              Icons.arrow_forward_rounded,
+                              size: 11,
+                              color: violetColor.withValues(alpha: 0.9),
+                            ),
+                          ],
+                        ),
+                        Text(
+                          subtitle,
+                          style: const TextStyle(
+                            fontSize: 9,
+                            color: mutedColor,
+                            letterSpacing: .8,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (onInfoTap != null)
+                    IconButton(
+                      icon: Icon(
+                        Icons.info_outline,
+                        size: 13,
+                        color: mutedColor.withValues(alpha: .7),
+                      ),
+                      tooltip: 'Details',
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: onInfoTap,
+                    ),
+                ],
               ),
-            ),
-          ],
+              const SizedBox(height: 14),
+              body,
+            ],
+          ),
         ),
       );
 }
