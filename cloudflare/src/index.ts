@@ -947,16 +947,9 @@ const worker = {
         const [rows, trades, rule] = await Promise.all([
           repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
           repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
-          repository.query("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1"),
+          repository.query("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1"),
         ]);
-        let feeRate = 0;
-        const value = rule.rows[0]?.value_json;
-        if (value) {
-          try {
-            const parsed = typeof value === 'string' ? JSON.parse(value) : value;
-            if (typeof parsed?.feeRate === 'number' && parsed.feeRate >= 0 && parsed.feeRate <= 0.05) feeRate = parsed.feeRate;
-          } catch { /* safe zero fee */ }
-        }
+        const feeRate = Number(rule.rows[0]?.rate ?? 0);
         return { book: rows.rows, trades: trades.rows, feeRate };
       });
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

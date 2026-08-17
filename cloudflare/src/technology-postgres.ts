@@ -15,7 +15,7 @@ export async function createResearchProject(repository: PostgresRepository, inpu
     const technologyId = `TECH-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const projectId = `PROJECT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-research-registry', amount: budget, reasonType: 'research_project_funding', reasonId: projectId, ruleVersion: 'research-v3', correlationId: input.correlationId });
-    await tx.query("INSERT INTO technologies (id, name, owner_id, progress, version, metadata) VALUES ($1,$2,$3,0,1,'{}')", [technologyId, input.name, input.ownerId]);
+    await tx.query("INSERT INTO technologies (id, name, owner_id, progress, version) VALUES ($1,$2,$3,0,1)", [technologyId, input.name, input.ownerId]);
     await tx.query("INSERT INTO research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day, focus) VALUES ($1,$2,$3,$4,0,'active',$5,$6)", [projectId, technologyId, input.ownerId, budget, day, input.focus]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Research project started', `${input.name} is now active with ${input.budget} Credits of funding.`, projectId]);
     return { ok: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [projectId])).rows[0], technology: (await tx.query('SELECT * FROM technologies WHERE id = $1', [technologyId])).rows[0], correlationId: input.correlationId };

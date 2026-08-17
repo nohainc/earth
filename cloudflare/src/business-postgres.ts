@@ -227,7 +227,8 @@ export async function proposeMerger(repository: PostgresRepository, input: { acq
     const day = Number(world.rows[0]?.game_day ?? 0);
     const mergerId = `MERGER-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const terms = { acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, pricePerShare: input.pricePerShare, totalShares: Number(totalShares), totalAmount: Number(total) };
-    await tx.query("INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, status, starts_game_day, ends_game_day, correlation_id) VALUES ($1,'strategic',$2,$3,'Merger Tender Offer',$4,$5,'proposed',$6,$7,$8)", [mergerId, input.acquirerId, target.rows[0].owner_id, toNanoMarkup(terms), total, day, day + 30, input.correlationId]);
+    await tx.query("INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, amount, status, starts_game_day, ends_game_day, correlation_id) VALUES ($1,'strategic',$2,$3,'Merger Tender Offer',$4,'proposed',$5,$6,$7)", [mergerId, input.acquirerId, target.rows[0].owner_id, total, day, day + 30, input.correlationId]);
+    await tx.query("INSERT INTO merger_contracts (contract_id, acquirer_business_id, target_business_id, price_per_share, total_shares, total_amount) VALUES ($1,$2,$3,$4,$5,$6)", [mergerId, input.acquirerBusinessId, input.targetBusinessId, input.pricePerShare, Number(totalShares), total]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merger_proposed', `Merger tender offer for ${input.targetBusinessId}`, toNanoMarkup({ mergerId, acquirerBusinessId: input.acquirerBusinessId, targetBusinessId: input.targetBusinessId, totalAmount: Number(total) })]);
     await enqueueOutbox(tx, {
       eventKey: `business-merger-proposal:${input.correlationId}`,
@@ -244,13 +245,14 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'business.merged' AND details->>'correlationId' = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, mergerId: input.mergerId, correlationId: input.correlationId };
-    const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; status: string; terms_json: unknown }>('SELECT id, proposer_id, counterparty_id, amount, status, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.mergerId]);
+    const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; status: string }>('SELECT id, proposer_id, counterparty_id, amount, status FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.mergerId]);
     if (!contract.rows[0] || contract.rows[0].status === 'cancelled') throw new Error('Merger contract not found or cancelled');
     if (contract.rows[0].counterparty_id !== input.callerId) throw new Error('Only target business owner may accept and execute merger');
-    const terms = typeof contract.rows[0].terms_json === 'string' ? fromNanoMarkup<Record<string, unknown>>(contract.rows[0].terms_json) : (contract.rows[0].terms_json as Record<string, unknown>);
-    const acquirerBusinessId = String(terms.acquirerBusinessId);
-    const targetBusinessId = String(terms.targetBusinessId);
-    const totalAmount = Number(contract.rows[0].amount);
+    const mergerRecord = await tx.query<{ acquirer_business_id: string; target_business_id: string; price_per_share: string; total_shares: string; total_amount: string }>('SELECT acquirer_business_id, target_business_id, price_per_share, total_shares, total_amount FROM merger_contracts WHERE contract_id = $1 FOR UPDATE', [input.mergerId]);
+    if (!mergerRecord.rows[0]) throw new Error('Merger terms not found');
+    const acquirerBusinessId = mergerRecord.rows[0].acquirer_business_id;
+    const targetBusinessId = mergerRecord.rows[0].target_business_id;
+    const totalAmount = Number(mergerRecord.rows[0].total_amount);
     const totalCents = moneyToCents(totalAmount);
     const [acquirerAccount, targetShares] = await Promise.all([
       tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [contract.rows[0].proposer_id]),

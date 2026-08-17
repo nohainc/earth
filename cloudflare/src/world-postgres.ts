@@ -52,9 +52,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     .filter((row) => row.product === 'components' || row.product === 'energy')
     .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
   const startIndex = economicStartIndex(referencePrice || 50);
-  const feeRule = (await repository.query<{ value_json: unknown }>("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1")).rows[0]?.value_json;
-  let feeRate = 0;
-  try { const parsed = typeof feeRule === 'string' ? fromNanoMarkup<{ feeRate?: number }>(feeRule) : feeRule as { feeRate?: number }; feeRate = typeof parsed?.feeRate === 'number' ? Math.min(0.05, Math.max(0, parsed.feeRate)) : 0; } catch { /* retain default */ }
+  const feeRule = (await repository.query<{ rate: string }>("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1")).rows[0]?.rate;
+  const feeRate = feeRule ? Number(feeRule) : 0;
   const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history] = await Promise.all([
     Promise.all([repository.query('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10'), repository.query('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10')]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),

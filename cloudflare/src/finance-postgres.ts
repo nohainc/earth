@@ -40,16 +40,8 @@ export async function settleTax(repository: PostgresRepository, humanId: string,
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [humanId]);
     const legacyRule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true");
     if (!account.rows[0] || !legacyRule.rows[0]) throw new Error('Tax rule or account not found');
-    const financeRule = await tx.query<{ value_json: unknown; version: number }>("SELECT value_json, version FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'finance' AND status = 'active' ORDER BY version DESC LIMIT 1");
-    let rate = String(legacyRule.rows[0].rate);
-    let version = Number(legacyRule.rows[0].version);
-    const configured = financeRule.rows[0]?.value_json;
-    if (configured) {
-      try {
-        const value = typeof configured === 'string' ? fromNanoMarkup<{ rate?: number }>(configured) : configured as { rate?: number };
-        if (typeof value?.rate === 'number' && value.rate >= 0 && value.rate <= 0.25) { rate = String(value.rate); version = Number(financeRule.rows[0].version); }
-      } catch { /* retain the canonical tax rule */ }
-    }
+    const rate = String(legacyRule.rows[0].rate);
+    const version = Number(legacyRule.rows[0].version);
     const amountCents = taxToCents(taxableAmount, rate);
     const amount = centsToMoney(amountCents);
     const rateNumber = Number(rate);

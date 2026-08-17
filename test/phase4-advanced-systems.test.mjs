@@ -107,7 +107,20 @@ test('executeMerger transfers funds pro-rata, transfers assets, and dissolves ta
             counterparty_id: 'H-TARGET-OWNER',
             amount: '10000.00',
             status: 'proposed',
-            terms_json: { acquirerBusinessId: 'BIZ-ACQUIRER', targetBusinessId: 'BIZ-TARGET', pricePerShare: 10, totalShares: 1000, totalAmount: 10000 },
+          },
+        ],
+      };
+    }
+    if (sql.includes('FROM merger_contracts WHERE contract_id = $1')) {
+      return {
+        rows: [
+          {
+            contract_id: 'MERGER-123',
+            acquirer_business_id: 'BIZ-ACQUIRER',
+            target_business_id: 'BIZ-TARGET',
+            price_per_share: '10.00',
+            total_shares: '1000',
+            total_amount: '10000.00',
           },
         ],
       };

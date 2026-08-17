@@ -30,13 +30,12 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposal: prior.rows[0], correlationId: input.correlationId };
     if (!(await eligible(tx, input.humanId, input.institutionId))) throw new Error('Human is not eligible to propose at this institution');
     const rule = input.ruleVersionId
-      ? await tx.query<{ value_json: unknown; id: string }>("SELECT id, value_json FROM governance_rules WHERE id = $1 AND institution_id = $2 AND status = 'active'", [input.ruleVersionId, input.institutionId])
-      : await tx.query<{ value_json: unknown; id: string }>("SELECT id, value_json FROM governance_rules WHERE institution_id = $1 AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
+      ? await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days FROM governance_rules WHERE id = $1 AND institution_id = $2 AND status = 'active'", [input.ruleVersionId, input.institutionId])
+      : await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days FROM governance_rules WHERE institution_id = $1 AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
     if (!rule.rows[0]) throw new Error('An active governance rule version is required');
-    const config = jsonObject(rule.rows[0].value_json);
-    const quorum = Number(config.quorum ?? 0.25);
-    const approvalThreshold = Number(config.approvalThreshold ?? 0.5);
-    const implementationDelay = Number(config.implementationDelayDays ?? 1);
+    const quorum = Number(rule.rows[0].quorum_threshold ?? 0.25);
+    const approvalThreshold = Number(rule.rows[0].approval_threshold ?? 0.5);
+    const implementationDelay = 1;
     if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
@@ -112,10 +111,10 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     }
     if (!['market', 'finance', 'services', 'technology'].includes(category)) throw new Error('Target rule is outside engine bounds');
     if (category === 'finance' && value.rate !== undefined && (typeof value.rate !== 'number' || Number(value.rate) < 0 || Number(value.rate) > 0.25)) throw new Error('Finance rule rate must be between 0 and 0.25');
-    const previous = await tx.query<{ version: number }>('SELECT version FROM governance_rules WHERE institution_id = $1 AND category = $2 ORDER BY version DESC LIMIT 1', [current.institution_id, category]);
-    const version = Number(previous.rows[0]?.version ?? 0) + 1;
-    const ruleId = `RULE-${current.institution_id}-${category}-${version}`;
-    await tx.query('INSERT INTO governance_rules (id, institution_id, name, category, value_json, version, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,\'active\',$7)', [ruleId, current.institution_id, current.title, category, toNanoMarkup(value), version, input.humanId]);
+    const quorum = value.quorum !== undefined ? Number(value.quorum) : 0.25;
+    const approval = value.approvalThreshold !== undefined ? Number(value.approvalThreshold) : 0.50;
+    const votingPeriod = value.votingPeriodDays !== undefined ? Number(value.votingPeriodDays) : 30;
+    await tx.query('INSERT INTO governance_rules (id, institution_id, name, category, quorum_threshold, approval_threshold, voting_period_days, version, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'active\',$9)', [ruleId, current.institution_id, current.title, category, quorum, approval, votingPeriod, version, input.humanId]);
     await tx.query("UPDATE governance_rules SET status = 'superseded' WHERE institution_id = $1 AND category = $2 AND status = 'active' AND id <> $3", [current.institution_id, category, ruleId]);
     await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'executed' WHERE id = $1", [current.id]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'rule.changed', `Rule ${category} changed`, toNanoMarkup({ proposalId: current.id, ruleId })]);

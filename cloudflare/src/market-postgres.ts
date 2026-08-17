@@ -16,13 +16,8 @@ type MarketOrderInput = {
 const products = new Set(['material', 'components', 'energy', 'compute']);
 
 async function feeRate(repository: PostgresRepository): Promise<string> {
-  const result = await repository.query<{ value_json: unknown }>("SELECT value_json FROM governance_rules WHERE institution_id = 'OUC-001' AND category = 'market' AND status = 'active' ORDER BY version DESC LIMIT 1");
-  const value = result.rows[0]?.value_json;
-  if (!value) return '0';
-  try {
-    const parsed = typeof value === 'string' ? fromNanoMarkup<{ feeRate?: number }>(value) : value as { feeRate?: number };
-    return typeof parsed.feeRate === 'number' && parsed.feeRate >= 0 && parsed.feeRate <= 0.05 ? String(parsed.feeRate) : '0';
-  } catch { return '0'; }
+  const result = await repository.query<{ rate: string }>("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1");
+  return result.rows[0]?.rate ?? '0';
 }
 
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
