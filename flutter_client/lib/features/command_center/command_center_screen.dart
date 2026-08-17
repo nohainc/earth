@@ -10,6 +10,7 @@ import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
+import 'top_fixed_hud_panel.dart';
 
 Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
   final base = configuredBase.isNotEmpty
@@ -367,38 +368,50 @@ class _CommandCenterState extends State<CommandCenter> {
                       end: Alignment.bottomRight,
                     ),
                   ),
-                  child: Row(
+                  child: Column(
                     children: [
-                      if (!compact)
-                        Sidebar(
-                          state: current,
-                          selectedSection: selectedSection,
-                          busy: busy,
-                          canAdvanceDay: canAdvanceDay,
-                          isLiveConnected: liveChannel != null,
-                          isReconnecting: liveReconnectTimer?.isActive == true,
-                          unreadNotifications: unreadNotifications,
-                          onAdvanceDay: () => _run(api.advanceDay),
-                          onLogout: () async {
-                            await api.logout();
-                            if (mounted) widget.onLogout();
-                          },
-                          onSecurity: () =>
-                              showSecurityDialog(context, api, widget.onLogout),
-                          onNavigate: (section) => _navigateToSection(
-                            context,
-                            section,
-                            closeDrawer: false,
-                          ),
-                        ),
+                      TopFixedHudPanel(
+                        state: current,
+                        onLogout: () async {
+                          await api.logout();
+                          if (mounted) widget.onLogout();
+                        },
+                        onSecurity: () =>
+                            showSecurityDialog(context, api, widget.onLogout),
+                      ),
                       Expanded(
-                        child: ListView(
-                          padding: EdgeInsets.fromLTRB(
-                            compact ? 16 : 34,
-                            compact ? 16 : 26,
-                            compact ? 16 : 42,
-                            56,
-                          ),
+                        child: Row(
+                          children: [
+                            if (!compact)
+                              Sidebar(
+                                state: current,
+                                selectedSection: selectedSection,
+                                busy: busy,
+                                canAdvanceDay: canAdvanceDay,
+                                isLiveConnected: liveChannel != null,
+                                isReconnecting: liveReconnectTimer?.isActive == true,
+                                unreadNotifications: unreadNotifications,
+                                onAdvanceDay: () => _run(api.advanceDay),
+                                onLogout: () async {
+                                  await api.logout();
+                                  if (mounted) widget.onLogout();
+                                },
+                                onSecurity: () =>
+                                    showSecurityDialog(context, api, widget.onLogout),
+                                onNavigate: (section) => _navigateToSection(
+                                  context,
+                                  section,
+                                  closeDrawer: false,
+                                ),
+                              ),
+                            Expanded(
+                              child: ListView(
+                                padding: EdgeInsets.fromLTRB(
+                                  compact ? 16 : 34,
+                                  compact ? 16 : 26,
+                                  compact ? 16 : 42,
+                                  56,
+                                ),
                           children: [
                             if (error != null)
                               Padding(
@@ -457,7 +470,10 @@ class _CommandCenterState extends State<CommandCenter> {
                     ],
                   ),
                 ),
-              ),
+              ],
+            ),
+          ),
+        ),
       );
     });
   }
