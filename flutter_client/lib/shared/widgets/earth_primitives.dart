@@ -4,36 +4,46 @@ import '../../app/theme.dart';
 void showEarthInfoDialog(
   BuildContext context, {
   required String title,
-  required String subtitle,
-  required List<Map<String, String>> items,
+  String subtitle = '',
+  String? description,
+  List<Map<String, String>> items = const [],
 }) {
   showDialog(
     context: context,
     builder: (context) => AlertDialog(
-      backgroundColor: surfaceColor,
+      backgroundColor: const Color(0xFF141A24),
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
         side: const BorderSide(color: Colors.white12),
       ),
-      title: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      title: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 15,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 0.5,
-              color: inkColor,
+          const Icon(Icons.info_outline, size: 16, color: cyanAccentColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 0.5,
+                    color: inkColor,
+                  ),
+                ),
+                if (subtitle.isNotEmpty) ...[
+                  const SizedBox(height: 3),
+                  Text(
+                    subtitle,
+                    style: const TextStyle(fontSize: 10.5, color: mutedColor),
+                  ),
+                ],
+              ],
             ),
           ),
-          if (subtitle.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Text(
-              subtitle,
-              style: const TextStyle(fontSize: 11, color: mutedColor),
-            ),
-          ],
         ],
       ),
       content: ConstrainedBox(
@@ -41,8 +51,20 @@ void showEarthInfoDialog(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
-          children: items
-              .map(
+          children: [
+            if (description != null && description.isNotEmpty) ...[
+              Text(
+                description,
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: mutedColor,
+                  height: 1.45,
+                ),
+              ),
+              if (items.isNotEmpty) const SizedBox(height: 14),
+            ],
+            if (items.isNotEmpty)
+              ...items.map(
                 (item) => Padding(
                   padding: const EdgeInsets.only(bottom: 12),
                   child: Column(
@@ -68,14 +90,14 @@ void showEarthInfoDialog(
                     ],
                   ),
                 ),
-              )
-              .toList(),
+              ),
+          ],
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('Close', style: TextStyle(color: violetColor)),
+          child: const Text('CLOSE', style: TextStyle(color: cyanAccentColor, fontWeight: FontWeight.w700, fontSize: 11)),
         ),
       ],
     ),
@@ -89,6 +111,7 @@ class EarthPanel extends StatelessWidget {
   final double? width;
   final VoidCallback? onInfoTap;
   final String? infoTooltip;
+  final String? infoDescription;
 
   const EarthPanel({
     super.key,
@@ -97,12 +120,15 @@ class EarthPanel extends StatelessWidget {
     this.width,
     this.onInfoTap,
     this.infoTooltip,
+    this.infoDescription,
   });
 
   @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurfaceVariant;
+    final hasInfo = onInfoTap != null || infoTooltip != null || infoDescription != null;
+
     return Semantics(
       container: true,
       label: title,
@@ -136,17 +162,16 @@ class EarthPanel extends StatelessWidget {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (onInfoTap != null || infoTooltip != null)
+                    if (hasInfo)
                       IconButton(
                         icon: Icon(
                           Icons.info_outline,
                           size: 14,
                           color: mutedColor.withValues(alpha: .8),
                         ),
-                        tooltip: infoTooltip ?? 'More information',
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
-                        onPressed: onInfoTap,
+                        onPressed: onInfoTap ?? (infoDescription != null ? () => showEarthInfoDialog(context, title: title, description: infoDescription!) : null),
                       ),
                   ],
                 ),

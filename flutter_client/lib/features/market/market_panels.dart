@@ -431,6 +431,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     return EarthPanel(
       key: widget.panelKey,
       title: 'CENTRAL MARKET / LIVE SIGNALS',
+      infoDescription:
+          'Live commodity clearing signals, supply vs demand liquidity pressure meters, historical uniform clearing price trends, and batch order placement terminal.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1081,6 +1083,8 @@ class MarketOrderBookPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'CENTRAL MARKET / ORDER BOOK',
+      infoDescription:
+          'Central clearing order book showing open buy bids and sell asks aggregated by price level, along with real-time executed clearing trades.',
       child: book.isEmpty
           ? const Text(
               'No open orders. The market is waiting for a new signal.',
@@ -1189,6 +1193,8 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
 
     return EarthPanel(
       title: 'MY MARKET ORDERS / LIFECYCLE',
+      infoDescription:
+          'Personal order management tracking open, partially filled, completed, and cancelled limit orders with automatic escrow reserve locking and settlement accounting.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

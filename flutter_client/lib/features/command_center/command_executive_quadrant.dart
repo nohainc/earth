@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 class CommandExecutiveQuadrant extends StatelessWidget {
@@ -104,6 +105,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: cyanAccentColor,
                   title: 'MARKET',
                   subtitle: 'UNIFORM BATCH SETTLEMENT',
+                  infoDescription:
+                      'Central clearing spot prices and settlement metrics across key commodities (Components, Energy, Materials) updated every clearing batch.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -126,6 +129,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: violetColor,
                   title: 'BUSINESS',
                   subtitle: '$businessName · $businessStatus',
+                  infoDescription:
+                      'Enterprise operational overview tracking machine fleet physical condition, projected net profit and loss per cycle, and current operational maintenance policy.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -151,6 +156,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: Colors.amberAccent,
                   title: cityName,
                   subtitle: 'MUNICIPAL RESIDENCY · HEALTH $cityHealth',
+                  infoDescription:
+                      'Municipal residency health and urban infrastructure capacities including municipal power grid stability, housing availability, and healthcare coverage.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -173,6 +180,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   iconColor: Colors.tealAccent,
                   title: 'FINANCE & CONTRACTS',
                   subtitle: 'DOUBLE-ENTRY SETTLED LEDGER',
+                  infoDescription:
+                      'Financial overview monitoring liquid citizen credits, active bilateral legal agreements, and double-entry cryptographic ledger audit verification.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -224,6 +233,7 @@ class _ExecutiveCard extends StatelessWidget {
   final Color iconColor;
   final String title;
   final String subtitle;
+  final String? infoDescription;
   final Widget body;
   final VoidCallback onTap;
 
@@ -233,6 +243,7 @@ class _ExecutiveCard extends StatelessWidget {
     required this.iconColor,
     required this.title,
     required this.subtitle,
+    this.infoDescription,
     required this.body,
     required this.onTap,
   });
@@ -298,6 +309,21 @@ class _ExecutiveCard extends StatelessWidget {
                       ],
                     ),
                   ),
+                  if (infoDescription != null)
+                    IconButton(
+                      icon: Icon(
+                        Icons.info_outline,
+                        size: 13,
+                        color: mutedColor.withValues(alpha: .8),
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => showEarthInfoDialog(
+                        context,
+                        title: title,
+                        description: infoDescription!,
+                      ),
+                    ),
                 ],
               ),
               const SizedBox(height: 14),

@@ -15,6 +15,8 @@ class OpportunityPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) => EarthPanel(
         title: 'LIVE OPPORTUNITIES',
+        infoDescription:
+            'Real-time strategic signals and urgent system notifications across market fluctuations, governance voting, municipal health, and enterprise operations requiring executive attention.',
         width: double.infinity,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

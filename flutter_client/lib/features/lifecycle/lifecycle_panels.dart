@@ -774,6 +774,8 @@ class MacroLiquidityPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'MACRO LIQUIDITY / WORLD ENGINE SIGNAL',
+      infoDescription:
+          'Systemic monetary base and liquidity tracking active money supply against the planetary economic target corridor.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

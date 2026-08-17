@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 /// The command-center executive citizen and planetary cockpit.
@@ -62,6 +63,22 @@ class HeroCard extends StatelessWidget {
                         fontSize: 10,
                         letterSpacing: 1.2,
                         fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    IconButton(
+                      icon: Icon(
+                        Icons.info_outline,
+                        size: 13,
+                        color: mutedColor.withValues(alpha: .8),
+                      ),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => showEarthInfoDialog(
+                        context,
+                        title: 'CITIZEN COCKPIT & STATUS',
+                        description:
+                            'Executive citizen cockpit displaying planetary world stability, citizen biometric health, generation, residency, standing, and legacy score.',
                       ),
                     ),
                   ],

@@ -68,6 +68,14 @@ void main() {
     expect(find.textContaining('S 100  ·  D 80'), findsOneWidget);
     expect(find.text('PLACE BUY ORDER'), findsOneWidget);
 
+    // Verify info icon is present and opens description dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Live commodity clearing signals'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+
     await tester.ensureVisible(find.text('PLACE BUY ORDER'));
     await tester.tap(find.text('PLACE BUY ORDER'));
     expect(executedAction, 'called');
