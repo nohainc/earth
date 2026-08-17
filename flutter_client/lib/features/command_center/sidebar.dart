@@ -30,6 +30,15 @@ class Sidebar extends StatelessWidget {
     this.onSecurity,
   });
 
+  String _clockLabel() {
+    final rawMinute = state.clock['minute'];
+    final minute =
+        rawMinute is num ? rawMinute.toInt() : int.tryParse('$rawMinute') ?? 0;
+    final hour = (minute ~/ 60) % 24;
+    final displayMinute = minute % 60;
+    return '${hour.toString().padLeft(2, '0')}:${displayMinute.toString().padLeft(2, '0')}';
+  }
+
   @override
   Widget build(BuildContext context) {
     final name = '${state.human['name'] ?? 'Human'}';
@@ -89,26 +98,44 @@ class Sidebar extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            '◌  EARTH',
-            style: TextStyle(
-              fontSize: 17,
-              fontWeight: FontWeight.w800,
-              letterSpacing: 3,
-            ),
-          ),
-          const Padding(
-            padding: EdgeInsets.only(left: 28, top: 2, bottom: 26),
-            child: Text(
-              'UNITED CORPORATIONS',
-              style: TextStyle(
-                fontSize: 8,
-                color: mutedColor,
-                letterSpacing: 1.2,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('◌  EARTH',
+                        style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 3)),
+                    Padding(
+                      padding: EdgeInsets.only(left: 28, top: 2),
+                      child: Text('UNITED CORPORATIONS',
+                          style: TextStyle(
+                              fontSize: 8,
+                              color: mutedColor,
+                              letterSpacing: 1.2)),
+                    ),
+                  ],
+                ),
               ),
-            ),
+              Tooltip(
+                message: 'Advance one game day',
+                child: IconButton(
+                  onPressed: busy || !canAdvanceDay ? null : onAdvanceDay,
+                  icon: const Icon(Icons.skip_next_rounded, size: 19),
+                  color: violetColor,
+                  disabledColor: Colors.white24,
+                  padding: EdgeInsets.zero,
+                  constraints:
+                      const BoxConstraints.tightFor(width: 28, height: 28),
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 14),
           PopupMenuButton<String>(
             onSelected: (value) =>
                 value == 'security' ? onSecurity?.call() : onLogout?.call(),
@@ -137,6 +164,25 @@ class Sidebar extends StatelessWidget {
               const Icon(Icons.expand_more, size: 16, color: mutedColor),
             ]),
           ),
+          const SizedBox(height: 12),
+          Row(children: [
+            Container(
+                width: 6,
+                height: 6,
+                decoration:
+                    BoxDecoration(color: liveColor, shape: BoxShape.circle)),
+            const SizedBox(width: 6),
+            Text(liveLabel,
+                style:
+                    TextStyle(color: liveColor, fontSize: 9, letterSpacing: 1)),
+          ]),
+          const SizedBox(height: 7),
+          const Text('WORLD CLOCK',
+              style:
+                  TextStyle(color: mutedColor, fontSize: 8, letterSpacing: 1)),
+          Text('DAY ${state.clock['day']} · ${_clockLabel()}',
+              style: const TextStyle(fontSize: 10, letterSpacing: 1)),
+          const SizedBox(height: 10),
           Expanded(
             child: SingleChildScrollView(
               child: Column(
@@ -215,37 +261,9 @@ class Sidebar extends StatelessWidget {
             ),
           ),
           const Divider(color: Colors.white12),
-          Row(children: [
-            Container(
-                width: 6,
-                height: 6,
-                decoration:
-                    BoxDecoration(color: liveColor, shape: BoxShape.circle)),
-            const SizedBox(width: 6),
-            Text(liveLabel,
-                style:
-                    TextStyle(color: liveColor, fontSize: 9, letterSpacing: 1))
-          ]),
-          const SizedBox(height: 7),
-          const Text('WORLD CLOCK',
-              style:
-                  TextStyle(color: mutedColor, fontSize: 8, letterSpacing: 1)),
-          Text(
-            'DAY ${state.clock['day']} · ${state.clock['minute']}',
-            style: const TextStyle(fontSize: 10, letterSpacing: 1),
-          ),
-          const SizedBox(height: 8),
           Text('$name · $city',
               overflow: TextOverflow.ellipsis,
               style: const TextStyle(color: mutedColor, fontSize: 9)),
-          const SizedBox(height: 10),
-          SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: busy || !canAdvanceDay ? null : onAdvanceDay,
-                icon: const Icon(Icons.skip_next, size: 14),
-                label: const Text('ADVANCE DAY', style: TextStyle(fontSize: 9)),
-              )),
         ],
       ),
     );
