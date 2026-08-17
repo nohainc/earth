@@ -168,20 +168,20 @@ class Dashboard extends StatelessWidget {
                   ),
                   EarthMetric(
                     width: itemWidth,
-                    label: 'WORLD HEALTH',
-                    value: '${state.world['health']} / 100',
-                    accent: Colors.orangeAccent,
+                    label: 'CITIZEN HEALTH',
+                    value: '${state.human['health'] ?? 100}%',
+                    accent: Colors.tealAccent,
                     hint:
-                        'Composite simulation health across resource scarcity, energy, and costs.',
+                        'Biological vitality and stamina of your persona. Deteriorates with aging or healthcare deficits.',
                     onInfoTap: () => showEarthInfoDialog(
                       context,
-                      title: 'WORLD HEALTH SCORE',
-                      subtitle: 'Planetary simulation vitality index',
+                      title: 'CITIZEN BIOLOGICAL HEALTH',
+                      subtitle: 'Physical vitality & aging indicators',
                       items: [
                         {
-                          'label': 'Health Score (${state.world['health']} / 100)',
+                          'label': 'Biological Health (${state.human['health'] ?? 100}%)',
                           'description':
-                              'Composite index reflecting ecological stability, machine maintenance rates, and macroeconomic liquidity.',
+                              'Represents your persona\'s physical condition. Maintained through local healthcare services and good living conditions.',
                         },
                       ],
                     ),
@@ -269,14 +269,6 @@ class Dashboard extends StatelessWidget {
                           ),
                         ),
                       ],
-                    ),
-                    Text(
-                      'LCI ${state.world['livingCostIndex'] ?? '1.00'}  ·  ESI ${state.world['essentialServicesIndex'] ?? '1.00'}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        letterSpacing: .6,
-                        color: mutedColor,
-                      ),
                     ),
                   ],
                 ),

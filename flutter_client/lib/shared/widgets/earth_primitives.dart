@@ -239,13 +239,7 @@ class EarthMetric extends StatelessWidget {
 
     return Semantics(
       label: '$label: $value',
-      child: hint != null
-          ? Tooltip(
-              message: hint!,
-              preferBelow: false,
-              child: metricCard,
-            )
-          : metricCard,
+      child: metricCard,
     );
   }
 }

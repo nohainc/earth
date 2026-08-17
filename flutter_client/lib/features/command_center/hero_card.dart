@@ -3,8 +3,7 @@ import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 
-/// The command-center world-health visual is isolated from API and state
-/// orchestration so dashboard work can evolve without enlarging main.dart.
+/// The command-center executive citizen and planetary cockpit.
 class HeroCard extends StatelessWidget {
   final EarthState state;
 
@@ -35,10 +34,17 @@ class HeroCard extends StatelessWidget {
         state.world['infrastructure_health'] ??
         '1.00';
 
+    final citizenName =
+        (state.human['name'] as String?)?.toUpperCase() ?? 'ALEXANDER VANE';
+    final citizenAge = state.human['age'] ?? '34';
+    final citizenGen = state.human['generation'] ?? '1';
+    final cityName =
+        (state.institutions['city']?['name'] as String?)?.toUpperCase() ??
+            'NEW CARTHAGE';
+
     return Container(
       width: double.infinity,
-      height: 218,
-      padding: const EdgeInsets.fromLTRB(28, 24, 28, 20),
+      padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.white12),
@@ -55,7 +61,7 @@ class HeroCard extends StatelessWidget {
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    '●  WORLD HEALTH · $statusText',
+                    '●  CITIZEN COCKPIT · ACTIVE',
                     style: TextStyle(
                       color: statusColor,
                       fontSize: 9,
@@ -70,55 +76,76 @@ class HeroCard extends StatelessWidget {
                       size: 13,
                       color: mutedColor.withValues(alpha: .8),
                     ),
-                    tooltip: 'World Health information',
+                    tooltip: 'Citizen & Simulation Details',
                     padding: EdgeInsets.zero,
                     constraints: const BoxConstraints(),
                     onPressed: () => showEarthInfoDialog(
                       context,
-                      title: 'WORLD HEALTH & VITALS',
-                      subtitle: 'Planetary simulation balance indicators',
+                      title: 'CITIZEN & SIMULATION STATUS',
+                      subtitle: 'Identity, demographic vitals, and planetary indices',
                       items: [
                         {
-                          'label': 'World Health Score ($healthScore / 100)',
+                          'label': 'Citizen Identity ($citizenName · Age $citizenAge)',
                           'description':
-                              'The composite vitality of the EARTH simulation. It reflects aggregate resource availability, machine breakdown rates, power grid stability, and macroeconomic solvency.',
+                              'Your active human citizen persona in the UC simulation. Generational knowledge, property ownership, and dynastic lineage are tied to this persona.',
                         },
                         {
-                          'label': 'LCI — Living Cost Index ($lci)',
+                          'label': 'World Health ($healthScore / 100 · $statusText)',
                           'description':
-                              'Multiplier measuring the cost of basic subsistence needs (food, energy, shelter). A higher LCI increases daily human upkeep requirements.',
+                              'Planetary simulation vitality reflecting aggregate resource availability, infrastructure uptime, and macroeconomic stability.',
                         },
                         {
-                          'label': 'ESI — Essential Services Index ($esi)',
+                          'label': 'Living Cost Index ($lci)',
                           'description':
-                              'Infrastructure uptime and municipal public utility stability across all chartered cities.',
+                              'Baseline cost multiplier for essential human upkeep (food, energy, shelter).',
+                        },
+                        {
+                          'label': 'Essential Services Index ($esi)',
+                          'description':
+                              'Public utility uptime and municipal grid stability across chartered cities.',
                         },
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 13),
+              const SizedBox(height: 10),
               Text(
-                '$healthScore',
+                citizenName,
                 style: const TextStyle(
-                  fontSize: 58,
-                  fontWeight: FontWeight.w300,
-                  letterSpacing: -4,
+                  fontSize: 32,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: -0.8,
+                  color: inkColor,
                 ),
               ),
+              const SizedBox(height: 2),
               Text(
-                'LCI $lci  ·  ESI $esi',
-                style: const TextStyle(color: mutedColor, fontSize: 10),
+                'AGE $citizenAge  ·  $cityName  ·  GENERATION $citizenGen',
+                style: const TextStyle(
+                  color: mutedColor,
+                  fontSize: 11,
+                  letterSpacing: .7,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                'World Health: $healthScore / 100 ($statusText)   ·   Living Cost Index: $lci   ·   Essential Services Index: $esi',
+                style: const TextStyle(
+                  color: mutedColor,
+                  fontSize: 10,
+                  letterSpacing: .4,
+                ),
               ),
             ],
           ),
           Positioned(
-            right: 55,
-            top: 3,
+            right: 20,
+            top: 2,
             child: Container(
-              width: 150,
-              height: 150,
+              width: 120,
+              height: 120,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(
@@ -128,14 +155,14 @@ class HeroCard extends StatelessWidget {
                 boxShadow: [
                   BoxShadow(
                     color: violetColor.withValues(alpha: .22),
-                    blurRadius: 40,
+                    blurRadius: 36,
                   ),
                 ],
               ),
               child: Center(
                 child: Container(
-                  width: 82,
-                  height: 82,
+                  width: 72,
+                  height: 72,
                   decoration: const BoxDecoration(
                     shape: BoxShape.circle,
                     gradient: RadialGradient(
@@ -152,7 +179,7 @@ class HeroCard extends StatelessWidget {
                       Text(
                         '${state.clock['day']}',
                         style: const TextStyle(
-                          fontSize: 24,
+                          fontSize: 20,
                           fontWeight: FontWeight.w800,
                         ),
                       ),
