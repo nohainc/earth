@@ -131,22 +131,6 @@ class _SidebarState extends State<Sidebar> {
     }
   }
 
-  bool get _isLocalDatabaseMode {
-    final host = Uri.base.host.toLowerCase();
-    if (host.isNotEmpty &&
-        host != 'localhost' &&
-        host != '127.0.0.1' &&
-        host != '0.0.0.0' &&
-        !host.contains('local')) {
-      return false;
-    }
-    final env = widget.state.json['environment'] as String?;
-    if (env == 'production') return false;
-    final authority = widget.state.json['authority'] as String?;
-    if (authority == 'production') return false;
-    return true;
-  }
-
   @override
   Widget build(BuildContext context) {
     final name = '${widget.state.human['name'] ?? 'Human'}';
@@ -528,8 +512,8 @@ class _SidebarState extends State<Sidebar> {
             ),
           ),
 
-          // 6. ADVANCE DAY BUTTON & BOTTOM LINE (Only visible in Local DB / Dev mode; hidden in Production)
-          if (_isLocalDatabaseMode && widget.onAdvanceDay != null) ...[
+          // 6. ADVANCE DAY ACTION BUTTON
+          if (widget.onAdvanceDay != null) ...[
             const Divider(color: Colors.white12, height: 16, thickness: 1),
             SizedBox(
               width: double.infinity,
@@ -537,15 +521,15 @@ class _SidebarState extends State<Sidebar> {
                 onPressed:
                     widget.busy || !widget.canAdvanceDay ? null : widget.onAdvanceDay,
                 icon: const Icon(Icons.skip_next_rounded, size: 16),
-                label: const Text(
-                  'Advance Day (Local DB)',
-                  style: TextStyle(fontSize: 10.5, letterSpacing: 1.3),
+                label: Text(
+                  widget.busy ? 'Advancing Day...' : 'Advance Day',
+                  style: const TextStyle(fontSize: 10.5, letterSpacing: 1.3, fontWeight: FontWeight.w600),
                 ),
                 style: TextButton.styleFrom(
                   splashFactory: NoSplash.splashFactory,
-                  foregroundColor: violetColor.withValues(alpha: 0.8),
+                  foregroundColor: cyanAccentColor.withValues(alpha: 0.9),
                   disabledForegroundColor: Colors.white24,
-                  padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
+                  padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 8),
                   alignment: Alignment.centerLeft,
                 ),
               ),

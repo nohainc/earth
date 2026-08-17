@@ -256,13 +256,7 @@ class _CommandCenterState extends State<CommandCenter> {
   @override
   Widget build(BuildContext context) {
     final current = state;
-    final canAdvanceDay = current?.roles.any((raw) {
-          final role = raw as Map<String, dynamic>;
-          return role['id'] == 'ROLE-OUC-DELEGATE' &&
-              role['human_id'] == current.human['id'] &&
-              role['assignment_status'] == 'active';
-        }) ??
-        false;
+    final canAdvanceDay = current != null;
 
     return LayoutBuilder(builder: (context, viewport) {
       final compact = viewport.maxWidth < 900;

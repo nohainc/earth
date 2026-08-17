@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { projectGameDeadline } from '../cloudflare/src/game-clock.ts';
+import { projectGameDeadline, getEffectiveGenesisTime, getAuthoritativeGameTime } from '../cloudflare/src/game-clock.ts';
 
 test('projects a governance deadline into game and real time', () => {
   const deadline = projectGameDeadline({
@@ -47,4 +47,39 @@ test('clamps expired deadlines without moving the game clock backwards', () => {
 
 test('rejects invalid deadlines', () => {
   assert.equal(projectGameDeadline({ gameDay: 1, gameMinute: 0, closesAt: 'invalid', nowMs: 0 }), null);
+});
+
+test('getEffectiveGenesisTime shifts start time back according to simulated day offset', () => {
+  const genesis = '2026-01-01T00:00:00.000Z';
+  const effective0 = getEffectiveGenesisTime({ genesisAt: genesis, simulatedDayOffset: 0 });
+  assert.equal(effective0.toISOString(), '2026-01-01T00:00:00.000Z');
+
+  const effective5 = getEffectiveGenesisTime({ genesisAt: genesis, simulatedDayOffset: 5 });
+  // 5 days before 2026-01-01 is 2025-12-27
+  assert.equal(effective5.toISOString(), '2025-12-27T00:00:00.000Z');
+});
+
+test('getAuthoritativeGameTime derives game day and minute from effective genesis', () => {
+  const genesis = '2026-01-01T00:00:00.000Z';
+  // 10 days and 30 minutes after genesis
+  const nowMs = Date.parse('2026-01-11T00:30:00.000Z');
+  
+  const time = getAuthoritativeGameTime({
+    nowMs,
+    genesisAt: genesis,
+    simulatedDayOffset: 0,
+  });
+  assert.equal(time.gameDay, 10);
+  assert.equal(time.gameMinute, 30);
+  assert.equal(time.effectiveGenesisAt, '2026-01-01T00:00:00.000Z');
+
+  // With a 3-day simulation offset, effective genesis shifts back and game day increases by 3
+  const timeWithOffset = getAuthoritativeGameTime({
+    nowMs,
+    genesisAt: genesis,
+    simulatedDayOffset: 3,
+  });
+  assert.equal(timeWithOffset.gameDay, 13);
+  assert.equal(timeWithOffset.gameMinute, 30);
+  assert.equal(timeWithOffset.effectiveGenesisAt, '2025-12-29T00:00:00.000Z');
 });

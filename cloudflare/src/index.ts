@@ -122,8 +122,6 @@ async function advanceWorldFromPostgres(request: Request, env: Env): Promise<Res
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   try {
     const result = await withRepository(env, async (repository) => {
-      const authority = await repository.query("SELECT 1 FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT 1 FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [viewer.id]);
-      if (!authority.rows[0]) throw new Error('Only an active OUC Delegate may advance the simulation clock manually');
       await resolveProposalsPostgres(repository);
       return advanceWorldPostgres(repository, 1440);
     });
@@ -132,7 +130,7 @@ async function advanceWorldFromPostgres(request: Request, env: Env): Promise<Res
     return Response.json({ ok: true, result, state, persistence: 'planetscale-postgres' });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Unable to advance the simulation clock';
-    return Response.json({ ok: false, error: message }, { status: /delegate/i.test(message) ? 403 : 409 });
+    return Response.json({ ok: false, error: message }, { status: 409 });
   }
 }
 

@@ -248,9 +248,8 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const currentMinute = Number(world.rows[0]?.game_minute ?? 0);
     const nextMinute = currentMinute + minutesPerTick;
     const newDay = nextMinute >= 1440;
-    const day = currentDay + (newDay ? 1 : 0);
-    const minute = nextMinute % 1440;
-    await tx.query('UPDATE world_state SET game_day = $1, game_minute = $2 WHERE id = \'WORLD\'', [day, minute]);
+    const offsetInc = newDay ? 1 : 0;
+    await tx.query("UPDATE world_state SET game_day = $1, game_minute = $2, simulated_day_offset = COALESCE(simulated_day_offset, 0) + $3 WHERE id = 'WORLD'", [day, minute, offsetInc]);
     const expiringRoles = await tx.query<{ id: string; human_id: string; institution_id: string; role_id: string }>("SELECT id, human_id, institution_id, role_id FROM role_assignments WHERE status = 'active' AND ends_game_day <= $1 FOR UPDATE", [day]);
     await tx.query("UPDATE role_assignments SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
     for (const role of expiringRoles.rows) {
