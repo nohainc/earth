@@ -295,114 +295,65 @@ class _CommandCenterState extends State<CommandCenter> {
                 ),
               )
             : null,
-        /* appBar: AppBar(
-          title: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('EARTH  ·  ${dashboardSectionTitle(selectedSection)}',
-                  style: const TextStyle(
-                      fontWeight: FontWeight.w800, letterSpacing: 1.1)),
-              if (current != null)
-                Text(
-                  'DAY ${current.clock['day']}  ·  ${current.institutions['city']['name']}  ·  ${current.institutions['corporation']['name']}',
-                  style: const TextStyle(
-                      color: mutedColor, fontSize: 9, letterSpacing: .5),
-                  overflow: TextOverflow.ellipsis,
+        appBar: compact && current != null
+            ? AppBar(
+                backgroundColor: surfaceColor.withValues(alpha: .9),
+                elevation: 0,
+                scrolledUnderElevation: 0,
+                leading: Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.menu, color: inkColor),
+                    tooltip: 'Navigation Menu',
+                    onPressed: () => Scaffold.of(context).openDrawer(),
+                  ),
                 ),
-            ],
-          ),
-          actions: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-              decoration: BoxDecoration(
-                color: liveColor.withValues(alpha: .10),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Row(children: [
-                Container(
-                    width: 6,
-                    height: 6,
-                    decoration: BoxDecoration(
-                        color: liveColor, shape: BoxShape.circle)),
-                const SizedBox(width: 6),
-                Text(liveLabel,
-                    style: TextStyle(
-                        color: liveColor,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .8)),
-              ]),
-            ),
-            IconButton(
-              tooltip: 'Activity and alerts',
-              onPressed: () =>
-                  _navigateToSection(context, 'activity', closeDrawer: false),
-              icon: Badge(
-                isLabelVisible: unreadNotifications > 0,
-                label: Text('$unreadNotifications'),
-                child: const Icon(Icons.notifications_none),
-              ),
-            ),
-            PopupMenuButton<String>(
-              tooltip: 'Account',
-              onSelected: (value) async {
-                if (value == 'security') {
-                  await showSecurityDialog(context, api, widget.onLogout);
-                } else if (value == 'logout') {
-                  await api.logout();
-                  if (mounted) widget.onLogout();
-                }
-              },
-              itemBuilder: (context) => [
-                PopupMenuItem(
-                  enabled: false,
-                  value: 'identity',
-                  child: Text(
-                      '${current?.human['name'] ?? 'Human'}\n${current?.human['email'] ?? ''}'),
+                title: Text(
+                  dashboardSectionTitle(selectedSection),
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 1.1,
+                    color: inkColor,
+                  ),
                 ),
-                const PopupMenuDivider(),
-                const PopupMenuItem(
-                    value: 'security', child: Text('Account security')),
-                const PopupMenuItem(value: 'logout', child: Text('Sign out')),
-              ],
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 8),
-                child: Row(children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: violetColor,
-                    child: Text(
-                      (current?.human['name']?.toString() ?? 'H')
-                          .trim()
-                          .split(RegExp(r'\s+'))
-                          .where((part) => part.isNotEmpty)
-                          .take(2)
-                          .map((part) => part[0].toUpperCase())
-                          .join(),
-                      style: const TextStyle(fontSize: 9),
+                actions: [
+                  IconButton(
+                    tooltip: 'Activity & alerts',
+                    onPressed: () => _navigateToSection(context, 'activity',
+                        closeDrawer: false),
+                    icon: Badge(
+                      isLabelVisible: unreadNotifications > 0,
+                      label: Text('$unreadNotifications'),
+                      child: const Icon(Icons.notifications_none,
+                          size: 20, color: mutedColor),
                     ),
                   ),
-                  const Icon(Icons.expand_more, size: 16),
-                ]),
-              ),
-            ),
-            if (busy)
-              const Padding(
-                padding: EdgeInsets.all(18),
-                child: SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(strokeWidth: 2),
-                ),
-              ),
-            TextButton(
-              onPressed:
-                  busy || !canAdvanceDay ? null : () => _run(api.advanceDay),
-              child: const Text('ADVANCE DAY  →'),
-            ),
-          ],
-        ), */
-        appBar: null,
+                  if (canAdvanceDay)
+                    IconButton(
+                      icon: const Icon(Icons.fast_forward,
+                          size: 18, color: violetColor),
+                      tooltip: 'Advance Day',
+                      onPressed: busy ? null : () => _run(api.advanceDay),
+                    ),
+                  IconButton(
+                    icon: const Icon(Icons.shield_outlined,
+                        size: 18, color: mutedColor),
+                    tooltip: 'Security',
+                    onPressed: () =>
+                        showSecurityDialog(context, api, widget.onLogout),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.logout,
+                        size: 18, color: mutedColor),
+                    tooltip: 'Sign Out',
+                    onPressed: () async {
+                      await api.logout();
+                      if (mounted) widget.onLogout();
+                    },
+                  ),
+                ],
+              )
+            : null,
         body: current == null
             ? Center(
                 child: error == null
@@ -468,18 +419,6 @@ class _CommandCenterState extends State<CommandCenter> {
                                       child: const Text('RETRY'),
                                     ),
                                   ],
-                                ),
-                              ),
-                            if (compact)
-                              const Padding(
-                                padding: EdgeInsets.only(bottom: 12),
-                                child: Text(
-                                  'COMPACT COMMAND VIEW',
-                                  style: TextStyle(
-                                    color: mutedColor,
-                                    fontSize: 9,
-                                    letterSpacing: 1.1,
-                                  ),
                                 ),
                               ),
                             Dashboard(
