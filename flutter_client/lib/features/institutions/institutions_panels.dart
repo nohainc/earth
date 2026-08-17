@@ -190,6 +190,8 @@ class CommunitiesPanel extends StatelessWidget {
     final communities = state.communities;
     return EarthPanel(
       title: 'COMMUNITIES / SHARED LIFE',
+      infoDescription:
+          '• Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, and shared municipal governance.\n\n• Membership & Contributions:\n  - JOIN / LEAVE: Free association allowing citizens to participate in community governance and welfare dividends.\n  - CONTRIBUTE: Voluntary treasury contributions funding local public projects and communal resources.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -198,15 +200,30 @@ class CommunitiesPanel extends StatelessWidget {
               Expanded(
                 child: Text(
                   '${communities.length} registered communities',
-                  style: const TextStyle(color: mutedColor, fontSize: 11),
+                  style: const TextStyle(
+                    color: mutedColor,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ),
               const SizedBox(width: 8),
-              OutlinedButton(
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cyanAccentColor,
+                  side: BorderSide(
+                      color: cyanAccentColor.withValues(alpha: .35)),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  visualDensity: VisualDensity.compact,
+                ),
                 onPressed: busy
                     ? null
                     : () => showCommunityComposer(context, action),
-                child: const Text('FOUND COMMUNITY'),
+                icon: const Icon(Icons.add_rounded, size: 14),
+                label: const Text('FOUND COMMUNITY',
+                    style:
+                        TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
               ),
             ],
           ),
@@ -219,15 +236,17 @@ class CommunitiesPanel extends StatelessWidget {
               final community = raw as Map<String, dynamic>;
               final id = community['id']?.toString() ?? 'COM-001';
               final name = community['name']?.toString() ?? 'Community';
-              final status = (community['status']?.toString() ?? 'active').toUpperCase();
-              final members = (community['member_count'] as num?)?.toInt() ?? 12;
+              final status =
+                  (community['status']?.toString() ?? 'active').toUpperCase();
+              final members =
+                  (community['member_count'] as num?)?.toInt() ?? 12;
 
               return Container(
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(8),
+                margin: const EdgeInsets.only(bottom: 10),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(6),
-                  borderRadius: BorderRadius.circular(6),
+                  color: surfaceColor.withValues(alpha: .75),
+                  borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: Colors.white10),
                 ),
                 child: Column(
@@ -235,19 +254,52 @@ class CommunitiesPanel extends StatelessWidget {
                   children: [
                     Row(
                       children: [
+                        Container(
+                          padding: const EdgeInsets.all(5),
+                          decoration: BoxDecoration(
+                            color: Colors.tealAccent.withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: const Icon(Icons.groups_outlined,
+                              size: 15, color: Colors.tealAccent),
+                        ),
+                        const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '$name ($id)',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: inkColor,
+                            ),
                           ),
                         ),
-                        Text(status, style: const TextStyle(fontSize: 9, color: mutedColor)),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
+                          decoration: BoxDecoration(
+                            color: cyanAccentColor.withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                                color: cyanAccentColor.withValues(alpha: .3)),
+                          ),
+                          child: Text(
+                            status,
+                            style: const TextStyle(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w800,
+                              color: cyanAccentColor,
+                            ),
+                          ),
+                        ),
                       ],
                     ),
-                    const SizedBox(height: 2),
-                    Text('$members active members',
-                        style: const TextStyle(fontSize: 10, color: mutedColor)),
-                    const SizedBox(height: 6),
+                    const SizedBox(height: 4),
+                    Text(
+                      '$members active members',
+                      style: const TextStyle(fontSize: 10.5, color: mutedColor),
+                    ),
+                    const SizedBox(height: 8),
                     Wrap(
                       spacing: 6,
                       runSpacing: 4,
@@ -255,32 +307,54 @@ class CommunitiesPanel extends StatelessWidget {
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            foregroundColor: cyanAccentColor,
+                            side: BorderSide(
+                                color: cyanAccentColor.withValues(alpha: .3)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 2),
                           ),
                           onPressed: busy
                               ? null
-                              : () => action(() => const EarthApi().joinCommunity(id)),
-                          child: const Text('JOIN', style: TextStyle(fontSize: 10)),
+                              : () => action(
+                                  () => const EarthApi().joinCommunity(id)),
+                          child: const Text('JOIN',
+                              style: TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w700)),
                         ),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            foregroundColor: Colors.orangeAccent,
+                            side: BorderSide(
+                                color:
+                                    Colors.orangeAccent.withValues(alpha: .3)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 2),
                           ),
                           onPressed: busy
                               ? null
-                              : () => action(() => const EarthApi().leaveCommunity(id)),
-                          child: const Text('LEAVE', style: TextStyle(fontSize: 10)),
+                              : () => action(
+                                  () => const EarthApi().leaveCommunity(id)),
+                          child: const Text('LEAVE',
+                              style: TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w700)),
                         ),
                         OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            foregroundColor: violetColor,
+                            side: BorderSide(
+                                color: violetColor.withValues(alpha: .3)),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 2),
                           ),
                           onPressed: busy
                               ? null
-                              : () => showCommunityContributionDialog(context, action, id),
-                          child: const Text('CONTRIBUTE', style: TextStyle(fontSize: 10)),
+                              : () => showCommunityContributionDialog(
+                                  context, action, id),
+                          child: const Text('CONTRIBUTE',
+                              style: TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w700)),
                         ),
                       ],
                     ),

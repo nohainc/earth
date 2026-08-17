@@ -37,13 +37,27 @@ class ProposalPanel extends StatelessWidget {
     final hasProposal = proposal['id'].toString().isNotEmpty;
     final proposalId = proposal['id'].toString();
     final isPassed = proposal['outcome'] == 'passed';
-    final executionStatus = (proposal['execution_status']?.toString() ?? 'pending').toLowerCase();
+    final executionStatus =
+        (proposal['execution_status']?.toString() ?? 'pending').toLowerCase();
     final isChallenged = executionStatus == 'challenged';
-    final isVoided = executionStatus == 'voided' || proposal['outcome'] == 'voided';
+    final isVoided =
+        executionStatus == 'voided' || proposal['outcome'] == 'voided';
     final isExecuted = executionStatus == 'executed';
 
+    final supportCount = asIntOr(votes['support'], 0);
+    final opposeCount = asIntOr(votes['oppose'], 0);
+    final uncastCount = asIntOr(votes['uncast'], 0);
+    final totalVotes = supportCount + opposeCount + uncastCount;
+
+    final quorumNum = (proposal['quorum'] as num?)?.toDouble() ?? .25;
+    final approvalThresholdNum =
+        (proposal['approval_threshold'] as num?)?.toDouble() ?? .50;
+    final quorumPercent = (quorumNum * 100).round();
+    final approvalPercent = (approvalThresholdNum * 100).round();
+
     final hasJudicialAuthority = state.roles.any((raw) {
-      final role = raw as Map<String, dynamic>;
+      if (raw is! Map<String, dynamic>) return false;
+      final role = raw;
       final holder = role['human_id']?.toString();
       final name = role['name']?.toString().toLowerCase() ?? '';
       return holder == state.human['id'] &&
@@ -56,94 +70,282 @@ class ProposalPanel extends StatelessWidget {
     if (isChallenged) statusColor = Colors.orangeAccent;
     if (isVoided) statusColor = Colors.redAccent;
     if (isExecuted) statusColor = Colors.greenAccent;
+    if (isPassed) statusColor = Colors.tealAccent;
 
     return EarthPanel(
       title: 'UC PROPOSAL ${hasProposal ? proposal['id'] : ''}',
+      infoDescription:
+          '• Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.\n\n• Quorum & Approval Thresholds:\n  - Quorum: Minimum citizen participation required for ballot validity ($quorumPercent%).\n  - Approval: Majority threshold needed among cast ballots for proposal enactment ($approvalPercent%).\n\n• Legislative Stages:\n  - ACTIVE: Open for citizen voting (support, oppose, abstain).\n  - PASSED / EXECUTABLE: Approved ballot awaiting formal execution on the planetary ledger.\n  - CHALLENGED: Contested under constitutional grounds awaiting Supreme Court judicial review.\n  - EXECUTED: Enacted into statutory planetary law.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  proposal['title']?.toString() ?? '',
-                  style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
+          // 1. PROPOSAL HEADER & EXECUTION BADGE
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .85),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.how_to_vote_outlined,
+                          size: 20, color: statusColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  proposal['title']?.toString() ?? '',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.5,
+                                    color: inkColor,
+                                  ),
+                                ),
+                              ),
+                              if (hasProposal) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: .15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(
+                                      color:
+                                          statusColor.withValues(alpha: .35),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    executionStatus.toUpperCase(),
+                                    style: TextStyle(
+                                      fontSize: 9.5,
+                                      fontWeight: FontWeight.w800,
+                                      letterSpacing: .8,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
+                            style: const TextStyle(
+                                color: mutedColor, fontSize: 11),
+                          ),
+                          Text(
+                            'Quorum $quorumPercent% · approval $approvalPercent%',
+                            style: const TextStyle(
+                                color: mutedColor, fontSize: 11),
+                          ),
+                          if (proposal['deadline'] is Map) ...[
+                            const SizedBox(height: 4),
+                            Text(
+                              formatProposalDeadline(proposal['deadline']
+                                  as Map<String, dynamic>),
+                              style: const TextStyle(
+                                color: Colors.orangeAccent,
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              if (hasProposal) ...[
-                const SizedBox(width: 8),
-                Text(
-                  executionStatus.toUpperCase(),
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    color: statusColor,
-                  ),
+
+                const SizedBox(height: 14),
+
+                // Voting Tally Breakdown & Progress Bar
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: inkColor,
+                      ),
+                    ),
+                    if (totalVotes > 0)
+                      Text(
+                        '${((supportCount / totalVotes) * 100).toStringAsFixed(1)}% SUPPORT',
+                        style: const TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: cyanAccentColor,
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(4),
+                  child: totalVotes == 0
+                      ? const LinearProgressIndicator(
+                          value: 0,
+                          minHeight: 6,
+                          backgroundColor: Colors.white10,
+                        )
+                      : Row(
+                          children: [
+                            if (supportCount > 0)
+                              Expanded(
+                                flex: supportCount,
+                                child: Container(
+                                  height: 6,
+                                  color: cyanAccentColor,
+                                ),
+                              ),
+                            if (opposeCount > 0)
+                              Expanded(
+                                flex: opposeCount,
+                                child: Container(
+                                  height: 6,
+                                  color: Colors.redAccent,
+                                ),
+                              ),
+                            if (uncastCount > 0)
+                              Expanded(
+                                flex: uncastCount,
+                                child: Container(
+                                  height: 6,
+                                  color: Colors.white12,
+                                ),
+                              ),
+                          ],
+                        ),
                 ),
               ],
-            ],
-          ),
-          const SizedBox(height: 2),
-          Text(
-            'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
-            style: const TextStyle(color: mutedColor, fontSize: 11),
-          ),
-          Text(
-            'Quorum ${(((proposal['quorum'] as num?)?.toDouble() ?? .25) * 100).round()}% · approval ${(((proposal['approval_threshold'] as num?)?.toDouble() ?? .5) * 100).round()}%',
-            style: const TextStyle(color: mutedColor, fontSize: 11),
-          ),
-          if (proposal['deadline'] is Map) ...[
-            const SizedBox(height: 2),
-            Text(
-              formatProposalDeadline(
-                  proposal['deadline'] as Map<String, dynamic>),
-              style: const TextStyle(color: Colors.orangeAccent, fontSize: 11),
             ),
-          ],
-          Text(
-            'Support ${votes['support']}  ·  Oppose ${votes['oppose']}  ·  Uncast ${votes['uncast']}',
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
-          const SizedBox(height: 12),
+
+          const SizedBox(height: 14),
+
+          // 2. LEGISLATIVE ACTIONS HUB
           Wrap(
             spacing: 8,
             runSpacing: 6,
             children: [
               for (final choice in ['support', 'oppose', 'abstain'])
                 OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: choice == 'support'
+                        ? cyanAccentColor
+                        : (choice == 'oppose' ? Colors.redAccent : mutedColor),
+                    side: BorderSide(
+                      color: choice == 'support'
+                          ? cyanAccentColor.withValues(alpha: .3)
+                          : (choice == 'oppose'
+                              ? Colors.redAccent.withValues(alpha: .3)
+                              : Colors.white24),
+                    ),
+                  ),
                   onPressed: busy || !hasProposal || isExecuted || isVoided
                       ? null
                       : () => action(() => const EarthApi()
                           .vote(proposal['id'] as String, choice)),
-                  child: Text(choice),
+                  child: Text(
+                    choice,
+                    style: const TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
                 ),
-              OutlinedButton(
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: inkColor,
+                  side: const BorderSide(color: Colors.white24),
+                ),
                 onPressed:
                     busy ? null : () => showProposalComposer(context, action),
-                child: const Text('CREATE PROPOSAL'),
+                icon: const Icon(Icons.note_add_outlined, size: 14),
+                label: const Text(
+                  'CREATE PROPOSAL',
+                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+                ),
               ),
-              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
-                FilledButton(
+              if (hasProposal &&
+                  isPassed &&
+                  !isChallenged &&
+                  !isVoided &&
+                  !isExecuted)
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: cyanAccentColor,
+                    foregroundColor: Colors.black,
+                  ),
                   onPressed: busy
                       ? null
-                      : () => action(() => const EarthApi()
-                          .executeProposal(proposalId)),
-                  child: const Text('EXECUTE PROPOSAL'),
+                      : () => action(
+                          () => const EarthApi().executeProposal(proposalId)),
+                  icon: const Icon(Icons.check_circle_outline, size: 14),
+                  label: const Text(
+                    'EXECUTE PROPOSAL',
+                    style:
+                        TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                  ),
                 ),
-              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
-                OutlinedButton(
+              if (hasProposal &&
+                  isPassed &&
+                  !isChallenged &&
+                  !isVoided &&
+                  !isExecuted)
+                OutlinedButton.icon(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: Colors.orangeAccent,
+                    side: BorderSide(
+                        color: Colors.orangeAccent.withValues(alpha: .35)),
+                  ),
                   onPressed: busy
                       ? null
                       : () => showChallengeDialog(context, action, proposalId),
-                  child: const Text('CHALLENGE PROPOSAL'),
+                  icon: const Icon(Icons.gavel_outlined, size: 14),
+                  label: const Text(
+                    'CHALLENGE PROPOSAL',
+                    style:
+                        TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+                  ),
                 ),
               if (hasProposal && isChallenged && hasJudicialAuthority)
-                OutlinedButton(
+                FilledButton.icon(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: violetColor,
+                    foregroundColor: Colors.white,
+                  ),
                   onPressed: busy
                       ? null
-                      : () => showAppealRulingDialog(context, action, proposalId),
-                  child: const Text('ISSUE RULING'),
+                      : () => showAppealRulingDialog(
+                          context, action, proposalId),
+                  icon: const Icon(Icons.balance_outlined, size: 14),
+                  label: const Text(
+                    'ISSUE RULING',
+                    style:
+                        TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                  ),
                 ),
             ],
           ),
@@ -169,6 +371,8 @@ class RolesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'AUTHORITY / ACTIVE TERMS & DELEGATION',
+      infoDescription:
+          '• Institutional Offices & Public Governance: Constitutional offices designated to oversee planetary infrastructure, municipal finance, and civil administration.\n\n• Constitutional Separation of Powers:\n  - ROLE-OUC-DELEGATE: Legislative and arbitral delegate with voting authority on public referendums.\n  - ROLE-CITY-MAYOR / PLANNER: Municipal executive authority allocating public finance into civic services.\n  - ROLE-JUSTICE: Supreme court jurist hearing constitutional challenges and appeals.\n\n• Action Protocols: Open roles may be claimed by qualifying citizens; active incumbents may resign or designate surrogates via delegation.',
       child: state.roles.isEmpty
           ? const Text('No institutional terms are active yet.',
               style: TextStyle(color: mutedColor, fontSize: 11))
@@ -176,24 +380,89 @@ class RolesPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: state.roles.map((raw) {
                 final role = raw as Map<String, dynamic>;
+                final roleId = role['id']?.toString() ?? 'ROLE';
+                final name = role['name']?.toString() ?? roleId;
                 final holder = role['human_id'] as String?;
-                final isMine = holder == state.human['id'];
+                final myId = state.human['id']?.toString() ?? 'H-0044';
+                final isMine = holder == myId;
+                final endsDay = role['ends_game_day'] ?? '—';
+
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.all(8),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
-                    color: Colors.white.withAlpha(6),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: Colors.white10),
+                    color: surfaceColor.withValues(alpha: .75),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: isMine
+                          ? cyanAccentColor.withValues(alpha: .3)
+                          : Colors.white10,
+                    ),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        '${role['name']} · Holder: ${holder ?? 'OPEN'} · Until day ${role['ends_game_day'] ?? '—'}',
-                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(5),
+                            decoration: BoxDecoration(
+                              color: (isMine
+                                      ? cyanAccentColor
+                                      : (holder == null
+                                          ? Colors.orangeAccent
+                                          : violetColor))
+                                  .withValues(alpha: .15),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Icon(
+                              isMine
+                                  ? Icons.account_circle_outlined
+                                  : (holder == null
+                                      ? Icons.help_outline
+                                      : Icons.badge_outlined),
+                              size: 15,
+                              color: isMine
+                                  ? cyanAccentColor
+                                  : (holder == null
+                                      ? Colors.orangeAccent
+                                      : violetColor),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$name · Holder: ${holder ?? 'OPEN'} · Until day $endsDay',
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: inkColor,
+                              ),
+                            ),
+                          ),
+                          if (isMine)
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: cyanAccentColor.withValues(alpha: .15),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(
+                                    color:
+                                        cyanAccentColor.withValues(alpha: .3)),
+                              ),
+                              child: const Text(
+                                'ASSIGNED TO YOU',
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  color: cyanAccentColor,
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Wrap(
                         spacing: 6,
                         runSpacing: 4,
@@ -202,48 +471,78 @@ class RolesPanel extends StatelessWidget {
                             OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                foregroundColor: Colors.orangeAccent,
+                                side: BorderSide(
+                                    color: Colors.orangeAccent
+                                        .withValues(alpha: .3)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                               ),
                               onPressed: busy
                                   ? null
                                   : () => action(() => const EarthApi()
                                       .resignRole(role['id'] as String)),
-                              child: const Text('RESIGN', style: TextStyle(fontSize: 10)),
+                              child: const Text('RESIGN',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700)),
                             ),
                             OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                foregroundColor: violetColor,
+                                side: BorderSide(
+                                    color:
+                                        violetColor.withValues(alpha: .3)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                               ),
                               onPressed: busy
                                   ? null
                                   : () => showDelegateDialog(
                                       context, action, role['id'] as String),
-                              child: const Text('DELEGATE', style: TextStyle(fontSize: 10)),
+                              child: const Text('DELEGATE',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700)),
                             ),
                           ] else if (holder == null) ...[
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
+                            FilledButton(
+                              style: FilledButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                backgroundColor: cyanAccentColor,
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 10, vertical: 2),
                               ),
                               onPressed: busy
                                   ? null
                                   : () => action(() => const EarthApi()
                                       .claimRole(role['id'] as String)),
-                              child: const Text('CLAIM', style: TextStyle(fontSize: 10)),
+                              child: const Text('CLAIM',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w800)),
                             ),
                           ] else ...[
                             OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                foregroundColor: Colors.redAccent,
+                                side: BorderSide(
+                                    color: Colors.redAccent
+                                        .withValues(alpha: .3)),
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
                               ),
                               onPressed: busy
                                   ? null
                                   : () => action(() => const EarthApi()
                                       .recallRole(role['id'] as String)),
-                              child: const Text('RECALL', style: TextStyle(fontSize: 10)),
+                              child: const Text('RECALL',
+                                  style: TextStyle(
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.w700)),
                             ),
                           ],
                         ],
@@ -271,50 +570,125 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final taxRules =
+        ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
+
     return EarthPanel(
       title: 'PUBLIC FINANCE / GOVERNANCE',
+      infoDescription:
+          '• Public Finance & Municipal Treasury: Statutory fiscal rules and public expenditure budgets funding planetary health, universal basic services, and municipal infrastructure.\n\n• Tax Rule System: Universal citizen tax rates evaluated across personal income, corporate surplus, asset transfers, and resource extraction.\n\n• Public Fund Routing: Citizens serving as City Mayors or City Planners possess authority to deploy UC municipal funds directly into public service operations.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          ...((state.finance['taxRules'] as List<dynamic>?) ?? const [])
-              .map((raw) {
-            final rule = raw as Map<String, dynamic>;
-            return Text(
-              '${rule['scope']} / ${rule['category']}  ·  ${(NumberFormatHelper.percent(rule['rate']))}  ·  v${rule['version']}',
-              style: const TextStyle(color: mutedColor, fontSize: 11),
-            );
-          }),
-          const SizedBox(height: 8),
+          if (taxRules.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(12),
+              margin: const EdgeInsets.only(bottom: 10),
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .7),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'STATUTORY TAX RULES',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: .8,
+                      color: mutedColor,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  ...taxRules.map((raw) {
+                    final rule = raw as Map<String, dynamic>;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        '${rule['scope']} / ${rule['category']}  ·  ${(NumberFormatHelper.percent(rule['rate']))}  ·  v${rule['version']}',
+                        style: const TextStyle(
+                          color: inkColor,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              ),
+            ),
+          ],
           const Text(
             'Treasury settlement and public spending require authenticated player action.',
-            style: TextStyle(color: mutedColor, fontSize: 10),
+            style: TextStyle(color: mutedColor, fontSize: 10.5),
           ),
           const SizedBox(height: 10),
-          OutlinedButton(
+          OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: cyanAccentColor,
+              side:
+                  BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
+            ),
             onPressed: busy
                 ? null
                 : () => action(() => const EarthApi().settleTax(1000)),
-            child: const Text('SETTLE BASIC LEVY ON 1,000 C'),
+            icon: const Icon(Icons.account_balance_outlined, size: 14),
+            label: const Text(
+              'SETTLE BASIC LEVY ON 1,000 C',
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+            ),
           ),
           if (state.roles.any((raw) {
-            final role = raw as Map<String, dynamic>;
+            if (raw is! Map<String, dynamic>) return false;
+            final role = raw;
             final holder = role['human_id']?.toString();
             final roleId = role['id']?.toString();
             return holder == state.human['id'] &&
                 (roleId == 'ROLE-CITY-MAYOR' || roleId == 'ROLE-CITY-PLANNER');
           })) ...[
-            const SizedBox(height: 8),
-            const Text(
-              'As an active city finance role, you can route UC funds into local services.',
-              style: TextStyle(color: mutedColor, fontSize: 10),
-            ),
-            const SizedBox(height: 8),
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => action(() => const EarthApi()
-                      .spendPublicFinance('CITY-0084', 'public-services', 100)),
-              child: const Text('FUND CITY SERVICES FROM UC · 100 C'),
+            const SizedBox(height: 10),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(10),
+              decoration: BoxDecoration(
+                color: violetColor.withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: violetColor.withValues(alpha: .25)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'As an active city finance role, you can route UC funds into local services.',
+                    style: TextStyle(
+                        color: inkColor,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w500),
+                  ),
+                  const SizedBox(height: 8),
+                  FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: violetColor,
+                      foregroundColor: Colors.white,
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: busy
+                        ? null
+                        : () => action(() => const EarthApi()
+                            .spendPublicFinance(
+                                'CITY-0084', 'public-services', 100)),
+                    icon: const Icon(Icons.send_rounded, size: 14),
+                    label: const Text(
+                      'FUND CITY SERVICES FROM UC · 100 C',
+                      style: TextStyle(
+                          fontSize: 10, fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ],
+              ),
             ),
           ],
         ],

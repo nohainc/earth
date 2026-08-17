@@ -54,6 +54,14 @@ void main() {
     expect(find.text('oppose'), findsOneWidget);
     expect(find.text('abstain'), findsOneWidget);
 
+    // Verify info dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Universal Citizenship Democratic Ballot'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('support'));
     expect(castChoice, 'voted');
   });

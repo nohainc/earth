@@ -695,6 +695,8 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'CIVIC STATUS / MEMBERSHIP HISTORY',
+      infoDescription:
+          '• Civic & Corporate Affiliation Journal: Chronological record of citizenship declarations, municipal registrations, and corporate charters.\n\n• Affiliation Records:\n  - JOIN_CITY / RESIDE: Residential affiliation establishing eligibility for municipal services and local voting.\n  - FOUND_ENTERPRISE / INCORPORATE: Corporate legal registration establishing commercial limited liability.\n  - JOIN_COMMUNITY: Collective civic association membership.',
       child: membershipEvents.isEmpty
           ? const Text(
               'Your civic and corporate history will appear here after joining an institution.',
@@ -703,12 +705,79 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: membershipEvents.take(8).map((raw) {
-                final event = raw as Map<String, dynamic>;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'DAY ${event['game_day']}  ·  ${event['institution_type']} ${event['institution_id']}  ·  ${event['action']}',
-                    style: const TextStyle(fontSize: 11),
+                if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
+                final event = raw;
+                final day = event['game_day']?.toString() ?? '-';
+                final type = (event['institution_type']?.toString() ?? 'CIVIC').toUpperCase();
+                final id = event['institution_id']?.toString() ?? '';
+                final action = (event['action']?.toString() ?? 'JOIN').toUpperCase();
+
+                Color typeColor = cyanAccentColor;
+                if (type.contains('CORP')) typeColor = violetColor;
+                if (type.contains('COMMUNITY')) typeColor = Colors.tealAccent;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .05),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'DAY $day',
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: mutedColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: typeColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: typeColor.withValues(alpha: .3)),
+                        ),
+                        child: Text(
+                          type,
+                          style: TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: typeColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          id,
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: inkColor,
+                          ),
+                        ),
+                      ),
+                      Text(
+                        action,
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          color: inkColor,
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
@@ -1187,27 +1256,87 @@ class HumanServicesPanel extends StatelessWidget {
 
   const HumanServicesPanel({super.key, this.panelKey, required this.state});
 
+  IconData _getServiceIcon(String key) {
+    final lower = key.toLowerCase();
+    if (lower.contains('health') || lower.contains('medical')) return Icons.medical_services_outlined;
+    if (lower.contains('edu') || lower.contains('school')) return Icons.school_outlined;
+    if (lower.contains('transit') || lower.contains('transport')) return Icons.commute_outlined;
+    if (lower.contains('house') || lower.contains('housing')) return Icons.apartment_outlined;
+    if (lower.contains('safe') || lower.contains('security')) return Icons.shield_outlined;
+    if (lower.contains('power') || lower.contains('utility') || lower.contains('energy')) return Icons.bolt_outlined;
+    if (lower.contains('water') || lower.contains('food')) return Icons.water_drop_outlined;
+    return Icons.public_outlined;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final services =
+        ((state.world['serviceStatus'] as Map<String, dynamic>?) ?? const {});
+
     return EarthPanel(
       key: panelKey,
       title: 'HUMAN SERVICES / CURRENT ACCESS',
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 8,
-        children: ((state.world['serviceStatus'] as Map<String, dynamic>?) ??
-                const {})
-            .entries
-            .map((entry) => Chip(
-                  label: Text('${entry.key.toUpperCase()}  ·  ${entry.value}'),
-                  backgroundColor: entry.value == 'normal'
-                      ? Colors.teal.withValues(alpha: .18)
-                      : entry.value == 'basic'
-                          ? Colors.orange.withValues(alpha: .18)
-                          : Colors.red.withValues(alpha: .18),
-                ))
-            .toList(),
-      ),
+      infoDescription:
+          '• Universal Human Services: Baseline public services guaranteed under the Planetary Constitution.\n\n• Service Access Tiers:\n  - NORMAL: Fully funded public service running at peak capacity with no citizen access restrictions.\n  - BASIC: Operating under standard municipal baseline; minor rationing on heavy load.\n  - DEGRADED: Strained municipal budget; requires public finance appropriation by City Mayor or Planner.',
+      child: services.isEmpty
+          ? const Text(
+              'Public service status data is currently synchronizing.',
+              style: TextStyle(color: mutedColor, fontSize: 11),
+            )
+          : Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: services.entries.map((entry) {
+                final serviceName = entry.key.toUpperCase();
+                final status = entry.value.toString().toLowerCase();
+
+                Color statusColor = Colors.tealAccent;
+                if (status == 'basic') statusColor = Colors.orangeAccent;
+                if (status == 'degraded' || status == 'offline') statusColor = Colors.redAccent;
+
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .75),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: statusColor.withValues(alpha: .3),
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(_getServiceIcon(entry.key), size: 16, color: statusColor),
+                      const SizedBox(width: 8),
+                      Text(
+                        serviceName,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: inkColor,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          status.toUpperCase(),
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }
