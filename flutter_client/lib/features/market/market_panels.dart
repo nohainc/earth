@@ -438,11 +438,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
-              final numCols = availableWidth >= 1100
-                  ? 5
-                  : availableWidth >= 680
-                      ? 3
-                      : 2;
+              final numCols = availableWidth >= 800 ? 4 : 2;
               final itemWidth = (availableWidth - (numCols - 1) * 12) / numCols;
 
               return Wrap(
