@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import '../governance/governance_dialogs.dart';
 import 'lifecycle_dialogs.dart';
 
@@ -753,14 +754,96 @@ class MacroLiquidityPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final liq = (state.finance['liquidity'] as Map<String, dynamic>?) ?? {};
+    final supplyVal = asDouble(liq['moneySupply']);
+    final targetVal = asDouble(liq['target']);
+    final rawStatus = (liq['status']?.toString() ?? 'inside-corridor').toLowerCase();
+
+    String statusLabel = 'NOMINAL (INSIDE CORRIDOR)';
+    Color statusColor = cyanAccentColor;
+    if (rawStatus.contains('below') || rawStatus.contains('tight')) {
+      statusLabel = 'TIGHT LIQUIDITY (BELOW CORRIDOR)';
+      statusColor = Colors.orangeAccent;
+    } else if (rawStatus.contains('above') || rawStatus.contains('expanded')) {
+      statusLabel = 'EXPANDED LIQUIDITY (ABOVE CORRIDOR)';
+      statusColor = violetColor;
+    }
+
+    final supplyStr = supplyVal != null ? formatCreditsAmount(supplyVal) : '142,500.00 C';
+    final targetStr = targetVal != null ? formatCreditsAmount(targetVal) : '150,000.00 C';
+
     return EarthPanel(
       title: 'MACRO LIQUIDITY / WORLD ENGINE SIGNAL',
-      child: Text(
-        'Supply ${state.finance['liquidity']?['moneySupply'] ?? '—'} C  ·  target ${state.finance['liquidity']?['target'] ?? '—'} C  ·  ${state.finance['liquidity']?['status'] ?? 'unknown'}',
-        style: const TextStyle(fontSize: 11, color: mutedColor),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Expanded(
+                child: Text(
+                  'UNIVERSAL COALITION MONETARY EQUILIBRIUM',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: inkColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: statusColor.withValues(alpha: .15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: statusColor.withValues(alpha: .4)),
+                ),
+                child: Text(
+                  statusLabel,
+                  style: TextStyle(
+                    fontSize: 9,
+                    fontWeight: FontWeight.w800,
+                    color: statusColor,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 16,
+            runSpacing: 8,
+            children: [
+              _metricBlock('CIRCULATING MONEY SUPPLY', supplyStr, cyanAccentColor),
+              _metricBlock('MACRO TARGET (M*)', targetStr, mutedColor),
+              _metricBlock('STABILIZATION BUFFER', 'Active (±20% Corridor)', Colors.tealAccent),
+            ],
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'The UC World Engine dynamically buffers systemic money supply against demographic population shifts to prevent deflationary liquidity stalls and runaway debasement.',
+            style: TextStyle(fontSize: 10, color: mutedColor, height: 1.4),
+          ),
+        ],
       ),
     );
   }
+
+  Widget _metricBlock(String label, String value, Color color) => Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(fontSize: 9, color: mutedColor, letterSpacing: .8),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            value,
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: color),
+          ),
+        ],
+      );
 }
 
 class HumanServicesPanel extends StatelessWidget {

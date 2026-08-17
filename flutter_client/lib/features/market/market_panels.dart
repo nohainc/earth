@@ -347,6 +347,40 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 0. YOUR INVENTORY & LIQUIDITY RIBBON
+          Container(
+            margin: const EdgeInsets.only(bottom: 14),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .5),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Wrap(
+              spacing: 12,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.account_balance_wallet_outlined, size: 13, color: mutedColor),
+                    SizedBox(width: 5),
+                    Text(
+                      'YOUR PORTFOLIO',
+                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: mutedColor),
+                    ),
+                  ],
+                ),
+                _balancePill('CREDITS', formatCreditsAmount(widget.state.human['credits']), violetColor),
+                _balancePill('MATERIALS', '${formatWholeNumber(widget.state.resources['material'])} MATR', Colors.tealAccent),
+                _balancePill('COMPONENTS', '${formatWholeNumber(widget.state.resources['components'])} FABR', cyanAccentColor),
+                _balancePill('ENERGY', '${formatWholeNumber(widget.state.resources['energy'])} ENGY', Colors.amberAccent),
+                _balancePill('COMPUTE', '${formatWholeNumber(widget.state.resources['compute'])} INFO', violetColor),
+              ],
+            ),
+          ),
+
           // 1. TOP COMMODITY SELECTOR MATRIX
           LayoutBuilder(
             builder: (context, constraints) {
@@ -364,6 +398,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   final data = (entry.value as Map<String, dynamic>?) ?? {};
                   final s = asInt(data['supply']) ?? 0;
                   final d = asInt(data['demand']) ?? 0;
+                  final userOwned = widget.state.resources[key] ?? 0;
                   final isSelected = key == _selectedCommodity;
 
                   return InkWell(
@@ -427,7 +462,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            'S $s  ·  D $d',
+                            'S $s  ·  D $d  ·  Owned $userOwned',
                             style: const TextStyle(
                               fontSize: 9.5,
                               color: mutedColor,
@@ -513,6 +548,28 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       ),
     );
   }
+
+  Widget _balancePill(String label, String value, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .1),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withValues(alpha: .25)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$label: ',
+              style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: mutedColor),
+            ),
+            Text(
+              value,
+              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color),
+            ),
+          ],
+        ),
+      );
 }
 
 class _MiniTrendBadge extends StatelessWidget {

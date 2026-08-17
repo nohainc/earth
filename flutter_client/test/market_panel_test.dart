@@ -65,7 +65,7 @@ void main() {
     expect(find.text('CENTRAL MARKET / LIVE SIGNALS'), findsOneWidget);
     expect(find.text('ENERGY'), findsOneWidget);
     expect(find.text('12.5 C'), findsOneWidget);
-    expect(find.text('S 100  ·  D 80'), findsOneWidget);
+    expect(find.textContaining('S 100  ·  D 80'), findsOneWidget);
     expect(find.text('▲ 2.50 C / 2d'), findsOneWidget);
     expect(find.text('BUY 1'), findsOneWidget);
     expect(find.text('SELL 1'), findsOneWidget);

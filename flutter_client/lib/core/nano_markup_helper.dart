@@ -17,11 +17,29 @@ class NanoMarkupHelper {
     return val;
   }
 
+  static dynamic _toNanoTree(dynamic val) {
+    if (val == null) return 'null';
+    if (val is num || val is bool) return val.toString();
+    if (val is String) return val;
+    if (val is Map) {
+      final map = <String, dynamic>{};
+      for (final entry in val.entries) {
+        map[entry.key.toString()] = _toNanoTree(entry.value);
+      }
+      return map;
+    }
+    if (val is List) {
+      return val.map((item) => _toNanoTree(item)).toList();
+    }
+    return val.toString();
+  }
+
   /// Encodes a Dart Map, List, or primitive to a Nano Markup formatted string.
   static String encode(dynamic data) {
     if (data == null) return 'null';
     try {
-      return nm.encode(data);
+      final tree = _toNanoTree(data);
+      return nm.encode(tree);
     } catch (_) {
       return jsonEncode(data);
     }

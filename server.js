@@ -31,10 +31,24 @@ function toNano(val) {
 function fromNano(str) {
   const text = (str || '').trim();
   if (!text) return {};
+  if ((text.startsWith('{') && text.endsWith('}')) || (text.startsWith('[') && text.endsWith(']'))) {
+    try {
+      return JSON.parse(text);
+    } catch {}
+  }
   try {
-    return parseNano(text);
+    const res = parseNano(text);
+    if (res && typeof res === 'object') return res;
+    if (typeof res === 'string' && ((res.startsWith('{') && res.endsWith('}')) || (res.startsWith('[') && res.endsWith(']')))) {
+      try { return JSON.parse(res); } catch {}
+    }
+    return res || {};
   } catch {
-    return JSON.parse(text);
+    try {
+      return JSON.parse(text);
+    } catch {
+      return {};
+    }
   }
 }
 
@@ -1242,6 +1256,16 @@ function snapshot() {
     ledgerEntries: state.ledger.slice(-25),
     contracts: state.contracts || [],
     notifications: state.notifications || [],
+    finance: {
+      taxRules: state.taxRules || [{ scope: 'global', category: 'market', rate: '0.015', active: true }],
+      liquidity: {
+        activeHumans: Object.keys(state.humans || {}).length || 1,
+        moneySupply: Object.values(state.humans || {}).reduce((acc, h) => acc + (h.credits || 0), 0) + 120000,
+        target: 150000,
+        corridor: { low: 120000, high: 180000 },
+        status: 'inside-corridor',
+      },
+    },
     mode: database ? 'postgres-reference' : 'reference-simulator',
     authority: 'non-production',
   };
@@ -1644,8 +1668,8 @@ const server = createServer(async (req, res) => {
   if (raw.trim()) {
     try {
       const contentType = req.headers['content-type'] || '';
-      body = contentType.includes('application/nanomarkup')
-        ? parseNano(raw)
+      body = (contentType.includes('application/nanomarkup') || raw.trim().startsWith('..') || raw.trim().startsWith(':'))
+        ? fromNano(raw)
         : JSON.parse(raw);
     } catch {
       return sendError(
@@ -1658,7 +1682,7 @@ const server = createServer(async (req, res) => {
       );
     }
     if (!body || typeof body !== 'object' || Array.isArray(body)) {
-      return sendError(res, 400, 'Request body must be a JSON object', 'VALIDATION_ERROR', correlationId);
+      return sendError(res, 400, 'Request body must be a valid mapping object', 'VALIDATION_ERROR', correlationId);
     }
   }
 
