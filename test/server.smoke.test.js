@@ -51,7 +51,7 @@ test('world snapshot contains the EARTH core entities', async () => {
   assert.equal(status, 200);
   assert.equal(body.human.id, 'H-0044');
   assert.equal(body.business.id, 'B-1048');
-  assert.deepEqual(Object.keys(body.resources).sort(), ['components', 'compute', 'energy', 'material']);
+  assert.deepEqual(Object.keys(body.resources).sort(), ['components', 'compute', 'energy', 'food', 'material']);
   assert.equal(body.institutions.city.name, 'New Carthage');
   assert.equal(body.institutions.corporation.kind, 'CORPORATION');
 });

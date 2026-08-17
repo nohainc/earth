@@ -15,6 +15,6 @@ test('starter package scales living and productive reserves independently', () =
     livingCostIndex: 1.5,
     economicStartIndex: 2,
     credits: 27630,
-    resources: { material: 840, components: 172, energy: 138, compute: 128 },
+    resources: { food: 465, material: 840, components: 172, energy: 138, compute: 128 },
   });
 });
