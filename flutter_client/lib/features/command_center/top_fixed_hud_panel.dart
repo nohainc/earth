@@ -143,7 +143,11 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     return LayoutBuilder(
       builder: (context, rootConstraints) {
         final totalWidth = rootConstraints.maxWidth;
-        final isSingleRow = totalWidth >= 680;
+        // Start using 2 rows early (threshold >= 860) to prevent any overlapping
+        final isSingleRow = totalWidth >= 860;
+        // Hide brand text on narrow viewports (< 560px) and brand altogether on very small screens (< 440px)
+        final showBrand = totalWidth >= 440;
+        final showBrandText = totalWidth >= 560;
 
         return Container(
           decoration: const BoxDecoration(
@@ -156,62 +160,64 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 1. BRAND HEADER
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 26,
-                    height: 26,
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: violetColor,
-                        width: 1.75,
-                      ),
-                      boxShadow: [
-                        BoxShadow(
-                          color: violetColor.withValues(alpha: 0.55),
-                          blurRadius: 12,
-                          spreadRadius: 1,
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'EARTH',
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 4.0,
+              // 1. BRAND HEADER (RESPONSIVELY COLLAPSIBLE)
+              if (showBrand) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
                           color: violetColor,
+                          width: 1.75,
                         ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: violetColor.withValues(alpha: 0.55),
+                            blurRadius: 10,
+                            spreadRadius: 1,
+                          ),
+                        ],
                       ),
-                      SizedBox(height: 1),
-                      Text(
-                        'UNITED CORPORATIONS',
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w600,
-                          color: mutedColor,
-                          letterSpacing: 1.3,
-                        ),
+                    ),
+                    if (showBrandText) ...[
+                      const SizedBox(width: 10),
+                      const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            'EARTH',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 4.0,
+                              color: violetColor,
+                            ),
+                          ),
+                          SizedBox(height: 1),
+                          Text(
+                            'UNITED CORPORATIONS',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w600,
+                              color: mutedColor,
+                              letterSpacing: 1.3,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
-                  ),
-                ],
-              ),
+                  ],
+                ),
+                _verticalSeparator(),
+              ],
 
-              // VERTICAL SEPARATOR 1
-              _verticalSeparator(),
-
-              // 2. CURRENT YEAR & DATE TIME (1-ROW OR 2-ROWS CORRESPONDING TO RESOURCE LAYOUT)
+              // 2. CURRENT YEAR & DATE TIME (1-ROW OR 2-ROWS)
               if (isSingleRow)
                 Text(
                   'YEAR ${clockRes.year} · DAY ${clockRes.dayOfYear} · $timeStr',
@@ -249,10 +255,10 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                   ],
                 ),
 
-              // VERTICAL SEPARATOR 2
+              // VERTICAL SEPARATOR
               _verticalSeparator(),
 
-              // 3. 6-RESOURCE SECTION (ICONS + NUMBERS ONLY)
+              // 3. 6-RESOURCE SECTION
               Expanded(
                 child: isSingleRow
                     ? SingleChildScrollView(
