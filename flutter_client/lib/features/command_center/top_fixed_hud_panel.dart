@@ -127,7 +127,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     final city =
         '${(widget.state.institutions['city'] as Map<String, dynamic>?)?['name'] ?? 'Independent'}';
 
-    final credits = formatCreditsAmount(widget.state.human['credits']);
+    final credits = formatWholeNumber(widget.state.human['credits']);
     final food = formatWholeNumber(widget.state.resources['food']);
     final mat = formatWholeNumber(widget.state.resources['material'] ?? widget.state.resources['materials']);
     final comp = formatWholeNumber(widget.state.resources['components']);
@@ -143,11 +143,11 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     return LayoutBuilder(
       builder: (context, rootConstraints) {
         final totalWidth = rootConstraints.maxWidth;
-        // Start using 2 rows early (threshold >= 860) to prevent any overlapping
-        final isSingleRow = totalWidth >= 860;
-        // Hide brand text on narrow viewports (< 560px) and brand altogether on very small screens (< 440px)
-        final showBrand = totalWidth >= 440;
-        final showBrandText = totalWidth >= 560;
+        // Switch to 2 rows when width < 800px
+        final isSingleRow = totalWidth >= 800;
+        // Hide app name text when width < 600px
+        final showBrandText = totalWidth >= 600;
+        const showBrand = true;
 
         return Container(
           decoration: const BoxDecoration(

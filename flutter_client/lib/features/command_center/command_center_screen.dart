@@ -261,7 +261,7 @@ class _CommandCenterState extends State<CommandCenter> {
     final canAdvanceDay = current != null;
 
     return LayoutBuilder(builder: (context, viewport) {
-      final compact = viewport.maxWidth < 900;
+      final compact = viewport.maxWidth < 800;
       return Scaffold(
         key: _scaffoldKey,
         drawer: current != null && compact
