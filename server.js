@@ -156,10 +156,11 @@ const state = {
     city: { id: 'CITY-0084', kind: 'CITY', name: 'New Carthage', residents: 18, fiscalHealth: 82, capacity: { housing: 76, energy: 92, connectivity: 88, health: 64 } },
     business: { id: 'B-1048', kind: 'BUSINESS', name: 'Kline Works', ownerId: 'H-0044' },
   },
-  resources: { material: 420, components: 86, energy: 92, compute: 64 },
+  resources: { food: 310, material: 420, components: 86, energy: 92, compute: 64 },
   businesses: { klineWorks: { id: 'B-1048', name: 'Kline Works', policy: 'reliability', condition: 96, research: 72 } },
   market: {
     products: {
+      food: { price: 8.5, supply: 640, demand: 520 },
       material: { price: 32.4, supply: 1240, demand: 980 },
       components: { price: 118.7, supply: 186, demand: 276 },
       energy: { price: 0.84, supply: 920, demand: 850 },
@@ -296,6 +297,7 @@ function advanceDay() {
   appendLedger({ debit: 'market-buyers', credit: 'H-0044', amount: revenue, reason: 'business_output', correlationId: randomUUID() });
   business.condition = Math.max(0, business.condition - (business.policy === 'capacity' ? 3 : 1));
   state.resources.components = Math.max(0, state.resources.components - 12);
+  state.resources.food = (state.resources.food || 0) + 16;
   state.resources.material += 24;
   state.resources.compute += 8;
   state.technology.research.progress = Math.min(100, state.technology.research.progress + 2);

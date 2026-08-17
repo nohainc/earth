@@ -25,6 +25,14 @@ class CommodityMeta {
 
   static const all = [
     CommodityMeta(
+      key: 'food',
+      name: 'FOOD & NUTRITION',
+      symbol: 'FOOD',
+      description: 'Vertical farm harvest & bio-nutrients for human metabolic survival.',
+      color: Colors.lightGreenAccent,
+      icon: Icons.eco_outlined,
+    ),
+    CommodityMeta(
       key: 'material',
       name: 'MATERIALS',
       symbol: 'MATR',
@@ -373,6 +381,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   ],
                 ),
                 _balancePill('CREDITS', formatCreditsAmount(widget.state.human['credits']), violetColor),
+                _balancePill('FOOD', '${formatWholeNumber(widget.state.resources['food'])} FOOD', Colors.lightGreenAccent),
                 _balancePill('MATERIALS', '${formatWholeNumber(widget.state.resources['material'])} MATR', Colors.tealAccent),
                 _balancePill('COMPONENTS', '${formatWholeNumber(widget.state.resources['components'])} FABR', cyanAccentColor),
                 _balancePill('ENERGY', '${formatWholeNumber(widget.state.resources['energy'])} ENGY', Colors.amberAccent),
@@ -384,10 +393,13 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           // 1. TOP COMMODITY SELECTOR MATRIX
           LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 720;
-              final itemWidth = isWide
-                  ? (constraints.maxWidth - (12 * 3)) / 4
-                  : (constraints.maxWidth - 12) / 2;
+              final availableWidth = constraints.maxWidth;
+              final numCols = availableWidth >= 1100
+                  ? 5
+                  : availableWidth >= 680
+                      ? 3
+                      : 2;
+              final itemWidth = (availableWidth - (numCols - 1) * 12) / numCols;
 
               return Wrap(
                 spacing: 12,

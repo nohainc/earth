@@ -968,7 +968,7 @@ const worker = {
       const side = body.side === 'sell' ? 'sell' : 'buy';
       const quantity = Number(body.quantity);
       const limitPrice = Number(body.limitPrice);
-      if (!['material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
+      if (!['food', 'material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {

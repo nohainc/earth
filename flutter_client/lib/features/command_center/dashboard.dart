@@ -98,13 +98,14 @@ class Dashboard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
-              final numCols = availableWidth >= 980
-                  ? 5
-                  : availableWidth >= 620
+              final numCols = availableWidth >= 1150
+                  ? 6
+                  : availableWidth >= 700
                       ? 3
                       : 2;
               final itemWidth = (availableWidth - (numCols - 1) * 14) / numCols;
 
+              final foodVal = state.resources['food'] ?? '0';
               final matVal = state.resources['materials'] ??
                   state.resources['material'] ??
                   '0';
@@ -122,6 +123,13 @@ class Dashboard extends StatelessWidget {
                     label: 'CREDITS',
                     value: formatCreditsAmount(state.human['credits']),
                     accent: violetColor,
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    icon: Icons.eco_outlined,
+                    label: 'FOOD',
+                    value: formatWholeNumber(foodVal),
+                    accent: Colors.lightGreenAccent,
                   ),
                   EarthMetric(
                     width: itemWidth,

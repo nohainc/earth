@@ -1,5 +1,6 @@
 export const STARTER_PACKAGE_BASE = {
   credits: 18_420,
+  food: 310,
   material: 420,
   components: 86,
   energy: 92,
@@ -29,6 +30,7 @@ export function calculateStarterPackage(livingCostIndex: unknown, economicIndex:
     economicStartIndex: economic,
     credits: Math.round(STARTER_PACKAGE_BASE.credits * living),
     resources: {
+      food: Math.round(STARTER_PACKAGE_BASE.food * living),
       material: Math.round(STARTER_PACKAGE_BASE.material * economic),
       components: Math.round(STARTER_PACKAGE_BASE.components * economic),
       energy: Math.round(STARTER_PACKAGE_BASE.energy * living),
