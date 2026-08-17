@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 class CommandExecutiveQuadrant extends StatelessWidget {
   final EarthState state;
@@ -21,30 +22,35 @@ class CommandExecutiveQuadrant extends StatelessWidget {
   Widget build(BuildContext context) {
     final business = state.business;
     final businessName =
-        (business['name'] as String?)?.toUpperCase() ?? 'KLINE WORKS';
+        (business['name']?.toString() ?? 'KLINE WORKS').toUpperCase();
     final businessStatus =
         (business['status']?.toString() ?? 'ACTIVE').toUpperCase();
-    final condition = (business['condition'] as num?)?.toInt() ?? 96;
+    final condition = asIntOr(business['condition'], 96);
     final policy =
         (business['policy']?.toString() ?? 'reliability').toUpperCase();
 
-    final finMap = businessFinancials['business'] is Map<String, dynamic>
-        ? (businessFinancials['business'] as Map<String, dynamic>)
+    final finMap = businessFinancials['business'] is Map
+        ? Map<String, dynamic>.from(businessFinancials['business'] as Map)
         : business;
-    final revenue = (finMap['revenue'] as num?)?.toDouble() ?? 1240.0;
-    final costs = (finMap['operating_costs'] as num?)?.toDouble() ?? 820.0;
-    final profit = (finMap['profit'] as num?)?.toDouble() ?? (revenue - costs);
+    final revenue = asDoubleOr(finMap['revenue'], 1240.0);
+    final costs = asDoubleOr(finMap['operating_costs'] ?? finMap['costs'], 820.0);
+    final profit = asDoubleOr(finMap['profit'], revenue - costs);
 
-    final city = state.institutions['city'] as Map<String, dynamic>? ?? {};
+    final cityRaw = state.institutions['city'];
+    final city = cityRaw is Map ? Map<String, dynamic>.from(cityRaw) : <String, dynamic>{};
     final cityName =
-        (city['name'] as String?)?.toUpperCase() ?? 'NEW CARTHAGE';
-    final cityHealth = city['fiscal_health'] ?? city['health'] ?? '82';
+        (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
+    final cityHealth = formatWholeNumber(city['fiscal_health'] ?? city['health'], fallback: '82');
 
     final marketProducts = state.market;
     String formatPrice(dynamic val) {
-      if (val is Map) return val['price']?.toString() ?? '—';
+      if (val is Map) return formatPrice(val['price']);
       if (val is num) return val.toStringAsFixed(2);
-      if (val is String) return val;
+      if (val is String && val.isNotEmpty) {
+        final d = double.tryParse(val);
+        if (d != null) return d.toStringAsFixed(2);
+        return val;
+      }
       return '—';
     }
 
@@ -57,7 +63,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
 
     final activeContracts = contracts.where((c) {
       if (c is! Map) return false;
-      return c['status'] == 'active' || c['status'] == 'signed';
+      final s = c['status']?.toString();
+      return s == 'active' || s == 'signed';
     }).length;
 
     return LayoutBuilder(
@@ -242,7 +249,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     subtitle: 'Treasury liquidity and binding supply contracts',
                     items: [
                       {
-                        'label': 'Liquid Credits (${state.human['credits']} C)',
+                        'label':
+                            'Liquid Credits (${formatCreditsAmount(state.human['credits'])})',
                         'description':
                             'Cash reserves instantly available for orders, equipment acquisition, and dividend distributions.',
                       },
@@ -262,7 +270,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _rowMetric('Liquid Credits',
-                          '${state.human['credits']} C', violetColor),
+                          formatCreditsAmount(state.human['credits']), violetColor),
                       const SizedBox(height: 5),
                       _rowMetric('Active Agreements',
                           '$activeContracts active contracts', mutedColor),

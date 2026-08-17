@@ -8,8 +8,38 @@ class NumberFormatHelper {
 double? asDouble(dynamic value) =>
     value is num ? value.toDouble() : double.tryParse(value?.toString() ?? '');
 
+double asDoubleOr(dynamic value, double fallback) {
+  if (value == null) return fallback;
+  if (value is num) return value.toDouble();
+  final d = double.tryParse(value.toString());
+  return d ?? fallback;
+}
+
 int? asInt(dynamic value) =>
     value is num ? value.toInt() : int.tryParse(value?.toString() ?? '');
+
+int asIntOr(dynamic value, int fallback) {
+  if (value == null) return fallback;
+  if (value is num) return value.toInt();
+  final i = int.tryParse(value.toString());
+  if (i != null) return i;
+  final d = double.tryParse(value.toString());
+  if (d != null) return d.toInt();
+  return fallback;
+}
+
+String formatWholeNumber(dynamic value, {String fallback = '0'}) {
+  if (value == null) return fallback;
+  if (value is num) return value.toInt().toString();
+  final s = value.toString().trim();
+  final d = double.tryParse(s);
+  if (d != null) return d.toInt().toString();
+  return s.isEmpty ? fallback : s;
+}
+
+String formatCreditsAmount(dynamic value) {
+  return '${formatWholeNumber(value)} C';
+}
 
 String formatPercent(dynamic value) {
   final number = value is num ? value.toDouble() : 0.0;

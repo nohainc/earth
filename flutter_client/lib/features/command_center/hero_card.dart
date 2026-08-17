@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 /// The command-center executive citizen and planetary cockpit.
 class HeroCard extends StatelessWidget {
@@ -152,17 +153,17 @@ class HeroCard extends StatelessWidget {
                   children: [
                     _statusPill(
                       'Health',
-                      '${state.human['health'] ?? 100}%',
+                      '${formatWholeNumber(state.human['health'] ?? 100)}%',
                       Colors.tealAccent,
                     ),
                     _statusPill(
                       'Standing',
-                      '${state.human['standing'] ?? 0}',
+                      formatWholeNumber(state.human['standing'] ?? 0),
                       cyanAccentColor,
                     ),
                     _statusPill(
                       'Legacy',
-                      '${state.human['legacy'] ?? 0}',
+                      formatWholeNumber(state.human['legacy'] ?? 0),
                       Colors.indigoAccent,
                     ),
                     _statusPill(

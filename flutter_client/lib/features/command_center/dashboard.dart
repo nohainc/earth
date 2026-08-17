@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import '../activity/activity_panel.dart';
 import '../contracts/contracts_panel.dart';
 import '../finance/personal_finance_panel.dart';
@@ -108,9 +109,6 @@ class Dashboard extends StatelessWidget {
               final compVal = state.resources['components'] ?? '0';
               final energyVal = state.resources['energy'] ?? '0';
 
-              String formatRes(dynamic v) =>
-                  v is num ? v.toInt().toString() : v.toString();
-
               return Wrap(
                 spacing: 14,
                 runSpacing: 14,
@@ -119,7 +117,7 @@ class Dashboard extends StatelessWidget {
                     width: itemWidth,
                     icon: Icons.account_balance_wallet_outlined,
                     label: 'CREDITS',
-                    value: '${state.human['credits']} C',
+                    value: formatCreditsAmount(state.human['credits']),
                     accent: violetColor,
                     hint:
                         'Personal liquid currency for market trade, machinery, and investments.',
@@ -129,7 +127,8 @@ class Dashboard extends StatelessWidget {
                       subtitle: 'Personal liquid account balance',
                       items: [
                         {
-                          'label': 'Liquid Reserve (${state.human['credits']} C)',
+                          'label':
+                              'Liquid Reserve (${formatCreditsAmount(state.human['credits'])})',
                           'description':
                               'The non-inflationary base currency of EARTH. Used to purchase physical commodities, machinery, research licenses, and pay city taxes.',
                         },
@@ -140,7 +139,7 @@ class Dashboard extends StatelessWidget {
                     width: itemWidth,
                     icon: Icons.view_in_ar_outlined,
                     label: 'MATERIALS',
-                    value: formatRes(matVal),
+                    value: formatWholeNumber(matVal),
                     accent: Colors.tealAccent,
                     hint:
                         'Base matter and raw industrial feedstock for manufacturing and construction.',
@@ -150,7 +149,8 @@ class Dashboard extends StatelessWidget {
                       subtitle: 'Industrial base feedstock',
                       items: [
                         {
-                          'label': 'Stockpile Quantity (${formatRes(matVal)})',
+                          'label':
+                              'Stockpile Quantity (${formatWholeNumber(matVal)})',
                           'description':
                               'Raw physical matter used to manufacture components and construct city infrastructure buildings.',
                         },
@@ -161,7 +161,7 @@ class Dashboard extends StatelessWidget {
                     width: itemWidth,
                     icon: Icons.settings_outlined,
                     label: 'COMPONENTS',
-                    value: formatRes(compVal),
+                    value: formatWholeNumber(compVal),
                     accent: cyanAccentColor,
                     hint:
                         'Precision sub-assemblies and replacement parts for machinery.',
@@ -171,7 +171,8 @@ class Dashboard extends StatelessWidget {
                       subtitle: 'High-precision mechanical sub-assemblies',
                       items: [
                         {
-                          'label': 'Stockpile Quantity (${formatRes(compVal)})',
+                          'label':
+                              'Stockpile Quantity (${formatWholeNumber(compVal)})',
                           'description':
                               'High-grade manufactured parts required to maintain, upgrade, and operate machinery.',
                         },
@@ -182,7 +183,7 @@ class Dashboard extends StatelessWidget {
                     width: itemWidth,
                     icon: Icons.bolt_outlined,
                     label: 'ENERGY',
-                    value: formatRes(energyVal),
+                    value: formatWholeNumber(energyVal),
                     accent: Colors.amberAccent,
                     hint:
                         'Electrical power consumed per cycle to power machines and infrastructure.',
@@ -192,7 +193,8 @@ class Dashboard extends StatelessWidget {
                       subtitle: 'Industrial and municipal power units',
                       items: [
                         {
-                          'label': 'Energy Reserves (${formatRes(energyVal)})',
+                          'label':
+                              'Energy Reserves (${formatWholeNumber(energyVal)})',
                           'description':
                               'Electrical energy capacity required for production cycles and grid stability.',
                         },
