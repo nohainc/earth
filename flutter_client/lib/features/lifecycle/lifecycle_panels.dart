@@ -340,19 +340,115 @@ class LedgerPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final entries = state.ledgerEntries;
+
     return EarthPanel(
       title: 'CENTRAL LEDGER / RECENT ACTIVITY',
-      child: state.ledgerEntries.isEmpty
-          ? const Text('No ledger activity yet.')
+      infoDescription:
+          '• Double-Entry Cryptographic Ledger: Immutable journal of all currency and asset flows across central clearing, dividend distributions, tax assessments, and peer transfers.\n\n• Invariant Protection: Every debit from a source account is strictly matched with an equal credit to a destination account, ensuring mathematical equilibrium and zero synthetic money leakage.\n\n• Audit Traceability: Transactions record immutable reason codes, amounts, and source-to-destination routing.',
+      child: entries.isEmpty
+          ? const Text(
+              'No ledger activity recorded yet.',
+              style: TextStyle(color: mutedColor, fontSize: 11),
+            )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: state.ledgerEntries.take(8).map((raw) {
+              children: entries.take(10).map((raw) {
                 final entry = raw as Map<String, dynamic>;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    '${entry['reason_type']}  ·  ${entry['amount']} ${entry['currency']}\n${entry['debit_account']} → ${entry['credit_account']}',
-                    style: const TextStyle(fontSize: 12),
+                final reason =
+                    (entry['reason_type']?.toString() ?? 'TRANSFER')
+                        .toUpperCase();
+                final amount = entry['amount'] ?? 0;
+                final currency =
+                    (entry['currency']?.toString() ?? 'C').toUpperCase();
+                final debit =
+                    entry['debit_account']?.toString() ?? 'SYSTEM_ESCROW';
+                final credit =
+                    entry['credit_account']?.toString() ?? 'CITIZEN_WALLET';
+
+                Color reasonColor = cyanAccentColor;
+                IconData reasonIcon = Icons.swap_horiz_rounded;
+
+                if (reason.contains('TAX')) {
+                  reasonColor = Colors.orangeAccent;
+                  reasonIcon = Icons.receipt_long_outlined;
+                } else if (reason.contains('DIVIDEND') || reason.contains('INCOME')) {
+                  reasonColor = violetColor;
+                  reasonIcon = Icons.paid_outlined;
+                } else if (reason.contains('MARKET') || reason.contains('ORDER')) {
+                  reasonColor = Colors.tealAccent;
+                  reasonIcon = Icons.storefront_outlined;
+                } else if (reason.contains('FEE') || reason.contains('PENALTY')) {
+                  reasonColor = Colors.redAccent;
+                  reasonIcon = Icons.gavel_outlined;
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: reasonColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(reasonIcon, size: 14, color: reasonColor),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              reason,
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: reasonColor,
+                                letterSpacing: .6,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$debit → $credit',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                color: mutedColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 3),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: Colors.white12),
+                        ),
+                        child: Text(
+                          '$amount $currency',
+                          style: const TextStyle(
+                            fontSize: 10.5,
+                            fontWeight: FontWeight.w800,
+                            color: inkColor,
+                            letterSpacing: -.2,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),
