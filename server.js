@@ -226,6 +226,29 @@ const state = {
   ],
 };
 
+const EPOCH_START_TIME_MS = Date.parse('2026-01-01T00:00:00.000Z');
+
+function computeCosmicClock(serverNow = Date.now()) {
+  const elapsedRealSec = Math.max(0, Math.floor((serverNow - EPOCH_START_TIME_MS) / 1000));
+  const totalSimMinutes = elapsedRealSec;
+  const inDayMinute = totalSimMinutes % 1440;
+  const totalDays = Math.floor(totalSimMinutes / 1440) + 1;
+  return {
+    epochStartTime: '2026-01-01T00:00:00.000Z',
+    serverCurrentTime: serverNow,
+    day: totalDays,
+    minute: inDayMinute,
+    realSecondsPerGameMinute: 1,
+  };
+}
+
+Object.assign(state.clock, computeCosmicClock());
+
+const serverClockInterval = setInterval(() => {
+  Object.assign(state.clock, computeCosmicClock());
+}, 1000);
+if (serverClockInterval.unref) serverClockInterval.unref();
+
 const money = (n) => Math.round(n * 100) / 100;
 
 function appendLedger({ debit, credit, amount, reason, correlationId }) {

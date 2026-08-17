@@ -40,8 +40,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('◌  EARTH'), findsOneWidget);
-    expect(find.text('Amara Vance · New Kyoto'), findsOneWidget);
+    expect(find.text('EARTH'), findsOneWidget);
+    expect(find.text('New Kyoto'), findsOneWidget);
 
     final marketButton = find.text('Central Market');
     expect(marketButton, findsOneWidget);

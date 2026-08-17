@@ -1,6 +1,8 @@
 services:
   postgres:
     image: postgres:16-alpine
+    container_name: earth_postgres
+    restart: unless-stopped
     environment:
       POSTGRES_DB: earth
       POSTGRES_USER: earth
@@ -9,7 +11,11 @@ services:
       - "5432:5432"
     volumes:
       - earth_postgres_data:/var/lib/postgresql/data
-      - ./db/migrations/001_initial.sql:/docker-entrypoint-initdb.d/001_initial.sql:ro
-      - ./db/seed.sql:/docker-entrypoint-initdb.d/002_seed.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U earth -d earth"]
+      interval: 2s
+      timeout: 5s
+      retries: 10
+
 volumes:
   earth_postgres_data:
