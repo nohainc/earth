@@ -73,6 +73,14 @@ void main() {
     expect(find.text('TAX CHARTER'), findsOneWidget);
     expect(find.text('FUND SERVICES · 100 C'), findsOneWidget);
 
+    // Verify info dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Municipal & Corporate Institutions'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+
     await tester.tap(find.text('PROPOSE BUDGET'));
     await tester.pumpAndSettle();
 

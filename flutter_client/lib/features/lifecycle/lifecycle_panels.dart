@@ -193,6 +193,8 @@ class InstitutionSolvencyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'INSTITUTION SOLVENCY / RECOVERY',
+      infoDescription:
+          '• Institutional Solvency & Recapitalization: Statutory economic health monitoring for municipal cities and corporate enterprises.\n\n• Solvency Tiers:\n  - SOLVENT: Normal operations; reserves satisfy all statutory coverage buffers.\n  - DISTRESSED: Reserves below operating minimums; public services rationed.\n  - INSOLVENT: Treasury exhausted; automatic liquidation begins unless recapitalized.\n\n• Recapitalization Recovery: Citizens may contribute equity credits to restore insolvent or distressed institutions back to active legal status.',
       child: state.financeStatus.isEmpty
           ? const Text(
               'Financial states will appear after the next world-day assessment.',
@@ -202,21 +204,93 @@ class InstitutionSolvencyPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: state.financeStatus.map((raw) {
                 final item = raw as Map<String, dynamic>;
-                final crisis = item['status'] == 'distressed' ||
-                    item['status'] == 'insolvent';
-                final recoverable = item['institution_kind'] == 'CITY' ||
-                    item['institution_kind'] == 'CORPORATION';
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 9),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                final kind = (item['institution_kind']?.toString() ?? 'INSTITUTION').toUpperCase();
+                final id = item['institution_id']?.toString() ?? '';
+                final status = (item['status']?.toString() ?? 'SOLVENT').toUpperCase();
+                final sinceDay = item['since_game_day']?.toString() ?? '—';
+
+                final crisis = status == 'DISTRESSED' || status == 'INSOLVENT';
+                final recoverable = kind == 'CITY' || kind == 'CORPORATION';
+
+                Color statusColor = cyanAccentColor;
+                if (status == 'DISTRESSED') statusColor = Colors.orangeAccent;
+                if (status == 'INSOLVENT') statusColor = Colors.redAccent;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .75),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(
+                      color: crisis ? statusColor.withValues(alpha: .4) : Colors.white10,
+                    ),
+                  ),
+                  child: Row(
                     children: [
-                      Text(
-                        '${item['institution_kind']} ${item['institution_id']}  ·  ${item['status']}  ·  since day ${item['since_game_day']}',
-                        style: const TextStyle(fontSize: 11),
+                      Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: statusColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(6),
+                        ),
+                        child: Icon(
+                          kind == 'CITY' ? Icons.location_city_outlined : Icons.domain_outlined,
+                          size: 16,
+                          color: statusColor,
+                        ),
                       ),
-                      if (crisis && recoverable)
-                        OutlinedButton(
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Text(
+                                  '$kind $id',
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w700,
+                                    color: inkColor,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: .15),
+                                    borderRadius: BorderRadius.circular(4),
+                                    border: Border.all(color: statusColor.withValues(alpha: .3)),
+                                  ),
+                                  child: Text(
+                                    status,
+                                    style: TextStyle(
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.w800,
+                                      color: statusColor,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              '$kind $id  ·  ${item['status']}  ·  since day $sinceDay',
+                              style: const TextStyle(fontSize: 10.5, color: mutedColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (crisis && recoverable) ...[
+                        const SizedBox(width: 8),
+                        FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: Colors.orangeAccent,
+                            foregroundColor: Colors.black,
+                            visualDensity: VisualDensity.compact,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                          ),
                           onPressed: busy
                               ? null
                               : () => showRecoveryDialog(
@@ -225,8 +299,10 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                                     item['institution_id'] as String,
                                     item['institution_kind'] as String,
                                   ),
-                          child: const Text('RECOVER'),
+                          icon: const Icon(Icons.healing_outlined, size: 14),
+                          label: const Text('RECOVER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
                         ),
+                      ],
                     ],
                   ),
                 );
@@ -898,6 +974,13 @@ class RankingLine extends StatelessWidget {
 
   const RankingLine(this.label, this.rows, {super.key});
 
+  IconData _getIconForLabel(String l) {
+    if (l.contains('CIT')) return Icons.location_city_outlined;
+    if (l.contains('CORP')) return Icons.domain_outlined;
+    if (l.contains('HUMAN')) return Icons.person_outline;
+    return Icons.biotech_outlined;
+  }
+
   @override
   Widget build(BuildContext context) {
     final list = rows is List ? rows : const [];
@@ -907,22 +990,46 @@ class RankingLine extends StatelessWidget {
         : label == 'CITIES'
             ? '${first['id']}  ·  ${first['residents']} residents'
             : '${first['id']}  ·  ${first['member_count']} members';
-    return Row(
-      children: [
-        Text(
-          label,
-          style:
-              const TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1),
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            value,
-            textAlign: TextAlign.right,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+
+    Color accent = cyanAccentColor;
+    if (label.contains('CORP')) accent = violetColor;
+    if (label.contains('HUMAN')) accent = Colors.tealAccent;
+    if (label.contains('TECH')) accent = Colors.amberAccent;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      decoration: BoxDecoration(
+        color: surfaceColor.withValues(alpha: .6),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          Icon(_getIconForLabel(label), size: 15, color: accent),
+          const SizedBox(width: 8),
+          Text(
+            label,
+            style: TextStyle(
+              color: accent,
+              fontSize: 10,
+              fontWeight: FontWeight.w700,
+              letterSpacing: .8,
+            ),
           ),
-        ),
-      ],
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: const TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w700,
+                color: inkColor,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
@@ -941,6 +1048,8 @@ class WorldRankingsPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'WORLD RANKINGS / POSTGRES LIVE',
+      infoDescription:
+          '• Civilizational Leaderboards & Metrics: Live global rankings aggregated across all planetary municipalities, corporate conglomerates, citizen leaders, and technology portfolios.\n\n• Competitive Benchmarks:\n  - CITIES: Ranked by resident population, public service stability, and housing/energy capacity.\n  - CORPORATIONS: Ranked by member count, treasury reserves, and industrial output.\n  - CITIZENS: Ranked by civic standing, legacy points, and net wealth.\n  - TECHNOLOGIES: Ranked by active patent licenses and diffusion rate.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

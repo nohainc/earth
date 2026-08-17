@@ -26,146 +26,421 @@ class InstitutionsCapacityPanel extends StatelessWidget {
         ? (state.institutions['city'] as Map<String, dynamic>)
         : <String, dynamic>{};
     final cityId = city['id']?.toString() ?? 'CITY-0084';
-    final cityName = (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
-    final residents = city['residents'] ?? 100;
-    final housingCap = city['housing_capacity'] ?? 120;
-    final energyCap = city['energy_capacity'] ?? 200;
+    final cityName =
+        (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
+    final residents = asIntOr(city['residents'], 100);
+    final housingCap = asIntOr(city['housing_capacity'], 120);
+    final energyCap = asIntOr(city['energy_capacity'], 200);
 
     final corp = state.institutions['corporation'] is Map<String, dynamic>
         ? (state.institutions['corporation'] as Map<String, dynamic>)
         : <String, dynamic>{};
     final corporationId = corp['id']?.toString() ?? 'CORP-001';
-    final corpName = (corp['name']?.toString() ?? 'CARTHAGE DYNAMICS').toUpperCase();
-    final corpMembers = corp['member_count'] ?? 42;
+    final corpName =
+        (corp['name']?.toString() ?? 'CARTHAGE DYNAMICS').toUpperCase();
+    final corpMembers = asIntOr(corp['member_count'], 42);
     final corpVersion = corp['constitution_version'] ?? 1;
 
     final isCityResident = state.membership?['city_id'] != null;
     final isCorpMember = state.membership?['corporation_id'] != null;
 
-    final housingRatio = formatPercent(state.world['serviceRatios']?['housing']);
+    final housingRatio =
+        formatPercent(state.world['serviceRatios']?['housing']);
     final energyRatio = formatPercent(state.world['serviceRatios']?['energy']);
-    final connectRatio = formatPercent(state.world['serviceRatios']?['connectivity']);
+    final connectRatio =
+        formatPercent(state.world['serviceRatios']?['connectivity']);
     final healthRatio = formatPercent(state.world['serviceRatios']?['health']);
 
     return EarthPanel(
       key: panelKey,
       title: 'INSTITUTIONS / CITY & CORP',
+      infoDescription:
+          '• Municipal & Corporate Institutions: Legal entities established under the Planetary Constitution to manage collective urban infrastructure and private commercial enterprises.\n\n• Municipal Operations:\n  - Residency: Citizens affiliated with a city gain access to subsidized public services and municipal voting.\n  - Housing & Energy Capacity: Physical limits on municipal residency and industrial manufacturing.\n  - Service Pressure Ratios: Real-time telemetry monitoring municipal infrastructure load across housing, power, connectivity, and health.\n\n• Corporate Enterprises:\n  - Limited Liability Charters: Registered corporate entities providing shared commercial treasury funds and specialized manufacturing capabilities.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // City Section
-          Text(
-            'CITY: $cityName ($cityId)',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '$residents residents · Housing cap: $housingCap · Energy cap: $energyCap',
-            style: const TextStyle(color: mutedColor, fontSize: 10),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            'Service pressure: Housing $housingRatio · Energy $energyRatio · Connect $connectRatio · Health $healthRatio',
-            style: const TextStyle(color: mutedColor, fontSize: 10),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => action(() => isCityResident
-                        ? const EarthApi().leaveCity(cityId: cityId)
-                        : const EarthApi().joinCity(cityId: cityId)),
-                child: Text(isCityResident ? 'LEAVE CITY' : 'JOIN CITY'),
-              ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => action(() => const EarthApi()
-                        .setCityBudget('maintenance', cityId: cityId)),
-                child: const Text('PROPOSE BUDGET'),
-              ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => showTaxCharterDialog(context, action, cityId),
-                child: const Text('TAX CHARTER'),
-              ),
-              if (state.communities.isNotEmpty)
-                OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => showFormationComposer(
-                            context,
-                            action,
-                            city: true,
-                            communityId: (state.communities.first
-                                as Map<String, dynamic>)['id'] as String,
+          // 1. CITY ADMINISTRATION COCKPIT CARD
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .85),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: cyanAccentColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.location_city_outlined,
+                          size: 20, color: cyanAccentColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'CITY: $cityName ($cityId)',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: inkColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (isCityResident
+                                          ? cyanAccentColor
+                                          : mutedColor)
+                                      .withValues(alpha: .15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: (isCityResident
+                                            ? cyanAccentColor
+                                            : mutedColor)
+                                        .withValues(alpha: .35),
+                                  ),
+                                ),
+                                child: Text(
+                                  isCityResident ? 'RESIDENT' : 'NON-RESIDENT',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: .8,
+                                    color: isCityResident
+                                        ? cyanAccentColor
+                                        : mutedColor,
+                                  ),
+                                ),
+                              ),
+                            ],
                           ),
-                  child: const Text('FORM CITY'),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$residents residents · Housing cap: $housingCap · Energy cap: $energyCap',
+                            style: const TextStyle(
+                              color: mutedColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-            ],
-          ),
-          const SizedBox(height: 12),
-          const Divider(height: 1, color: Colors.white10),
-          const SizedBox(height: 10),
 
-          // Corporation Section
-          Text(
-            'CORPORATION: $corpName ($corporationId)',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            '$corpMembers members · Constitution v$corpVersion · Status: ${isCorpMember ? 'MEMBER' : 'INDEPENDENT'}',
-            style: const TextStyle(color: mutedColor, fontSize: 10),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => action(() => isCorpMember
-                        ? const EarthApi()
-                            .leaveCorporation(corporationId: corporationId)
-                        : const EarthApi()
-                            .joinCorporation(corporationId: corporationId)),
-                child: Text(isCorpMember ? 'LEAVE CORP' : 'JOIN CORP'),
-              ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => action(() => const EarthApi().spendCorporationTreasury(
-                        100,
-                        corporationId: corporationId)),
-                child: const Text('FUND SERVICES · 100 C'),
-              ),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => action(() => const EarthApi().contributeCorporation(100,
-                        corporationId: corporationId)),
-                child: const Text('CONTRIBUTE · 100 C'),
-              ),
-              if (isCityResident)
-                OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => showFormationComposer(
-                            context,
-                            action,
-                            city: false,
-                            cityId: cityId,
-                          ),
-                  child: const Text('FORM CORP'),
+                const SizedBox(height: 12),
+
+                // Service Pressure Gauges Box
+                Container(
+                  width: double.infinity,
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: .03),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    'Service pressure: Housing $housingRatio · Energy $energyRatio · Connect $connectRatio · Health $healthRatio',
+                    style: const TextStyle(
+                      color: inkColor,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
                 ),
-            ],
+
+                const SizedBox(height: 12),
+
+                // City Action Buttons Hub
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isCityResident
+                            ? Colors.orangeAccent
+                            : cyanAccentColor,
+                        side: BorderSide(
+                          color: (isCityResident
+                                  ? Colors.orangeAccent
+                                  : cyanAccentColor)
+                              .withValues(alpha: .35),
+                        ),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () => action(() => isCityResident
+                              ? const EarthApi().leaveCity(cityId: cityId)
+                              : const EarthApi().joinCity(cityId: cityId)),
+                      child: Text(
+                        isCityResident ? 'LEAVE CITY' : 'JOIN CITY',
+                        style: const TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: inkColor,
+                        side: const BorderSide(color: Colors.white24),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () => action(() => const EarthApi()
+                              .setCityBudget('maintenance', cityId: cityId)),
+                      icon: const Icon(Icons.account_balance_wallet_outlined,
+                          size: 14),
+                      label: const Text(
+                        'PROPOSE BUDGET',
+                        style: TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: violetColor,
+                        side: BorderSide(
+                            color: violetColor.withValues(alpha: .35)),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () => showTaxCharterDialog(context, action, cityId),
+                      icon: const Icon(Icons.receipt_long_outlined, size: 14),
+                      label: const Text(
+                        'TAX CHARTER',
+                        style: TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (state.communities.isNotEmpty)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: cyanAccentColor,
+                          foregroundColor: Colors.black,
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => showFormationComposer(
+                                  context,
+                                  action,
+                                  city: true,
+                                  communityId: (state.communities.first
+                                      as Map<String, dynamic>)['id'] as String,
+                                ),
+                        icon: const Icon(Icons.add_business_outlined, size: 14),
+                        label: const Text(
+                          'FORM CITY',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // 2. CORPORATION ENTERPRISE COCKPIT CARD
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .85),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: violetColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(Icons.domain_outlined,
+                          size: 20, color: violetColor),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  'CORPORATION: $corpName ($corporationId)',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13,
+                                    color: inkColor,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 3),
+                                decoration: BoxDecoration(
+                                  color: (isCorpMember
+                                          ? violetColor
+                                          : mutedColor)
+                                      .withValues(alpha: .15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                    color: (isCorpMember
+                                            ? violetColor
+                                            : mutedColor)
+                                        .withValues(alpha: .35),
+                                  ),
+                                ),
+                                child: Text(
+                                  isCorpMember ? 'MEMBER' : 'INDEPENDENT',
+                                  style: TextStyle(
+                                    fontSize: 9.5,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: .8,
+                                    color: isCorpMember
+                                        ? violetColor
+                                        : mutedColor,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '$corpMembers members · Constitution v$corpVersion · Status: ${isCorpMember ? 'MEMBER' : 'INDEPENDENT'}',
+                            style: const TextStyle(
+                              color: mutedColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+
+                const SizedBox(height: 14),
+
+                // Corporate Action Buttons Hub
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: isCorpMember
+                            ? Colors.orangeAccent
+                            : violetColor,
+                        side: BorderSide(
+                          color: (isCorpMember
+                                  ? Colors.orangeAccent
+                                  : violetColor)
+                              .withValues(alpha: .35),
+                        ),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () => action(() => isCorpMember
+                              ? const EarthApi().leaveCorporation(
+                                  corporationId: corporationId)
+                              : const EarthApi().joinCorporation(
+                                  corporationId: corporationId)),
+                      child: Text(
+                        isCorpMember ? 'LEAVE CORP' : 'JOIN CORP',
+                        style: const TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: cyanAccentColor,
+                        side: BorderSide(
+                            color: cyanAccentColor.withValues(alpha: .35)),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () => action(() => const EarthApi()
+                              .spendCorporationTreasury(100,
+                                  corporationId: corporationId)),
+                      icon: const Icon(Icons.send_rounded, size: 14),
+                      label: const Text(
+                        'FUND SERVICES · 100 C',
+                        style: TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: Colors.tealAccent,
+                        side: BorderSide(
+                            color: Colors.tealAccent.withValues(alpha: .35)),
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () => action(() => const EarthApi()
+                              .contributeCorporation(100,
+                                  corporationId: corporationId)),
+                      icon: const Icon(Icons.savings_outlined, size: 14),
+                      label: const Text(
+                        'CONTRIBUTE · 100 C',
+                        style: TextStyle(
+                            fontSize: 10.5, fontWeight: FontWeight.w700),
+                      ),
+                    ),
+                    if (isCityResident)
+                      FilledButton.icon(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: violetColor,
+                          foregroundColor: Colors.white,
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => showFormationComposer(
+                                  context,
+                                  action,
+                                  city: false,
+                                  cityId: cityId,
+                                ),
+                        icon: const Icon(Icons.corporate_fare_outlined,
+                            size: 14),
+                        label: const Text(
+                          'FORM CORP',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w800),
+                        ),
+                      ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
