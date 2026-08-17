@@ -355,41 +355,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 0. YOUR INVENTORY & LIQUIDITY RIBBON
-          Container(
-            margin: const EdgeInsets.only(bottom: 14),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .5),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Wrap(
-              spacing: 12,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.account_balance_wallet_outlined, size: 13, color: mutedColor),
-                    SizedBox(width: 5),
-                    Text(
-                      'YOUR PORTFOLIO',
-                      style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.w800, letterSpacing: 1.1, color: mutedColor),
-                    ),
-                  ],
-                ),
-                _balancePill('CREDITS', formatCreditsAmount(widget.state.human['credits']), violetColor),
-                _balancePill('FOOD', '${formatWholeNumber(widget.state.resources['food'])} FOOD', Colors.lightGreenAccent),
-                _balancePill('MATERIALS', '${formatWholeNumber(widget.state.resources['material'])} MATR', Colors.tealAccent),
-                _balancePill('COMPONENTS', '${formatWholeNumber(widget.state.resources['components'])} FABR', cyanAccentColor),
-                _balancePill('ENERGY', '${formatWholeNumber(widget.state.resources['energy'])} ENGY', Colors.amberAccent),
-                _balancePill('COMPUTE', '${formatWholeNumber(widget.state.resources['compute'])} INFO', violetColor),
-              ],
-            ),
-          ),
-
           // 1. TOP COMMODITY SELECTOR MATRIX
           LayoutBuilder(
             builder: (context, constraints) {
@@ -493,95 +458,39 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           ),
           const SizedBox(height: 18),
 
-          // 2. MAIN 2-COLUMN VIEW: COMMODITY CHART & QUICK ACTIONS + DOCKED BATCH ORDER TERMINAL
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final isTwoCol = constraints.maxWidth >= 760;
-
-              final leftWidget = _CommodityChartAndDepth(
-                meta: meta,
-                currentPrice: currentPrice,
-                rawPrice: productData['price']?.toString() ?? currentPrice.toString(),
-                supply: supply,
-                demand: demand,
-                history: history,
-                feeRate: widget.state.marketFeeRate,
-                busy: widget.busy,
-                action: widget.action,
-              );
-
-              final rightWidget = _MarketOrderTerminal(
-                meta: meta,
-                side: _orderSide,
-                onSideChanged: (s) => setState(() => _orderSide = s),
-                qtyController: _qtyController,
-                priceController: _priceController,
-                currentPrice: currentPrice,
-                userCredits: userCredits,
-                userStockpile: userStock,
-                feeRate: widget.state.marketFeeRate,
-                busy: widget.busy,
-                onSubmit: () async {
-                  final qty = int.tryParse(_qtyController.text.trim()) ?? 0;
-                  final price = double.tryParse(_priceController.text.trim()) ?? 0.0;
-                  if (qty > 0 && price > 0) {
-                    await widget.action(() => const EarthApi().submitOrder(
-                          _selectedCommodity,
-                          price,
-                          side: _orderSide,
-                          quantity: qty,
-                        ));
-                  }
-                },
-              );
-
-              if (isTwoCol) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(flex: 3, child: leftWidget),
-                    const SizedBox(width: 16),
-                    Expanded(flex: 2, child: rightWidget),
-                  ],
-                );
+          // 2. COMBINED COMMODITY GRAPH & TRADING TERMINAL HUB
+          _UnifiedCommodityTradeHub(
+            meta: meta,
+            currentPrice: currentPrice,
+            rawPrice: productData['price']?.toString() ?? currentPrice.toString(),
+            supply: supply,
+            demand: demand,
+            history: history,
+            feeRate: widget.state.marketFeeRate,
+            busy: widget.busy,
+            side: _orderSide,
+            onSideChanged: (s) => setState(() => _orderSide = s),
+            qtyController: _qtyController,
+            priceController: _priceController,
+            userCredits: userCredits,
+            userStockpile: userStock,
+            onSubmit: () async {
+              final qty = int.tryParse(_qtyController.text.trim()) ?? 0;
+              final price = double.tryParse(_priceController.text.trim()) ?? 0.0;
+              if (qty > 0 && price > 0) {
+                await widget.action(() => const EarthApi().submitOrder(
+                      _selectedCommodity,
+                      price,
+                      side: _orderSide,
+                      quantity: qty,
+                    ));
               }
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  leftWidget,
-                  const SizedBox(height: 16),
-                  rightWidget,
-                ],
-              );
             },
           ),
         ],
       ),
     );
   }
-
-  Widget _balancePill(String label, String value, Color color) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: color.withValues(alpha: .1),
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(color: color.withValues(alpha: .25)),
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '$label: ',
-              style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w600, color: mutedColor),
-            ),
-            Text(
-              value,
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color),
-            ),
-          ],
-        ),
-      );
 }
 
 class _MiniTrendBadge extends StatelessWidget {
@@ -647,7 +556,7 @@ class _PriceTrendText extends StatelessWidget {
   }
 }
 
-class _CommodityChartAndDepth extends StatelessWidget {
+class _UnifiedCommodityTradeHub extends StatelessWidget {
   final CommodityMeta meta;
   final double currentPrice;
   final String rawPrice;
@@ -656,9 +565,15 @@ class _CommodityChartAndDepth extends StatelessWidget {
   final dynamic history;
   final double feeRate;
   final bool busy;
-  final Future<void> Function(Future<EarthState> Function()) action;
+  final String side;
+  final ValueChanged<String> onSideChanged;
+  final TextEditingController qtyController;
+  final TextEditingController priceController;
+  final double userCredits;
+  final int userStockpile;
+  final VoidCallback onSubmit;
 
-  const _CommodityChartAndDepth({
+  const _UnifiedCommodityTradeHub({
     required this.meta,
     required this.currentPrice,
     required this.rawPrice,
@@ -667,7 +582,13 @@ class _CommodityChartAndDepth extends StatelessWidget {
     required this.history,
     required this.feeRate,
     required this.busy,
-    required this.action,
+    required this.side,
+    required this.onSideChanged,
+    required this.qtyController,
+    required this.priceController,
+    required this.userCredits,
+    required this.userStockpile,
+    required this.onSubmit,
   });
 
   @override
@@ -691,173 +612,416 @@ class _CommodityChartAndDepth extends StatelessWidget {
     final totalPressure = (supply + demand).clamp(1, 999999);
     final demandPct = (demand / totalPressure).clamp(0.05, 0.95);
 
+    final qty = int.tryParse(qtyController.text.trim()) ?? 0;
+    final limitPrice = double.tryParse(priceController.text.trim()) ?? 0.0;
+    final baseTotal = qty * limitPrice;
+    final fee = side == 'buy' ? baseTotal * feeRate : 0.0;
+    final totalEscrow = side == 'buy' ? baseTotal + fee : baseTotal;
+
+    final maxAffordableUnits = limitPrice > 0 ? (userCredits / (limitPrice * (1 + feeRate))).floor() : 0;
+    final maxSellableUnits = userStockpile;
+
+    final isBuy = side == 'buy';
+    final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
+
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: const EdgeInsets.all(18),
       decoration: BoxDecoration(
         color: surfaceColor.withValues(alpha: .72),
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(14),
         border: Border.all(color: Colors.white12),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      '${meta.name} (${meta.symbol})',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.1,
-                        color: inkColor,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 2),
-                    Text(
-                      meta.description,
-                      style: const TextStyle(fontSize: 10, color: mutedColor),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 10),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(
-                    'P* ${currentPrice.toStringAsFixed(2)} C',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w800,
-                      color: meta.color,
-                      letterSpacing: -.5,
-                    ),
-                  ),
-                  const Text(
-                    'UNIFORM CLEARING PRICE',
-                    style: TextStyle(fontSize: 8.5, color: mutedColor, letterSpacing: .8),
-                  ),
-                ],
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 760;
 
-          // Area Price Trend Chart
-          Container(
-            height: 120,
-            width: double.infinity,
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: prices.length >= 2
-                ? CustomPaint(
-                    painter: _PriceAreaChartPainter(
-                      prices: prices,
-                      minPrice: minPrice,
-                      maxPrice: maxPrice,
-                      lineColor: meta.color,
-                    ),
-                  )
-                : Center(
-                    child: Text(
-                      'Aggregating periodic batch clearing history…',
-                      style: TextStyle(fontSize: 10.5, color: mutedColor.withValues(alpha: .7)),
-                    ),
-                  ),
-          ),
-          const SizedBox(height: 12),
-
-          // Supply vs Demand Pressure Bar
-          Column(
+          final chartAndDepthSection = Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'BUY DEMAND: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)',
-                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: cyanAccentColor),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          '${meta.name} (${meta.symbol})',
+                          style: const TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 1.1,
+                            color: inkColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          meta.description,
+                          style: const TextStyle(fontSize: 10, color: mutedColor),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
                   ),
-                  Text(
-                    'SELL SUPPLY: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)',
-                    style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.orangeAccent),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 5),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: SizedBox(
-                  height: 6,
-                  child: Row(
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
-                      Expanded(
-                        flex: (demandPct * 100).round(),
-                        child: Container(color: cyanAccentColor),
+                      Text(
+                        'P* ${currentPrice.toStringAsFixed(2)} C',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w800,
+                          color: meta.color,
+                          letterSpacing: -.5,
+                        ),
                       ),
-                      Expanded(
-                        flex: ((1 - demandPct) * 100).round(),
-                        child: Container(color: Colors.orangeAccent),
+                      const Text(
+                        'UNIFORM CLEARING PRICE',
+                        style: TextStyle(fontSize: 8.5, color: mutedColor, letterSpacing: .8),
                       ),
                     ],
                   ),
-                ),
+                ],
               ),
-            ],
-          ),
-          const SizedBox(height: 14),
+              const SizedBox(height: 14),
 
-          // Quick Action Instant Buttons
-          Row(
+              // Area Price Trend Chart
+              Container(
+                height: 140,
+                width: double.infinity,
+                padding: const EdgeInsets.symmetric(vertical: 8),
+                child: prices.length >= 2
+                    ? CustomPaint(
+                        painter: _PriceAreaChartPainter(
+                          prices: prices,
+                          minPrice: minPrice,
+                          maxPrice: maxPrice,
+                          lineColor: meta.color,
+                        ),
+                      )
+                    : Center(
+                        child: Text(
+                          'Aggregating periodic batch clearing history…',
+                          style: TextStyle(fontSize: 10.5, color: mutedColor.withValues(alpha: .7)),
+                        ),
+                      ),
+              ),
+              const SizedBox(height: 12),
+
+              // Supply vs Demand Pressure Bar
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'BUY DEMAND: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)',
+                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: cyanAccentColor),
+                      ),
+                      Text(
+                        'SELL SUPPLY: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)',
+                        style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.orangeAccent),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 5),
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(4),
+                    child: SizedBox(
+                      height: 6,
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: (demandPct * 100).round(),
+                            child: Container(color: cyanAccentColor),
+                          ),
+                          Expanded(
+                            flex: ((1 - demandPct) * 100).round(),
+                            child: Container(color: Colors.orangeAccent),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          );
+
+          final tradeTerminalSection = Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => action(() => const EarthApi().submitOrder(
-                            meta.key,
-                            currentPrice,
-                            side: 'buy',
-                            quantity: 1,
-                          )),
-                  child: const Text('BUY 1'),
+              // Buy / Sell Selector
+              Row(
+                children: [
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => onSideChanged('buy'),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: isBuy ? cyanAccentColor.withValues(alpha: .2) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: isBuy ? cyanAccentColor : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          'BUY ${meta.symbol}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                            color: isBuy ? cyanAccentColor : mutedColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: InkWell(
+                      onTap: () => onSideChanged('sell'),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 8),
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          color: !isBuy ? Colors.orangeAccent.withValues(alpha: .2) : Colors.transparent,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: !isBuy ? Colors.orangeAccent : Colors.white12,
+                          ),
+                        ),
+                        child: Text(
+                          'SELL ${meta.symbol}',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 1.1,
+                            color: !isBuy ? Colors.orangeAccent : mutedColor,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+
+              // Available balance tag
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isBuy ? 'AVAILABLE CREDITS' : 'AVAILABLE INVENTORY',
+                    style: const TextStyle(fontSize: 9, color: mutedColor, letterSpacing: .8),
+                  ),
+                  Text(
+                    isBuy
+                        ? '${formatCreditsAmount(userCredits)} (max ~$maxAffordableUnits u)'
+                        : '$userStockpile ${meta.symbol}',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w700,
+                      color: isBuy ? violetColor : meta.color,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Quantity Field + Preset Chips
+              TextField(
+                controller: qtyController,
+                keyboardType: TextInputType.number,
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  labelText: 'ORDER QUANTITY (UNITS)',
+                  labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1.1),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  suffixText: meta.symbol,
+                  suffixStyle: TextStyle(fontSize: 10, color: meta.color, fontWeight: FontWeight.w700),
                 ),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => action(() => const EarthApi().submitOrder(
-                            meta.key,
-                            currentPrice,
-                            side: 'sell',
-                            quantity: 1,
-                          )),
-                  child: const Text('SELL 1'),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  _presetChip('25%', () {
+                    final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
+                    qtyController.text = (maxU * 0.25).clamp(1, 99999).round().toString();
+                  }),
+                  const SizedBox(width: 4),
+                  _presetChip('50%', () {
+                    final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
+                    qtyController.text = (maxU * 0.50).clamp(1, 99999).round().toString();
+                  }),
+                  const SizedBox(width: 4),
+                  _presetChip('75%', () {
+                    final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
+                    qtyController.text = (maxU * 0.75).clamp(1, 99999).round().toString();
+                  }),
+                  const SizedBox(width: 4),
+                  _presetChip('MAX', () {
+                    final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
+                    qtyController.text = maxU.clamp(1, 99999).toString();
+                  }),
+                ],
+              ),
+              const SizedBox(height: 10),
+
+              // Limit Price Field + Prefill button
+              TextField(
+                controller: priceController,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                decoration: InputDecoration(
+                  labelText: 'LIMIT PRICE (C / UNIT)',
+                  labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1.1),
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  suffixIcon: TextButton(
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      minimumSize: Size.zero,
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    onPressed: () => priceController.text = currentPrice.toStringAsFixed(2),
+                    child: Text('SPOT', style: TextStyle(fontSize: 9.5, color: meta.color)),
+                  ),
                 ),
               ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: OutlinedButton(
-                  onPressed: busy
-                      ? null
-                      : () => action(() => const EarthApi().settleMarket(meta.key)),
-                  child: const Text('SETTLE'),
+              const SizedBox(height: 12),
+
+              // Cost Summary Box
+              Container(
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.04),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text('Base value:', style: TextStyle(fontSize: 10, color: mutedColor)),
+                        Text('${baseTotal.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                      ],
+                    ),
+                    if (isBuy && feeRate > 0) ...[
+                      const SizedBox(height: 3),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Exchange fee (${(feeRate * 100).toStringAsFixed(1)}%):', style: const TextStyle(fontSize: 10, color: mutedColor)),
+                          Text('${fee.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10, color: mutedColor)),
+                        ],
+                      ),
+                    ],
+                    const Divider(height: 10, color: Colors.white10),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isBuy ? 'Escrow Hold:' : 'Gross Proceeds:',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                        ),
+                        Text(
+                          '${totalEscrow.toStringAsFixed(2)} C',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: sideColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Submit Action Button
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  onPressed: busy || qty <= 0 || limitPrice <= 0 ? null : onSubmit,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: sideColor.withValues(alpha: .85),
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                  ),
+                  child: Text(
+                    'PLACE ${side.toUpperCase()} ORDER',
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.1,
+                    ),
+                  ),
                 ),
               ),
             ],
-          ),
-        ],
+          );
+
+          if (isWide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: chartAndDepthSection),
+                Container(
+                  width: 1,
+                  height: 360,
+                  color: Colors.white12,
+                  margin: const EdgeInsets.symmetric(horizontal: 18),
+                ),
+                Expanded(flex: 2, child: tradeTerminalSection),
+              ],
+            );
+          }
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              chartAndDepthSection,
+              const Divider(height: 28, color: Colors.white12),
+              tradeTerminalSection,
+            ],
+          );
+        },
       ),
     );
   }
+
+  Widget _presetChip(String label, VoidCallback onTap) => Expanded(
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(vertical: 3),
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              color: Colors.white.withValues(alpha: .06),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Text(
+              label,
+              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: mutedColor),
+            ),
+          ),
+        ),
+      );
 }
 
 class _PriceAreaChartPainter extends CustomPainter {
@@ -930,300 +1094,6 @@ class _PriceAreaChartPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant _PriceAreaChartPainter oldDelegate) => true;
-}
-
-class _MarketOrderTerminal extends StatelessWidget {
-  final CommodityMeta meta;
-  final String side;
-  final ValueChanged<String> onSideChanged;
-  final TextEditingController qtyController;
-  final TextEditingController priceController;
-  final double currentPrice;
-  final double userCredits;
-  final int userStockpile;
-  final double feeRate;
-  final bool busy;
-  final VoidCallback onSubmit;
-
-  const _MarketOrderTerminal({
-    required this.meta,
-    required this.side,
-    required this.onSideChanged,
-    required this.qtyController,
-    required this.priceController,
-    required this.currentPrice,
-    required this.userCredits,
-    required this.userStockpile,
-    required this.feeRate,
-    required this.busy,
-    required this.onSubmit,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final qty = int.tryParse(qtyController.text.trim()) ?? 0;
-    final limitPrice = double.tryParse(priceController.text.trim()) ?? 0.0;
-    final baseTotal = qty * limitPrice;
-    final fee = side == 'buy' ? baseTotal * feeRate : 0.0;
-    final totalEscrow = side == 'buy' ? baseTotal + fee : baseTotal;
-
-    final maxAffordableUnits = limitPrice > 0 ? (userCredits / (limitPrice * (1 + feeRate))).floor() : 0;
-    final maxSellableUnits = userStockpile;
-
-    final isBuy = side == 'buy';
-    final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
-
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .72),
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Buy / Sell Selector
-          Row(
-            children: [
-              Expanded(
-                child: InkWell(
-                  onTap: () => onSideChanged('buy'),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: isBuy ? cyanAccentColor.withValues(alpha: .2) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: isBuy ? cyanAccentColor : Colors.white12,
-                      ),
-                    ),
-                    child: Text(
-                      'BUY ${meta.symbol}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                        color: isBuy ? cyanAccentColor : mutedColor,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: InkWell(
-                  onTap: () => onSideChanged('sell'),
-                  borderRadius: BorderRadius.circular(8),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
-                    alignment: Alignment.center,
-                    decoration: BoxDecoration(
-                      color: !isBuy ? Colors.orangeAccent.withValues(alpha: .2) : Colors.transparent,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: !isBuy ? Colors.orangeAccent : Colors.white12,
-                      ),
-                    ),
-                    child: Text(
-                      'SELL ${meta.symbol}',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 1.1,
-                        color: !isBuy ? Colors.orangeAccent : mutedColor,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
-
-          // Available balance tag
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                isBuy ? 'AVAILABLE CREDITS' : 'AVAILABLE INVENTORY',
-                style: const TextStyle(fontSize: 9, color: mutedColor, letterSpacing: .8),
-              ),
-              Text(
-                isBuy
-                    ? '${formatCreditsAmount(userCredits)} (max ~$maxAffordableUnits u)'
-                    : '$userStockpile ${meta.symbol}',
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: isBuy ? violetColor : meta.color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Quantity Field + Preset Chips
-          TextField(
-            controller: qtyController,
-            keyboardType: TextInputType.number,
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            decoration: InputDecoration(
-              labelText: 'ORDER QUANTITY (UNITS)',
-              labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1.1),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              suffixText: meta.symbol,
-              suffixStyle: TextStyle(fontSize: 10, color: meta.color, fontWeight: FontWeight.w700),
-            ),
-          ),
-          const SizedBox(height: 6),
-          Row(
-            children: [
-              _presetChip('25%', () {
-                final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                qtyController.text = (maxU * 0.25).clamp(1, 99999).round().toString();
-              }),
-              const SizedBox(width: 4),
-              _presetChip('50%', () {
-                final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                qtyController.text = (maxU * 0.50).clamp(1, 99999).round().toString();
-              }),
-              const SizedBox(width: 4),
-              _presetChip('75%', () {
-                final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                qtyController.text = (maxU * 0.75).clamp(1, 99999).round().toString();
-              }),
-              const SizedBox(width: 4),
-              _presetChip('MAX', () {
-                final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                qtyController.text = maxU.clamp(1, 99999).toString();
-              }),
-            ],
-          ),
-          const SizedBox(height: 10),
-
-          // Limit Price Field + Prefill button
-          TextField(
-            controller: priceController,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-            decoration: InputDecoration(
-              labelText: 'LIMIT PRICE (C / UNIT)',
-              labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1.1),
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              suffixIcon: TextButton(
-                style: TextButton.styleFrom(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                onPressed: () => priceController.text = currentPrice.toStringAsFixed(2),
-                child: Text('SPOT', style: TextStyle(fontSize: 9.5, color: meta.color)),
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Cost Summary Box
-          Container(
-            padding: const EdgeInsets.all(10),
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: 0.04),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text('Base value:', style: TextStyle(fontSize: 10, color: mutedColor)),
-                    Text('${baseTotal.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
-                  ],
-                ),
-                if (isBuy && feeRate > 0) ...[
-                  const SizedBox(height: 3),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('Exchange fee (${(feeRate * 100).toStringAsFixed(1)}%):', style: const TextStyle(fontSize: 10, color: mutedColor)),
-                      Text('${fee.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10, color: mutedColor)),
-                    ],
-                  ),
-                ],
-                const Divider(height: 10, color: Colors.white10),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      isBuy ? 'Escrow Hold:' : 'Gross Proceeds:',
-                      style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                    ),
-                    Text(
-                      '${totalEscrow.toStringAsFixed(2)} C',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w800,
-                        color: sideColor,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 12),
-
-          // Submit Action Button
-          SizedBox(
-            width: double.infinity,
-            child: FilledButton(
-              onPressed: busy || qty <= 0 || limitPrice <= 0 ? null : onSubmit,
-              style: FilledButton.styleFrom(
-                backgroundColor: sideColor.withValues(alpha: .85),
-                foregroundColor: Colors.black,
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-              ),
-              child: Text(
-                'SUBMIT $side ORDER',
-                style: const TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.1,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _presetChip(String label, VoidCallback onTap) => Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .06),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Text(
-              label,
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: mutedColor),
-            ),
-          ),
-        ),
-      );
 }
 
 class MarketOrderBookPanel extends StatelessWidget {

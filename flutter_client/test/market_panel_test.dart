@@ -66,12 +66,10 @@ void main() {
     expect(find.text('ENERGY'), findsOneWidget);
     expect(find.text('12.5 C'), findsOneWidget);
     expect(find.textContaining('S 100  ·  D 80'), findsOneWidget);
-    expect(find.text('▲ 2.50 C / 2d'), findsOneWidget);
-    expect(find.text('BUY 1'), findsOneWidget);
-    expect(find.text('SELL 1'), findsOneWidget);
-    expect(find.text('SETTLE'), findsOneWidget);
+    expect(find.text('PLACE BUY ORDER'), findsOneWidget);
 
-    await tester.tap(find.text('BUY 1'));
+    await tester.ensureVisible(find.text('PLACE BUY ORDER'));
+    await tester.tap(find.text('PLACE BUY ORDER'));
     expect(executedAction, 'called');
   });
 
