@@ -1,5 +1,5 @@
 import { bytesToBase32, validTotp, digest } from './auth-crypto';
-import { cookieValue, currentHuman, sessionCookie } from './auth-session';
+import { cookieValue, extractToken, currentHuman, sessionCookie } from './auth-session';
 import { parseJsonBody } from './request-validation';
 import { withRepository } from './repository';
 
@@ -41,7 +41,7 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
   if (url.pathname === '/api/auth/sessions' && request.method === 'GET') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const token = cookieValue(request, 'earth_session');
+    const token = extractToken(request);
     const currentHash = token ? await digest(token) : '';
     const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = $1 ORDER BY created_at DESC', [human.id]));
     if (!sessions) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });

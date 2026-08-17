@@ -7,12 +7,18 @@ extension EarthApiAuth on EarthApi {
       (await _request('/api/auth/me')) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> login(String email, String password,
-          {String? otp}) async =>
-      (await _request('/api/auth/login', method: 'POST', body: {
-        'email': email,
-        'password': password,
-        if (otp != null && otp.isNotEmpty) 'otp': otp,
-      })) as Map<String, dynamic>;
+      {String? otp}) async {
+    final response = (await _request('/api/auth/login', method: 'POST', body: {
+      'email': email,
+      'password': password,
+      if (otp != null && otp.isNotEmpty) 'otp': otp,
+    })) as Map<String, dynamic>;
+    final token = response['token']?.toString();
+    if (token != null && token.isNotEmpty) {
+      await AuthStorage.saveToken(token);
+    }
+    return response;
+  }
 
   Future<Map<String, dynamic>> enrollMfa() async =>
       (await _request('/api/auth/mfa/enroll', method: 'POST'))
@@ -77,6 +83,10 @@ extension EarthApiAuth on EarthApi {
           })) as Map<String, dynamic>;
 
   Future<void> logout() async {
-    await _request('/api/auth/logout', method: 'POST');
+    try {
+      await _request('/api/auth/logout', method: 'POST');
+    } finally {
+      await AuthStorage.clearToken();
+    }
   }
 }

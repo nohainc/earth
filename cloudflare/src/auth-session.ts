@@ -23,6 +23,16 @@ export function cookieValue(request: Request, name: string): string | null {
   return value ? decodeURIComponent(value.slice(name.length + 1)) : null;
 }
 
+export function extractToken(request: Request): string | null {
+  const cookieTok = cookieValue(request, 'earth_session');
+  if (cookieTok) return cookieTok;
+  const authHeader = request.headers.get('Authorization') ?? request.headers.get('authorization');
+  if (authHeader && /^Bearer\s+/i.test(authHeader)) {
+    return authHeader.replace(/^Bearer\s+/i, '').trim();
+  }
+  return null;
+}
+
 export function sessionCookie(token: string, maxAge: number): string {
   return `earth_session=${encodeURIComponent(
     token,
@@ -34,7 +44,7 @@ export async function currentHuman(
   env: Env,
   allowEstate = false,
 ): Promise<AuthenticatedHuman | null> {
-  const token = cookieValue(request, 'earth_session');
+  const token = extractToken(request);
   if (!token) return null;
   const tokenHash = await digest(token);
   const result = await withRepository(env, (repository) =>

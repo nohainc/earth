@@ -1,6 +1,7 @@
 import 'package:http/http.dart' as http;
 
 import '../../earth_http_client.dart';
+import '../auth_storage.dart';
 import '../nano_markup_helper.dart';
 
 const _apiVersion = '2026-08';
@@ -26,6 +27,10 @@ class EarthApiTransport {
       'accept': 'application/nanomarkup, application/json',
       'X-Request-ID': requestId,
     };
+    final token = await AuthStorage.getToken();
+    if (token != null && token.isNotEmpty) {
+      headers['authorization'] = 'Bearer $token';
+    }
     final correlationId = body?['correlationId']?.toString().trim();
     if (method == 'POST' || method == 'DELETE') {
       headers['Idempotency-Key'] =

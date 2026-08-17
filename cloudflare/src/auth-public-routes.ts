@@ -1,5 +1,5 @@
 import { bytesToBase64, derivePassword, digest, validTotp } from './auth-crypto';
-import { cookieValue, issueActionToken, sessionCookie } from './auth-session';
+import { cookieValue, extractToken, issueActionToken, sessionCookie } from './auth-session';
 import { registerIdentity, loginIdentity } from './auth-postgres';
 import { parseJsonBody } from './request-validation';
 import { withRepository } from './repository';
@@ -95,14 +95,14 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
     try {
       const result = await withRepository(env, (repository) => loginIdentity(repository, { email, password: parsed.value.password ?? '', otp: parsed.value.otp ?? '', validTotp }));
       if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
-      return new Response(JSON.stringify({ ok: result.ok, human: result.human, expiresAt: result.expiresAt }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
+      return new Response(JSON.stringify({ ok: result.ok, token: result.token, human: result.human, expiresAt: result.expiresAt }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Invalid email or password';
       return Response.json({ ok: false, error: message }, { status: /too many/i.test(message) ? 429 : /verify|active/i.test(message) ? 403 : 401 });
     }
   }
   if (url.pathname === '/api/auth/logout' && request.method === 'POST') {
-    const token = cookieValue(request, 'earth_session');
+    const token = extractToken(request);
     if (token) await withRepository(env, async (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE token_hash = $1', [await digest(token)]));
     return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
   }
