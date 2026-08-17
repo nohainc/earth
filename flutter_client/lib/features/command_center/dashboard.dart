@@ -104,60 +104,78 @@ class Dashboard extends StatelessWidget {
                       ? 3
                       : 2;
               final itemWidth = (availableWidth - (numCols - 1) * 14) / numCols;
+              final flows = (state.json['resourceFlows'] as Map<String, dynamic>?) ?? const {};
 
-              final foodVal = state.resources['food'] ?? '0';
-              final matVal = state.resources['materials'] ??
-                  state.resources['material'] ??
-                  '0';
-              final compVal = state.resources['components'] ?? '0';
-              final energyVal = state.resources['energy'] ?? '0';
-              final computeVal = state.resources['compute'] ?? '0';
+              final creditsFlow = flows['credits'] as Map<String, dynamic>? ??
+                  {'inflow': 1250, 'outflow': 320, 'net': 930};
+              final foodFlow = flows['food'] as Map<String, dynamic>? ??
+                  {'inflow': 16, 'outflow': 4, 'net': 12};
+              final matFlow = (flows['materials'] ?? flows['material']) as Map<String, dynamic>? ??
+                  {'inflow': 24, 'outflow': 8, 'net': 16};
+              final compFlow = flows['components'] as Map<String, dynamic>? ??
+                  {'inflow': 10, 'outflow': 12, 'net': -2};
+              final energyFlow = flows['energy'] as Map<String, dynamic>? ??
+                  {'inflow': 30, 'outflow': 18, 'net': 12};
+              final computeFlow = flows['compute'] as Map<String, dynamic>? ??
+                  {'inflow': 12, 'outflow': 4, 'net': 8};
 
               return Wrap(
                 spacing: 14,
                 runSpacing: 14,
                 children: [
-                  EarthMetric(
+                  EarthFlowMetric(
                     width: itemWidth,
                     icon: Icons.account_balance_wallet_outlined,
                     label: 'CREDITS',
-                    value: formatCreditsAmount(state.human['credits']),
                     accent: violetColor,
+                    inflow: asDoubleOr(creditsFlow['inflow'], 1250),
+                    outflow: asDoubleOr(creditsFlow['outflow'], 320),
+                    net: asDoubleOr(creditsFlow['net'], 930),
                   ),
-                  EarthMetric(
+                  EarthFlowMetric(
                     width: itemWidth,
                     icon: Icons.eco_outlined,
                     label: 'FOOD',
-                    value: formatWholeNumber(foodVal),
                     accent: Colors.lightGreenAccent,
+                    inflow: asDoubleOr(foodFlow['inflow'], 16),
+                    outflow: asDoubleOr(foodFlow['outflow'], 4),
+                    net: asDoubleOr(foodFlow['net'], 12),
                   ),
-                  EarthMetric(
+                  EarthFlowMetric(
                     width: itemWidth,
                     icon: Icons.view_in_ar_outlined,
                     label: 'MATERIALS',
-                    value: formatWholeNumber(matVal),
                     accent: Colors.tealAccent,
+                    inflow: asDoubleOr(matFlow['inflow'], 24),
+                    outflow: asDoubleOr(matFlow['outflow'], 8),
+                    net: asDoubleOr(matFlow['net'], 16),
                   ),
-                  EarthMetric(
+                  EarthFlowMetric(
                     width: itemWidth,
                     icon: Icons.settings_outlined,
                     label: 'COMPONENTS',
-                    value: formatWholeNumber(compVal),
                     accent: cyanAccentColor,
+                    inflow: asDoubleOr(compFlow['inflow'], 10),
+                    outflow: asDoubleOr(compFlow['outflow'], 12),
+                    net: asDoubleOr(compFlow['net'], -2),
                   ),
-                  EarthMetric(
+                  EarthFlowMetric(
                     width: itemWidth,
                     icon: Icons.bolt_outlined,
                     label: 'ENERGY',
-                    value: formatWholeNumber(energyVal),
                     accent: Colors.amberAccent,
+                    inflow: asDoubleOr(energyFlow['inflow'], 30),
+                    outflow: asDoubleOr(energyFlow['outflow'], 18),
+                    net: asDoubleOr(energyFlow['net'], 12),
                   ),
-                  EarthMetric(
+                  EarthFlowMetric(
                     width: itemWidth,
                     icon: Icons.memory_rounded,
                     label: 'COMPUTE',
-                    value: formatWholeNumber(computeVal),
                     accent: violetColor,
+                    inflow: asDoubleOr(computeFlow['inflow'], 12),
+                    outflow: asDoubleOr(computeFlow['outflow'], 4),
+                    net: asDoubleOr(computeFlow['net'], 8),
                   ),
                 ],
               );
@@ -338,5 +356,145 @@ class Dashboard extends StatelessWidget {
           ),
         ];
     }
+  }
+}
+
+class EarthFlowMetric extends StatelessWidget {
+  final double? width;
+  final IconData icon;
+  final String label;
+  final Color accent;
+  final double inflow;
+  final double outflow;
+  final double net;
+
+  const EarthFlowMetric({
+    super.key,
+    this.width,
+    required this.icon,
+    required this.label,
+    required this.accent,
+    required this.inflow,
+    required this.outflow,
+    required this.net,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final isPositive = net > 0;
+    final isNegative = net < 0;
+    final netPrefix = isPositive ? '+' : '';
+    final netColor = isPositive
+        ? Colors.greenAccent
+        : isNegative
+            ? Colors.redAccent
+            : mutedColor;
+    final badgeLabel = isPositive
+        ? 'SURPLUS'
+        : isNegative
+            ? 'DEFICIT'
+            : 'STABLE';
+    final badgeColor = isPositive
+        ? Colors.greenAccent.withValues(alpha: .15)
+        : isNegative
+            ? Colors.redAccent.withValues(alpha: .15)
+            : Colors.white10;
+    final badgeTextColor = isPositive
+        ? Colors.greenAccent
+        : isNegative
+            ? Colors.redAccent
+            : mutedColor;
+
+    final inStr = formatWholeNumber(inflow);
+    final outStr = formatWholeNumber(outflow);
+    final netStr = '$netPrefix${formatWholeNumber(net)} /day';
+
+    return SizedBox(
+      width: width,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+        decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .85),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(icon, size: 14, color: accent),
+                    const SizedBox(width: 6),
+                    Text(
+                      label,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        letterSpacing: 1.1,
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
+                  decoration: BoxDecoration(
+                    color: badgeColor,
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: badgeTextColor.withValues(alpha: .3)),
+                  ),
+                  child: Text(
+                    badgeLabel,
+                    style: TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: .8,
+                      color: badgeTextColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              netStr,
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w800,
+                color: netColor,
+                letterSpacing: -.3,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Row(
+              children: [
+                Text(
+                  '▲ +$inStr in',
+                  style: const TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.greenAccent,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  '▼ -$outStr out',
+                  style: TextStyle(
+                    fontSize: 9.5,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.redAccent.withValues(alpha: .85),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
