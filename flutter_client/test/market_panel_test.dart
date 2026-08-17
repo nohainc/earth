@@ -41,20 +41,22 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: MarketSignalsPanel(
-            state: state,
-            busy: false,
-            priceHistory: const {
-              'energy': {
-                'history': [
-                  {'gameDay': 10, 'price': 12.5},
-                  {'gameDay': 9, 'price': 10.0},
-                ],
+          body: SingleChildScrollView(
+            child: MarketSignalsPanel(
+              state: state,
+              busy: false,
+              priceHistory: const {
+                'energy': {
+                  'history': [
+                    {'gameDay': 10, 'price': 12.5},
+                    {'gameDay': 9, 'price': 10.0},
+                  ],
+                },
               },
-            },
-            action: (callback) async {
-              executedAction = 'called';
-            },
+              action: (callback) async {
+                executedAction = 'called';
+              },
+            ),
           ),
         ),
       ),
