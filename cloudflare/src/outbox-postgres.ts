@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
 export type OutboxEvent = {
   id: string;
@@ -25,8 +26,8 @@ export async function enqueueOutbox(
 ): Promise<void> {
   await repository.query(
     `INSERT INTO event_outbox (id, event_key, topic, aggregate_type, aggregate_id, payload)
-     VALUES ($1, $2, $3, $4, $5, $6::jsonb) ON CONFLICT (event_key) DO NOTHING`,
-    [crypto.randomUUID(), input.eventKey, input.topic, input.aggregateType, input.aggregateId, JSON.stringify(input.payload)],
+     VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT (event_key) DO NOTHING`,
+    [crypto.randomUUID(), input.eventKey, input.topic, input.aggregateType, input.aggregateId, toNanoMarkup(input.payload)],
   );
 }
 
@@ -88,6 +89,13 @@ export async function deliverOutbox(
       [limit],
     );
     for (const event of result.rows) {
+      if (typeof event.payload === 'string') {
+        try {
+          event.payload = fromNanoMarkup<Record<string, unknown>>(event.payload);
+        } catch {
+          try { event.payload = JSON.parse(event.payload); } catch { event.payload = {}; }
+        }
+      }
       await tx.query(
         'UPDATE event_outbox SET locked_at = CURRENT_TIMESTAMP, attempts = attempts + 1 WHERE id = $1',
         [event.id],
