@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 17,
+  "migrationVersion": 18,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -30,9 +30,9 @@
     "earth_schema_migrations": ["version", "name", "checksum"],
     "event_outbox": ["id", "event_key", "topic", "payload", "processed_at"],
     "financial_states": ["institution_id", "status", "since_game_day"],
-    "governance_rules": ["id", "institution_id", "category"],
+    "governance_rules": ["id", "institution_id", "category", "quorum_threshold", "approval_threshold"],
     "humans": ["id", "account_id", "life_status"],
-    "institution_roles": ["id", "institution_id", "name"],
+    "institution_roles": ["id", "institution_id", "name", "can_propose", "can_vote"],
     "institutions": ["id", "kind", "status"],
     "ledger_entries": ["id", "debit_account", "credit_account", "amount"],
     "life_events": ["id", "human_id", "event_type"],
@@ -46,6 +46,7 @@
     "market_trades": ["id", "order_id", "clearing_price"],
     "membership_events": ["id", "human_id", "institution_id"],
     "memberships": ["human_id", "joined_game_day"],
+    "merger_contracts": ["contract_id", "acquirer_business_id", "target_business_id", "price_per_share", "total_shares", "total_amount"],
     "negotiated_contracts": ["id", "proposer_id", "counterparty_id", "status"],
     "notifications": ["id", "human_id", "notification_type"],
     "ownership_events": ["id", "asset_id", "to_owner_id"],
@@ -60,8 +61,9 @@
     "role_assignments": ["id", "role_id", "institution_id", "human_id"],
     "succession_plans": ["human_id", "successor_name", "successor_human_id"],
     "tax_rules": ["id", "scope", "category", "rate"],
-    "technologies": ["id", "name", "progress", "version"],
+    "technologies": ["id", "name", "progress", "version", "required_compute", "cost_credits"],
     "technology_licenses": ["id", "patent_id", "licensor_id", "licensee_id"],
+    "technology_prerequisites": ["technology_id", "required_technology_id"],
     "world_events": ["id", "game_day", "event_type"],
     "world_state": ["id", "game_day", "health", "essential_services_index", "last_scheduler_at"]
   },
