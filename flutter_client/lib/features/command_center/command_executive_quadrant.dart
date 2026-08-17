@@ -116,8 +116,8 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   minHeight: minCardHeight,
                   icon: '◈',
                   iconColor: violetColor,
-                  title: 'BUSINESS / $businessName',
-                  subtitle: '$businessStatus · $policy',
+                  title: 'BUSINESS',
+                  subtitle: '$businessName · $businessStatus',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -143,7 +143,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   minHeight: minCardHeight,
                   icon: '⊙',
                   iconColor: Colors.amberAccent,
-                  title: 'CITY / $cityName',
+                  title: cityName,
                   subtitle: 'MUNICIPAL RESIDENCY · HEALTH $cityHealth',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -157,7 +157,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                       _rowMetric('Health Coverage', '64% coverage', mutedColor),
                     ],
                   ),
-                  buttonLabel: 'Open Civic & City →',
+                  buttonLabel: 'Open Civic →',
                   onTap: () => onNavigate?.call('civic'),
                 ),
 
