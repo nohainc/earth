@@ -10,9 +10,12 @@ const cyanAccentColor = Color(0xff55d8b2);
 ThemeData createEarthTheme() => ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: canvasColor,
+      canvasColor: canvasColor,
+      cardColor: surfaceColor,
       colorScheme: ColorScheme.fromSeed(
         seedColor: violetColor,
         brightness: Brightness.dark,
+        surface: surfaceColor,
       ),
       fontFamily: 'Manrope',
       useMaterial3: true,

@@ -132,6 +132,14 @@ class _SidebarState extends State<Sidebar> {
   }
 
   bool get _isLocalDatabaseMode {
+    final host = Uri.base.host.toLowerCase();
+    if (host.isNotEmpty &&
+        host != 'localhost' &&
+        host != '127.0.0.1' &&
+        host != '0.0.0.0' &&
+        !host.contains('local')) {
+      return false;
+    }
     final env = widget.state.json['environment'] as String?;
     if (env == 'production') return false;
     final authority = widget.state.json['authority'] as String?;

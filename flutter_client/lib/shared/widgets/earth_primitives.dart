@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/theme.dart';
 
 /// Reusable presentation primitives shared by feature panels.
 ///
@@ -23,6 +24,13 @@ class EarthPanel extends StatelessWidget {
       child: SizedBox(
         width: width,
         child: Card(
+          color: surfaceColor.withValues(alpha: .72),
+          surfaceTintColor: Colors.transparent,
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(14),
+            side: const BorderSide(color: Colors.white12),
+          ),
           child: Padding(
             padding: const EdgeInsets.all(20),
             child: Column(
@@ -66,6 +74,13 @@ class EarthMetric extends StatelessWidget {
         child: SizedBox(
           width: 210,
           child: Card(
+            color: surfaceColor.withValues(alpha: .72),
+            surfaceTintColor: Colors.transparent,
+            elevation: 0,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(14),
+              side: const BorderSide(color: Colors.white12),
+            ),
             child: Padding(
               padding: const EdgeInsets.all(18),
               child: Column(

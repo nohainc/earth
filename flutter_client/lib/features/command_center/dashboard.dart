@@ -149,31 +149,34 @@ class Dashboard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 18),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'RESOURCE RESERVES   $resourceText',
-                    style: const TextStyle(
-                      fontSize: 11,
-                      letterSpacing: .8,
-                      color: mutedColor,
-                    ),
+          Container(
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .72),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: Colors.white12),
+            ),
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'RESOURCE RESERVES   $resourceText',
+                  style: const TextStyle(
+                    fontSize: 11,
+                    letterSpacing: .8,
+                    color: mutedColor,
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'STARTER ECONOMY   living-cost ${state.world['livingCostIndex'] ?? '—'}  ·  productive ${state.world['economicStartIndex'] ?? '—'}',
-                    style: const TextStyle(
-                      fontSize: 10,
-                      letterSpacing: .6,
-                      color: mutedColor,
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  'STARTER ECONOMY   living-cost ${state.world['livingCostIndex'] ?? '—'}  ·  productive ${state.world['economicStartIndex'] ?? '—'}',
+                  style: const TextStyle(
+                    fontSize: 10,
+                    letterSpacing: .6,
+                    color: mutedColor,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
           ),
           const SizedBox(height: 14),

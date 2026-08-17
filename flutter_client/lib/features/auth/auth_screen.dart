@@ -205,6 +205,13 @@ class _AuthScreenState extends State<AuthScreen> {
           child: ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 440),
             child: Card(
+              color: surfaceColor.withValues(alpha: .85),
+              surfaceTintColor: Colors.transparent,
+              elevation: 0,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+                side: const BorderSide(color: Colors.white12),
+              ),
               margin: const EdgeInsets.all(24),
               child: Padding(
                 padding: const EdgeInsets.all(28),
