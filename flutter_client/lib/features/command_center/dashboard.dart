@@ -98,16 +98,19 @@ class Dashboard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
-              final useFourColumns = availableWidth >= 700;
-              final itemWidth = useFourColumns
-                  ? (availableWidth - 3 * 14) / 4
-                  : (availableWidth - 14) / 2;
+              final numCols = availableWidth >= 980
+                  ? 5
+                  : availableWidth >= 620
+                      ? 3
+                      : 2;
+              final itemWidth = (availableWidth - (numCols - 1) * 14) / numCols;
 
               final matVal = state.resources['materials'] ??
                   state.resources['material'] ??
                   '0';
               final compVal = state.resources['components'] ?? '0';
               final energyVal = state.resources['energy'] ?? '0';
+              final computeVal = state.resources['compute'] ?? '0';
 
               return Wrap(
                 spacing: 14,
@@ -140,6 +143,13 @@ class Dashboard extends StatelessWidget {
                     label: 'ENERGY',
                     value: formatWholeNumber(energyVal),
                     accent: Colors.amberAccent,
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    icon: Icons.memory_rounded,
+                    label: 'COMPUTE',
+                    value: formatWholeNumber(computeVal),
+                    accent: violetColor,
                   ),
                 ],
               );
