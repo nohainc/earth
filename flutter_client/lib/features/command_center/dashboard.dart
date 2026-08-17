@@ -107,9 +107,6 @@ class Dashboard extends StatelessWidget {
                   '0';
               final compVal = state.resources['components'] ?? '0';
               final energyVal = state.resources['energy'] ?? '0';
-              final computeVal = state.resources['compute'] ??
-                  state.resources['computing'] ??
-                  '0';
 
               String formatRes(dynamic v) =>
                   v is num ? v.toInt().toString() : v.toString();
@@ -118,7 +115,6 @@ class Dashboard extends StatelessWidget {
                 spacing: 14,
                 runSpacing: 14,
                 children: [
-                  // Row 1: Citizen & Finance
                   EarthMetric(
                     width: itemWidth,
                     icon: Icons.account_balance_wallet_outlined,
@@ -140,71 +136,6 @@ class Dashboard extends StatelessWidget {
                       ],
                     ),
                   ),
-                  EarthMetric(
-                    width: itemWidth,
-                    icon: Icons.workspace_premium_outlined,
-                    label: 'STANDING',
-                    value: '${state.human['standing']}',
-                    accent: Colors.tealAccent,
-                    hint:
-                        'Civic reputation within your city, influencing voting weight.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'CIVIC STANDING',
-                      subtitle: 'Municipal influence and reputation',
-                      items: [
-                        {
-                          'label': 'Standing Score (${state.human['standing']})',
-                          'description':
-                              'Earned through active economic production, community contributions, and assembly participation. Enhances your voting weight in local ordinances.',
-                        },
-                      ],
-                    ),
-                  ),
-                  EarthMetric(
-                    width: itemWidth,
-                    icon: Icons.account_tree_outlined,
-                    label: 'LEGACY',
-                    value: '${state.human['legacy']}',
-                    accent: Colors.indigoAccent,
-                    hint:
-                        'Dynastic achievement score passed down to designated successors.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'DYNASTIC LEGACY',
-                      subtitle: 'Generational achievement and lineage',
-                      items: [
-                        {
-                          'label': 'Legacy Points (${state.human['legacy']})',
-                          'description':
-                              'Accumulated across lifetimes. Determines your historical standing in the UC Archive and unlocks dynastic foundation privileges.',
-                        },
-                      ],
-                    ),
-                  ),
-                  EarthMetric(
-                    width: itemWidth,
-                    icon: Icons.favorite_border_outlined,
-                    label: 'CITIZEN HEALTH',
-                    value: '${state.human['health'] ?? 100}%',
-                    accent: Colors.tealAccent,
-                    hint:
-                        'Biological vitality and stamina of your persona. Deteriorates with aging or healthcare deficits.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'CITIZEN BIOLOGICAL HEALTH',
-                      subtitle: 'Physical vitality & aging indicators',
-                      items: [
-                        {
-                          'label': 'Biological Health (${state.human['health'] ?? 100}%)',
-                          'description':
-                              'Represents your persona\'s physical condition. Maintained through local healthcare services and good living conditions.',
-                        },
-                      ],
-                    ),
-                  ),
-
-                  // Row 2: Physical Commodities
                   EarthMetric(
                     width: itemWidth,
                     icon: Icons.view_in_ar_outlined,
@@ -264,27 +195,6 @@ class Dashboard extends StatelessWidget {
                           'label': 'Energy Reserves (${formatRes(energyVal)})',
                           'description':
                               'Electrical energy capacity required for production cycles and grid stability.',
-                        },
-                      ],
-                    ),
-                  ),
-                  EarthMetric(
-                    width: itemWidth,
-                    icon: Icons.memory_outlined,
-                    label: 'COMPUTE',
-                    value: formatRes(computeVal),
-                    accent: violetColor,
-                    hint:
-                        'Processing capacity for AI assistants and technology R&D progress.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'COMPUTE CAPACITY (Q)',
-                      subtitle: 'Processing nodes and simulation intelligence',
-                      items: [
-                        {
-                          'label': 'Compute Power (${formatRes(computeVal)})',
-                          'description':
-                              'Computational units allocated toward technology research breakthroughs and automated assistant policies.',
                         },
                       ],
                     ),
