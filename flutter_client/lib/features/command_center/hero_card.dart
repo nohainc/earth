@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
-import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 /// The command-center executive citizen and planetary cockpit.
@@ -26,14 +25,6 @@ class HeroCard extends StatelessWidget {
       statusText = 'NOMINAL';
       statusColor = Colors.tealAccent;
     }
-
-    final lci = state.world['livingCostIndex'] ??
-        state.world['living_cost_index'] ??
-        '1.00';
-    final esi = state.world['essentialServicesIndex'] ??
-        state.world['essential_services_index'] ??
-        state.world['infrastructure_health'] ??
-        '1.00';
 
     final citizenName =
         (state.human['name'] as String?)?.toUpperCase() ?? 'ALEXANDER VANE';
@@ -71,55 +62,6 @@ class HeroCard extends StatelessWidget {
                         fontSize: 10,
                         letterSpacing: 1.2,
                         fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    IconButton(
-                      icon: Icon(
-                        Icons.info_outline,
-                        size: 13,
-                        color: mutedColor.withValues(alpha: .8),
-                      ),
-                      tooltip: 'Citizen & Simulation Details',
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () => showEarthInfoDialog(
-                        context,
-                        title: 'CITIZEN & SIMULATION STATUS',
-                        subtitle:
-                            'Identity, personal status, and planetary indices',
-                        items: [
-                          {
-                            'label':
-                                'Citizen Identity ($citizenName · Age $citizenAge)',
-                            'description':
-                                'Your active human persona in the UC simulation. Generational knowledge, property ownership, and dynastic lineage are tied to this persona.',
-                          },
-                          {
-                            'label':
-                                'Personal Standing (${state.human['standing'] ?? '0'}) & Legacy (${state.human['legacy'] ?? '0'})',
-                            'description':
-                                'Standing measures civic influence and assembly voting weight. Legacy tracks dynastic achievement points passed down to successors.',
-                          },
-                          {
-                            'label':
-                                'Biological Health (${state.human['health'] ?? '100'}%)',
-                            'description':
-                                'Physical condition and stamina of your persona.',
-                          },
-                          {
-                            'label':
-                                'World Health ($healthScore / 100 · $statusText)',
-                            'description':
-                                'Planetary simulation vitality reflecting aggregate resource availability, infrastructure uptime, and macroeconomic stability.',
-                          },
-                          {
-                            'label':
-                                'Living Cost Index ($lci) · Essential Services ($esi)',
-                            'description':
-                                'Baseline upkeep cost multiplier and municipal utility uptime across chartered cities.',
-                          },
-                        ],
                       ),
                     ),
                   ],

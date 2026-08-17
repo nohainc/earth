@@ -16,28 +16,6 @@ class OpportunityPanel extends StatelessWidget {
   Widget build(BuildContext context) => EarthPanel(
         title: 'LIVE OPPORTUNITIES',
         width: double.infinity,
-        onInfoTap: () => showEarthInfoDialog(
-          context,
-          title: 'LIVE SIGNALS & OPPORTUNITIES',
-          subtitle: 'Prioritized simulation intelligence alerts',
-          items: [
-            {
-              'label': 'Orange / High Priority',
-              'description':
-                  'Immediate decision vectors (e.g. tight commodity supply, urgent votes closing soon, high market price shifts).',
-            },
-            {
-              'label': 'Violet / Medium Priority',
-              'description':
-                  'Standard operational updates (e.g. pending civic proposals, active commercial contract notices).',
-            },
-            {
-              'label': 'Teal / Low Priority / Tech',
-              'description':
-                  'Longer-term advantages (e.g. ongoing research breakthroughs, R&D funding progress).',
-            },
-          ],
-        ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: opportunities.isEmpty
@@ -59,23 +37,18 @@ class OpportunityPanel extends StatelessWidget {
                           : violetColor;
 
                   String targetSection = 'command';
-                  String actionText = 'View →';
                   if (signal.contains('market')) {
                     targetSection = 'market';
-                    actionText = 'View Market →';
                   } else if (signal.contains('governance') ||
                       signal.contains('civic') ||
                       signal.contains('vote')) {
                     targetSection = 'civic';
-                    actionText = 'Review Vote →';
                   } else if (signal.contains('research') ||
                       signal.contains('tech')) {
                     targetSection = 'technology';
-                    actionText = 'Open Research →';
                   } else if (signal.contains('business') ||
                       signal.contains('production')) {
                     targetSection = 'business';
-                    actionText = 'Open Business →';
                   }
 
                   return Padding(
@@ -151,23 +124,6 @@ class OpportunityPanel extends StatelessWidget {
                                           letterSpacing: .8,
                                         ),
                                       ),
-                                      if (targetSection != 'command') ...[
-                                        const Text(
-                                          '·',
-                                          style: TextStyle(
-                                            color: Colors.white24,
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                        Text(
-                                          actionText,
-                                          style: const TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: violetColor,
-                                          ),
-                                        ),
-                                      ],
                                     ],
                                   ),
                                 ],

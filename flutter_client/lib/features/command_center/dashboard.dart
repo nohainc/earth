@@ -119,21 +119,6 @@ class Dashboard extends StatelessWidget {
                     label: 'CREDITS',
                     value: formatCreditsAmount(state.human['credits']),
                     accent: violetColor,
-                    hint:
-                        'Personal liquid currency for market trade, machinery, and investments.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'CREDITS & CURRENCY',
-                      subtitle: 'Personal liquid account balance',
-                      items: [
-                        {
-                          'label':
-                              'Liquid Reserve (${formatCreditsAmount(state.human['credits'])})',
-                          'description':
-                              'The non-inflationary base currency of EARTH. Used to purchase physical commodities, machinery, research licenses, and pay city taxes.',
-                        },
-                      ],
-                    ),
                   ),
                   EarthMetric(
                     width: itemWidth,
@@ -141,21 +126,6 @@ class Dashboard extends StatelessWidget {
                     label: 'MATERIALS',
                     value: formatWholeNumber(matVal),
                     accent: Colors.tealAccent,
-                    hint:
-                        'Base matter and raw industrial feedstock for manufacturing and construction.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'RAW MATERIALS (M)',
-                      subtitle: 'Industrial base feedstock',
-                      items: [
-                        {
-                          'label':
-                              'Stockpile Quantity (${formatWholeNumber(matVal)})',
-                          'description':
-                              'Raw physical matter used to manufacture components and construct city infrastructure buildings.',
-                        },
-                      ],
-                    ),
                   ),
                   EarthMetric(
                     width: itemWidth,
@@ -163,21 +133,6 @@ class Dashboard extends StatelessWidget {
                     label: 'COMPONENTS',
                     value: formatWholeNumber(compVal),
                     accent: cyanAccentColor,
-                    hint:
-                        'Precision sub-assemblies and replacement parts for machinery.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'MANUFACTURED COMPONENTS (C)',
-                      subtitle: 'High-precision mechanical sub-assemblies',
-                      items: [
-                        {
-                          'label':
-                              'Stockpile Quantity (${formatWholeNumber(compVal)})',
-                          'description':
-                              'High-grade manufactured parts required to maintain, upgrade, and operate machinery.',
-                        },
-                      ],
-                    ),
                   ),
                   EarthMetric(
                     width: itemWidth,
@@ -185,21 +140,6 @@ class Dashboard extends StatelessWidget {
                     label: 'ENERGY',
                     value: formatWholeNumber(energyVal),
                     accent: Colors.amberAccent,
-                    hint:
-                        'Electrical power consumed per cycle to power machines and infrastructure.',
-                    onInfoTap: () => showEarthInfoDialog(
-                      context,
-                      title: 'POWER & ENERGY (E)',
-                      subtitle: 'Industrial and municipal power units',
-                      items: [
-                        {
-                          'label':
-                              'Energy Reserves (${formatWholeNumber(energyVal)})',
-                          'description':
-                              'Electrical energy capacity required for production cycles and grid stability.',
-                        },
-                      ],
-                    ),
                   ),
                 ],
               );
