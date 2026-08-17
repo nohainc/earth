@@ -726,6 +726,8 @@ class AuthorityHistoryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'AUTHORITY / GOVERNANCE HISTORY',
+      infoDescription:
+          '• Governance & Authority Journal: Canonical record of institutional role transitions, constitutional delegations, and executive responsibilities.\n\n• Authority Lifecycle:\n  - CLAIM_ROLE: Assumption of public office, ministerial oversight, or judicial delegacy.\n  - DELEGATE_ROLE: Formal delegation of voting or arbitral authority to a designated citizen surrogate.\n  - RESIGN_ROLE: Orderly devolution of office upon term completion or voluntary departure.',
       child: authorityEvents.isEmpty
           ? const Text(
               'Role claims and resignations will appear here as your institutional authority develops.',
@@ -734,12 +736,85 @@ class AuthorityHistoryPanel extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: authorityEvents.take(8).map((raw) {
-                final event = raw as Map<String, dynamic>;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Text(
-                    'DAY ${event['game_day']}  ·  ${event['action']}  ·  ROLE ${event['role_id']}',
-                    style: const TextStyle(fontSize: 11),
+                if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
+                final event = raw;
+                final day = event['game_day']?.toString() ?? '-';
+                final action = (event['action']?.toString() ?? 'CLAIM').toUpperCase();
+                final roleId = event['role_id']?.toString() ?? 'ROLE';
+
+                Color actionColor = cyanAccentColor;
+                IconData actionIcon = Icons.verified_user_outlined;
+
+                if (action.contains('RESIGN')) {
+                  actionColor = Colors.orangeAccent;
+                  actionIcon = Icons.logout_rounded;
+                } else if (action.contains('DELEGATE')) {
+                  actionColor = violetColor;
+                  actionIcon = Icons.forward_to_inbox_outlined;
+                }
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(5),
+                        decoration: BoxDecoration(
+                          color: actionColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Icon(actionIcon, size: 14, color: actionColor),
+                      ),
+                      const SizedBox(width: 10),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .05),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'DAY $day',
+                          style: const TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                            color: mutedColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'ROLE: $roleId',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: inkColor,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: actionColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: actionColor.withValues(alpha: .3)),
+                        ),
+                        child: Text(
+                          action,
+                          style: TextStyle(
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w800,
+                            color: actionColor,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),

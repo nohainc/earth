@@ -4,6 +4,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/nano_markup_helper.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import '../governance/governance_dialogs.dart';
 import '../lifecycle/lifecycle_dialogs.dart';
 
@@ -34,10 +35,11 @@ class _ContractsPanelState extends State<ContractsPanel> {
   bool _canArbitrate() {
     final myId = widget.state.human['id']?.toString() ?? 'H-0044';
     return widget.state.roles.any((raw) {
-      if (raw is! Map<String, dynamic>) return false;
-      return raw['id'] == 'ROLE-OUC-DELEGATE' &&
-          (raw['human_id'] == myId || raw['delegate_id'] == myId);
-    }) || myId == 'H-0044';
+          if (raw is! Map<String, dynamic>) return false;
+          return raw['id'] == 'ROLE-OUC-DELEGATE' &&
+              (raw['human_id'] == myId || raw['delegate_id'] == myId);
+        }) ||
+        myId == 'H-0044';
   }
 
   Future<void> _handleAccept(String contractId) async {
@@ -50,7 +52,8 @@ class _ContractsPanelState extends State<ContractsPanel> {
       await widget.action(() => const EarthApi().acceptContract(contractId));
       if (mounted) {
         setState(() {
-          _statusFeedback = 'Contract $contractId accepted and confirmed by server.';
+          _statusFeedback =
+              'Contract $contractId accepted and confirmed by server.';
         });
       }
     } catch (e) {
@@ -92,6 +95,25 @@ class _ContractsPanelState extends State<ContractsPanel> {
     }
   }
 
+  IconData _getContractIcon(String kind) {
+    if (kind.contains('supply') || kind.contains('commodity')) {
+      return Icons.inventory_2_outlined;
+    }
+    if (kind.contains('capacity') || kind.contains('power')) {
+      return Icons.bolt_outlined;
+    }
+    if (kind.contains('intellectual') || kind.contains('service')) {
+      return Icons.psychology_outlined;
+    }
+    if (kind.contains('employment') || kind.contains('labor')) {
+      return Icons.badge_outlined;
+    }
+    if (kind.contains('strategic') || kind.contains('treaty')) {
+      return Icons.policy_outlined;
+    }
+    return Icons.handshake_outlined;
+  }
+
   @override
   Widget build(BuildContext context) {
     final contractList = widget.contracts.isNotEmpty
@@ -100,145 +122,415 @@ class _ContractsPanelState extends State<ContractsPanel> {
     final myId = widget.state.human['id']?.toString() ?? 'H-0044';
     final canArbitrate = _canArbitrate();
 
+    int activeContractsCount = 0;
+    int disputedContractsCount = 0;
+    double totalContractValue = 0.0;
+
+    for (final raw in contractList) {
+      if (raw is Map<String, dynamic>) {
+        final status = raw['status']?.toString() ?? 'proposed';
+        final isDisputed =
+            raw['dispute_id'] != null || raw['disputeId'] != null;
+        final amt = asDoubleOr(raw['amount'], 0.0);
+
+        if (status == 'accepted' || status == 'proposed') {
+          activeContractsCount++;
+          totalContractValue += amt;
+        }
+        if (isDisputed) {
+          disputedContractsCount++;
+        }
+      }
+    }
+
     return EarthPanel(
       key: widget.panelKey,
       title: 'NEGOTIATED CONTRACTS & ARBITRATION',
+      infoDescription:
+          '• Bilateral Agreements & Escrow: Legally enforceable contractual obligations entered into between citizens or corporations.\n\n• Lifecycle Stages:\n  - PROPOSED: Awaiting bilateral counterparty acceptance or cancellation by proposer.\n  - ACCEPTED / ACTIVE: Escrow funds locked and recurring service or commodity transfers active.\n  - DISPUTED: Contested obligations escalated to OUC judicial delegates for formal arbitration.\n  - COMPLETED: All delivery milestones fulfilled and retained escrows disbursed.\n\n• Judicial Arbitration: Authorized OUC delegates arbitrate active disputes, issuing legally binding award resolutions.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1. EXECUTIVE CONTRACT PORTFOLIO HEADER
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .85),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: LayoutBuilder(
+              builder: (context, metricConstraints) {
+                final metricWidth = metricConstraints.maxWidth;
+                final numCols = metricWidth >= 600 ? 3 : 1;
+                final itemWidth = numCols == 1
+                    ? metricWidth
+                    : (metricWidth - (numCols - 1) * 12) / numCols;
+
+                return Wrap(
+                  spacing: 12,
+                  runSpacing: 10,
+                  children: [
+                    _metricMiniBox(
+                      width: itemWidth,
+                      title: 'ACTIVE AGREEMENTS',
+                      value: '$activeContractsCount',
+                      accent: cyanAccentColor,
+                      icon: Icons.handshake_outlined,
+                    ),
+                    _metricMiniBox(
+                      width: itemWidth,
+                      title: 'COMMITTED ESCROWS',
+                      value: '${formatWholeNumber(totalContractValue)} C',
+                      accent: violetColor,
+                      icon: Icons.lock_clock_outlined,
+                    ),
+                    _metricMiniBox(
+                      width: itemWidth,
+                      title: 'OPEN DISPUTES',
+                      value: '$disputedContractsCount',
+                      accent: disputedContractsCount > 0
+                          ? Colors.orangeAccent
+                          : Colors.tealAccent,
+                      icon: Icons.gavel_outlined,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
           if (_statusFeedback != null) ...[
             Container(
-              padding: const EdgeInsets.all(8),
-              margin: const EdgeInsets.only(bottom: 12),
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              margin: const EdgeInsets.only(bottom: 14),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(12),
-                borderRadius: BorderRadius.circular(4),
+                color: violetColor.withValues(alpha: .15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: violetColor.withValues(alpha: .3)),
               ),
-              child: Text(
-                _statusFeedback!,
-                style: const TextStyle(fontSize: 11, color: Colors.white70),
+              child: Row(
+                children: [
+                  const Icon(Icons.info_outline, size: 16, color: violetColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      _statusFeedback!,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w600,
+                        color: inkColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
+
+          // 2. CONTRACT AGREEMENTS STREAM
           if (contractList.isEmpty)
-            const Text(
-              'No bilateral agreements on record.',
-              style: TextStyle(color: mutedColor, fontSize: 11),
+            const Padding(
+              padding: EdgeInsets.symmetric(vertical: 16),
+              child: Center(
+                child: Text(
+                  'No bilateral agreements on record.',
+                  style: TextStyle(color: mutedColor, fontSize: 11),
+                ),
+              ),
             )
           else
             ...contractList.take(12).map((raw) {
               if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
               final contract = raw;
-              final contractId = contract['id']?.toString() ?? 'CTR-UNKNOWN';
-              final proposerId = contract['proposer_id']?.toString() ?? '';
-              final counterpartyId = contract['counterparty_id']?.toString() ?? '';
-              final title = contract['title']?.toString() ?? 'Agreement';
-              final kind = contract['kind']?.toString() ?? 'contract';
+              final contractId =
+                  contract['id']?.toString() ?? 'CTR-UNKNOWN';
+              final proposerId =
+                  contract['proposer_id']?.toString() ?? '';
+              final counterpartyId =
+                  contract['counterparty_id']?.toString() ?? '';
+              final title =
+                  contract['title']?.toString() ?? 'Agreement';
+              final kind = (contract['kind']?.toString() ?? 'contract')
+                  .toUpperCase();
               final amount = contract['amount'] ?? 0;
-              final status = contract['status']?.toString() ?? 'proposed';
-              final startDay = contract['start_day'] ?? contract['startDay'] ?? '-';
-              final endDay = contract['end_day'] ?? contract['endDay'] ?? '-';
-              final disputeId = contract['dispute_id'] ?? contract['disputeId'];
-              final disputeStatus = contract['dispute_status'] ?? contract['disputeStatus'];
+              final status =
+                  contract['status']?.toString() ?? 'proposed';
+              final startDay =
+                  contract['start_day'] ?? contract['startDay'] ?? '-';
+              final endDay =
+                  contract['end_day'] ?? contract['endDay'] ?? '-';
+              final disputeId =
+                  contract['dispute_id'] ?? contract['disputeId'];
+              final disputeStatus =
+                  contract['dispute_status'] ?? contract['disputeStatus'];
               final isDisputed = disputeId != null;
 
               final isProposer = proposerId == myId;
-              final isCounterparty = counterpartyId == myId || counterpartyId.isEmpty;
+              final isCounterparty =
+                  counterpartyId == myId || counterpartyId.isEmpty;
               final isPending = _pendingContractIds.contains(contractId);
               final isBusy = widget.busy || isPending;
 
               Color statusColor = mutedColor;
               if (status == 'accepted') statusColor = cyanAccentColor;
-              if (status == 'cancelled' || status == 'rejected') statusColor = Colors.redAccent;
+              if (status == 'cancelled' || status == 'rejected') {
+                statusColor = Colors.redAccent;
+              }
               if (isDisputed) statusColor = Colors.orangeAccent;
 
-                    final rawTerms = contract['terms_json'] ?? contract['terms'];
-                    final dynamic decodedTerms = rawTerms is String ? NanoMarkupHelper.decode(rawTerms) : rawTerms;
-                    final Map<dynamic, dynamic>? termsMap = decodedTerms is Map ? decodedTerms : null;
+              final rawTerms =
+                  contract['terms_json'] ?? contract['terms'];
+              final dynamic decodedTerms = rawTerms is String
+                  ? NanoMarkupHelper.decode(rawTerms)
+                  : rawTerms;
+              final Map<dynamic, dynamic>? termsMap =
+                  decodedTerms is Map ? decodedTerms : null;
 
-                    return Container(
-                      margin: const EdgeInsets.only(bottom: 12),
-                      padding: const EdgeInsets.all(12),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 12),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: surfaceColor.withValues(alpha: .75),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(
+                    color: isDisputed
+                        ? Colors.orangeAccent.withValues(alpha: .4)
+                        : (status == 'accepted'
+                            ? cyanAccentColor.withValues(alpha: .3)
+                            : Colors.white10),
+                  ),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: statusColor.withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(_getContractIcon(kind.toLowerCase()),
+                              size: 15, color: statusColor),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      '$title ($contractId)',
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 12,
+                                        color: inkColor,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 7, vertical: 2.5),
+                                    decoration: BoxDecoration(
+                                      color: statusColor.withValues(alpha: .15),
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(
+                                        color:
+                                            statusColor.withValues(alpha: .35),
+                                      ),
+                                    ),
+                                    child: Text(
+                                      isDisputed
+                                          ? 'DISPUTED ($disputeStatus)'
+                                          : status.toUpperCase(),
+                                      style: TextStyle(
+                                        fontSize: 9.5,
+                                        fontWeight: FontWeight.w800,
+                                        letterSpacing: .7,
+                                        color: statusColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Kind: $kind · Amount: $amount C · Schedule: Day $startDay → Day $endDay',
+                                style: const TextStyle(
+                                  fontSize: 10.5,
+                                  color: mutedColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 8),
+
+                    // Parties & Schedule Info Box
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 10, vertical: 6),
                       decoration: BoxDecoration(
-                        color: Colors.white.withAlpha(6),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: Colors.white10),
+                        color: Colors.white.withValues(alpha: .03),
+                        borderRadius: BorderRadius.circular(6),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  '$title ($contractId)',
-                                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 12),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Text(
-                                isDisputed ? 'DISPUTED ($disputeStatus)' : status.toUpperCase(),
-                                style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: statusColor),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Kind: $kind · Amount: $amount C · Schedule: Day $startDay → Day $endDay',
-                            style: const TextStyle(fontSize: 11, color: mutedColor),
-                          ),
-                          const SizedBox(height: 2),
                           Text(
                             'Parties: Proposer $proposerId ⇄ Counterparty $counterpartyId',
-                            style: const TextStyle(fontSize: 10, color: mutedColor),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              color: mutedColor,
+                              fontWeight: FontWeight.w500,
+                            ),
                           ),
                           if (termsMap != null && termsMap.isNotEmpty) ...[
                             const SizedBox(height: 2),
                             Text(
                               'Terms: ${termsMap.entries.map((e) => '${e.key}: ${e.value}').join(' · ')}',
-                              style: const TextStyle(fontSize: 10, color: Colors.white70),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: inkColor,
+                              ),
                             ),
                           ],
-                          if (isDisputed) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              'Dispute details: ID $disputeId · Reason: ${contract['dispute_reason'] ?? 'Under review'}',
-                              style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                        ],
+                      ),
+                    ),
+
+                    if (isDisputed) ...[
+                      const SizedBox(height: 8),
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        decoration: BoxDecoration(
+                          color: Colors.orangeAccent.withValues(alpha: .1),
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(
+                              color: Colors.orangeAccent.withValues(alpha: .3)),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.gavel_outlined,
+                                size: 14, color: Colors.orangeAccent),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Dispute details: ID $disputeId · Reason: ${contract['dispute_reason'] ?? 'Under review'}',
+                                style: const TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.orangeAccent,
+                                ),
+                              ),
                             ),
                           ],
-                    const SizedBox(height: 8),
+                        ),
+                      ),
+                    ],
+
+                    const SizedBox(height: 10),
+
+                    // Action Buttons Hub
                     Wrap(
                       spacing: 8,
                       runSpacing: 6,
                       children: [
-                        // Accept: Available only for proposed contracts where current user is counterparty
                         if (status == 'proposed' && isCounterparty)
-                          OutlinedButton(
-                            onPressed: isBusy ? null : () => _handleAccept(contractId),
-                            child: const Text('ACCEPT'),
-                          ),
-                        // Cancel: Available for proposed contracts by proposer or counterparty
-                        if (status == 'proposed' && (isProposer || isCounterparty))
-                          OutlinedButton(
-                            onPressed: isBusy ? null : () => _handleCancel(contractId),
-                            child: const Text('CANCEL'),
-                          ),
-                        // Dispute: Available for accepted or completed contracts with no active dispute
-                        if ((status == 'accepted' || status == 'completed') && !isDisputed)
-                          OutlinedButton(
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: cyanAccentColor,
+                              foregroundColor: Colors.black,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                            ),
                             onPressed: isBusy
                                 ? null
-                                : () => showDisputeDialog(context, widget.action, contractId),
-                            child: const Text('OPEN DISPUTE'),
+                                : () => _handleAccept(contractId),
+                            icon: const Icon(Icons.check_circle_outline,
+                                size: 14),
+                            label: const Text('ACCEPT',
+                                style: TextStyle(
+                                    fontSize: 10, fontWeight: FontWeight.w800)),
                           ),
-                        // Arbitrate: Available for authorized delegates/arbitrators on disputed contracts
+                        if (status == 'proposed' &&
+                            (isProposer || isCounterparty))
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.redAccent,
+                              side: BorderSide(
+                                  color: Colors.redAccent
+                                      .withValues(alpha: .35)),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                            ),
+                            onPressed: isBusy
+                                ? null
+                                : () => _handleCancel(contractId),
+                            icon: const Icon(Icons.cancel_outlined, size: 14),
+                            label: const Text('CANCEL',
+                                style: TextStyle(
+                                    fontSize: 10, fontWeight: FontWeight.w700)),
+                          ),
+                        if ((status == 'accepted' ||
+                                status == 'completed') &&
+                            !isDisputed)
+                          OutlinedButton.icon(
+                            style: OutlinedButton.styleFrom(
+                              foregroundColor: Colors.orangeAccent,
+                              side: BorderSide(
+                                  color: Colors.orangeAccent
+                                      .withValues(alpha: .35)),
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                            ),
+                            onPressed: isBusy
+                                ? null
+                                : () => showDisputeDialog(
+                                    context, widget.action, contractId),
+                            icon: const Icon(Icons.warning_amber_rounded,
+                                size: 14),
+                            label: const Text('OPEN DISPUTE',
+                                style: TextStyle(
+                                    fontSize: 10, fontWeight: FontWeight.w700)),
+                          ),
                         if (isDisputed && canArbitrate)
-                          OutlinedButton(
+                          FilledButton.icon(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: Colors.orangeAccent,
+                              foregroundColor: Colors.black,
+                              visualDensity: VisualDensity.compact,
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 6),
+                            ),
                             onPressed: isBusy
                                 ? null
-                                : () => showResolveDialog(context, widget.action, contractId),
-                            child: const Text('ARBITRATE & RESOLVE'),
+                                : () => showResolveDialog(
+                                    context, widget.action, contractId),
+                            icon: const Icon(Icons.gavel_outlined, size: 14),
+                            label: const Text('ARBITRATE & RESOLVE',
+                                style: TextStyle(
+                                    fontSize: 10, fontWeight: FontWeight.w800)),
                           ),
                       ],
                     ),
@@ -246,14 +538,78 @@ class _ContractsPanelState extends State<ContractsPanel> {
                 ),
               );
             }),
+
           const SizedBox(height: 8),
+
           OutlinedButton.icon(
+            style: OutlinedButton.styleFrom(
+              foregroundColor: cyanAccentColor,
+              side:
+                  BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+            ),
             onPressed: widget.busy
                 ? null
                 : () => showContractComposerDialog(context, widget.action),
-            icon: const Icon(Icons.add, size: 14),
-            label: const Text('PROPOSE NEW AGREEMENT'),
+            icon: const Icon(Icons.add_rounded, size: 16),
+            label: const Text(
+              'PROPOSE NEW AGREEMENT',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .6,
+              ),
+            ),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _metricMiniBox({
+    required double width,
+    required String title,
+    required String value,
+    required Color accent,
+    required IconData icon,
+  }) {
+    return Container(
+      width: width,
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: surfaceColor.withValues(alpha: .7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .8,
+                  color: mutedColor,
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                value,
+                style: TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.w800,
+                  color: accent,
+                  letterSpacing: -.3,
+                ),
+              ),
+            ],
+          ),
+          Icon(icon, size: 16, color: accent),
         ],
       ),
     );

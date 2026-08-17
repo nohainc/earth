@@ -70,6 +70,10 @@ void main() {
     );
 
     expect(find.text('NEGOTIATED CONTRACTS & ARBITRATION'), findsOneWidget);
+    expect(find.text('ACTIVE AGREEMENTS'), findsOneWidget);
+    expect(find.text('COMMITTED ESCROWS'), findsOneWidget);
+    expect(find.text('OPEN DISPUTES'), findsOneWidget);
+
     expect(find.text('Components supply agreement (CTR-001)'), findsOneWidget);
     expect(find.text('PROPOSED'), findsOneWidget);
     expect(find.text('ACCEPT'), findsOneWidget);
@@ -79,6 +83,14 @@ void main() {
     expect(find.text('DISPUTED (open)'), findsOneWidget);
     expect(find.text('ARBITRATE & RESOLVE'), findsOneWidget);
     expect(find.text('PROPOSE NEW AGREEMENT'), findsOneWidget);
+
+    // Verify info dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Bilateral Agreements & Escrow'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
 
     // Tap accept on CTR-001
     await tester.tap(find.text('ACCEPT'));
