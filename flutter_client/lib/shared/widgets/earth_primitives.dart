@@ -165,6 +165,7 @@ class EarthMetric extends StatelessWidget {
   final String label;
   final String value;
   final Color accent;
+  final IconData? icon;
   final double? width;
   final String? hint;
   final VoidCallback? onInfoTap;
@@ -174,6 +175,7 @@ class EarthMetric extends StatelessWidget {
     required this.label,
     required this.value,
     required this.accent,
+    this.icon,
     this.width,
     this.hint,
     this.onInfoTap,
@@ -200,15 +202,30 @@ class EarthMetric extends StatelessWidget {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Expanded(
-                    child: Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 10,
-                        letterSpacing: 1,
-                        color: accent,
-                        fontWeight: FontWeight.w700,
-                      ),
-                      overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (icon != null) ...[
+                          Icon(
+                            icon,
+                            size: 13,
+                            color: accent,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        Flexible(
+                          child: Text(
+                            label,
+                            style: TextStyle(
+                              fontSize: 10,
+                              letterSpacing: 1,
+                              color: accent,
+                              fontWeight: FontWeight.w700,
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                   if (hint != null || onInfoTap != null)

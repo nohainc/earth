@@ -41,10 +41,13 @@ class HeroCard extends StatelessWidget {
     final cityName =
         (state.institutions['city']?['name'] as String?)?.toUpperCase() ??
             'NEW CARTHAGE';
+    final corpName =
+        (state.institutions['corporation']?['name'] as String?)?.toUpperCase() ??
+            'KLINE WORKS';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.fromLTRB(28, 22, 28, 20),
+      padding: const EdgeInsets.fromLTRB(28, 24, 28, 24),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: Colors.white12),
@@ -90,6 +93,11 @@ class HeroCard extends StatelessWidget {
                               'Your active human citizen persona in the UC simulation. Generational knowledge, property ownership, and dynastic lineage are tied to this persona.',
                         },
                         {
+                          'label': 'Affiliation & Charter ($cityName · $corpName)',
+                          'description':
+                              'Chartered municipal residency and corporate enterprise affiliation driving cycle dividends and voting representation.',
+                        },
+                        {
                           'label': 'World Health ($healthScore / 100 · $statusText)',
                           'description':
                               'Planetary simulation vitality reflecting aggregate resource availability, infrastructure uptime, and macroeconomic stability.',
@@ -119,17 +127,26 @@ class HeroCard extends StatelessWidget {
                   color: inkColor,
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 'AGE $citizenAge  ·  $cityName  ·  GENERATION $citizenGen',
                 style: const TextStyle(
                   color: mutedColor,
                   fontSize: 11,
                   letterSpacing: .7,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                 ),
               ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 10),
+              Text(
+                'Affiliation: $corpName   ·   Biological Uptime: 98%   ·   Assembly Status: Active Member',
+                style: TextStyle(
+                  color: inkColor.withValues(alpha: .85),
+                  fontSize: 11,
+                  letterSpacing: .4,
+                ),
+              ),
+              const SizedBox(height: 10),
               Text(
                 'World Health: $healthScore / 100 ($statusText)   ·   Living Cost Index: $lci   ·   Essential Services Index: $esi',
                 style: const TextStyle(
@@ -141,53 +158,56 @@ class HeroCard extends StatelessWidget {
             ],
           ),
           Positioned(
-            right: 20,
-            top: 2,
-            child: Container(
-              width: 120,
-              height: 120,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: violetColor.withValues(alpha: .5),
-                  width: 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: violetColor.withValues(alpha: .22),
-                    blurRadius: 36,
+            right: 16,
+            top: 10,
+            bottom: 10,
+            child: Center(
+              child: Container(
+                width: 126,
+                height: 126,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: violetColor.withValues(alpha: .5),
+                    width: 1,
                   ),
-                ],
-              ),
-              child: Center(
-                child: Container(
-                  width: 72,
-                  height: 72,
-                  decoration: const BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: RadialGradient(
-                      colors: [violetColor, Color(0xff5145b7)],
+                  boxShadow: [
+                    BoxShadow(
+                      color: violetColor.withValues(alpha: .22),
+                      blurRadius: 36,
                     ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Text(
-                        'EARTH',
-                        style: TextStyle(fontSize: 8, letterSpacing: 2),
+                  ],
+                ),
+                child: Center(
+                  child: Container(
+                    width: 76,
+                    height: 76,
+                    decoration: const BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [violetColor, Color(0xff5145b7)],
                       ),
-                      Text(
-                        '${state.clock['day']}',
-                        style: const TextStyle(
-                          fontSize: 20,
-                          fontWeight: FontWeight.w800,
+                    ),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Text(
+                          'EARTH',
+                          style: TextStyle(fontSize: 8, letterSpacing: 2),
                         ),
-                      ),
-                      const Text(
-                        'DAY',
-                        style: TextStyle(fontSize: 8, letterSpacing: 1),
-                      ),
-                    ],
+                        Text(
+                          '${state.clock['day']}',
+                          style: const TextStyle(
+                            fontSize: 22,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const Text(
+                          'DAY',
+                          style: TextStyle(fontSize: 8, letterSpacing: 1),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

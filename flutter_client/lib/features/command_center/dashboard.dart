@@ -102,12 +102,26 @@ class Dashboard extends StatelessWidget {
                   ? (availableWidth - 3 * 14) / 4
                   : (availableWidth - 14) / 2;
 
+              final matVal = state.resources['materials'] ??
+                  state.resources['material'] ??
+                  '0';
+              final compVal = state.resources['components'] ?? '0';
+              final energyVal = state.resources['energy'] ?? '0';
+              final computeVal = state.resources['compute'] ??
+                  state.resources['computing'] ??
+                  '0';
+
+              String formatRes(dynamic v) =>
+                  v is num ? v.toInt().toString() : v.toString();
+
               return Wrap(
                 spacing: 14,
                 runSpacing: 14,
                 children: [
+                  // Row 1: Citizen & Finance
                   EarthMetric(
                     width: itemWidth,
+                    icon: Icons.account_balance_wallet_outlined,
                     label: 'CREDITS',
                     value: '${state.human['credits']} C',
                     accent: violetColor,
@@ -128,6 +142,7 @@ class Dashboard extends StatelessWidget {
                   ),
                   EarthMetric(
                     width: itemWidth,
+                    icon: Icons.workspace_premium_outlined,
                     label: 'STANDING',
                     value: '${state.human['standing']}',
                     accent: Colors.tealAccent,
@@ -148,6 +163,7 @@ class Dashboard extends StatelessWidget {
                   ),
                   EarthMetric(
                     width: itemWidth,
+                    icon: Icons.account_tree_outlined,
                     label: 'LEGACY',
                     value: '${state.human['legacy']}',
                     accent: Colors.indigoAccent,
@@ -168,6 +184,7 @@ class Dashboard extends StatelessWidget {
                   ),
                   EarthMetric(
                     width: itemWidth,
+                    icon: Icons.favorite_border_outlined,
                     label: 'CITIZEN HEALTH',
                     value: '${state.human['health'] ?? 100}%',
                     accent: Colors.tealAccent,
@@ -182,6 +199,92 @@ class Dashboard extends StatelessWidget {
                           'label': 'Biological Health (${state.human['health'] ?? 100}%)',
                           'description':
                               'Represents your persona\'s physical condition. Maintained through local healthcare services and good living conditions.',
+                        },
+                      ],
+                    ),
+                  ),
+
+                  // Row 2: Physical Commodities
+                  EarthMetric(
+                    width: itemWidth,
+                    icon: Icons.view_in_ar_outlined,
+                    label: 'MATERIALS',
+                    value: formatRes(matVal),
+                    accent: Colors.tealAccent,
+                    hint:
+                        'Base matter and raw industrial feedstock for manufacturing and construction.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'RAW MATERIALS (M)',
+                      subtitle: 'Industrial base feedstock',
+                      items: [
+                        {
+                          'label': 'Stockpile Quantity (${formatRes(matVal)})',
+                          'description':
+                              'Raw physical matter used to manufacture components and construct city infrastructure buildings.',
+                        },
+                      ],
+                    ),
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    icon: Icons.settings_outlined,
+                    label: 'COMPONENTS',
+                    value: formatRes(compVal),
+                    accent: cyanAccentColor,
+                    hint:
+                        'Precision sub-assemblies and replacement parts for machinery.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'MANUFACTURED COMPONENTS (C)',
+                      subtitle: 'High-precision mechanical sub-assemblies',
+                      items: [
+                        {
+                          'label': 'Stockpile Quantity (${formatRes(compVal)})',
+                          'description':
+                              'High-grade manufactured parts required to maintain, upgrade, and operate machinery.',
+                        },
+                      ],
+                    ),
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    icon: Icons.bolt_outlined,
+                    label: 'ENERGY',
+                    value: formatRes(energyVal),
+                    accent: Colors.amberAccent,
+                    hint:
+                        'Electrical power consumed per cycle to power machines and infrastructure.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'POWER & ENERGY (E)',
+                      subtitle: 'Industrial and municipal power units',
+                      items: [
+                        {
+                          'label': 'Energy Reserves (${formatRes(energyVal)})',
+                          'description':
+                              'Electrical energy capacity required for production cycles and grid stability.',
+                        },
+                      ],
+                    ),
+                  ),
+                  EarthMetric(
+                    width: itemWidth,
+                    icon: Icons.memory_outlined,
+                    label: 'COMPUTE',
+                    value: formatRes(computeVal),
+                    accent: violetColor,
+                    hint:
+                        'Processing capacity for AI assistants and technology R&D progress.',
+                    onInfoTap: () => showEarthInfoDialog(
+                      context,
+                      title: 'COMPUTE CAPACITY (Q)',
+                      subtitle: 'Processing nodes and simulation intelligence',
+                      items: [
+                        {
+                          'label': 'Compute Power (${formatRes(computeVal)})',
+                          'description':
+                              'Computational units allocated toward technology research breakthroughs and automated assistant policies.',
                         },
                       ],
                     ),
@@ -203,178 +306,6 @@ class Dashboard extends StatelessWidget {
               ),
             ),
           const SizedBox(height: 18),
-          // REDESIGNED RESOURCE RESERVES HUD
-          Container(
-            width: double.infinity,
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .72),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white12),
-            ),
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        const Text(
-                          'PHYSICAL COMMODITIES & RESERVES',
-                          style: TextStyle(
-                            fontSize: 10,
-                            letterSpacing: 1.1,
-                            fontWeight: FontWeight.w700,
-                            color: mutedColor,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: Icon(
-                            Icons.info_outline,
-                            size: 13,
-                            color: mutedColor.withValues(alpha: .7),
-                          ),
-                          tooltip: 'Commodity reserves information',
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
-                          onPressed: () => showEarthInfoDialog(
-                            context,
-                            title: 'PHYSICAL COMMODITIES & RESERVES',
-                            subtitle:
-                                'The 4 fundamental pillars of the physical economy',
-                            items: [
-                              {
-                                'label': 'Materials (M)',
-                                'description':
-                                    'Base matter and raw industrial feedstock utilized to manufacture components and construct city infrastructure.',
-                              },
-                              {
-                                'label': 'Components (C)',
-                                'description':
-                                    'Manufactured precision sub-assemblies and replacement parts required to operate and maintain machinery.',
-                              },
-                              {
-                                'label': 'Energy (E)',
-                                'description':
-                                    'Electrical power consumed per cycle to power machines and support municipal infrastructure grids.',
-                              },
-                              {
-                                'label': 'Compute (Q)',
-                                'description':
-                                    'Processing power utilized for AI assistants and technology R&D progress.',
-                              },
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final resWidth = constraints.maxWidth >= 600
-                        ? (constraints.maxWidth - 3 * 12) / 4
-                        : (constraints.maxWidth - 12) / 2;
-
-                    final entries = [
-                      {
-                        'key': 'Materials',
-                        'symbol': '❖',
-                        'val': state.resources['materials'] ??
-                            state.resources['material'] ??
-                            '0',
-                        'color': Colors.tealAccent,
-                      },
-                      {
-                        'key': 'Components',
-                        'symbol': '⚙',
-                        'val': state.resources['components'] ?? '0',
-                        'color': cyanAccentColor,
-                      },
-                      {
-                        'key': 'Energy',
-                        'symbol': '⚡',
-                        'val': state.resources['energy'] ?? '0',
-                        'color': Colors.amberAccent,
-                      },
-                      {
-                        'key': 'Compute',
-                        'symbol': '◈',
-                        'val': state.resources['compute'] ??
-                            state.resources['computing'] ??
-                            '0',
-                        'color': violetColor,
-                      },
-                    ];
-
-                    return Wrap(
-                      spacing: 12,
-                      runSpacing: 12,
-                      children: entries.map((entry) {
-                        final valStr = entry['val'] is num
-                            ? (entry['val'] as num).toInt().toString()
-                            : entry['val'].toString();
-
-                        return Container(
-                          width: resWidth,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 14, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withAlpha(8),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Row(
-                            children: [
-                              Text(
-                                entry['symbol'] as String,
-                                style: TextStyle(
-                                  fontSize: 14,
-                                  color: entry['color'] as Color,
-                                  fontWeight: FontWeight.w700,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment:
-                                      CrossAxisAlignment.start,
-                                  children: [
-                                    Text(
-                                      (entry['key'] as String).toUpperCase(),
-                                      style: const TextStyle(
-                                        fontSize: 9,
-                                        letterSpacing: .8,
-                                        color: mutedColor,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      valStr,
-                                      style: const TextStyle(
-                                        fontSize: 14,
-                                        fontWeight: FontWeight.w800,
-                                        color: inkColor,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      }).toList(),
-                    );
-                  },
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
         ],
         ..._selectedPanels(),
       ],
