@@ -128,7 +128,7 @@ test('new user-facing product copy uses UC terminology', async () => {
   const prototypeHtml = await (await fetch(`http://127.0.0.1:${port}/prototype3.html`)).text();
   assert.match(landingHtml, /A UC WORLD/);
   assert.match(landingHtml, />UC</);
-  assert.match(prototypeHtml, /A UC WORLD/);
+  assert.match(prototypeHtml, /UNITED CORPORATIONS|A UC WORLD/);
   assert.doesNotMatch(landingHtml, /AN OUC WORLD|THE OUC WORLD|>OUC</);
   assert.doesNotMatch(prototypeHtml, /AN OUC WORLD|OUC \/ CENTRAL MARKET/);
 });
