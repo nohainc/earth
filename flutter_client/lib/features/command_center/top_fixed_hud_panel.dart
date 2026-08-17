@@ -13,6 +13,10 @@ class YearAndDay {
 class TopFixedHudPanel extends StatefulWidget {
   final EarthState state;
   final int unreadNotifications;
+  final bool isLiveConnected;
+  final bool isReconnecting;
+  final bool showDrawerButton;
+  final VoidCallback? onOpenDrawer;
   final ValueChanged<String>? onNavigate;
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
@@ -21,6 +25,10 @@ class TopFixedHudPanel extends StatefulWidget {
     super.key,
     required this.state,
     this.unreadNotifications = 0,
+    this.isLiveConnected = false,
+    this.isReconnecting = false,
+    this.showDrawerButton = false,
+    this.onOpenDrawer,
     this.onNavigate,
     this.onLogout,
     this.onSecurity,
@@ -127,6 +135,10 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     final energy = formatWholeNumber(widget.state.resources['energy']);
     final compute = formatWholeNumber(widget.state.resources['compute']);
 
+    final connectionColor = widget.isLiveConnected
+        ? Colors.greenAccent
+        : (widget.isReconnecting ? Colors.orangeAccent : Colors.redAccent);
+
     return Container(
       decoration: const BoxDecoration(
         color: Color(0xff0e1024),
@@ -134,7 +146,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           bottom: BorderSide(color: Colors.white12, width: 1.0),
         ),
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
@@ -207,13 +219,12 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           // VERTICAL SEPARATOR 2
           _verticalSeparator(),
 
-          // 3. 6-RESOURCE SECTION (EXPANDED RESPONSIVE)
+          // 3. 6-RESOURCE SECTION (ICONS + NUMBERS ONLY, NO RESOURCE TEXT NAMES)
           Expanded(
             child: LayoutBuilder(
               builder: (context, constraints) {
                 final availableW = constraints.maxWidth;
-                // Single row threshold: stays in 1 row down to 420px
-                final isSingleRow = availableW >= 420;
+                final isSingleRow = availableW >= 320;
 
                 if (isSingleRow) {
                   return SingleChildScrollView(
@@ -221,39 +232,38 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, 'CREDITS', isCompact: false),
+                        _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: false),
                         _dotSeparator(),
-                        _hudResourceItem(Icons.eco_outlined, '$food FOOD', Colors.lightGreenAccent, 'FOOD', isCompact: false),
+                        _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: false),
                         _dotSeparator(),
-                        _hudResourceItem(Icons.view_in_ar_outlined, '$mat MATR', Colors.tealAccent, 'MATERIALS', isCompact: false),
+                        _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: false),
                         _dotSeparator(),
-                        _hudResourceItem(Icons.settings_outlined, '$comp FABR', cyanAccentColor, 'COMPONENTS', isCompact: false),
+                        _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: false),
                         _dotSeparator(),
-                        _hudResourceItem(Icons.bolt_outlined, '$energy ENGY', Colors.amberAccent, 'ENERGY', isCompact: false),
+                        _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: false),
                         _dotSeparator(),
-                        _hudResourceItem(Icons.memory_rounded, '$compute COMPUTE', violetColor, 'COMPUTE', isCompact: false),
+                        _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: false),
                       ],
                     ),
                   );
                 } else {
-                  // 2 rows by 3 items
                   return Column(
                     mainAxisSize: MainAxisSize.min,
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Expanded(child: _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, 'CREDITS', isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.eco_outlined, '$food FOOD', Colors.lightGreenAccent, 'FOOD', isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.view_in_ar_outlined, '$mat MATR', Colors.tealAccent, 'MATERIALS', isCompact: true)),
+                          Expanded(child: _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: true)),
+                          Expanded(child: _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: true)),
+                          Expanded(child: _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: true)),
                         ],
                       ),
                       const SizedBox(height: 3),
                       Row(
                         children: [
-                          Expanded(child: _hudResourceItem(Icons.settings_outlined, '$comp FABR', cyanAccentColor, 'COMPONENTS', isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.bolt_outlined, '$energy ENGY', Colors.amberAccent, 'ENERGY', isCompact: true)),
-                          Expanded(child: _hudResourceItem(Icons.memory_rounded, '$compute COMPUTE', violetColor, 'COMPUTE', isCompact: true)),
+                          Expanded(child: _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: true)),
+                          Expanded(child: _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: true)),
+                          Expanded(child: _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: true)),
                         ],
                       ),
                     ],
@@ -263,34 +273,68 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
             ),
           ),
 
-          const SizedBox(width: 10),
+          const SizedBox(width: 8),
 
-          // 4. ALARM / NOTIFICATIONS ICON
-          Stack(
-            clipBehavior: Clip.none,
-            children: [
-              IconButton(
-                icon: const Icon(Icons.notifications_none_outlined, size: 20, color: mutedColor),
-                tooltip: 'Activity & Notifications',
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
-                splashRadius: 18,
-                onPressed: () => widget.onNavigate?.call('activity'),
-              ),
-              if (widget.unreadNotifications > 0)
-                Positioned(
-                  top: 2,
-                  right: 2,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
-                    ),
-                    constraints: const BoxConstraints(minWidth: 8, minHeight: 8),
+          // 4. ALARM / NOTIFICATIONS ICON WITH CONNECTION STATE COLOR INDICATOR
+          InkWell(
+            onTap: () => widget.onNavigate?.call('activity'),
+            borderRadius: BorderRadius.circular(16),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(Icons.notifications_none_outlined, size: 20, color: mutedColor),
+                      if (widget.unreadNotifications > 0)
+                        Positioned(
+                          top: -3,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: connectionColor,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '${widget.unreadNotifications}',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Positioned(
+                          top: 0,
+                          right: 0,
+                          child: Container(
+                            width: 6,
+                            height: 6,
+                            decoration: BoxDecoration(
+                              color: connectionColor,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: connectionColor.withValues(alpha: 0.6),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
-                ),
-            ],
+                ],
+              ),
+            ),
           ),
 
           const SizedBox(width: 8),
@@ -305,7 +349,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
               borderRadius: BorderRadius.circular(12),
               side: const BorderSide(color: Colors.white12),
             ),
-            tooltip: 'User account & security menu',
+            tooltip: '',
             onSelected: (value) {
               if (value == 'security') {
                 widget.onSecurity?.call();
@@ -362,8 +406,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
               ),
             ],
             child: Container(
-              width: 32,
-              height: 32,
+              width: 30,
+              height: 30,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: LinearGradient(
@@ -389,25 +433,38 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                 style: const TextStyle(
                   color: Colors.white,
                   fontWeight: FontWeight.w800,
-                  fontSize: 13,
+                  fontSize: 12,
                 ),
               ),
             ),
           ),
+
+          // 6. HAMBURGER MENU (SHOWN ONLY WHEN SIDEBAR IS HIDDEN IN COMPACT MODE)
+          if (widget.showDrawerButton) ...[
+            const SizedBox(width: 6),
+            InkWell(
+              onTap: widget.onOpenDrawer,
+              borderRadius: BorderRadius.circular(8),
+              child: const Padding(
+                padding: EdgeInsets.all(4),
+                child: Icon(Icons.menu_rounded, size: 22, color: inkColor),
+              ),
+            ),
+          ],
         ],
       ),
     );
   }
 
   Widget _verticalSeparator() => Container(
-        height: 28,
+        height: 24,
         width: 1,
         color: Colors.white12,
-        margin: const EdgeInsets.symmetric(horizontal: 14),
+        margin: const EdgeInsets.symmetric(horizontal: 10),
       );
 
   Widget _dotSeparator() => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 8),
+        margin: const EdgeInsets.symmetric(horizontal: 6),
         width: 3,
         height: 3,
         decoration: const BoxDecoration(
@@ -416,24 +473,21 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         ),
       );
 
-  Widget _hudResourceItem(IconData icon, String value, Color color, String tooltip, {required bool isCompact}) => Tooltip(
-        message: tooltip,
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, size: isCompact ? 11 : 13, color: color),
-            const SizedBox(width: 4),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: isCompact ? 9.5 : 11,
-                fontWeight: FontWeight.w700,
-                color: color,
-                letterSpacing: -.2,
-              ),
-              overflow: TextOverflow.ellipsis,
+  Widget _hudResourceItem(IconData icon, String value, Color color, {required bool isCompact}) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: isCompact ? 11 : 13, color: color),
+          const SizedBox(width: 3.5),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: isCompact ? 9.5 : 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: -.2,
             ),
-          ],
-        ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
       );
 }

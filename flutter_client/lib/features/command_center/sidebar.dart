@@ -8,9 +8,6 @@ class Sidebar extends StatelessWidget {
   final ValueChanged<String> onNavigate;
   final bool busy;
   final bool canAdvanceDay;
-  final bool isLiveConnected;
-  final bool isReconnecting;
-  final int unreadNotifications;
   final VoidCallback? onAdvanceDay;
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
@@ -22,9 +19,6 @@ class Sidebar extends StatelessWidget {
     required this.onNavigate,
     this.busy = false,
     this.canAdvanceDay = false,
-    this.isLiveConnected = false,
-    this.isReconnecting = false,
-    this.unreadNotifications = 0,
     this.onAdvanceDay,
     this.onLogout,
     this.onSecurity,
@@ -65,17 +59,6 @@ class Sidebar extends StatelessWidget {
         ]
       ),
     ];
-
-    final connectionStatus = isReconnecting
-        ? 'Reconnecting…'
-        : isLiveConnected
-            ? 'Live Connected'
-            : 'Offline';
-    final connectionColor = isLiveConnected
-        ? Colors.greenAccent
-        : isReconnecting
-            ? Colors.orangeAccent
-            : Colors.redAccent;
 
     return Container(
       width: 244,
@@ -158,25 +141,6 @@ class Sidebar extends StatelessWidget {
                                     ),
                                   ),
                                 ),
-                                if (item.$1 == 'activity' && unreadNotifications > 0)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: Colors.redAccent.withValues(alpha: .2),
-                                      borderRadius: BorderRadius.circular(10),
-                                      border: Border.all(
-                                          color: Colors.redAccent.withValues(alpha: .5)),
-                                    ),
-                                    child: Text(
-                                      '$unreadNotifications',
-                                      style: const TextStyle(
-                                        fontSize: 9.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: Colors.redAccent,
-                                      ),
-                                    ),
-                                  ),
                               ],
                             ),
                           ),
@@ -188,11 +152,11 @@ class Sidebar extends StatelessWidget {
             ),
           ),
 
-          // 2. FOOTER CONTROLS & SYSTEM STATUS
-          const SizedBox(height: 12),
-          const Divider(color: Colors.white12, height: 1, thickness: 1),
-          const SizedBox(height: 12),
+          // 2. FOOTER ADVANCE DAY (IF APPLICABLE)
           if (canAdvanceDay) ...[
+            const SizedBox(height: 12),
+            const Divider(color: Colors.white12, height: 1, thickness: 1),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
@@ -210,38 +174,7 @@ class Sidebar extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(height: 10),
           ],
-          Row(
-            children: [
-              Container(
-                width: 7,
-                height: 7,
-                decoration: BoxDecoration(
-                  color: connectionColor,
-                  shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: connectionColor.withValues(alpha: 0.5),
-                      blurRadius: 4,
-                      spreadRadius: 1,
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  connectionStatus,
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    color: mutedColor,
-                    letterSpacing: 1.3,
-                  ),
-                ),
-              ),
-            ],
-          ),
         ],
       ),
     );

@@ -32,6 +32,7 @@ class CommandCenter extends StatefulWidget {
 
 class _CommandCenterState extends State<CommandCenter> {
   final api = const EarthApi();
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   final _sectionKeys = <String, GlobalKey>{
     'command': GlobalKey(),
     'market': GlobalKey(),
@@ -262,6 +263,7 @@ class _CommandCenterState extends State<CommandCenter> {
     return LayoutBuilder(builder: (context, viewport) {
       final compact = viewport.maxWidth < 900;
       return Scaffold(
+        key: _scaffoldKey,
         drawer: current != null && compact
             ? Drawer(
                 backgroundColor: canvasColor,
@@ -271,9 +273,6 @@ class _CommandCenterState extends State<CommandCenter> {
                     selectedSection: selectedSection,
                     busy: busy,
                     canAdvanceDay: canAdvanceDay,
-                    isLiveConnected: liveChannel != null,
-                    isReconnecting: liveReconnectTimer?.isActive == true,
-                    unreadNotifications: unreadNotifications,
                     onAdvanceDay: () => _run(api.advanceDay),
                     onLogout: () async {
                       await api.logout();
@@ -288,65 +287,6 @@ class _CommandCenterState extends State<CommandCenter> {
                     ),
                   ),
                 ),
-              )
-            : null,
-        appBar: compact && current != null
-            ? AppBar(
-                backgroundColor: surfaceColor.withValues(alpha: .9),
-                elevation: 0,
-                scrolledUnderElevation: 0,
-                leading: Builder(
-                  builder: (context) => IconButton(
-                    icon: const Icon(Icons.menu, color: inkColor),
-                    tooltip: 'Navigation Menu',
-                    onPressed: () => Scaffold.of(context).openDrawer(),
-                  ),
-                ),
-                title: Text(
-                  dashboardSectionTitle(selectedSection),
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 1.1,
-                    color: inkColor,
-                  ),
-                ),
-                actions: [
-                  IconButton(
-                    tooltip: 'Activity & alerts',
-                    onPressed: () => _navigateToSection(context, 'activity',
-                        closeDrawer: false),
-                    icon: Badge(
-                      isLabelVisible: unreadNotifications > 0,
-                      label: Text('$unreadNotifications'),
-                      child: const Icon(Icons.notifications_none,
-                          size: 20, color: mutedColor),
-                    ),
-                  ),
-                  if (canAdvanceDay)
-                    IconButton(
-                      icon: const Icon(Icons.fast_forward,
-                          size: 18, color: violetColor),
-                      tooltip: 'Advance Day',
-                      onPressed: busy ? null : () => _run(api.advanceDay),
-                    ),
-                  IconButton(
-                    icon: const Icon(Icons.shield_outlined,
-                        size: 18, color: mutedColor),
-                    tooltip: 'Security',
-                    onPressed: () =>
-                        showSecurityDialog(context, api, widget.onLogout),
-                  ),
-                  IconButton(
-                    icon: const Icon(Icons.logout,
-                        size: 18, color: mutedColor),
-                    tooltip: 'Sign Out',
-                    onPressed: () async {
-                      await api.logout();
-                      if (mounted) widget.onLogout();
-                    },
-                  ),
-                ],
               )
             : null,
         body: current == null
@@ -373,6 +313,10 @@ class _CommandCenterState extends State<CommandCenter> {
                       TopFixedHudPanel(
                         state: current,
                         unreadNotifications: unreadNotifications,
+                        isLiveConnected: liveChannel != null,
+                        isReconnecting: liveReconnectTimer?.isActive == true,
+                        showDrawerButton: compact,
+                        onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                         onNavigate: (section) => _navigateToSection(
                           context,
                           section,
@@ -394,9 +338,6 @@ class _CommandCenterState extends State<CommandCenter> {
                                 selectedSection: selectedSection,
                                 busy: busy,
                                 canAdvanceDay: canAdvanceDay,
-                                isLiveConnected: liveChannel != null,
-                                isReconnecting: liveReconnectTimer?.isActive == true,
-                                unreadNotifications: unreadNotifications,
                                 onAdvanceDay: () => _run(api.advanceDay),
                                 onLogout: () async {
                                   await api.logout();
