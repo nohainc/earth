@@ -432,7 +432,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       key: widget.panelKey,
       title: 'CENTRAL MARKET / LIVE SIGNALS',
       infoDescription:
-          'Live commodity clearing signals, supply vs demand liquidity pressure meters, historical uniform clearing price trends, and batch order placement terminal.',
+          '• Commodity Selector: Select between Food, Materials, Energy, Components, and Compute to view spot clearing price, 24h price delta, and market liquidity.\n\n• Liquidity Pressure Gauge: Real-time ratio comparing total aggregated sell volume against buy volume. Identifies supply shortages and accumulation trends.\n\n• Historical Clearing Trend: Interactive price chart tracking uniform clearing prices settled across successive clearing batches.\n\n• Execution Terminal: Submit limit Buy or Sell orders with explicit quantity and unit price controls. Escrow funds or inventory units are automatically locked and refunded upon cancellation.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1084,76 +1084,52 @@ class MarketOrderBookPanel extends StatelessWidget {
     return EarthPanel(
       title: 'CENTRAL MARKET / ORDER BOOK',
       infoDescription:
-          'Central clearing order book showing open buy bids and sell asks aggregated by price level, along with real-time executed clearing trades.',
+          '• Aggregated Order Depth: Displays open buy bids and sell asks grouped by commodity and best price tiers, showing total volume waiting for batch execution.\n\n• Order Count & Liquidity: Number of discrete market participants contributing liquidity to each price tier.\n\n• Central Clearing Settlement: Orders do not execute via continuous match; all qualifying bids and asks cross simultaneously at the uniform clearing price when the batch clears.',
       child: book.isEmpty
           ? const Text(
               'No open orders. The market is waiting for a new signal.',
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
-                  children: book.map((raw) {
-                    final row = raw as Map<String, dynamic>;
-                    final product = row['product']?.toString() ?? 'material';
-                    final meta = CommodityMeta.forProduct(product);
-                    final openQty = asInt(row['open_quantity']) ?? 0;
-                    final bestPrice = asDouble(row['best_price']) ?? 0.0;
-                    final orderCount = asInt(row['order_count']) ?? 1;
+          : Wrap(
+              spacing: 12,
+              runSpacing: 10,
+              children: book.map((raw) {
+                final row = raw as Map<String, dynamic>;
+                final product = row['product']?.toString() ?? 'material';
+                final meta = CommodityMeta.forProduct(product);
+                final openQty = asInt(row['open_quantity']) ?? 0;
+                final bestPrice = asDouble(row['best_price']) ?? 0.0;
+                final orderCount = asInt(row['order_count']) ?? 1;
 
-                    return Container(
-                      width: 200,
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: surfaceColor.withValues(alpha: .72),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: Column(
+                return Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(meta.icon, size: 14, color: meta.color),
+                      const SizedBox(width: 8),
+                      Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '${meta.name} (${meta.symbol})',
-                                style: TextStyle(
-                                  fontSize: 10.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: meta.color,
-                                ),
-                              ),
-                              Text(
-                                '$orderCount orders',
-                                style: const TextStyle(fontSize: 9, color: mutedColor),
-                              ),
-                            ],
+                          Text(
+                            meta.name,
+                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: inkColor),
                           ),
-                          const SizedBox(height: 6),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Pending volume:', style: TextStyle(fontSize: 10, color: mutedColor)),
-                              Text('$openQty units', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700)),
-                            ],
-                          ),
-                          const SizedBox(height: 2),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              const Text('Best limit price:', style: TextStyle(fontSize: 10, color: mutedColor)),
-                              Text('${bestPrice.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: inkColor)),
-                            ],
+                          Text(
+                            '$openQty units · ${bestPrice.toStringAsFixed(2)} C ($orderCount orders)',
+                            style: const TextStyle(fontSize: 9.5, color: mutedColor),
                           ),
                         ],
                       ),
-                    );
-                  }).toList(),
-                ),
-              ],
+                    ],
+                  ),
+                );
+              }).toList(),
             ),
     );
   }
@@ -1194,7 +1170,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
     return EarthPanel(
       title: 'MY MARKET ORDERS / LIFECYCLE',
       infoDescription:
-          'Personal order management tracking open, partially filled, completed, and cancelled limit orders with automatic escrow reserve locking and settlement accounting.',
+          '• Order Status Categorization: Filter across All, Active (Open / Partially Filled), Completed (Filled), and Cancelled limit orders.\n\n• Order Lifecycle Indicators: Tracks submitted quantity, filled volume progress, limit price per unit, and locked escrow reserves.\n\n• Escrow & Cancellation: Active limit buy orders securely lock credits in escrow; active sell orders lock inventory units. Cancelling an order instantly unlocks and restores escrowed assets.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

@@ -47,51 +47,53 @@ void showEarthInfoDialog(
         ],
       ),
       content: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 420),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            if (description != null && description.isNotEmpty) ...[
-              Text(
-                description,
-                style: const TextStyle(
-                  fontSize: 12,
-                  color: mutedColor,
-                  height: 1.45,
-                ),
-              ),
-              if (items.isNotEmpty) const SizedBox(height: 14),
-            ],
-            if (items.isNotEmpty)
-              ...items.map(
-                (item) => Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        item['label'] ?? '',
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: violetColor,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        item['description'] ?? '',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: inkColor,
-                          height: 1.35,
-                        ),
-                      ),
-                    ],
+        constraints: const BoxConstraints(maxWidth: 480, maxHeight: 440),
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              if (description != null && description.isNotEmpty) ...[
+                Text(
+                  description,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: mutedColor,
+                    height: 1.45,
                   ),
                 ),
-              ),
-          ],
+                if (items.isNotEmpty) const SizedBox(height: 14),
+              ],
+              if (items.isNotEmpty)
+                ...items.map(
+                  (item) => Padding(
+                    padding: const EdgeInsets.only(bottom: 12),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          item['label'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: violetColor,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          item['description'] ?? '',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            color: inkColor,
+                            height: 1.35,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
       actions: [

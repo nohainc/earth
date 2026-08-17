@@ -73,7 +73,7 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Executive corporate management hub'), findsOneWidget);
+    expect(find.textContaining('Executive Entity Identity'), findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 

@@ -106,7 +106,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   title: 'MARKET',
                   subtitle: 'UNIFORM BATCH SETTLEMENT',
                   infoDescription:
-                      'Central clearing spot prices and settlement metrics across key commodities (Components, Energy, Materials) updated every clearing batch.',
+                      '• Spot Clearing Prices: Displays current clearing prices for key commodities (Components, Energy, Materials) settled per batch cycle.\n\n• Batch Auction Clearing: Periodic auctions aggregate discrete supply/demand curves to clear trades at a single non-arbitrage equilibrium price.\n\n• Action: Tap card to open Central Market to view full order books or submit limit orders.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -130,7 +130,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   title: 'BUSINESS',
                   subtitle: '$businessName · $businessStatus',
                   infoDescription:
-                      'Enterprise operational overview tracking machine fleet physical condition, projected net profit and loss per cycle, and current operational maintenance policy.',
+                      '• Fleet Condition: Average structural integrity across all registered machinery. Drops below 50% risk severe downtime and emergency maintenance surcharges.\n\n• Projected Net P&L: Net credits earned per operating cycle after subtracting power, raw materials, and municipal taxes.\n\n• Operating Policy: Active dispatch strategy (Reliability, Margin, or Capacity) balancing output yield against wear rate.\n\n• Action: Tap card to manage unit economics, issue shares, distribute dividends, or tune policies.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -157,7 +157,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   title: cityName,
                   subtitle: 'MUNICIPAL RESIDENCY · HEALTH $cityHealth',
                   infoDescription:
-                      'Municipal residency health and urban infrastructure capacities including municipal power grid stability, housing availability, and healthcare coverage.',
+                      '• Power Grid Stability: Percentage of total municipal electrical demand satisfied by local energy generation.\n\n• Housing Capacity: Proportion of available residential capacity preventing citizen overcrowding and homelessness.\n\n• Health Coverage: Municipal medical support level preventing biological health decay.\n\n• Action: Tap card to inspect city capacity, community roles, and active governance referendums.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -181,7 +181,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   title: 'FINANCE & CONTRACTS',
                   subtitle: 'DOUBLE-ENTRY SETTLED LEDGER',
                   infoDescription:
-                      'Financial overview monitoring liquid citizen credits, active bilateral legal agreements, and double-entry cryptographic ledger audit verification.',
+                      '• Liquid Credits: Spendable funds available immediately for spot trading, machine purchases, and escrow deposits.\n\n• Active Agreements: Total active bilateral contracts with open delivery, payment, or collateral obligations.\n\n• Ledger Integrity: Real-time cryptographic validation of double-entry transaction ledgers ensuring zero balance leakage.\n\n• Action: Tap card to open financial statements, transaction history, and contract negotiation tools.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [

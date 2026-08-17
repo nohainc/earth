@@ -78,7 +78,7 @@ class HeroCard extends StatelessWidget {
                         context,
                         title: 'CITIZEN COCKPIT & STATUS',
                         description:
-                            'Executive citizen cockpit displaying planetary world stability, citizen biometric health, generation, residency, standing, and legacy score.',
+                            '• Citizen Status & Residency: Real-time vitality status, generational lineage, age in game cycles, and legal residential city jurisdiction.\n\n• Biometric Health: Physical vitality score (0–100%). Low health increases mortality risk and triggers emergency healthcare protocols.\n\n• Civic Standing: Reputation and trust rating earned through lawful contracts, proposal votes, and public treasury contributions.\n\n• Legacy Score: Cumulative generational prestige inherited by designated successors upon succession.\n\n• Planetary World Health: Global ecological equilibrium index. Environmental degradation increases municipal costs and market volatility.',
                       ),
                     ),
                   ],

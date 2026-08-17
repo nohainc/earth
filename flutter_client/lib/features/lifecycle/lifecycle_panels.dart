@@ -775,7 +775,7 @@ class MacroLiquidityPanel extends StatelessWidget {
     return EarthPanel(
       title: 'MACRO LIQUIDITY / WORLD ENGINE SIGNAL',
       infoDescription:
-          'Systemic monetary base and liquidity tracking active money supply against the planetary economic target corridor.',
+          '• Systemic Monetary Base: Real-time circulating currency in the global economy versus the Coalition equilibrium target corridor.\n\n• Corridor Status:\n  - EQUILIBRIUM: Active money supply matches economic velocity without inflationary or deflationary pressure.\n  - TIGHT LIQUIDITY: Deflationary contraction below lower corridor boundary; capital costs rise.\n  - EXPANDED LIQUIDITY: Inflationary expansion above upper corridor boundary; commodity prices inflate.\n\n• Sovereign Reserve Treasury: Stabilization reserves deployed to maintain exchange parity and back public infrastructure.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

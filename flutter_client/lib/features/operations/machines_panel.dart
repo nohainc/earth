@@ -25,7 +25,7 @@ class MachinesPanel extends StatelessWidget {
     return EarthPanel(
       title: 'AUTOMATION / MACHINE INVENTORY',
       infoDescription:
-          'Catalog of automated industrial machinery, fabrication rigs, and synthesis equipment with condition monitoring, utilization metrics, and maintenance controls.',
+          '• Fleet Inventory: Total count of active, idle, and decommissioned machines.\n\n• Machine Telemetry Indicators:\n  - Physical Condition: Structural wear percentage. Below 35% risks critical failure; below 75% increases power draw.\n  - Utilization Rate: Current workload percentage relative to maximum operational speed.\n  - Productive Capacity: Output scaling multiplier.\n  - Conversion Rates: Required input raw materials consumed per cycle to synthesize output products.\n  - Maintenance Due: Countdown of operational cycles until compulsory preventative overhaul.\n\n• Fleet Actions: Dispatch maintenance, acquire new machinery from catalog, or sell idle units.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -226,7 +226,7 @@ class ProductionEventsPanel extends StatelessWidget {
     return EarthPanel(
       title: 'INDUSTRIAL PRODUCTION / EVENT STREAM',
       infoDescription:
-          'Historical log of machine fleet production runs, output yields, operating cycles, and energy/material conversion events.',
+          '• Production Audit Stream: Immutable chronological record of manufacturing, fabrication, and chemical synthesis runs executed across your automated machine fleet.\n\n• Event Indicators:\n  - Cycle Day: Canonical game day when the production run settled.\n  - Machine Class: Model of fabrication rig or synthesis reactor.\n  - Yield & Resource: Net units produced and specific commodity type (Food, Materials, Energy, Components, Compute).',
       child: events.isEmpty
           ? const Text(
               'No production cycle events recorded.',

@@ -16,7 +16,7 @@ class OpportunityPanel extends StatelessWidget {
   Widget build(BuildContext context) => EarthPanel(
         title: 'LIVE OPPORTUNITIES',
         infoDescription:
-            'Real-time strategic signals and urgent system notifications across market fluctuations, governance voting, municipal health, and enterprise operations requiring executive attention.',
+            '• Strategic Alert Feed: Aggregates real-time events across the economic, civic, and operational spheres that demand citizen action.\n\n• Priority Tiers:\n  - HIGH (Orange): Immediate risk of resource deficit, machine failure, contract default, insolvency, or expiring ballot.\n  - MEDIUM (Violet): Actionable market arbitrage, profitable price spreads, or open governance referendums.\n  - LOW (Teal): Background civic notices, minor market trends, and non-critical updates.\n\n• Deep Navigation: Tapping an opportunity\'s action button immediately navigates you to the corresponding terminal panel to execute decisions.',
         width: double.infinity,
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

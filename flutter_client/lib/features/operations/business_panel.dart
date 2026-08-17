@@ -82,7 +82,7 @@ class BusinessPanel extends StatelessWidget {
       key: panelKey,
       title: 'ENTERPRISE OPERATIONS / $businessName',
       infoDescription:
-          'Executive corporate management hub displaying financial statements, unit economics, ownership cap table distribution, corporate governance thresholds, and operational policy controls.',
+          '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.\n\n• Unit Economics & Financial Statement:\n  - OPERATING REVENUE: Gross product sales from market batches and executed contracts.\n  - OPERATING COSTS: Combined raw inputs, power, maintenance reserves, and civic taxes.\n  - NET PROFIT / CYCLE: Net operating income with margin % and cost structure ratio breakdown.\n  - TAX ASSESSMENT BASE: Audited canonical taxable turnover.\n\n• Cap Table & Governance: Share distribution across equity holders, controller designation, and constitutional thresholds (Shareholder vote %, Board approval %, Dilution notice days).\n\n• Corporate Action Hub: Execute dividend distributions, equity transfers, share issuance, mergers, managerial appointments, and enterprise liquidation.',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;

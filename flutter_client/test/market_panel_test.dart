@@ -72,7 +72,7 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Live commodity clearing signals'), findsOneWidget);
+    expect(find.textContaining('Commodity Selector'), findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
