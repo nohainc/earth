@@ -222,19 +222,92 @@ class ProductionEventsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final events = state.productionEvents;
     return EarthPanel(
-      title: 'PRODUCTION / EVENT STREAM',
+      title: 'INDUSTRIAL PRODUCTION / EVENT STREAM',
+      infoDescription:
+          'Historical log of machine fleet production runs, output yields, operating cycles, and energy/material conversion events.',
       child: events.isEmpty
-          ? const Text('No production cycle events recorded.',
-              style: TextStyle(color: mutedColor, fontSize: 11))
+          ? const Text(
+              'No production cycle events recorded.',
+              style: TextStyle(color: mutedColor, fontSize: 11),
+            )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: events.take(6).map((raw) {
+              children: events.take(8).map((raw) {
                 final event = raw as Map<String, dynamic>;
-                return Padding(
-                  padding: const EdgeInsets.only(bottom: 6),
-                  child: Text(
-                    'Day ${event['game_day'] ?? state.clock['day']}: ${event['output_resource']} +${event['output_amount']} (${event['machine_type'] ?? 'rig'})',
-                    style: const TextStyle(fontSize: 10, color: mutedColor),
+                final gameDay = event['game_day'] ?? state.clock['day'] ?? 184;
+                final outputResource =
+                    (event['output_resource']?.toString() ?? 'MATERIAL')
+                        .toUpperCase();
+                final outputAmount = event['output_amount'] ?? 0;
+                final machineType =
+                    (event['machine_type']?.toString() ?? 'RIG').toUpperCase();
+
+                Color resColor = cyanAccentColor;
+                if (outputResource.contains('ENERGY')) resColor = Colors.amberAccent;
+                if (outputResource.contains('FOOD')) resColor = Colors.lightGreenAccent;
+                if (outputResource.contains('COMPUTE')) resColor = violetColor;
+                if (outputResource.contains('COMPONENT')) resColor = Colors.tealAccent;
+
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white10),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: .06),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          'DAY $gameDay',
+                          style: const TextStyle(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            color: mutedColor,
+                            letterSpacing: .6,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          'Machine $machineType Cycle',
+                          style: const TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: inkColor,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2.5),
+                        decoration: BoxDecoration(
+                          color: resColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(4),
+                          border:
+                              Border.all(color: resColor.withValues(alpha: .35)),
+                        ),
+                        child: Text(
+                          '+$outputAmount $outputResource',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: resColor,
+                            letterSpacing: .5,
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                 );
               }).toList(),

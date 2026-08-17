@@ -38,7 +38,7 @@ void main() {
                 'controllingHumanId': 'H-0044',
                 'totalIssuedShares': 1000,
                 'holders': [
-                  {'display_name': 'Amara Kline', 'percentage': 75, 'shares': 750},
+                  {'human_id': 'H-0044', 'display_name': 'Amara Kline', 'percentage': 75, 'shares': 750},
                 ],
               },
               businessFinancials: const {
@@ -60,16 +60,26 @@ void main() {
       ),
     );
 
-    expect(find.text('BUSINESS / KLINE WORKS'), findsOneWidget);
+    expect(find.text('ENTERPRISE OPERATIONS / KLINE WORKS'), findsOneWidget);
     expect(find.text('ACTIVE'), findsOneWidget);
-    expect(find.text('FINANCIAL STATEMENT (PERIOD ACTUALS)'), findsOneWidget);
-    expect(find.text('Operating Revenue: 1240.00 C'), findsOneWidget);
-    expect(find.text('Operating Costs: 820.00 C'), findsOneWidget);
-    expect(find.text('+420.00 C'), findsOneWidget);
-    expect(find.textContaining('Amara Kline: 75% (750 shares)'), findsOneWidget);
+    expect(find.text('OPERATING REVENUE'), findsOneWidget);
+    expect(find.text('1240 C'), findsWidgets);
+    expect(find.text('820 C'), findsOneWidget);
+    expect(find.text('+420 C'), findsOneWidget);
+    expect(find.textContaining('Amara Kline (H-0044)'), findsOneWidget);
+    expect(find.text('CONTROLLER'), findsOneWidget);
+
+    // Verify info icon is present and opens description dialog
+    expect(find.byIcon(Icons.info_outline), findsWidgets);
+    await tester.tap(find.byIcon(Icons.info_outline).first);
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Executive corporate management hub'), findsOneWidget);
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
 
     // Distribute dividends
     expect(find.text('DISTRIBUTE DIVIDENDS'), findsOneWidget);
+    await tester.ensureVisible(find.text('DISTRIBUTE DIVIDENDS'));
     await tester.tap(find.text('DISTRIBUTE DIVIDENDS'));
     await tester.pumpAndSettle();
 
@@ -133,18 +143,18 @@ void main() {
     );
 
     expect(find.text('DISTRESSED'), findsOneWidget);
-    expect(find.text('-400.00 C'), findsOneWidget);
+    expect(find.text('-400 C'), findsWidgets);
     expect(find.text('WARNING: FINANCIAL DISTRESS'), findsOneWidget);
-    expect(find.text('LIQUIDATE BUSINESS'), findsOneWidget);
+    expect(find.text('LIQUIDATE BUSINESS'), findsWidgets);
 
     await tester.ensureVisible(find.text('LIQUIDATE BUSINESS'));
     await tester.tap(find.text('LIQUIDATE BUSINESS'));
     await tester.pumpAndSettle();
 
     expect(find.text('Liquidate business?'), findsOneWidget);
-    expect(find.text('LIQUIDATE'), findsOneWidget);
+    expect(find.widgetWithText(FilledButton, 'LIQUIDATE'), findsOneWidget);
 
-    await tester.tap(find.text('LIQUIDATE'));
+    await tester.tap(find.widgetWithText(FilledButton, 'LIQUIDATE'));
     await tester.pumpAndSettle();
 
     expect(liquidationTriggered, isTrue);
