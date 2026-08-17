@@ -124,7 +124,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
 
 export async function challengeProposal(repository: PostgresRepository, input: { humanId: string; proposalId: string; reason: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'governance.challenge_filed' AND details->>'correlationId' = $1", [input.correlationId]);
+    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'governance.challenge_filed' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposalId: input.proposalId, correlationId: input.correlationId };
     const proposal = await tx.query<{ id: string; institution_id: string; outcome: string; executed_at: string | null; execution_status: string }>('SELECT id, institution_id, outcome, executed_at, execution_status FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
@@ -134,7 +134,7 @@ export async function challengeProposal(repository: PostgresRepository, input: {
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     await tx.query("UPDATE proposals SET execution_status = 'challenged' WHERE id = $1", [input.proposalId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.challenge_filed', `Constitutional challenge filed for proposal ${input.proposalId}`, toNanoMarkup({ proposalId: input.proposalId, challenger: input.humanId, reason: input.reason, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'governance.challenge_filed', `Constitutional challenge filed for proposal ${input.proposalId}`, toNanoMarkup({ proposalId: input.proposalId, challenger: input.humanId, reason: input.reason, correlationId: input.correlationId }), input.correlationId]);
     await enqueueOutbox(tx, {
       eventKey: `governance-challenge:${input.correlationId}`,
       topic: 'world_activity',
@@ -148,7 +148,7 @@ export async function challengeProposal(repository: PostgresRepository, input: {
 
 export async function resolveConstitutionalAppeal(repository: PostgresRepository, input: { humanId: string; proposalId: string; ruling: 'uphold' | 'void'; rationale: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'governance.ruling_issued' AND details->>'correlationId' = $1", [input.correlationId]);
+    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'governance.ruling_issued' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposalId: input.proposalId, ruling: input.ruling, correlationId: input.correlationId };
     const proposal = await tx.query<{ id: string; institution_id: string; outcome: string; executed_at: string | null }>('SELECT id, institution_id, outcome, executed_at FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
@@ -161,7 +161,7 @@ export async function resolveConstitutionalAppeal(repository: PostgresRepository
     } else {
       await tx.query("UPDATE proposals SET execution_status = 'ready' WHERE id = $1", [input.proposalId]);
     }
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'governance.ruling_issued', `Constitutional ruling for proposal ${input.proposalId}: ${input.ruling.toUpperCase()}`, toNanoMarkup({ proposalId: input.proposalId, jurist: input.humanId, ruling: input.ruling, rationale: input.rationale, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'governance.ruling_issued', `Constitutional ruling for proposal ${input.proposalId}: ${input.ruling.toUpperCase()}`, toNanoMarkup({ proposalId: input.proposalId, jurist: input.humanId, ruling: input.ruling, rationale: input.rationale, correlationId: input.correlationId }), input.correlationId]);
     await enqueueOutbox(tx, {
       eventKey: `governance-ruling:${input.correlationId}`,
       topic: 'world_activity',

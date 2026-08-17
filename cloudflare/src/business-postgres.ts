@@ -243,7 +243,7 @@ export async function proposeMerger(repository: PostgresRepository, input: { acq
 
 export async function executeMerger(repository: PostgresRepository, input: { callerId: string; mergerId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'business.merged' AND details->>'correlationId' = $1", [input.correlationId]);
+    const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'business.merged' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, mergerId: input.mergerId, correlationId: input.correlationId };
     const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; status: string }>('SELECT id, proposer_id, counterparty_id, amount, status FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.mergerId]);
     if (!contract.rows[0] || contract.rows[0].status === 'cancelled') throw new Error('Merger contract not found or cancelled');
@@ -282,7 +282,7 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
     await tx.query("UPDATE businesses SET status = 'bankrupt' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE negotiated_contracts SET status = 'completed', accepted_game_day = $1 WHERE id = $2", [day, input.mergerId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, toNanoMarkup({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId })]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, toNanoMarkup({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId }), input.correlationId]);
     await enqueueOutbox(tx, {
       eventKey: `business-merger:${input.correlationId}`,
       topic: 'world_activity',

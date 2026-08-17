@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 20,
+  "migrationVersion": 21,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -92,6 +92,7 @@
     "event_outbox_aggregate_idx",
     "proposals_game_deadline_idx",
     "recycling_events_machine_correlation_idx",
-    "bankruptcy_events_institution_correlation_idx"
+    "bankruptcy_events_institution_correlation_idx",
+    "world_events_correlation_idx"
   ]
 }
