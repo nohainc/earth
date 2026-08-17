@@ -68,10 +68,15 @@ class CommandExecutiveQuadrant extends StatelessWidget {
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final isTwoColumns = constraints.maxWidth >= 700;
-        final cardWidth = isTwoColumns
-            ? (constraints.maxWidth - 16) / 2
-            : constraints.maxWidth;
+        final availableWidth = constraints.maxWidth;
+        final numCols = availableWidth >= 1200
+            ? 4
+            : availableWidth >= 400
+                ? 2
+                : 1;
+        final cardWidth = numCols == 1
+            ? availableWidth
+            : (availableWidth - (numCols - 1) * 16) / numCols;
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,

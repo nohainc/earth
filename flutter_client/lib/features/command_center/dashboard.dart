@@ -98,9 +98,9 @@ class Dashboard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
-              final numCols = availableWidth >= 1150
+              final numCols = availableWidth >= 1200
                   ? 6
-                  : availableWidth >= 700
+                  : availableWidth >= 600
                       ? 3
                       : 2;
               final itemWidth = (availableWidth - (numCols - 1) * 14) / numCols;
