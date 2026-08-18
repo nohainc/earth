@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 23,
+  "migrationVersion": 25,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -23,11 +23,14 @@
     "businesses": ["id", "owner_id", "status"],
     "character_lineage": ["id", "email", "human_id", "generation", "birth_game_day", "dynasty_name"],
     "cities": ["id", "institution_id", "treasury"],
+    "comm_channels": ["id", "scope", "name"],
+    "comm_messages": ["id", "channel_id", "sender_human_id", "body"],
     "communities": ["id", "founder_id", "shared_credits"],
     "community_members": ["community_id", "human_id", "role"],
     "contract_disputes": ["id", "contract_id", "status"],
     "corporations": ["id", "institution_id", "treasury"],
     "deceased_profiles": ["human_id", "death_game_day", "cause_of_death", "epitaph", "dynasty_name"],
+    "diplomatic_dispatches": ["id", "sender_human_id", "recipient_human_id", "subject", "status"],
     "earth_schema_migrations": ["version", "name", "checksum"],
     "event_outbox": ["id", "event_key", "topic", "payload", "processed_at"],
     "financial_states": ["institution_id", "status", "since_game_day"],
@@ -97,6 +100,9 @@
     "world_events_correlation_idx",
     "character_lineage_email_idx",
     "deceased_profiles_rank_idx",
-    "deceased_profiles_dynasty_idx"
+    "deceased_profiles_dynasty_idx",
+    "comm_messages_channel_idx",
+    "diplomatic_dispatches_recipient_idx",
+    "diplomatic_dispatches_sender_idx"
   ]
 }

@@ -23,6 +23,7 @@ import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
 import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
+import { communicationsRoutes } from './communications-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -279,6 +280,8 @@ const worker = {
     if (url.pathname === '/api/ownership/events' && request.method === 'GET') return ownershipHistoryFromPostgres(request, env);
     if (url.pathname === '/api/membership/events' && request.method === 'GET') return membershipHistoryFromPostgres(request, env);
     if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);
+    const commResponse = await communicationsRoutes(request, env, url);
+    if (commResponse) return commResponse;
     const authRouteResponse = await authenticatedAuthRoute(request, env, url);
     if (authRouteResponse) return authRouteResponse;
     const publicAuthResponse = await publicAuthRoute(request, env, url);

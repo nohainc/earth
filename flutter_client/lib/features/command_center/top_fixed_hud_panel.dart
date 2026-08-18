@@ -20,6 +20,7 @@ class TopFixedHudPanel extends StatefulWidget {
   final ValueChanged<String>? onNavigate;
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
+  final VoidCallback? onCommLink;
 
   const TopFixedHudPanel({
     super.key,
@@ -32,6 +33,7 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onNavigate,
     this.onLogout,
     this.onSecurity,
+    this.onCommLink,
   });
 
   @override
@@ -358,6 +360,22 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                           ),
                         ),
                     ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // COMM-LINK SUB-SPACE RELAY BUTTON
+              InkWell(
+                onTap: widget.onCommLink,
+                borderRadius: BorderRadius.circular(8),
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Icon(
+                    Icons.settings_input_antenna,
+                    size: 21,
+                    color: EarthColors.cyanAccent,
                   ),
                 ),
               ),

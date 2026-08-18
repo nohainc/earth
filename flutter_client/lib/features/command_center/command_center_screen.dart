@@ -8,6 +8,7 @@ import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
+import '../communications/comm_link_dialog.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
@@ -328,6 +329,8 @@ class _CommandCenterState extends State<CommandCenter> {
                         },
                         onSecurity: () =>
                             showSecurityDialog(context, api, widget.onLogout),
+                        onCommLink: () => showCommLinkDialog(context,
+                            api: api, state: current),
                       ),
                       Expanded(
                         child: Row(
@@ -426,6 +429,18 @@ class _CommandCenterState extends State<CommandCenter> {
                       ),
                     ],
                   ),
+                ),
+              ),
+        floatingActionButton: current == null
+            ? null
+            : FloatingActionButton.extended(
+                onPressed: () => showCommLinkDialog(context, api: api, state: current),
+                backgroundColor: EarthColors.cyanAccent,
+                foregroundColor: Colors.black,
+                icon: const Icon(Icons.settings_input_antenna, size: 18),
+                label: const Text(
+                  'COMM-LINK',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.8),
                 ),
               ),
       );

@@ -241,6 +241,138 @@ const state = {
   ],
 };
 
+const commState = {
+  channels: [
+    {
+      id: 'channel-global-relay',
+      scope: 'global',
+      scope_id: null,
+      name: 'Planetary Public Relay',
+      description: 'Universal broadcast frequency for open civilizational discourse and market news.',
+    },
+    {
+      id: 'channel-city-new-tokyo',
+      scope: 'city',
+      scope_id: 'city-new-tokyo',
+      name: 'Neo-Tokyo City Hall',
+      description: 'Municipal forum for Neo-Tokyo residents, tax debates, and infrastructure initiatives.',
+    },
+    {
+      id: 'channel-city-london',
+      scope: 'city',
+      scope_id: 'city-london',
+      name: 'London Industrial Forum',
+      description: 'Municipal chamber for London residents, trade, and industrial supply.',
+    },
+    {
+      id: 'channel-corp-kline',
+      scope: 'institution',
+      scope_id: 'corp-kline-industrial',
+      name: 'Kline Syndicate Boardroom',
+      description: 'Encrypted channel for Kline Industrial shareholders and executive partners.',
+    },
+    {
+      id: 'dm-amara-dmitri',
+      scope: 'direct',
+      scope_id: null,
+      name: 'Dmitri Rostov (Direct Link)',
+      description: 'Encrypted peer-to-peer diplomatic link.',
+    },
+  ],
+  messages: {
+    'channel-global-relay': [
+      {
+        id: 'msg-1',
+        channel_id: 'channel-global-relay',
+        sender_human_id: 'H-0012',
+        sender_display_name: 'Dmitri Rostov',
+        sender_dynasty_name: 'House of Rostov',
+        body: 'Notice to all industrial fabricators: high-purity silicon demand has spiked 20% in London.',
+        game_day: 184,
+        game_minute: 420,
+        attachments: [],
+        created_at: new Date(Date.now() - 3600000).toISOString(),
+      },
+      {
+        id: 'msg-2',
+        channel_id: 'channel-global-relay',
+        sender_human_id: 'H-0044',
+        sender_display_name: 'Amara Vance',
+        sender_dynasty_name: 'Vance Dynasty',
+        body: 'Kline Works is allocating 40 kW additional geothermal compute capacity to fulfill component orders.',
+        game_day: 184,
+        game_minute: 480,
+        attachments: [],
+        created_at: new Date(Date.now() - 1800000).toISOString(),
+      },
+    ],
+    'channel-city-new-tokyo': [
+      {
+        id: 'msg-3',
+        channel_id: 'channel-city-new-tokyo',
+        sender_human_id: 'H-0044',
+        sender_display_name: 'Amara Vance',
+        sender_dynasty_name: 'Vance Dynasty',
+        body: 'Proposing municipal proposal P-201: Lower industrial energy tariffs by 1.5% to boost export volume.',
+        game_day: 184,
+        game_minute: 500,
+        attachments: [{ type: 'proposal', id: 'P-201', title: 'Industrial Energy Tariff Reduction' }],
+        created_at: new Date(Date.now() - 900000).toISOString(),
+      },
+    ],
+    'dm-amara-dmitri': [
+      {
+        id: 'msg-4',
+        channel_id: 'dm-amara-dmitri',
+        sender_human_id: 'H-0012',
+        sender_display_name: 'Dmitri Rostov',
+        sender_dynasty_name: 'House of Rostov',
+        body: 'Amara, did you review the tender offer for the circuit board delivery?',
+        game_day: 184,
+        game_minute: 520,
+        attachments: [],
+        created_at: new Date(Date.now() - 300000).toISOString(),
+      },
+    ],
+  },
+  dispatches: [
+    {
+      id: 'mail-1',
+      sender_human_id: 'H-0012',
+      sender_display_name: 'Dmitri Rostov',
+      sender_dynasty_name: 'House of Rostov',
+      recipient_human_id: 'H-0044',
+      recipient_display_name: 'Amara Vance',
+      subject: 'Tender Offer & Supply Contract Inquiry',
+      body: 'Greetings Executive Vance. We are seeking to secure long-term rights to 250 units of standard circuit boards per cycle. We have enclosed a preliminary bilateral trade agreement for your executive review.',
+      status: 'unread',
+      game_day: 184,
+      game_minute: 510,
+      dispatch_type: 'contract_offer',
+      action_payload: { contractId: 'CTR-904', creditsOffered: 1500 },
+      created_at: new Date(Date.now() - 600000).toISOString(),
+      read_at: null,
+    },
+    {
+      id: 'mail-2',
+      sender_human_id: 'H-0088',
+      sender_display_name: 'Kaelen Thorne',
+      sender_dynasty_name: 'Thorne Syndicate',
+      recipient_human_id: 'H-0044',
+      recipient_display_name: 'Amara Vance',
+      subject: 'Quantum Core Patent Licensing Inquiry',
+      body: 'We would like to license your Quantum Core patent for our Geneva fabrication plant. We offer 5% gross royalties plus 500 Credits upfront.',
+      status: 'unread',
+      game_day: 184,
+      game_minute: 320,
+      dispatch_type: 'patent_license',
+      action_payload: { patentId: 'PAT-01', royaltyPercent: 5.0, upfrontCredits: 500 },
+      created_at: new Date(Date.now() - 7200000).toISOString(),
+      read_at: null,
+    },
+  ],
+};
+
 const EPOCH_START_TIME_MS = Date.parse('2026-01-01T00:00:00.000Z');
 
 function computeCosmicClock(serverNow = Date.now()) {
@@ -623,6 +755,134 @@ function command(path, body, req = null) {
       ok: true,
       cemetery: memorials.slice(0, limit),
       totalReturned: Math.min(memorials.length, limit),
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  // --- Universal Comm-Link & Diplomatic Mail ---
+  if (path === '/api/comm/channels' && body.method === 'GET') {
+    return {
+      ok: true,
+      channels: commState.channels,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/comm/messages' && body.method === 'GET') {
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const channelId = url?.searchParams.get('channelId') || body.channelId || 'channel-global-relay';
+    const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 50)));
+    const msgs = (commState.messages[channelId] || []).slice(-limit);
+    return {
+      ok: true,
+      channelId,
+      messages: msgs,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/comm/messages' && body.method === 'POST') {
+    const channelId = body.channelId || 'channel-global-relay';
+    const text = (body.body || '').trim();
+    if (!text) throw new ApiError('Message body cannot be empty', 400, 'VALIDATION_ERROR');
+
+    const newMsg = {
+      id: `msg-${Date.now()}`,
+      channel_id: channelId,
+      sender_human_id: 'H-0044',
+      sender_display_name: 'Amara Vance',
+      sender_dynasty_name: 'Vance Dynasty',
+      body: text,
+      game_day: state.clock.day || 184,
+      game_minute: state.clock.minute || 500,
+      attachments: body.attachments || [],
+      created_at: new Date().toISOString(),
+    };
+    if (!commState.messages[channelId]) commState.messages[channelId] = [];
+    commState.messages[channelId].push(newMsg);
+    publish('comm.message.sent', newMsg);
+    return {
+      ok: true,
+      message: newMsg,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/comm/dispatches' && body.method === 'GET') {
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const folder = url?.searchParams.get('folder') || body.folder || 'inbox';
+    let list = commState.dispatches;
+    if (folder === 'sent') {
+      list = list.filter((d) => d.sender_human_id === 'H-0044');
+    } else if (folder === 'archived') {
+      list = list.filter((d) => d.recipient_human_id === 'H-0044' && d.status === 'archived');
+    } else {
+      list = list.filter((d) => d.recipient_human_id === 'H-0044' && d.status !== 'archived');
+    }
+    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === 'H-0044' && d.status === 'unread').length;
+    return {
+      ok: true,
+      folder,
+      dispatches: list,
+      unreadCount,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/comm/dispatches' && body.method === 'POST') {
+    const recipientId = (body.recipientId || '').trim();
+    const subject = (body.subject || '').trim();
+    const text = (body.body || '').trim();
+    if (!recipientId || !subject || !text) {
+      throw new ApiError('recipientId, subject, and body are required', 400, 'VALIDATION_ERROR');
+    }
+    const newDispatch = {
+      id: `mail-${Date.now()}`,
+      sender_human_id: 'H-0044',
+      sender_display_name: 'Amara Vance',
+      sender_dynasty_name: 'Vance Dynasty',
+      recipient_human_id: recipientId,
+      recipient_display_name: recipientId === 'H-0012' ? 'Dmitri Rostov' : (recipientId === 'H-0088' ? 'Kaelen Thorne' : recipientId),
+      subject,
+      body: text,
+      status: 'unread',
+      game_day: state.clock.day || 184,
+      game_minute: state.clock.minute || 520,
+      dispatch_type: body.dispatchType || 'diplomatic',
+      action_payload: body.actionPayload || {},
+      created_at: new Date().toISOString(),
+      read_at: null,
+    };
+    commState.dispatches.unshift(newDispatch);
+    publish('comm.dispatch.sent', newDispatch);
+    return {
+      ok: true,
+      dispatch: newDispatch,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/comm/dispatches/read' && body.method === 'POST') {
+    const dispatchId = body.dispatchId;
+    const found = commState.dispatches.find((d) => d.id === dispatchId);
+    if (found) {
+      found.status = 'read';
+      found.read_at = new Date().toISOString();
+    }
+    return {
+      ok: true,
+      dispatchId,
+      read: true,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/comm/metrics' && body.method === 'GET') {
+    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === 'H-0044' && d.status === 'unread').length;
+    return {
+      ok: true,
+      unreadDispatches: unreadCount,
+      activeChannelsCount: commState.channels.length,
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
