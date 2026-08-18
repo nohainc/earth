@@ -1283,10 +1283,19 @@ class MacroLiquidityPanel extends StatelessWidget {
     final supplyStr = supplyVal != null ? formatCreditsAmount(supplyVal) : '142,500.00 C';
     final targetStr = targetVal != null ? formatCreditsAmount(targetVal) : '150,000.00 C';
 
+    final cpiVal = asDouble(liq['cpi']) ?? 102.4;
+    final cpiDelta = cpiVal - 100.0;
+    final cpiDeltaStr = (cpiDelta >= 0 ? '+${cpiDelta.toStringAsFixed(1)}%' : '${cpiDelta.toStringAsFixed(1)}%');
+
+    final giniVal = asDouble(liq['gini']) ?? 0.28;
+    final giniLabel = giniVal <= 0.35 ? 'EQUITABLE' : (giniVal <= 0.50 ? 'MODERATE' : 'CONCENTRATED');
+
+    final velocityVal = asDouble(liq['velocity']) ?? 1.84;
+
     return EarthPanel(
-      title: 'MACRO LIQUIDITY / WORLD ENGINE SIGNAL',
+      title: 'UC MONETARY STABILITY BOARD / MACRO BASE',
       infoDescription:
-          '• Systemic Monetary Base: Real-time circulating currency in the global economy versus the Coalition equilibrium target corridor.\n\n• Corridor Status:\n  - EQUILIBRIUM: Active money supply matches economic velocity without inflationary or deflationary pressure.\n  - TIGHT LIQUIDITY: Deflationary contraction below lower corridor boundary; capital costs rise.\n  - EXPANDED LIQUIDITY: Inflationary expansion above upper corridor boundary; commodity prices inflate.\n\n• Sovereign Reserve Treasury: Stabilization reserves deployed to maintain exchange parity and back public infrastructure.',
+          '• UC Monetary Stability Board Charter (Spec §1.7.2, §1.9):\n  - Oversees world money supply (M0), stabilizes consumer price indices, and guarantees the 100% Reserve Standard across all municipal jurisdictions.\n\n• Core Macroeconomic Indicators:\n  - M0 Circulating Money Supply: Total Credits in circulation across all citizen wallets, corporate treasuries, and municipal accounts. Strictly conserved with zero unbacked fractional printing.\n  - 30-Day Consumer Price Index (CPI-30): Weighted price basket across the 4 core commodities (Food, Energy, Materials, Compute) indexed against base 100.0.\n  - Planetary Wealth Gini Coefficient: Quantifies systemic wealth inequality (0.00 = perfect equality, 1.00 = maximum concentration). Guardrail corridor triggers progressive fiscal levies above 0.45.\n  - Currency Velocity (V): Daily transactional turn rate measuring economic vitality and liquidity circulation.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -1295,7 +1304,7 @@ class MacroLiquidityPanel extends StatelessWidget {
             children: [
               const Expanded(
                 child: Text(
-                  'UNIVERSAL COALITION MONETARY EQUILIBRIUM',
+                  'UC PLANETARY MONETARY & STABILITY METRICS',
                   style: TextStyle(
                     fontSize: 11,
                     fontWeight: FontWeight.w800,
@@ -1323,19 +1332,61 @@ class MacroLiquidityPanel extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 16,
-            runSpacing: 8,
-            children: [
-              _metricBlock('CIRCULATING MONEY SUPPLY', supplyStr, cyanAccentColor),
-              _metricBlock('MACRO TARGET (M*)', targetStr, mutedColor),
-              _metricBlock('STABILIZATION BUFFER', 'Active (±20% Corridor)', Colors.tealAccent),
-            ],
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final isWide = constraints.maxWidth >= 600;
+              return Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    child: _metricCard(
+                      'CIRCULATING M0',
+                      supplyStr,
+                      '100% Reserve Conserved',
+                      cyanAccentColor,
+                      Icons.account_balance_wallet_outlined,
+                    ),
+                  ),
+                  SizedBox(
+                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    child: _metricCard(
+                      '30-DAY CPI',
+                      cpiVal.toStringAsFixed(1),
+                      '$cpiDeltaStr vs Base 100.0',
+                      Colors.tealAccent,
+                      Icons.show_chart_outlined,
+                    ),
+                  ),
+                  SizedBox(
+                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    child: _metricCard(
+                      'PLANETARY GINI (G)',
+                      giniVal.toStringAsFixed(2),
+                      '$giniLabel (<0.45 target)',
+                      violetColor,
+                      Icons.pie_chart_outline,
+                    ),
+                  ),
+                  SizedBox(
+                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    child: _metricCard(
+                      'MONEY VELOCITY (V)',
+                      '${velocityVal.toStringAsFixed(2)}x',
+                      'Target M*: $targetStr',
+                      Colors.orangeAccent,
+                      Icons.speed_outlined,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
-          const SizedBox(height: 8),
+          const SizedBox(height: 10),
           const Text(
-            'The UC World Engine dynamically buffers systemic money supply against demographic population shifts to prevent deflationary liquidity stalls and runaway debasement.',
+            'The UC Monetary Stability Board maintains the 100% Reserve Standard. Macro money supply is strictly non-inflationary, offsetting demographic shifts via the Central Stability Reserve without currency debasement.',
             style: TextStyle(fontSize: 10, color: mutedColor, height: 1.4),
           ),
         ],
@@ -1343,19 +1394,54 @@ class MacroLiquidityPanel extends StatelessWidget {
     );
   }
 
-  Widget _metricBlock(String label, String value, Color color) => Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            label,
-            style: const TextStyle(fontSize: 9, color: mutedColor, letterSpacing: .8),
-          ),
-          const SizedBox(height: 2),
-          Text(
-            value,
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w800, color: color),
-          ),
-        ],
+  Widget _metricCard(String label, String value, String subtext, Color color, IconData icon) => Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.white12),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Icon(icon, size: 13, color: color),
+                const SizedBox(width: 5),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: const TextStyle(
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w700,
+                      color: mutedColor,
+                      letterSpacing: .6,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 4),
+            Text(
+              value,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              subtext,
+              style: const TextStyle(
+                fontSize: 8.5,
+                color: mutedColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ],
+        ),
       );
 }
 

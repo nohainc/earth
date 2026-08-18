@@ -36,13 +36,23 @@ class ProposalPanel extends StatelessWidget {
         (proposal['votes'] as Map<String, dynamic>?) ?? const {});
     final hasProposal = proposal['id'].toString().isNotEmpty;
     final proposalId = proposal['id'].toString();
-    final isPassed = proposal['outcome'] == 'passed';
+    final isPassed = proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
     final executionStatus =
-        (proposal['execution_status']?.toString() ?? 'pending').toLowerCase();
+        (proposal['execution_status']?.toString() ?? (isPassed ? 'ready' : 'pending')).toLowerCase();
     final isChallenged = executionStatus == 'challenged';
     final isVoided =
         executionStatus == 'voided' || proposal['outcome'] == 'voided';
     final isExecuted = executionStatus == 'executed';
+
+    final currentDay = asIntOr(state.clock['day'], 1);
+    final implDay = asInt(proposal['implementation_game_day']) ??
+        (proposal['implementation_delay_days'] != null
+            ? (asInt(proposal['resolved_game_day']) ?? currentDay) + asInt(proposal['implementation_delay_days'])!
+            : (isPassed ? currentDay : null));
+    final delayDaysRemaining = (implDay != null && currentDay < implDay && isPassed)
+        ? (implDay - currentDay)
+        : 0;
+    final isCoolingOff = isPassed && delayDaysRemaining > 0 && !isChallenged && !isVoided && !isExecuted;
 
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
@@ -70,12 +80,13 @@ class ProposalPanel extends StatelessWidget {
     if (isChallenged) statusColor = Colors.orangeAccent;
     if (isVoided) statusColor = Colors.redAccent;
     if (isExecuted) statusColor = Colors.greenAccent;
-    if (isPassed) statusColor = Colors.tealAccent;
+    if (isCoolingOff) statusColor = Colors.amberAccent;
+    if (isPassed && !isCoolingOff && !isChallenged && !isVoided && !isExecuted) statusColor = Colors.tealAccent;
 
     return EarthPanel(
       title: 'UC PROPOSAL ${hasProposal ? proposal['id'] : ''}',
       infoDescription:
-          '• Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.\n\n• Quorum & Approval Thresholds:\n  - Quorum: Minimum citizen participation required for ballot validity ($quorumPercent%).\n  - Approval: Majority threshold needed among cast ballots for proposal enactment ($approvalPercent%).\n\n• Legislative Stages:\n  - ACTIVE: Open for citizen voting (support, oppose, abstain).\n  - PASSED / EXECUTABLE: Approved ballot awaiting formal execution on the planetary ledger.\n  - CHALLENGED: Contested under constitutional grounds awaiting Supreme Court judicial review.\n  - EXECUTED: Enacted into statutory planetary law.',
+          '• Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.\n\n• Quorum & Approval Thresholds:\n  - Quorum: Minimum citizen participation required for ballot validity ($quorumPercent%).\n  - Approval: Majority threshold needed among cast ballots for proposal enactment ($approvalPercent%).\n\n• Mandatory Implementation Delay (Cooling-Off Period):\n  - Spec §1.8.2: All passed legislation enters a mandatory 3-day cooling-off window prior to execution, allowing affected entities to prepare or file constitutional challenges with the UC High Court.\n\n• Legislative Stages:\n  - ACTIVE: Open for citizen voting (support, oppose, abstain).\n  - COOLING-OFF: Approved ballot undergoing mandatory judicial review window.\n  - READY: Cooling-off complete; authorized for ledger enactment.\n  - CHALLENGED: Under injunction awaiting Supreme Court ruling.\n  - EXECUTED: Enacted into statutory planetary law.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -134,7 +145,9 @@ class ProposalPanel extends StatelessWidget {
                                     ),
                                   ),
                                   child: Text(
-                                    executionStatus.toUpperCase(),
+                                    isCoolingOff
+                                        ? 'COOLING-OFF'
+                                        : executionStatus.toUpperCase(),
                                     style: TextStyle(
                                       fontSize: 9.5,
                                       fontWeight: FontWeight.w800,
@@ -157,6 +170,33 @@ class ProposalPanel extends StatelessWidget {
                             style: const TextStyle(
                                 color: mutedColor, fontSize: 11),
                           ),
+                          if (isCoolingOff) ...[
+                            const SizedBox(height: 6),
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: Colors.amberAccent.withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(4),
+                                border: Border.all(color: Colors.amberAccent.withValues(alpha: .3)),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.timer_outlined, size: 13, color: Colors.amberAccent),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      'Cooling-off active: Implementation Day $implDay ($delayDaysRemaining day(s) for challenge)',
+                                      style: const TextStyle(
+                                        color: Colors.amberAccent,
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
                           if (proposal['deadline'] is Map) ...[
                             const SizedBox(height: 4),
                             Text(
@@ -295,18 +335,18 @@ class ProposalPanel extends StatelessWidget {
                   !isExecuted)
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: cyanAccentColor,
+                    backgroundColor: isCoolingOff ? Colors.amberAccent : cyanAccentColor,
                     foregroundColor: Colors.black,
                   ),
-                  onPressed: busy
+                  onPressed: busy || isCoolingOff
                       ? null
                       : () => action(
                           () => const EarthApi().executeProposal(proposalId)),
-                  icon: const Icon(Icons.check_circle_outline, size: 14),
-                  label: const Text(
-                    'EXECUTE PROPOSAL',
+                  icon: Icon(isCoolingOff ? Icons.lock_clock_outlined : Icons.check_circle_outline, size: 14),
+                  label: Text(
+                    isCoolingOff ? 'COOLING-OFF (DAY $implDay)' : 'EXECUTE PROPOSAL',
                     style:
-                        TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                        const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
                   ),
                 ),
               if (hasProposal &&

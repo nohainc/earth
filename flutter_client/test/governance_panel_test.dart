@@ -65,4 +65,53 @@ void main() {
     await tester.tap(find.text('support'));
     expect(castChoice, 'voted');
   });
+
+  testWidgets('ProposalPanel renders cooling-off judicial review state and disables premature execution',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 10, 'minute': 200},
+      'human': {'id': 'h-amara', 'credits': 500, 'standing': 10, 'legacy': 0},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {'research': {}},
+      'institutions': {'city': {}, 'corporation': {}},
+      'life': {},
+      'governance': {
+        'proposals': [
+          {
+            'id': 'PROP-102',
+            'title': 'Energy Tariff Standardization',
+            'status': 'closed',
+            'outcome': 'passed',
+            'quorum': 0.25,
+            'approval_threshold': 0.5,
+            'implementation_game_day': 13,
+            'implementation_delay_days': 3,
+            'execution_status': 'ready',
+            'votes': {'support': 40, 'oppose': 10, 'uncast': 0},
+          }
+        ]
+      },
+      'roles': [],
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProposalPanel(
+            state: state,
+            busy: false,
+            action: (callback) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('UC PROPOSAL PROP-102'), findsOneWidget);
+    expect(find.text('COOLING-OFF'), findsOneWidget);
+    expect(find.textContaining('Cooling-off active: Implementation Day 13'), findsOneWidget);
+    expect(find.text('COOLING-OFF (DAY 13)'), findsOneWidget);
+    expect(find.text('CHALLENGE PROPOSAL'), findsOneWidget);
+  });
 }

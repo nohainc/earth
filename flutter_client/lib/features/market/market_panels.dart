@@ -428,14 +428,113 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final isBuy = _orderSide == 'buy';
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
 
+    final currentDay = asIntOr(widget.state.clock['day'], 1);
+    final currentMinute = asIntOr(widget.state.clock['minute'], 0);
+    final epochIndex = (currentDay * 6) + (currentMinute ~/ 240);
+    final minutesToNextEpoch = 240 - (currentMinute % 240);
+    final remHours = minutesToNextEpoch ~/ 60;
+    final remMins = minutesToNextEpoch % 60;
+    final countdownStr = '${remHours.toString().padLeft(2, '0')}:${remMins.toString().padLeft(2, '0')}';
+
     return EarthPanel(
       key: widget.panelKey,
       title: 'CENTRAL MARKET / LIVE SIGNALS',
       infoDescription:
-          '• Commodity Selector: Select between Food, Materials, Energy, Components, and Compute to view spot clearing price, 24h price delta, and market liquidity.\n\n• Liquidity Pressure Gauge: Real-time ratio comparing total aggregated sell volume against buy volume. Identifies supply shortages and accumulation trends.\n\n• Historical Clearing Trend: Interactive price chart tracking uniform clearing prices settled across successive clearing batches.\n\n• Execution Terminal: Submit limit Buy or Sell orders with explicit quantity and unit price controls. Escrow funds or inventory units are automatically locked and refunded upon cancellation.',
+          '• Periodic Batch Auction Architecture (Spec §1.10):\n  - Major commodities clear via scheduled Batch Auctions (every 4 simulation hours) rather than continuous front-run order books.\n  - Uniform Price Clearing (P*): All buy orders >= P* and sell orders <= P* fill at the identical market clearing price.\n  - Pro-Rata Shortage Allocation: Excess supply or demand at exact P* is allocated proportionally.\n\n• Commodity Selector: Select between Food, Materials, Energy, Components, and Compute to view spot clearing price, 24h price delta, and market liquidity.\n\n• Liquidity Pressure Gauge: Real-time ratio comparing total aggregated sell volume against buy volume.\n\n• Execution Terminal: Submit limit Buy or Sell orders with explicit quantity and unit price controls.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 0. BATCH AUCTION CLEARING BANNER
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .85),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: cyanAccentColor.withValues(alpha: .25)),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: cyanAccentColor.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: const Icon(Icons.layers_outlined, size: 16, color: cyanAccentColor),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          const Text(
+                            'PERIODIC BATCH AUCTION',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .8,
+                              color: inkColor,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.tealAccent.withValues(alpha: .12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(color: Colors.tealAccent.withValues(alpha: .3)),
+                            ),
+                            child: Text(
+                              'EPOCH #$epochIndex',
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: Colors.tealAccent,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Next batch clearing in $countdownStr · Uniform Clearing Price (P*) · Zero Slippage',
+                        style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  decoration: BoxDecoration(
+                    color: cyanAccentColor.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: cyanAccentColor.withValues(alpha: .3)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.sync_outlined, size: 11, color: cyanAccentColor),
+                      SizedBox(width: 4),
+                      Text(
+                        'POOLING ORDERS',
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .6,
+                          color: cyanAccentColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // 1. TOP COMMODITY SELECTOR MATRIX
           LayoutBuilder(
             builder: (context, constraints) {
