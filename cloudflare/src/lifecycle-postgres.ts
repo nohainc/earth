@@ -82,12 +82,30 @@ export async function settleInheritance(repository: PostgresRepository, input: {
   });
 }
 
+export function calculateAnnualMortalityHazard(age: number, health: number, essentialServicesIndex: number): number {
+  if (age < 65) return 0;
+  if (age >= 105) return 1.0;
+  const clampedHealth = Math.max(0, Math.min(100, health));
+  const servicesFactor = 0.68 / Math.max(0.2, essentialServicesIndex || 0.68);
+  const healthPenalty = 1 + (100 - clampedHealth) / 50;
+  const ageExponent = Math.pow(1.10, age - 65);
+  const hazard = 0.015 + 0.0002 * ageExponent * healthPenalty * servicesFactor;
+  return Math.min(0.95, Math.max(0.005, hazard));
+}
+
 export async function processMortality(tx: PostgresRepository, day: number): Promise<number> {
   const service = await tx.query<{ essential_services_index: string }>("SELECT essential_services_index FROM world_state WHERE id = 'WORLD'");
-  const mortalityAge = Math.round(90 + Math.max(-5, Math.min(5, (Number(service.rows[0]?.essential_services_index ?? 0.68) - 0.68) * 10)));
-  const humans = await tx.query<{ id: string; account_id: string | null; display_name: string; standing: number; legacy: number; age_years: number; successor_name: string | null; successor_human_id: string | null; estate_period_days: number | null; balance: string }>('SELECT humans.id, account_balances.account_id, humans.display_name, humans.standing, humans.legacy, humans.age_years, succession_plans.successor_name, succession_plans.successor_human_id, succession_plans.estate_period_days, COALESCE(account_balances.balance, 0) AS balance FROM humans LEFT JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = \'CREDIT\' WHERE humans.life_status = \'active\' AND humans.age_years >= $1 FOR UPDATE', [mortalityAge]);
+  const essentialServicesIndex = Number(service.rows[0]?.essential_services_index ?? 0.68);
+  const humans = await tx.query<{ id: string; account_id: string | null; display_name: string; standing: number; legacy: number; age_years: number; successor_name: string | null; successor_human_id: string | null; estate_period_days: number | null; balance: string }>('SELECT humans.id, account_balances.account_id, humans.display_name, humans.standing, humans.legacy, humans.age_years, succession_plans.successor_name, succession_plans.successor_human_id, succession_plans.estate_period_days, COALESCE(account_balances.balance, 0) AS balance FROM humans LEFT JOIN succession_plans ON succession_plans.human_id = humans.id LEFT JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = \'CREDIT\' WHERE humans.life_status = \'active\' AND humans.age_years >= 65 FOR UPDATE');
   let processed = 0;
   for (const human of humans.rows) {
+    const age = Number(human.age_years);
+    const health = 85; // Standard biological health baseline
+    const hazard = calculateAnnualMortalityHazard(age, health, essentialServicesIndex);
+    const seed = (day * 43 + (parseInt(human.id.replace(/\D/g, '') || '1', 10)) * 23) % 10000;
+    const roll = seed / 10000.0;
+    if (roll >= hazard && age < 105) continue;
+
     const eventId = `DEATH-${human.id}-${day}`;
     if ((await tx.query("SELECT 1 FROM life_events WHERE id = $1 AND event_type = 'death'", [eventId])).rows[0]) continue;
     const successor = human.successor_human_id ? await tx.query<{ id: string; account_id: string }>("SELECT humans.id, account_balances.account_id FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.id = $1 AND humans.life_status = 'active' FOR UPDATE", [human.successor_human_id]) : { rows: [] } as { rows: Array<{ id: string; account_id: string }> };
@@ -133,7 +151,7 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
     await tx.query("UPDATE humans SET life_status = $1, death_game_day = $2 WHERE id = $3", [successorRow ? 'deceased' : 'estate', day, human.id]);
     await tx.query('INSERT INTO life_events (id,human_id,event_type,game_day,successor_name,estate_credits) VALUES ($1,$2,\'death\',$3,$4,$5)', [eventId, human.id, day, human.successor_name, successorRow ? gross : gross]);
     if (successorRow) {
-      await tx.query('INSERT INTO deceased_profiles (human_id,display_name,death_game_day,final_standing,final_legacy,successor_name) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name', [human.id, human.display_name, day, human.standing, human.legacy, human.successor_name]);
+      await tx.query('INSERT INTO deceased_profiles (human_id,display_name,death_game_day,final_standing,final_legacy,successor_name,cause_of_death,epitaph) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name, death_game_day = EXCLUDED.death_game_day', [human.id, human.display_name, day, human.standing, human.legacy, human.successor_name, 'Natural Biological Mortality', 'Inscribed into the Planetary Pantheon of Earth.']);
       await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [human.id]);
       await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'human.life_event\',\'A Human entered the archive\',$3) ON CONFLICT (id) DO NOTHING', [`DEATH-${human.id}-${day}`, day, toNanoMarkup({ humanId: human.id, successor: human.successor_name })]);
     } else {

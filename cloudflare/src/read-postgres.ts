@@ -161,13 +161,37 @@ export async function readBusinessProfile(repository: PostgresRepository, busine
 }
 
 export async function listPantheonOfAchievements(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const [deceased, active] = await Promise.all([
-    repository.query('SELECT * FROM deceased_profiles ORDER BY final_legacy DESC, final_standing DESC LIMIT 20'),
+  const [deceased, active, dynasties] = await Promise.all([
+    repository.query('SELECT * FROM deceased_profiles ORDER BY final_legacy DESC, final_standing DESC LIMIT 50'),
     repository.query("SELECT id, display_name, age_years, standing, legacy, (standing * 10 + legacy * 50 + age_years * 2) AS composite_legacy_score FROM humans WHERE life_status = 'active' ORDER BY legacy DESC, standing DESC LIMIT 20"),
+    repository.query("SELECT dynasty_name, COUNT(*) as deceased_count, MAX(final_legacy) as peak_legacy FROM deceased_profiles GROUP BY dynasty_name ORDER BY peak_legacy DESC LIMIT 20"),
   ]);
   return {
     deceasedPantheon: deceased.rows,
     livingLeaders: active.rows,
+    dynasticHouses: dynasties.rows,
+  };
+}
+
+export async function listCemeteryProfiles(repository: PostgresRepository, query: { search?: string; dynasty?: string; limit?: number }): Promise<Record<string, unknown>> {
+  const limit = Math.max(1, Math.min(100, query.limit ?? 50));
+  let sql = 'SELECT * FROM deceased_profiles WHERE 1=1';
+  const params: unknown[] = [];
+  if (query.search && query.search.trim().length > 0) {
+    params.push(`%${query.search.trim()}%`);
+    sql += ` AND (display_name ILIKE $${params.length} OR successor_name ILIKE $${params.length} OR dynasty_name ILIKE $${params.length})`;
+  }
+  if (query.dynasty && query.dynasty.trim().length > 0) {
+    params.push(query.dynasty.trim());
+    sql += ` AND dynasty_name = $${params.length}`;
+  }
+  params.push(limit);
+  sql += ` ORDER BY death_game_day DESC, final_legacy DESC LIMIT $${params.length}`;
+
+  const rows = await repository.query(sql, params);
+  return {
+    cemetery: rows.rows,
+    totalReturned: rows.rows.length,
   };
 }
 

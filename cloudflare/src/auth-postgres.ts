@@ -60,7 +60,7 @@ export async function loginIdentity(repository: PostgresRepository, input: { ema
   const attempt = (await repository.query<{ window_started_at: string; attempt_count: number; blocked_until: string | null }>('SELECT window_started_at, attempt_count, blocked_until FROM auth_login_attempts WHERE email = $1', [input.email])).rows[0];
   if (attempt?.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) throw new Error('Too many login attempts. Try again later.');
   const credential = (await repository.query<{ human_id: string; password_hash: string; password_salt: string; password_iterations: number; email_verified_at: string | null; mfa_enabled: boolean; mfa_secret: string | null; life_status: string }>("SELECT auth_credentials.*, humans.life_status FROM auth_credentials JOIN humans ON humans.id = auth_credentials.human_id WHERE auth_credentials.email = $1", [input.email])).rows[0];
-  if (credential?.life_status !== 'active') throw new Error('This Human is not currently active');
+  if (!credential) throw new Error('Invalid email or password');
   if (!credential.email_verified_at) throw new Error('Verify your email before signing in');
   const matches = Boolean(input.password.length && await derivePassword(input.password, base64ToBytes(credential.password_salt), Number(credential.password_iterations)) === credential.password_hash);
   if (!matches) {
@@ -75,6 +75,98 @@ export async function loginIdentity(repository: PostgresRepository, input: { ema
   const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
   await repository.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), credential.human_id, await digest(token), expires]);
-  const human = (await repository.query('SELECT id, display_name FROM humans WHERE id = $1', [credential.human_id])).rows[0];
-  return { ok: true, human, expiresAt: expires, token, maxAge: SESSION_DAYS * 86400 };
+  const human = (await repository.query<{ id: string; display_name: string; life_status: string }>('SELECT id, display_name, life_status FROM humans WHERE id = $1', [credential.human_id])).rows[0];
+  return { ok: true, human, lifeStatus: human?.life_status ?? credential.life_status, expiresAt: expires, token, maxAge: SESSION_DAYS * 86400 };
+}
+
+export async function rebornIdentity(repository: PostgresRepository, input: { email: string; displayName: string; dynastyName?: string; startingCityId?: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
+    if (!cred) throw new Error('Account not found');
+    const prevHuman = (await tx.query<{ id: string; display_name: string; legacy: number; standing: number; life_status: string }>('SELECT id, display_name, legacy, standing, life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
+
+    const world = await tx.query<{ game_day: number; living_cost_index: string }>("SELECT game_day, living_cost_index FROM world_state WHERE id = 'WORLD'");
+    const worldDay = Number(world.rows[0]?.game_day ?? 184);
+    const referencePrice = await tx.query<{ reference_price: string }>("SELECT COALESCE(AVG(price), 50) AS reference_price FROM market_prices WHERE product IN ('components', 'energy')");
+    const starter = calculateStarterPackage(world.rows[0]?.living_cost_index ?? 1, economicStartIndex(referencePrice.rows[0]?.reference_price ?? 50));
+
+    const newHumanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const newAccountId = `account-${newHumanId.toLowerCase()}`;
+    const businessId = `B-${newHumanId.slice(2)}`;
+    const machineId = `M-${newHumanId.slice(2)}-01`;
+    const technologyId = `TECH-${newHumanId.slice(2)}`;
+    const researchId = `R-${newHumanId.slice(2)}`;
+    const cityId = input.startingCityId ?? 'city-new-tokyo';
+
+    // 1. Create new Human with starter capital minus 500 Credit Naturalization Fee (net 9,500 Credits)
+    const netStartingCredits = Math.max(1000, Number(starter.credits) - 500);
+    await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,life_status) VALUES ($1,$2,$3,20,500,$4,\'active\')', [newHumanId, newAccountId, input.displayName, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
+    await tx.query('INSERT INTO account_balances (account_id,owner_id,currency,balance) VALUES ($1,$2,\'CREDIT\',$3)', [newAccountId, newHumanId, netStartingCredits]);
+
+    // 2. Distribute Naturalization Fee (250 C to UC Treasury, 250 C to City Treasury)
+    await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\'');
+    await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = $1', [`account-${cityId}-treasury`]).catch(() => tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\''));
+
+    // 3. Setup starter business, machine, resources, technology
+    await tx.query('INSERT INTO institutions (id,kind,name) VALUES ($1,\'BUSINESS\',$2)', [businessId, `${input.displayName} Enterprise`]);
+    await tx.query('INSERT INTO businesses (id,institution_id,owner_id,business_type,registration_day) VALUES ($1,$1,$2,\'manufacturing\',$3)', [businessId, newHumanId, worldDay]);
+    await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,1000)', [businessId, newHumanId]);
+    await tx.query('INSERT INTO machines (id,owner_id,name,machine_type,condition,utilization,maintenance_due,productive_capacity) VALUES ($1,$2,\'Core Fabricator Mark I\',\'fabricator\',100,0,$3,1)', [machineId, newHumanId, worldDay + 30]);
+    await tx.query('INSERT INTO business_assets (business_id,machine_id) VALUES ($1,$2)', [businessId, machineId]);
+    for (const [res, amt] of Object.entries(starter.resources)) {
+      await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [newHumanId, res, amt]);
+    }
+    await tx.query('INSERT INTO technologies (id,name,tier,category) VALUES ($1,\'Advanced Automated Assembly\',1,\'manufacturing\') ON CONFLICT(id) DO NOTHING', [technologyId]);
+    await tx.query('INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,started_game_day) VALUES ($1,$2,$3,2500,0,$4)', [researchId, technologyId, newHumanId, worldDay]);
+    await tx.query('INSERT INTO memberships (human_id,city_id,joined_game_day) VALUES ($1,$2,$3) ON CONFLICT(human_id) DO UPDATE SET city_id = EXCLUDED.city_id', [newHumanId, cityId, worldDay]);
+
+    // 4. Update auth credentials to point to the new human
+    await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [newHumanId, input.email]);
+    await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
+
+    // 5. Inscribe into character lineage
+    const dynasty = input.dynastyName ?? 'Founding Dynasty';
+    await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,dynasty_name) VALUES ($1,$2,$3,$4,(SELECT COALESCE(MAX(generation), 0) + 1 FROM character_lineage WHERE email = $2),$5,$6)', [crypto.randomUUID(), input.email, newHumanId, prevHuman?.id ?? null, worldDay, dynasty]);
+
+    const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
+    const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
+    await tx.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), newHumanId, await digest(token), expires]);
+
+    return {
+      ok: true,
+      reborn: true,
+      human: { id: newHumanId, displayName: input.displayName, email: input.email, life_status: 'active' },
+      token,
+      expiresAt: expires,
+      maxAge: SESSION_DAYS * 86400,
+    };
+  });
+}
+
+export async function claimHeirIdentity(repository: PostgresRepository, input: { email: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
+    if (!cred) throw new Error('Account not found');
+    const plan = (await tx.query<{ successor_human_id: string; successor_name: string }>('SELECT successor_human_id, successor_name FROM succession_plans WHERE human_id = $1', [cred.human_id])).rows[0];
+    if (!plan?.successor_human_id) throw new Error('No designated successor registered for this character');
+
+    const successor = (await tx.query<{ id: string; display_name: string; life_status: string }>('SELECT id, display_name, life_status FROM humans WHERE id = $1', [plan.successor_human_id])).rows[0];
+    if (!successor || successor.life_status !== 'active') throw new Error('Designated successor is not currently active');
+
+    await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [successor.id, input.email]);
+    await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
+
+    const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
+    const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
+    await tx.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), successor.id, await digest(token), expires]);
+
+    return {
+      ok: true,
+      claimed: true,
+      human: successor,
+      token,
+      expiresAt: expires,
+      maxAge: SESSION_DAYS * 86400,
+    };
+  });
 }

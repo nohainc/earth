@@ -3,6 +3,7 @@ import '../../core/api/earth_api.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../command_center/command_center_screen.dart';
 import 'auth_screen.dart';
+import 'reincarnation_dialog.dart';
 
 class AuthGate extends StatefulWidget {
   const AuthGate({super.key});
@@ -90,6 +91,24 @@ class _AuthGateState extends State<AuthGate> {
           onAuthenticated: (value) => setState(() => session = value),
           initialResetToken: resetToken,
           initialMessage: actionMessage);
+    }
+    final human = current['human'] as Map<String, dynamic>?;
+    final lifeStatus = human?['life_status']?.toString();
+    if (lifeStatus == 'deceased' || lifeStatus == 'estate') {
+      return Scaffold(
+        body: Center(
+          child: ReincarnationDialog(
+            deceasedHuman: human ?? const {},
+            api: api,
+            onReborn: (val) {
+              setState(() {
+                loadingSession = true;
+              });
+              _bootstrap();
+            },
+          ),
+        ),
+      );
     }
     return CommandCenter(
         onLogout: () => setState(() => session = {'authenticated': false}));

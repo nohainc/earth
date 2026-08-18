@@ -7,6 +7,15 @@ const surfaceColor = Color(0xff1b1e38);
 const mutedColor = Color(0xff9698b5);
 const cyanAccentColor = Color(0xff55d8b2);
 
+class EarthColors {
+  static const Color panelSurface = surfaceColor;
+  static const Color cardSurface = Color(0xff222646);
+  static const Color borderSubtle = Colors.white12;
+  static const Color goldMetallic = Color(0xffeab308);
+  static const Color cyanAccent = cyanAccentColor;
+  static const Color textMuted = mutedColor;
+}
+
 ThemeData createEarthTheme() => ThemeData(
       brightness: Brightness.dark,
       scaffoldBackgroundColor: canvasColor,

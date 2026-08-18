@@ -2,6 +2,7 @@ import { bytesToBase32, validTotp, digest } from './auth-crypto';
 import { cookieValue, extractToken, currentHuman, sessionCookie } from './auth-session';
 import { parseJsonBody } from './request-validation';
 import { withRepository } from './repository';
+import { rebornIdentity, claimHeirIdentity } from './auth-postgres';
 
 export async function authenticatedAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
@@ -61,6 +62,34 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [human.id]));
     if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
+  }
+  if (url.pathname === '/api/auth/rebirth' && request.method === 'POST') {
+    const human = await currentHuman(request, env);
+    if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ displayName?: string; dynastyName?: string; startingCityId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const displayName = parsed.value.displayName?.trim();
+    if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => rebornIdentity(repository, { email: human.email, displayName, dynastyName: parsed.value.dynastyName?.trim(), startingCityId: parsed.value.startingCityId }));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
+      return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Rebirth transaction failed';
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
+  }
+  if (url.pathname === '/api/auth/claim-heir' && request.method === 'POST') {
+    const human = await currentHuman(request, env);
+    if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    try {
+      const result = await withRepository(env, (repository) => claimHeirIdentity(repository, { email: human.email }));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
+      return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Succession claim failed';
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
   }
   return null;
 }

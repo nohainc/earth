@@ -17,7 +17,7 @@ import { changeDelegation as changeDelegationPostgres, changeRole as changeRoleP
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
 import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
-import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
+import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
@@ -1118,6 +1118,18 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Pantheon fetch failed' }, { status: 500 });
+      }
+    }
+    if (url.pathname === '/api/cemetery' && request.method === 'GET') {
+      const search = url.searchParams.get('search')?.trim();
+      const dynasty = url.searchParams.get('dynasty')?.trim();
+      const limit = Number(url.searchParams.get('limit') ?? 50);
+      try {
+        const result = await withRepository(env, (repository) => listCemeteryProfilesPostgres(repository, { search, dynasty, limit }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Cemetery fetch failed' }, { status: 500 });
       }
     }
     if (url.pathname === '/api/market/history' && request.method === 'GET') {

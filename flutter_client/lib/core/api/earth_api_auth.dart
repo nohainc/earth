@@ -82,6 +82,34 @@ extension EarthApiAuth on EarthApi {
             'password': password,
           })) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> rebirth(String displayName,
+      {String? dynastyName, String? startingCityId}) async {
+    final response = (await _request('/api/auth/rebirth',
+        method: 'POST',
+        body: {
+          'displayName': displayName,
+          if (dynastyName != null && dynastyName.isNotEmpty)
+            'dynastyName': dynastyName,
+          if (startingCityId != null && startingCityId.isNotEmpty)
+            'startingCityId': startingCityId,
+        })) as Map<String, dynamic>;
+    final token = response['token']?.toString();
+    if (token != null && token.isNotEmpty) {
+      await AuthStorage.saveToken(token);
+    }
+    return response;
+  }
+
+  Future<Map<String, dynamic>> claimHeir() async {
+    final response = (await _request('/api/auth/claim-heir',
+        method: 'POST', body: {})) as Map<String, dynamic>;
+    final token = response['token']?.toString();
+    if (token != null && token.isNotEmpty) {
+      await AuthStorage.saveToken(token);
+    }
+    return response;
+  }
+
   Future<void> logout() async {
     try {
       await _request('/api/auth/logout', method: 'POST');

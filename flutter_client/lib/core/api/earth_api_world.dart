@@ -64,6 +64,18 @@ extension EarthApiWorld on EarthApi {
   Future<Map<String, dynamic>> pantheon() async =>
       (await _request('/api/pantheon')) as Map<String, dynamic>;
 
+  Future<Map<String, dynamic>> cemetery(
+      {String? search, String? dynasty, int limit = 50}) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
+      if (dynasty != null && dynasty.trim().isNotEmpty)
+        'dynasty': dynasty.trim(),
+    };
+    final uri = Uri(path: '/api/cemetery', queryParameters: params);
+    return (await _request(uri.toString())) as Map<String, dynamic>;
+  }
+
   Future<Map<String, dynamic>> rankings() async =>
       (await _request('/api/rankings')) as Map<String, dynamic>;
 

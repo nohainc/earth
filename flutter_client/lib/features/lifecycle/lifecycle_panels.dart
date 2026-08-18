@@ -6,6 +6,7 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../governance/governance_dialogs.dart';
 import 'lifecycle_dialogs.dart';
+import 'cemetery_pantheon_dialog.dart';
 
 class SuccessionPanel extends StatelessWidget {
   final EarthState state;
@@ -1326,6 +1327,58 @@ class PantheonPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Cemetery Action Header
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 16),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: EarthColors.cardSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: EarthColors.goldMetallic.withAlpha(100)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.account_balance, color: EarthColors.goldMetallic, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'PLANETARY CEMETERY & MEMORIAL ARCHIVE',
+                        style: TextStyle(
+                          color: EarthColors.goldMetallic,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Search all inscribed citizen records, eulogies, and multi-generational lineages.',
+                        style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (ctx) => ElevatedButton.icon(
+                    onPressed: () => showCemeteryPantheonDialog(ctx),
+                    icon: const Icon(Icons.open_in_new, size: 16),
+                    label: const Text('EXPLORE CEMETERY'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: EarthColors.goldMetallic,
+                      foregroundColor: Colors.black,
+                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // 1. DYNASTIC SUCCESSION LINEAGE TREE
           const Text(
             'DYNASTIC SUCCESSION LINEAGE TREE',
