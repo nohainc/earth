@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/live_connection_status.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../activity/activity_panel.dart';
@@ -49,6 +50,7 @@ class Dashboard extends StatelessWidget {
   final List<dynamic> contracts;
   final bool isLiveConnected;
   final bool isReconnecting;
+  final LiveConnectionStatus? connectionStatus;
   final int unreadNotifications;
   final Map<String, GlobalKey> sectionKeys;
   final String selectedSection;
@@ -77,6 +79,7 @@ class Dashboard extends StatelessWidget {
     this.contracts = const [],
     this.isLiveConnected = true,
     this.isReconnecting = false,
+    this.connectionStatus,
     required this.unreadNotifications,
     required this.sectionKeys,
     this.selectedSection = 'command',
@@ -358,6 +361,7 @@ class Dashboard extends StatelessWidget {
             unreadCount: unreadNotifications,
             isLiveConnected: isLiveConnected,
             isReconnecting: isReconnecting,
+            connectionStatus: connectionStatus,
             onRefresh: onRefreshEvents ?? () {},
             onMarkRead: onMarkNotificationRead ?? (_) async {},
             onMarkAllRead: onMarkAllNotificationsRead ?? () async {},

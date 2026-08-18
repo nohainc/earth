@@ -19,6 +19,7 @@ import '../../core/onboarding_controller.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
+import '../../core/models/live_connection_status.dart';
 
 Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
   final base = configuredBase.isNotEmpty
@@ -72,9 +73,12 @@ class _CommandCenterState extends State<CommandCenter> {
   int unreadNotifications = 0;
   int unreadCommMessages = 0;
   String selectedSection = 'command';
+  LiveConnectionStatus connectionStatus = LiveConnectionStatus.reconnecting;
   Timer? eventTimer;
   Timer? liveReconnectTimer;
+  Timer? pollingFallbackTimer;
   WebSocketChannel? liveChannel;
+  int _wsFailCount = 0;
   final Set<String> _seenEventKeys = <String>{};
   int _requestGeneration = 0;
 
@@ -129,27 +133,79 @@ class _CommandCenterState extends State<CommandCenter> {
 
   void _connectLiveChannel() {
     final uri = liveEventsUri(configuredBase: api.baseUrl, pageUri: Uri.base);
-    if (uri == null) return;
+    if (uri == null) {
+      _startPollingFallback();
+      return;
+    }
     try {
       liveChannel = WebSocketChannel.connect(uri);
       _refreshEvents();
       liveChannel!.stream.listen((message) {
+        _wsFailCount = 0;
+        _stopPollingFallback();
+        if (mounted && connectionStatus != LiveConnectionStatus.live) {
+          setState(() => connectionStatus = LiveConnectionStatus.live);
+        }
         handleLiveMessage(message);
       }, onError: (_) {
         liveChannel = null;
-        _scheduleLiveReconnect();
+        _onWebSocketDisconnected();
       }, onDone: () {
         liveChannel = null;
-        _scheduleLiveReconnect();
+        _onWebSocketDisconnected();
       });
     } catch (_) {
       liveChannel = null;
+      _onWebSocketDisconnected();
     }
   }
 
-  void _scheduleLiveReconnect() {
+  void _onWebSocketDisconnected() {
+    _wsFailCount++;
+    if (_wsFailCount >= 2) {
+      _startPollingFallback();
+    } else {
+      if (mounted) {
+        setState(() => connectionStatus = LiveConnectionStatus.reconnecting);
+      }
+      _scheduleLiveReconnect(const Duration(seconds: 5));
+    }
+  }
+
+  void _startPollingFallback() {
+    if (mounted && connectionStatus != LiveConnectionStatus.polling) {
+      setState(() => connectionStatus = LiveConnectionStatus.polling);
+    }
+    pollingFallbackTimer?.cancel();
+    // Poll every 8 seconds when WebSockets are unavailable
+    pollingFallbackTimer = Timer.periodic(const Duration(seconds: 8), (_) {
+      _pollFallbackSync();
+    });
+    // And try to reconnect WebSocket in the background every 30 seconds
+    _scheduleLiveReconnect(const Duration(seconds: 30));
+  }
+
+  void _stopPollingFallback() {
+    pollingFallbackTimer?.cancel();
+    pollingFallbackTimer = null;
+  }
+
+  Future<void> _pollFallbackSync() async {
+    try {
+      await _refreshEvents();
+      if (mounted && connectionStatus == LiveConnectionStatus.offline) {
+        setState(() => connectionStatus = LiveConnectionStatus.polling);
+      }
+    } catch (_) {
+      if (mounted) {
+        setState(() => connectionStatus = LiveConnectionStatus.offline);
+      }
+    }
+  }
+
+  void _scheduleLiveReconnect([Duration delay = const Duration(seconds: 10)]) {
     if (!mounted || liveReconnectTimer?.isActive == true) return;
-    liveReconnectTimer = Timer(const Duration(seconds: 10), () {
+    liveReconnectTimer = Timer(delay, () {
       liveReconnectTimer = null;
       if (mounted && liveChannel == null) _connectLiveChannel();
     });
@@ -189,10 +245,18 @@ class _CommandCenterState extends State<CommandCenter> {
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;
+          if (connectionStatus == LiveConnectionStatus.offline) {
+            connectionStatus = liveChannel != null
+                ? LiveConnectionStatus.live
+                : LiveConnectionStatus.polling;
+          }
         });
       }
     } catch (_) {
-      // The world snapshot remains usable if the optional live feed is temporarily unavailable.
+      // If requests fail completely, transition to offline state
+      if (mounted && connectionStatus != LiveConnectionStatus.reconnecting) {
+        setState(() => connectionStatus = LiveConnectionStatus.offline);
+      }
     }
   }
 
@@ -241,13 +305,20 @@ class _CommandCenterState extends State<CommandCenter> {
           businessFinancials = financials;
           marketHistory = history;
           pantheon = achievementData;
+          if (connectionStatus == LiveConnectionStatus.offline) {
+            connectionStatus = liveChannel != null
+                ? LiveConnectionStatus.live
+                : LiveConnectionStatus.polling;
+          }
         });
       }
       await _refreshEvents();
     } catch (exception) {
       if (mounted && requestGeneration == _requestGeneration) {
-        setState(
-            () => error = exception.toString().replaceFirst('Exception: ', ''));
+        setState(() {
+          error = exception.toString().replaceFirst('Exception: ', '');
+          connectionStatus = LiveConnectionStatus.offline;
+        });
       }
     } finally {
       if (mounted && requestGeneration == _requestGeneration) {
@@ -260,6 +331,7 @@ class _CommandCenterState extends State<CommandCenter> {
   void dispose() {
     eventTimer?.cancel();
     liveReconnectTimer?.cancel();
+    pollingFallbackTimer?.cancel();
     liveChannel?.sink.close();
     super.dispose();
   }
@@ -368,6 +440,7 @@ class _CommandCenterState extends State<CommandCenter> {
                         unreadCommMessages: unreadCommMessages,
                         isLiveConnected: liveChannel != null,
                         isReconnecting: liveReconnectTimer?.isActive == true,
+                        connectionStatus: connectionStatus,
                         showDrawerButton: compact,
                         onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
                         onNavigate: (section) => _navigateToSection(
@@ -432,6 +505,90 @@ class _CommandCenterState extends State<CommandCenter> {
                                         ],
                                       ),
                                     ),
+                                  if (connectionStatus == LiveConnectionStatus.polling)
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFFD600).withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.timer_outlined, size: 16, color: Color(0xFFFFD600)),
+                                          const SizedBox(width: 10),
+                                          const Expanded(
+                                            child: Text(
+                                              'WebSocket telemetry unavailable — polling mode active (updates every 8s). Simulation data may be slightly delayed.',
+                                              style: TextStyle(
+                                                color: Color(0xFFFFD600),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          TextButton(
+                                            onPressed: () {
+                                              _connectLiveChannel();
+                                              _run(api.world);
+                                            },
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: const Color(0xFFFFD600),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              visualDensity: VisualDensity.compact,
+                                            ),
+                                            child: const Text(
+                                              'RETRY LIVE STREAM',
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  if (connectionStatus == LiveConnectionStatus.offline)
+                                    Container(
+                                      margin: const EdgeInsets.only(bottom: 12),
+                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFFFF5252).withValues(alpha: 0.08),
+                                        borderRadius: BorderRadius.circular(8),
+                                        border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.3)),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          const Icon(Icons.cloud_off_outlined, size: 16, color: Color(0xFFFF5252)),
+                                          const SizedBox(width: 10),
+                                          const Expanded(
+                                            child: Text(
+                                              'Network offline — displaying cached simulation state. Reconnecting automatically...',
+                                              style: TextStyle(
+                                                color: Color(0xFFFF5252),
+                                                fontSize: 11,
+                                                fontWeight: FontWeight.w600,
+                                              ),
+                                            ),
+                                          ),
+                                          const SizedBox(width: 8),
+                                          TextButton(
+                                            onPressed: () {
+                                              _connectLiveChannel();
+                                              _run(api.world);
+                                            },
+                                            style: TextButton.styleFrom(
+                                              foregroundColor: const Color(0xFFFF5252),
+                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                              visualDensity: VisualDensity.compact,
+                                            ),
+                                            child: const Text(
+                                              'RECONNECT NOW',
+                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
                                    OnboardingGuidanceBar(
                                      onNavigate: (section) => _navigateToSection(
                                        context,
@@ -469,6 +626,7 @@ class _CommandCenterState extends State<CommandCenter> {
                                       isLiveConnected: liveChannel != null,
                                       isReconnecting:
                                           liveReconnectTimer?.isActive == true,
+                                      connectionStatus: connectionStatus,
                                       unreadNotifications: unreadNotifications,
                                       sectionKeys: _sectionKeys,
                                       action: _run,

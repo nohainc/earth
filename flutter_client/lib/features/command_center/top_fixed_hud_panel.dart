@@ -10,6 +10,7 @@ import '../onboarding/onboarding_welcome_dialog.dart';
 import '../../core/onboarding_controller.dart';
 import 'theme_customizer_dialog.dart';
 import 'daily_briefing_dialog.dart';
+import '../../core/models/live_connection_status.dart';
 
 class YearAndDay {
   final int year;
@@ -23,6 +24,7 @@ class TopFixedHudPanel extends StatefulWidget {
   final int unreadCommMessages;
   final bool isLiveConnected;
   final bool isReconnecting;
+  final LiveConnectionStatus? connectionStatus;
   final bool showDrawerButton;
   final VoidCallback? onOpenDrawer;
   final ValueChanged<String>? onNavigate;
@@ -38,6 +40,7 @@ class TopFixedHudPanel extends StatefulWidget {
     this.unreadCommMessages = 0,
     this.isLiveConnected = false,
     this.isReconnecting = false,
+    this.connectionStatus,
     this.showDrawerButton = false,
     this.onOpenDrawer,
     this.onNavigate,
@@ -147,19 +150,24 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     final energy = formatWholeNumber(widget.state.resources['energy']);
     final compute = formatWholeNumber(widget.state.resources['compute']);
 
-    final connectionColor = widget.isLiveConnected
-        ? Colors.greenAccent
-        : (widget.isReconnecting ? Colors.orangeAccent : Colors.redAccent);
+    final status = widget.connectionStatus ??
+        (widget.isLiveConnected
+            ? LiveConnectionStatus.live
+            : (widget.isReconnecting
+                ? LiveConnectionStatus.reconnecting
+                : LiveConnectionStatus.offline));
+
+    final connectionColor = status.color;
 
     final (clockRes, timeStr) = _getLiveClockData();
 
     return LayoutBuilder(
       builder: (context, rootConstraints) {
         final totalWidth = rootConstraints.maxWidth;
-        // Switch to 2 rows when width < 800px
-        final isSingleRow = totalWidth >= 800;
-        // Hide app name text when width < 600px
-        final showBrandText = totalWidth >= 600;
+        // Switch to 2 rows when width < 1050px
+        final isSingleRow = totalWidth >= 1050;
+        // Hide app name text when width < 880px
+        final showBrandText = totalWidth >= 880;
         const showBrand = true;
 
         return Container(
@@ -340,7 +348,42 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
               const SizedBox(width: 8),
 
-              // 4. ALARM / NOTIFICATIONS ICON WITH CONNECTION STATE COLOR INDICATOR
+              // 4. TELEMETRY STATUS PILL
+              Tooltip(
+                message: '${status.label}\n${status.description}',
+                child: InkWell(
+                  onTap: () => widget.onNavigate?.call('activity'),
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
+                    decoration: BoxDecoration(
+                      color: status.color.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: status.color.withValues(alpha: 0.45)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(status.icon, size: 10, color: status.color),
+                        const SizedBox(width: 3.5),
+                        Text(
+                          status.shortLabel,
+                          style: TextStyle(
+                            color: status.color,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 0.5,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // 5. ALARM / NOTIFICATIONS ICON WITH CONNECTION STATE COLOR INDICATOR
               InkWell(
                 onTap: () => widget.onNavigate?.call('activity'),
                 borderRadius: BorderRadius.circular(16),
@@ -685,15 +728,17 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
       children: [
         Icon(icon, size: isCompact ? 11 : 13, color: color),
         const SizedBox(width: 3.5),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: isCompact ? 9.5 : 11,
-            fontWeight: FontWeight.w700,
-            color: color,
-            letterSpacing: -.2,
+        Flexible(
+          child: Text(
+            value,
+            style: TextStyle(
+              fontSize: isCompact ? 9.5 : 11,
+              fontWeight: FontWeight.w700,
+              color: color,
+              letterSpacing: -.2,
+            ),
+            overflow: TextOverflow.ellipsis,
           ),
-          overflow: TextOverflow.ellipsis,
         ),
       ],
     );

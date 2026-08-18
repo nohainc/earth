@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../core/models/live_connection_status.dart';
 
 class ActivityPanel extends StatefulWidget {
   final List<dynamic> events;
@@ -8,6 +9,7 @@ class ActivityPanel extends StatefulWidget {
   final int unreadCount;
   final bool isLiveConnected;
   final bool isReconnecting;
+  final LiveConnectionStatus? connectionStatus;
   final VoidCallback onRefresh;
   final Future<void> Function(String) onMarkRead;
   final Future<void> Function() onMarkAllRead;
@@ -21,6 +23,7 @@ class ActivityPanel extends StatefulWidget {
     this.unreadCount = 0,
     this.isLiveConnected = true,
     this.isReconnecting = false,
+    this.connectionStatus,
     required this.onRefresh,
     required this.onMarkRead,
     required this.onMarkAllRead,
@@ -133,85 +136,113 @@ class _ActivityPanelState extends State<ActivityPanel>
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // 1. LIVE CONNECTION & TELEMETRY HEADER
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .75),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    color: widget.isLiveConnected
-                        ? cyanAccentColor
-                        : (widget.isReconnecting
-                            ? Colors.orangeAccent
-                            : Colors.redAccent),
-                    boxShadow: widget.isLiveConnected
-                        ? [
-                            BoxShadow(
-                              color: cyanAccentColor.withValues(alpha: .6),
-                              blurRadius: 6,
-                              spreadRadius: 1,
+          Builder(
+            builder: (context) {
+              final status = widget.connectionStatus ??
+                  (widget.isLiveConnected
+                      ? LiveConnectionStatus.live
+                      : (widget.isReconnecting
+                          ? LiveConnectionStatus.reconnecting
+                          : LiveConnectionStatus.offline));
+              final hasNotice = status == LiveConnectionStatus.polling ||
+                  status == LiveConnectionStatus.offline;
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: surfaceColor.withValues(alpha: .75),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: status.color.withValues(alpha: 0.3)),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            color: status.color,
+                            boxShadow: status == LiveConnectionStatus.live
+                                ? [
+                                    BoxShadow(
+                                      color: status.color.withValues(alpha: .6),
+                                      blurRadius: 6,
+                                      spreadRadius: 1,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            status.label,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: status.color,
+                              letterSpacing: 0.8,
                             ),
-                          ]
-                        : null,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    widget.isLiveConnected
-                        ? 'LIVE STREAM ACTIVE'
-                        : (widget.isReconnecting
-                            ? 'RECONNECTING / REPLAYING...'
-                            : 'DISCONNECTED'),
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      color: widget.isLiveConnected
-                          ? cyanAccentColor
-                          : (widget.isReconnecting
-                              ? Colors.orangeAccent
-                              : Colors.redAccent),
-                      letterSpacing: 0.8,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .04),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.white10),
+                          ),
+                          child: Text(
+                            '${widget.events.length} EVENTS BUFFERED',
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w600,
+                              color: mutedColor,
+                              letterSpacing: .5,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          tooltip: 'Refresh events & notifications',
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints(),
+                          onPressed: widget.onRefresh,
+                        ),
+                      ],
                     ),
                   ),
-                ),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: .04),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Text(
-                    '${widget.events.length} EVENTS BUFFERED',
-                    style: const TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: mutedColor,
-                      letterSpacing: .5,
+                  if (hasNotice) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                      decoration: BoxDecoration(
+                        color: status.color.withValues(alpha: 0.08),
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: status.color.withValues(alpha: 0.25)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(status.icon, size: 13, color: status.color),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              status.description,
+                              style: TextStyle(color: status.color, fontSize: 9.5),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  tooltip: 'Refresh events & notifications',
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(),
-                  onPressed: widget.onRefresh,
-                ),
-              ],
-            ),
+                  ],
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 14),
