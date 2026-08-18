@@ -63,6 +63,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> personalFinanceData = const {};
   List<dynamic> contractsList = const [];
   int unreadNotifications = 0;
+  int unreadCommMessages = 0;
   String selectedSection = 'command';
   Timer? eventTimer;
   Timer? liveReconnectTimer;
@@ -156,11 +157,16 @@ class _CommandCenterState extends State<CommandCenter> {
       final authority = await api.authorityEvents();
       Map<String, dynamic> finData = personalFinanceData;
       List<dynamic> cList = contractsList;
+      int commUnread = unreadCommMessages;
       try {
         finData = await api.personalFinance();
       } catch (_) {}
       try {
         cList = await api.contracts();
+      } catch (_) {}
+      try {
+        final commMetricsData = await api.commMetrics();
+        commUnread = asInt(commMetricsData['unreadDispatches']) ?? 0;
       } catch (_) {}
       if (mounted) {
         setState(() {
@@ -170,6 +176,7 @@ class _CommandCenterState extends State<CommandCenter> {
           authorityEvents = authority;
           personalFinanceData = finData;
           contractsList = cList;
+          unreadCommMessages = commUnread;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
           unreadNotifications = asInt(notificationData['unread']) ??
@@ -314,6 +321,7 @@ class _CommandCenterState extends State<CommandCenter> {
                       TopFixedHudPanel(
                         state: current,
                         unreadNotifications: unreadNotifications,
+                        unreadCommMessages: unreadCommMessages,
                         isLiveConnected: liveChannel != null,
                         isReconnecting: liveReconnectTimer?.isActive == true,
                         showDrawerButton: compact,
@@ -429,18 +437,6 @@ class _CommandCenterState extends State<CommandCenter> {
                       ),
                     ],
                   ),
-                ),
-              ),
-        floatingActionButton: current == null
-            ? null
-            : FloatingActionButton.extended(
-                onPressed: () => showCommLinkDialog(context, api: api, state: current),
-                backgroundColor: EarthColors.cyanAccent,
-                foregroundColor: Colors.black,
-                icon: const Icon(Icons.settings_input_antenna, size: 18),
-                label: const Text(
-                  'COMM-LINK',
-                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, letterSpacing: 0.8),
                 ),
               ),
       );

@@ -13,6 +13,7 @@ class YearAndDay {
 class TopFixedHudPanel extends StatefulWidget {
   final EarthState state;
   final int unreadNotifications;
+  final int unreadCommMessages;
   final bool isLiveConnected;
   final bool isReconnecting;
   final bool showDrawerButton;
@@ -26,6 +27,7 @@ class TopFixedHudPanel extends StatefulWidget {
     super.key,
     required this.state,
     this.unreadNotifications = 0,
+    this.unreadCommMessages = 0,
     this.isLiveConnected = false,
     this.isReconnecting = false,
     this.showDrawerButton = false,
@@ -366,16 +368,50 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
               const SizedBox(width: 4),
 
-              // COMM-LINK SUB-SPACE RELAY BUTTON
+              // COMM-LINK SUB-SPACE RELAY BUTTON WITH UNREAD BADGE
               InkWell(
                 onTap: widget.onCommLink,
                 borderRadius: BorderRadius.circular(8),
-                child: const Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: Icon(
-                    Icons.settings_input_antenna,
-                    size: 21,
-                    color: EarthColors.cyanAccent,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    children: [
+                      const Icon(
+                        Icons.settings_input_antenna,
+                        size: 21,
+                        color: EarthColors.cyanAccent,
+                      ),
+                      if (widget.unreadCommMessages > 0)
+                        Positioned(
+                          top: -3,
+                          right: -5,
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                            decoration: BoxDecoration(
+                              color: EarthColors.cyanAccent,
+                              borderRadius: BorderRadius.circular(8),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: EarthColors.cyanAccent.withValues(alpha: 0.6),
+                                  blurRadius: 4,
+                                  spreadRadius: 1,
+                                ),
+                              ],
+                            ),
+                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
+                            alignment: Alignment.center,
+                            child: Text(
+                              '${widget.unreadCommMessages}',
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 8.5,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
                 ),
               ),

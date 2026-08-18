@@ -47,6 +47,8 @@ void main() {
     bool loggedOut = false;
     bool securityOpened = false;
 
+    bool commLinkOpened = false;
+
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
@@ -57,6 +59,7 @@ void main() {
           body: TopFixedHudPanel(
             state: state,
             unreadNotifications: 3,
+            unreadCommMessages: 5,
             isLiveConnected: true,
             isReconnecting: false,
             showDrawerButton: true,
@@ -64,6 +67,7 @@ void main() {
             onNavigate: (r) => navigatedRoute = r,
             onLogout: () => loggedOut = true,
             onSecurity: () => securityOpened = true,
+            onCommLink: () => commLinkOpened = true,
           ),
         ),
       ),
@@ -72,6 +76,13 @@ void main() {
     // Verify brand header
     expect(find.text('EARTH'), findsOneWidget);
     expect(find.text('UNITED CORPORATIONS'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget); // Comm badge
+
+    // Test Comm-Link trigger
+    final commBtn = find.byIcon(Icons.settings_input_antenna);
+    expect(commBtn, findsOneWidget);
+    await tester.tap(commBtn);
+    expect(commLinkOpened, isTrue);
 
     // Test drawer trigger
     final drawerBtn = find.byIcon(Icons.menu);
