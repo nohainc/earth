@@ -14,6 +14,7 @@ import '../dynasty/dynasty_tree_dialog.dart';
 import '../market/derivatives_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
 import '../onboarding/onboarding_guidance_bar.dart';
+import 'daily_briefing_dialog.dart';
 import '../../core/onboarding_controller.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
@@ -293,6 +294,14 @@ class _CommandCenterState extends State<CommandCenter> {
     }
     if (section == 'net_worth') {
       showNetWorthAnalyticsDialog(context, api: api);
+      return;
+    }
+    if (section == 'briefing') {
+      showDailyBriefingDialog(
+        context,
+        api: api,
+        onNavigate: (sec) => _navigateToSection(context, sec, closeDrawer: false),
+      );
       return;
     }
     if (mounted) setState(() => selectedSection = section);

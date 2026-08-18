@@ -43,6 +43,7 @@ class Sidebar extends StatelessWidget {
         'OVERVIEW',
         [
           ('command', 'Command', Icons.dashboard_outlined),
+          ('briefing', 'Daily Briefing', Icons.newspaper_outlined),
           ('activity', 'Activity', Icons.notifications_none),
         ]
       ),

@@ -29,6 +29,7 @@ import { listPlanetaryRegionsAndPlots, claimPlotLease, upgradePlotInfrastructure
 import { getDynastyOverview, unlockDynastyPerk, equipDynastyHeirloom, forgeDynastyHeirloom, updateDynastyMotto } from './dynasty-postgres.ts';
 import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
+import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -1243,6 +1244,19 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Failed to fetch net-worth history';
+        return Response.json({ ok: false, error: message }, { status: 400 });
+      }
+    }
+
+    if (url.pathname === '/api/player/daily-briefing' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const humanId = viewer?.id || 'H-0044';
+      try {
+        const result = await withRepository(env, (repository) => getDailyBriefing(repository, humanId));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to generate daily briefing';
         return Response.json({ ok: false, error: message }, { status: 400 });
       }
     }

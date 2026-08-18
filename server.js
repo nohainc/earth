@@ -1696,6 +1696,87 @@ function command(path, body, req = null) {
     };
   }
 
+  if (path === '/api/player/daily-briefing' && body.method === 'GET') {
+    const currentDay = state.clock?.day || 185;
+    const previousDay = Math.max(1, currentDay - 1);
+
+    return {
+      ok: true,
+      gameDay: currentDay,
+      daysElapsed: 1,
+      sinceDay: previousDay,
+      netWealthDelta: {
+        current: 158000.0,
+        previous: 152400.0,
+        delta: 5600.0,
+        deltaPct: 3.67,
+      },
+      cashflow: {
+        totalIncome: 14250.0,
+        totalExpenses: 4820.0,
+        netProfit: 9430.0,
+        businessDividends: 6500.0,
+        marketSales: 7750.0,
+        machineMaintenance: 2620.0,
+        civicTaxes: 2200.0,
+      },
+      marketMovements: [
+        { commodity: 'ENERGY', currentPrice: 108.5, previousPrice: 102.0, deltaPct: 6.37, trend: 'up', volume24h: 14200 },
+        { commodity: 'MATERIAL', currentPrice: 42.1, previousPrice: 44.8, deltaPct: -6.03, trend: 'down', volume24h: 9800 },
+        { commodity: 'COMPUTE', currentPrice: 285.0, previousPrice: 270.0, deltaPct: 5.56, trend: 'up', volume24h: 6300 },
+        { commodity: 'FOOD', currentPrice: 19.8, previousPrice: 19.5, deltaPct: 1.54, trend: 'up', volume24h: 18900 },
+      ],
+      businessSummary: {
+        activeBusinesses: 2,
+        totalDailyOutput: 3840,
+        activeMachines: 4,
+        degradedMachinesCount: 1,
+        pendingContractsCount: 2,
+      },
+      civicSummary: {
+        activeProposals: 3,
+        passedProposals24h: 1,
+        cityResidency: 'New Geneva',
+        cityTaxRatePct: 4.5,
+        recentCivicEvents: [
+          'Passed: Energy Infrastructure Subsidy (+15% output in Valparaíso)',
+          'Proposed: AI Research Grant & Autonomous Compute Standard',
+        ],
+      },
+      unreadAlerts: {
+        unreadNotifications: 2,
+        unreadComms: 1,
+        criticalAlertsCount: 0,
+      },
+      recommendedDirectives: [
+        {
+          id: 'rec_market_energy',
+          title: 'Capitalize on Energy Spot Price Rally',
+          urgency: 'high',
+          reason: 'Energy spot price is up +6.37% over the last batch auction. Consider liquidating surplus reserves.',
+          actionLabel: 'SELL ENERGY',
+          targetSection: 'market',
+        },
+        {
+          id: 'rec_machine_maintenance',
+          title: 'Perform Preventive Machine Maintenance',
+          urgency: 'medium',
+          reason: '1 automated extraction unit has reached 74% condition. Overhaul before breakdown penalties apply.',
+          actionLabel: 'INSPECT MACHINES',
+          targetSection: 'business',
+        },
+        {
+          id: 'rec_senate_ballot',
+          title: 'Cast Sovereign Vote on Municipal Tax Charter',
+          urgency: 'medium',
+          reason: 'Senate Proposal #12 (Valparaíso Energy Subsidy) closes in 140 simulation ticks.',
+          actionLabel: 'GOVERNANCE SENATE',
+          targetSection: 'civic',
+        },
+      ],
+    };
+  }
+
   if (path === '/api/contracts' && body.method === 'POST') {
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');

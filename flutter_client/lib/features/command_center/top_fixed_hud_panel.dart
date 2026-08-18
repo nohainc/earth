@@ -9,6 +9,7 @@ import '../finance/net_worth_analytics_dialog.dart';
 import '../onboarding/onboarding_welcome_dialog.dart';
 import '../../core/onboarding_controller.dart';
 import 'theme_customizer_dialog.dart';
+import 'daily_briefing_dialog.dart';
 
 class YearAndDay {
   final int year;
@@ -530,6 +531,33 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                     padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     child: Icon(
                       Icons.help_outline,
+                      size: 21,
+                      color: EarthColors.cyanAccent,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // EXECUTIVE DAILY BRIEFING TERMINAL
+              Tooltip(
+                message: 'Executive Daily Briefing (What Changed?)',
+                child: InkWell(
+                  key: const Key('btn-daily-briefing'),
+                  onTap: () {
+                    EarthAudioEngine.instance.playClick();
+                    showDailyBriefingDialog(
+                      context,
+                      api: const EarthApi(),
+                      onNavigate: (section) => widget.onNavigate?.call(section),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Icon(
+                      Icons.newspaper_outlined,
                       size: 21,
                       color: EarthColors.cyanAccent,
                     ),
