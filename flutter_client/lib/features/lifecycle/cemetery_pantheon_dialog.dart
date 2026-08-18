@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
+import '../dynasty/dynasty_tree_dialog.dart';
 
 void showCemeteryPantheonDialog(BuildContext context, {EarthApi? api}) {
   showDialog(
@@ -120,6 +121,19 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
                     ],
                   ),
                 ),
+                ElevatedButton.icon(
+                  key: const Key('btn-open-dynasty-tree'),
+                  onPressed: () => showDynastyTreeDialog(context, api: widget.api),
+                  icon: const Icon(Icons.account_tree_outlined, size: 14),
+                  label: const Text('DYNASTY TREE'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: EarthColors.goldMetallic,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 IconButton(
                   icon: const Icon(Icons.close, color: EarthColors.textMuted),
                   onPressed: () => Navigator.of(context).pop(),

@@ -515,6 +515,101 @@ const territoryPlotsState = [
   { id: 'PLOT-ORB-04', region_id: 'REG-ORBITAL-RING', plot_name: 'Solar Lagrange Concentrator', coord_x: 0.00, coord_y: 0.00, terrain_type: 'orbital', primary_resource: 'energy', base_yield_rate: '100.00', development_level: 4, max_level: 5, infrastructure_name: 'Orbital Microwave Emitter', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '250.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
 ];
 
+const dynastyState = {
+  dynasty: {
+    id: 'DYN-H0044',
+    email: 'amara@earth.local',
+    dynasty_name: 'House Vance',
+    motto: 'From the Red Dust We Build Eternity',
+    founder_human_id: 'H-0044',
+    legacy_points: 350,
+    total_wealth_generated: 450000.00,
+    created_at: new Date(Date.now() - 86400000 * 30).toISOString(),
+  },
+  lineage: [
+    {
+      id: 'LIN-001',
+      dynasty_id: 'DYN-H0044',
+      human_id: 'H-0044',
+      predecessor_human_id: null,
+      generation: 1,
+      name: 'Cassian Vance I',
+      title: 'Pioneer Patriarch',
+      birth_game_day: 1,
+      death_game_day: 140,
+      is_incumbent: false,
+      cause_of_death: 'Hyperbaric Decompression',
+      epitaph: 'Laid the foundation stones of Neo-Tokyo and the first Quantum Relay Network.',
+      lifetime_wealth: 280000.00,
+      businesses_founded: 3,
+      proposals_authored: 4,
+      legacy_score: 180,
+      created_at: new Date(Date.now() - 86400000 * 20).toISOString(),
+    },
+    {
+      id: 'LIN-002',
+      dynasty_id: 'DYN-H0044',
+      human_id: 'H-0044',
+      predecessor_human_id: 'H-0044',
+      generation: 2,
+      name: 'Amara Vance',
+      title: 'Current Dynastic Head',
+      birth_game_day: 120,
+      death_game_day: null,
+      is_incumbent: true,
+      cause_of_death: null,
+      epitaph: 'Steering House Vance through the corporate expansion age.',
+      lifetime_wealth: 170000.00,
+      businesses_founded: 2,
+      proposals_authored: 2,
+      legacy_score: 170,
+      created_at: new Date(Date.now() - 86400000 * 10).toISOString(),
+    },
+  ],
+  perks: [
+    {
+      id: 'PRK-001',
+      dynasty_id: 'DYN-H0044',
+      perk_key: 'industrialist_lineage',
+      perk_name: 'Industrialist Lineage',
+      perk_category: 'operations',
+      tier: 1,
+      unlocked_game_day: 140,
+    },
+  ],
+  heirlooms: [
+    {
+      id: 'HLM-001',
+      dynasty_id: 'DYN-H0044',
+      name: 'The Vance Founding Signet',
+      heirloom_type: 'founder_seal',
+      quality_tier: 'Legendary',
+      stat_buff: '+10% Machine Build Speed & -15% Business Startup Fees',
+      equipped_by_human_id: 'H-0044',
+      inscription: 'Forged from the first batch of refined titanium produced by Pacific Rim Sprawl.',
+      created_at: new Date(Date.now() - 86400000 * 15).toISOString(),
+    },
+    {
+      id: 'HLM-002',
+      dynasty_id: 'DYN-H0044',
+      name: 'High Senate Chronometer',
+      heirloom_type: 'pioneer_chronometer',
+      quality_tier: 'Epic',
+      stat_buff: '+12% Voting Weight in World Senate Injunctions',
+      equipped_by_human_id: null,
+      inscription: 'Awarded for drafting the Constitutional Protection Charter on Game Day 75.',
+      created_at: new Date(Date.now() - 86400000 * 5).toISOString(),
+    },
+  ],
+  catalogPerks: [
+    { key: 'industrialist_lineage', name: 'Industrialist Lineage', category: 'Operations', cost: 100, description: '+10% Machine Build Speed & -15% Business Startup Fees' },
+    { key: 'diplomatic_dynasty', name: 'Diplomatic Dynasty', category: 'Governance', cost: 100, description: '+15% Senate & City Council Voting Influence' },
+    { key: 'financial_magnate', name: 'Financial Magnate', category: 'Finance', cost: 120, description: '+8% Corporate Dividend Yields & -20% Loan Margins' },
+    { key: 'technological_pioneers', name: 'Technological Pioneers', category: 'Research', cost: 150, description: '+15% Compute Research Efficiency & +25% Patent Royalties' },
+    { key: 'planetary_agronomists', name: 'Planetary Agronomists', category: 'Resources', cost: 120, description: '+20% Regional Bio-Harvest Rate & Concession Yields' },
+  ],
+};
+
 const EPOCH_START_TIME_MS = Date.parse('2026-01-01T00:00:00.000Z');
 
 function computeCosmicClock(serverNow = Date.now()) {
@@ -1290,6 +1385,93 @@ function command(path, body, req = null) {
     plot.last_harvested_game_day = state.clock.day;
     publish('plot.harvested', { plotId, resource, harvestAmount });
     const result = { ok: true, plot, harvestedAmount: harvestAmount, resourceType: resource, state: snapshot() };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  // Dynastic Lineage & Genealogical Archive
+  if (path === '/api/dynasty' && body.method === 'GET') {
+    return {
+      ok: true,
+      dynasty: dynastyState.dynasty,
+      lineage: dynastyState.lineage,
+      perks: dynastyState.perks,
+      heirlooms: dynastyState.heirlooms,
+      catalogPerks: dynastyState.catalogPerks,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/dynasty/perks/unlock' && body.method === 'POST') {
+    const perkKey = body.perkKey;
+    const catalogItem = dynastyState.catalogPerks.find((p) => p.key === perkKey);
+    if (!catalogItem) throw new ApiError(`Invalid perk key '${perkKey}'`, 400, 'BAD_REQUEST');
+    if (dynastyState.dynasty.legacy_points < catalogItem.cost) {
+      throw new ApiError(`Insufficient legacy points. Required: ${catalogItem.cost}, available: ${dynastyState.dynasty.legacy_points}`, 409, 'CONFLICT');
+    }
+    if (dynastyState.perks.some((p) => p.perk_key === perkKey)) {
+      throw new ApiError(`Perk '${catalogItem.name}' is already unlocked`, 409, 'CONFLICT');
+    }
+    dynastyState.dynasty.legacy_points -= catalogItem.cost;
+    const newPerk = {
+      id: `PRK-DYN-H0044-${perkKey}`,
+      dynasty_id: dynastyState.dynasty.id,
+      perk_key: perkKey,
+      perk_name: catalogItem.name,
+      perk_category: catalogItem.category.toLowerCase(),
+      tier: 1,
+      unlocked_game_day: state.clock.day,
+    };
+    dynastyState.perks.push(newPerk);
+    publish('dynasty.perk_unlocked', { perkKey, remainingPoints: dynastyState.dynasty.legacy_points });
+    const result = { ok: true, perkKey, perkName: catalogItem.name, remainingPoints: dynastyState.dynasty.legacy_points };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  if (path === '/api/dynasty/heirlooms/equip' && body.method === 'POST') {
+    const player = human('amara', req);
+    const heirloomId = body.heirloomId;
+    const heirloom = dynastyState.heirlooms.find((h) => h.id === heirloomId);
+    if (!heirloom) throw new ApiError('Heirloom not found', 404, 'NOT_FOUND');
+    const isEquipped = heirloom.equipped_by_human_id === player.id;
+    heirloom.equipped_by_human_id = isEquipped ? null : player.id;
+    publish('dynasty.heirloom_equipped', { heirloomId, isEquipped: !isEquipped });
+    const result = { ok: true, heirloomId, isEquipped: !isEquipped, equippedBy: heirloom.equipped_by_human_id };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  if (path === '/api/dynasty/heirlooms/forge' && body.method === 'POST') {
+    const name = body.name || 'Ancestral Relic';
+    const heirloomType = body.heirloomType || 'dynasty_standard';
+    const inscription = body.inscription || 'Forged by the house patriarch.';
+    const statBuff = body.statBuff || '+5% Prestige & Influence';
+    const newHeirloom = {
+      id: `HLM-DYN-H0044-${Date.now()}`,
+      dynasty_id: dynastyState.dynasty.id,
+      name,
+      heirloom_type: heirloomType,
+      quality_tier: 'Legendary',
+      stat_buff: statBuff,
+      equipped_by_human_id: null,
+      inscription,
+      created_at: new Date().toISOString(),
+    };
+    dynastyState.heirlooms.push(newHeirloom);
+    publish('dynasty.heirloom_forged', { heirloomId: newHeirloom.id, name });
+    const result = { ok: true, heirloom: newHeirloom };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  if (path === '/api/dynasty/motto' && body.method === 'POST') {
+    const motto = body.motto ? String(body.motto).trim() : dynastyState.dynasty.motto;
+    const dynastyName = body.dynastyName ? String(body.dynastyName).trim() : dynastyState.dynasty.dynasty_name;
+    dynastyState.dynasty.motto = motto;
+    dynastyState.dynasty.dynasty_name = dynastyName;
+    publish('dynasty.motto_updated', { motto, dynastyName });
+    const result = { ok: true, motto, dynastyName };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }

@@ -16,6 +16,7 @@ part 'earth_api_supply_contracts.dart';
 part 'earth_api_map.dart';
 part 'earth_api_personal_finance.dart';
 part 'earth_api_comm.dart';
+part 'earth_api_dynasty.dart';
 
 class EarthApi {
   final String baseUrl;
