@@ -448,10 +448,112 @@ function command(path, body, req = null) {
       generatedFrom: database ? 'planetscale-postgres' : 'reference-simulator',
     };
   }
+  if (path === '/api/cemetery' && body.method === 'GET') {
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const search = (url?.searchParams.get('search') || body.search || '').trim().toLowerCase();
+    const dynasty = (url?.searchParams.get('dynasty') || body.dynasty || '').trim();
+    const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 50)));
+
+    let memorials = [
+      {
+        human_id: 'H-0001',
+        display_name: 'Founder Marcus Vance',
+        death_game_day: 1200,
+        final_standing: 980,
+        final_legacy: 5400,
+        successor_name: 'Amara Vance',
+        cause_of_death: 'Natural Biological Mortality',
+        epitaph: 'Pioneered civilization across the frontier of Earth.',
+        dynasty_name: 'Vance Dynasty',
+        birth_game_day: 1,
+      },
+      {
+        human_id: 'H-0002',
+        display_name: 'Elena Rostova',
+        death_game_day: 940,
+        final_standing: 860,
+        final_legacy: 3800,
+        successor_name: 'Dmitri Rostov',
+        cause_of_death: 'Natural Biological Mortality',
+        epitaph: 'Architect of municipal water security and free exchange.',
+        dynasty_name: 'House of Rostov',
+        birth_game_day: 1,
+      },
+    ];
+
+    if (search) {
+      memorials = memorials.filter((m) =>
+        m.display_name.toLowerCase().includes(search) ||
+        (m.dynasty_name && m.dynasty_name.toLowerCase().includes(search)) ||
+        (m.successor_name && m.successor_name.toLowerCase().includes(search))
+      );
+    }
+    if (dynasty) {
+      memorials = memorials.filter((m) => m.dynasty_name === dynasty);
+    }
+
+    return {
+      ok: true,
+      cemetery: memorials.slice(0, limit),
+      totalReturned: Math.min(memorials.length, limit),
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
   if (path === '/api/pantheon' && body.method === 'GET') {
     return {
-      deceasedPantheon: [],
-      livingLeaders: [{ id: 'H-0044', display_name: 'Amara Vance', age_years: 42, standing: 840, legacy: 120, composite_legacy_score: 14484 }],
+      ok: true,
+      deceasedPantheon: [
+        {
+          human_id: 'H-0001',
+          display_name: 'Founder Marcus Vance',
+          death_game_day: 1200,
+          final_standing: 980,
+          final_legacy: 5400,
+          composite_legacy_score: 18160,
+          successor_name: 'Amara Vance',
+          cause_of_death: 'Natural Biological Mortality',
+          epitaph: 'Pioneered civilization across the frontier of Earth.',
+          dynasty_name: 'Vance Dynasty',
+        },
+        {
+          human_id: 'H-0002',
+          display_name: 'Elena Rostova',
+          death_game_day: 940,
+          final_standing: 860,
+          final_legacy: 3800,
+          composite_legacy_score: 13120,
+          successor_name: 'Dmitri Rostov',
+          cause_of_death: 'Natural Biological Mortality',
+          epitaph: 'Architect of municipal water security and free exchange.',
+          dynasty_name: 'House of Rostov',
+        },
+      ],
+      dynasticHouses: [
+        {
+          dynasty_name: 'Vance Dynasty',
+          deceased_count: 1,
+          peak_legacy: 5400,
+          peak_standing: 980,
+        },
+        {
+          dynasty_name: 'House of Rostov',
+          deceased_count: 1,
+          peak_legacy: 3800,
+          peak_standing: 860,
+        },
+      ],
+      livingLeaders: [
+        {
+          id: 'H-0044',
+          display_name: 'Amara Vance',
+          age_years: 42,
+          standing: 840,
+          legacy: 120,
+          composite_legacy_score: 14484,
+        },
+      ],
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
 
@@ -768,6 +870,64 @@ function command(path, body, req = null) {
     const session = resolveSession(req);
     if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     return { ok: true, enabled: false };
+  }
+
+  if (path === '/api/auth/rebirth' && body.method === 'POST') {
+    const displayName = (body.displayName || body.display_name || '').trim();
+    if (!displayName || displayName.length < 2 || displayName.length > 80) {
+      throw new ApiError('Display name must be between 2 and 80 characters', 400, 'VALIDATION_ERROR');
+    }
+    const dynastyName = (body.dynastyName || body.dynasty_name || '').trim();
+    const cityId = (body.startingCityId || body.city_id || 'city-new-tokyo').trim();
+    const humanId = `H-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newHuman = {
+      id: humanId,
+      display_name: displayName,
+      displayName,
+      email: 'citizen@earth.world',
+      standing: 100,
+      legacy: 0,
+      age_years: 20,
+      life_status: 'active',
+      city_id: cityId,
+      dynasty_name: dynastyName || undefined,
+      credits: 200,
+    };
+    return {
+      data: {
+        ok: true,
+        reborn: true,
+        naturalizationFeePaid: 500,
+        human: newHuman,
+        persistence: database ? 'postgres-reference' : 'reference-simulator',
+      },
+      status: 200,
+    };
+  }
+
+  if (path === '/api/auth/claim-heir' && body.method === 'POST') {
+    const successorName = state.life?.successor?.name || 'Designated Heir';
+    const humanId = `H-${Math.floor(1000 + Math.random() * 9000)}`;
+    const newHuman = {
+      id: humanId,
+      display_name: successorName,
+      displayName: successorName,
+      email: 'citizen@earth.world',
+      standing: 250,
+      legacy: 50,
+      age_years: 25,
+      life_status: 'active',
+      credits: 1000,
+    };
+    return {
+      data: {
+        ok: true,
+        claimed: true,
+        human: newHuman,
+        persistence: database ? 'postgres-reference' : 'reference-simulator',
+      },
+      status: 200,
+    };
   }
 
   // --- Domain Mutations ---
