@@ -1,47 +1,67 @@
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/decision_consequence.dart';
+import '../../shared/widgets/consequence_preview_card.dart';
 
 Future<void> showResearchComposerDialog(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action) async {
-  final name = TextEditingController();
+  final name = TextEditingController(text: 'Quantum Matrix Grid');
   final budget = TextEditingController(text: '240');
   String focus = 'efficiency';
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
+          builder: (context, setState) {
+            final parsedBudget = double.tryParse(budget.text.trim()) ?? 240.0;
+            return AlertDialog(
                 title: const Text('Start Research Project'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  TextField(
-                      controller: name,
-                      decoration:
-                          const InputDecoration(labelText: 'Technology focus')),
-                  const SizedBox(height: 10),
-                  TextField(
-                      controller: budget,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(
-                          labelText: 'Initial budget (minimum 240 C)')),
-                  const SizedBox(height: 10),
-                  DropdownButtonFormField<String>(
-                      initialValue: focus,
-                      items: const [
-                        'efficiency',
-                        'durability',
-                        'safety',
-                        'cost'
-                      ]
-                          .map((item) =>
-                              DropdownMenuItem(value: item, child: Text(item)))
-                          .toList(),
-                      onChanged: (value) {
-                        if (value != null) setState(() => focus = value);
-                      },
-                      decoration: const InputDecoration(
-                          labelText: 'Research parameter focus')),
-                ]),
+                content: SizedBox(
+                  width: 520,
+                  child: SingleChildScrollView(
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      TextField(
+                          controller: name,
+                          decoration:
+                              const InputDecoration(labelText: 'Technology focus'),
+                          onChanged: (_) => setState(() {})),
+                      const SizedBox(height: 10),
+                      TextField(
+                          controller: budget,
+                          keyboardType:
+                              const TextInputType.numberWithOptions(decimal: true),
+                          decoration: const InputDecoration(
+                              labelText: 'Initial budget (minimum 240 C)'),
+                          onChanged: (_) => setState(() {})),
+                      const SizedBox(height: 10),
+                      DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: focus,
+                          items: const [
+                            'efficiency',
+                            'durability',
+                            'safety',
+                            'cost'
+                          ]
+                              .map((item) =>
+                                  DropdownMenuItem(value: item, child: Text(item)))
+                              .toList(),
+                          onChanged: (value) {
+                            if (value != null) setState(() => focus = value);
+                          },
+                          decoration: const InputDecoration(
+                              labelText: 'Research parameter focus')),
+                      const SizedBox(height: 14),
+                      ConsequencePreviewCard(
+                        consequence: DecisionConsequence.researchFunding(
+                          projectName: name.text.trim().isEmpty ? 'Classified Initiative' : name.text.trim(),
+                          computeAllocated: parsedBudget,
+                          unlockYield: '+15% $focus boost across industrial production',
+                        ),
+                      ),
+                    ]),
+                  ),
+                ),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(dialogContext),
@@ -61,7 +81,9 @@ Future<void> showResearchComposerDialog(BuildContext context,
                       },
                       child: const Text('Start')),
                 ],
-              )));
+              );
+            },
+          ));
 }
 
 Future<void> showLicenseComposerDialog(BuildContext context,

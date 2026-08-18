@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/decision_consequence.dart';
+import '../../shared/widgets/consequence_preview_card.dart';
 
 Future<void> showDecommissionDialog(
     BuildContext context,
@@ -132,41 +134,68 @@ Future<void> showMachineAcquisitionDialog(
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) => AlertDialog(
         title: const Text('Acquire Machine'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Select a production unit from the machine catalog to expand capacity.',
-              style: TextStyle(fontSize: 12),
-            ),
-            const SizedBox(height: 12),
-            DropdownButtonFormField<String>(
-              initialValue: selectedType,
-              items: const [
-                DropdownMenuItem(
-                  value: 'fabrication-rig',
-                  child: Text('Fabrication Rig · 850 C + 50 Material'),
+        content: SizedBox(
+          width: 520,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+              const Text(
+                'Select a production unit from the machine catalog to expand capacity.',
+                style: TextStyle(fontSize: 12),
+              ),
+              const SizedBox(height: 12),
+              DropdownButtonFormField<String>(
+                isExpanded: true,
+                initialValue: selectedType,
+                items: const [
+                  DropdownMenuItem(
+                    value: 'fabrication-rig',
+                    child: Text('Fabrication Rig · 850 C + 50 Material'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'extraction-unit',
+                    child: Text('Extraction Unit · 600 C + 40 Material'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'refining-matrix',
+                    child: Text('Refining Matrix · 1200 C + 80 Material'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'compute-cluster',
+                    child: Text('Compute Cluster · 950 C + 30 Material'),
+                  ),
+                ],
+                onChanged: (val) {
+                  if (val != null) setState(() => selectedType = val);
+                },
+              ),
+              const SizedBox(height: 14),
+              ConsequencePreviewCard(
+                consequence: DecisionConsequence.machineAcquisition(
+                  machineName: selectedType.replaceAll('-', ' ').toUpperCase(),
+                  costCredits: selectedType == 'refining-matrix'
+                      ? 1200
+                      : selectedType == 'compute-cluster'
+                          ? 950
+                          : selectedType == 'fabrication-rig'
+                              ? 850
+                              : 600,
+                  outputYield: selectedType == 'fabrication-rig'
+                      ? '45 Components'
+                      : selectedType == 'compute-cluster'
+                          ? '60 Compute'
+                          : selectedType == 'refining-matrix'
+                              ? '80 Refined Material'
+                              : '120 Raw Material',
+                  businessName: 'Primary Enterprise',
                 ),
-                DropdownMenuItem(
-                  value: 'extraction-unit',
-                  child: Text('Extraction Unit · 600 C + 40 Material'),
-                ),
-                DropdownMenuItem(
-                  value: 'refining-matrix',
-                  child: Text('Refining Matrix · 1200 C + 80 Material'),
-                ),
-                DropdownMenuItem(
-                  value: 'compute-cluster',
-                  child: Text('Compute Cluster · 950 C + 30 Material'),
-                ),
-              ],
-              onChanged: (val) {
-                if (val != null) setState(() => selectedType = val);
-              },
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
+      ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/decision_consequence.dart';
+import '../../shared/widgets/consequence_preview_card.dart';
 
 Future<void> showFormationComposer(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action,
@@ -109,65 +111,88 @@ Future<void> showTaxCharterDialog(
 
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Set city tax charter'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Text(
-            'Rates are entered as percentages (0–30%). Stored in exact basis points.',
-            style: TextStyle(fontSize: 12),
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        final parsedIncome = double.tryParse(income.text.trim()) ?? 5.0;
+        final parsedCorporate = double.tryParse(corporate.text.trim()) ?? 10.0;
+        return AlertDialog(
+          title: const Text('Set city tax charter'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'Rates are entered as percentages (0–30%). Stored in exact basis points.',
+                    style: TextStyle(fontSize: 12),
+                  ),
+                  TextField(
+                    controller: income,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Income tax (%)'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  TextField(
+                    controller: sales,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Sales tax (%)'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  TextField(
+                    controller: corporate,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Corporate tax (%)'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  TextField(
+                    controller: property,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Property tax (%)'),
+                    onChanged: (_) => setState(() {}),
+                  ),
+                  const SizedBox(height: 14),
+                  ConsequencePreviewCard(
+                    consequence: DecisionConsequence.municipalTaxAdjustment(
+                      cityName: cityId,
+                      oldRatePct: 5.0,
+                      newRatePct: (parsedIncome + parsedCorporate) / 2.0,
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          TextField(
-            controller: income,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Income tax (%)'),
-          ),
-          TextField(
-            controller: sales,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Sales tax (%)'),
-          ),
-          TextField(
-            controller: corporate,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Corporate tax (%)'),
-          ),
-          TextField(
-            controller: property,
-            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-            decoration: const InputDecoration(labelText: 'Property tax (%)'),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('CANCEL'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            final rates = [
-              double.tryParse(income.text.trim()),
-              double.tryParse(sales.text.trim()),
-              double.tryParse(corporate.text.trim()),
-              double.tryParse(property.text.trim()),
-            ];
-            if (rates.any((value) => value == null || value < 0 || value > 30)) {
-              return;
-            }
-            Navigator.pop(dialogContext);
-            await action(() => const EarthApi().setCityTaxCharter(
-                  cityId: cityId,
-                  incomeTaxBps: (rates[0]! * 100).round(),
-                  salesTaxBps: (rates[1]! * 100).round(),
-                  corporateTaxBps: (rates[2]! * 100).round(),
-                  propertyTaxBps: (rates[3]! * 100).round(),
-                ));
-          },
-          child: const Text('SAVE CHARTER'),
-        ),
-      ],
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final rates = [
+                  double.tryParse(income.text.trim()),
+                  double.tryParse(sales.text.trim()),
+                  double.tryParse(corporate.text.trim()),
+                  double.tryParse(property.text.trim()),
+                ];
+                if (rates.any((value) => value == null || value < 0 || value > 30)) {
+                  return;
+                }
+                Navigator.pop(dialogContext);
+                await action(() => const EarthApi().setCityTaxCharter(
+                      cityId: cityId,
+                      incomeTaxBps: (rates[0]! * 100).round(),
+                      salesTaxBps: (rates[1]! * 100).round(),
+                      corporateTaxBps: (rates[2]! * 100).round(),
+                      propertyTaxBps: (rates[3]! * 100).round(),
+                    ));
+              },
+              child: const Text('SAVE CHARTER'),
+            ),
+          ],
+        );
+      },
     ),
   );
 }

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/decision_consequence.dart';
+import '../../shared/widgets/consequence_preview_card.dart';
 
 Future<void> showBusinessManagerDialog(
     BuildContext context,
@@ -312,29 +314,54 @@ Future<void> showDividendDialog(
   final amount = TextEditingController(text: '100');
   await showDialog<void>(
     context: context,
-    builder: (dialogContext) => AlertDialog(
-      title: const Text('Distribute dividends'),
-      content: TextField(
-        controller: amount,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        decoration: const InputDecoration(labelText: 'Total distribution (C)'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('CANCEL'),
-        ),
-        FilledButton(
-          onPressed: () async {
-            final value = double.tryParse(amount.text.trim());
-            if (value == null || value <= 0) return;
-            Navigator.pop(dialogContext);
-            await action(() => const EarthApi().distributeDividends(
-                businessId, value));
-          },
-          child: const Text('DISTRIBUTE'),
-        ),
-      ],
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) {
+        final parsedAmount = double.tryParse(amount.text.trim()) ?? 100.0;
+        return AlertDialog(
+          title: const Text('Distribute dividends'),
+          content: SizedBox(
+            width: 520,
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  TextField(
+                    controller: amount,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(labelText: 'Total distribution (C)'),
+                    onChanged: (val) => setState(() {}),
+                  ),
+                  const SizedBox(height: 14),
+                  ConsequencePreviewCard(
+                    consequence: DecisionConsequence.dividendDistribution(
+                      businessName: businessId,
+                      totalAmount: parsedAmount,
+                      shareholderCount: 4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCEL'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final value = double.tryParse(amount.text.trim());
+                if (value == null || value <= 0) return;
+                Navigator.pop(dialogContext);
+                await action(() => const EarthApi().distributeDividends(
+                    businessId, value));
+              },
+              child: const Text('DISTRIBUTE'),
+            ),
+          ],
+        );
+      },
     ),
   );
 }
