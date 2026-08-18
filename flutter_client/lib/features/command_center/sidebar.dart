@@ -50,6 +50,7 @@ class Sidebar extends StatelessWidget {
         'ECONOMY',
         [
           ('market', 'Market', Icons.swap_horiz),
+          ('derivatives', 'Futures & Charts', Icons.show_chart),
           ('business', 'Business', Icons.storefront_outlined),
           ('finance', 'Finance', Icons.account_balance_wallet_outlined),
         ]

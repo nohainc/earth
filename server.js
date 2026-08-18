@@ -610,6 +610,64 @@ const dynastyState = {
   ],
 };
 
+
+const commoditiesList = ['energy', 'material', 'compute', 'food'];
+const basePrices = { energy: 30.00, material: 45.00, compute: 60.00, food: 20.00 };
+
+const marketOhlcState = {};
+for (const c of commoditiesList) {
+  const list = [];
+  const baseP = basePrices[c];
+  for (let day = 155; day <= 185; day++) {
+    const stepNoise = Math.sin(day * 0.4 + commoditiesList.indexOf(c)) * 3.5 + Math.cos(day * 0.15) * 2.0;
+    const o = Math.round((baseP + stepNoise) * 100) / 100;
+    const cls = Math.round((o + Math.sin(day * 0.7) * 2.2) * 100) / 100;
+    const h = Math.round((Math.max(o, cls) + Math.abs(Math.cos(day * 0.3)) * 2.0 + 0.5) * 100) / 100;
+    const l = Math.round((Math.min(o, cls) - Math.abs(Math.sin(day * 0.5)) * 1.8 - 0.3) * 100) / 100;
+    const vol = Math.round(1000.0 + Math.abs(Math.sin(day * 0.9)) * 1500.0);
+    list.push({
+      id: `OHLC-${c.toUpperCase()}-${day}`,
+      commodity: c,
+      game_day: day,
+      open_price: o,
+      high_price: h,
+      low_price: l,
+      close_price: cls,
+      volume: vol,
+    });
+  }
+  marketOhlcState[c] = list;
+}
+
+const futuresContractsState = [
+  {
+    id: 'FUT-ENERGY-101',
+    seller_human_id: 'H-0044',
+    buyer_human_id: null,
+    commodity: 'energy',
+    contract_size: 250.00,
+    strike_price: 28.50,
+    expiry_game_day: 210,
+    collateral_locked: 250.00,
+    premium_paid: 0.00,
+    status: 'open',
+    created_at: new Date(Date.now() - 86400000 * 2).toISOString(),
+  },
+  {
+    id: 'FUT-COMPUTE-102',
+    seller_human_id: 'H-0012',
+    buyer_human_id: 'H-0044',
+    commodity: 'compute',
+    contract_size: 100.00,
+    strike_price: 58.00,
+    expiry_game_day: 200,
+    collateral_locked: 100.00,
+    premium_paid: 250.00,
+    status: 'matched',
+    created_at: new Date(Date.now() - 86400000 * 4).toISOString(),
+  },
+];
+
 const EPOCH_START_TIME_MS = Date.parse('2026-01-01T00:00:00.000Z');
 
 function computeCosmicClock(serverNow = Date.now()) {
@@ -1472,6 +1530,97 @@ function command(path, body, req = null) {
     dynastyState.dynasty.dynasty_name = dynastyName;
     publish('dynasty.motto_updated', { motto, dynastyName });
     const result = { ok: true, motto, dynastyName };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  
+  if (path === '/api/market/derivatives' && body.method === 'GET') {
+    const c = (req.url && new URL(req.url, 'http://localhost').searchParams.get('commodity')) || 'energy';
+    const ohlc = marketOhlcState[c.toLowerCase()] || [];
+    const closes = ohlc.map(s => Number(s.close_price));
+    const ma7 = [];
+    const ma25 = [];
+    for (let i = 0; i < closes.length; i++) {
+      if (i >= 6) {
+        const sum7 = closes.slice(i - 6, i + 1).reduce((a, b) => a + b, 0);
+        ma7.push(Math.round((sum7 / 7) * 100) / 100);
+      } else ma7.push(null);
+      if (i >= 24) {
+        const sum25 = closes.slice(i - 24, i + 1).reduce((a, b) => a + b, 0);
+        ma25.push(Math.round((sum25 / 25) * 100) / 100);
+      } else ma25.push(null);
+    }
+    const orderbook = futuresContractsState.filter(f => f.commodity === c.toLowerCase() && f.status === 'open');
+    const userPositions = futuresContractsState.filter(f => f.seller_human_id === 'H-0044' || f.buyer_human_id === 'H-0044');
+    return {
+      ok: true,
+      commodity: c.toLowerCase(),
+      ohlc,
+      ma7,
+      ma25,
+      orderbook,
+      userPositions,
+    };
+  }
+
+  if (path === '/api/market/futures/create' && body.method === 'POST') {
+    const player = human('amara', req);
+    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const c = (body.commodity || 'energy').toLowerCase();
+    const size = Number(body.size);
+    const strikePrice = Number(body.strikePrice);
+    const expiryGameDay = Number(body.expiryGameDay);
+    if (!size || size <= 0) throw new ApiError('Contract size must be greater than 0', 400, 'INVALID_SIZE');
+    if (!strikePrice || strikePrice <= 0) throw new ApiError('Strike price must be greater than 0', 400, 'INVALID_PRICE');
+    const contract = {
+      id: `FUT-${c.toUpperCase()}-${Date.now()}`,
+      seller_human_id: player.id,
+      buyer_human_id: null,
+      commodity: c,
+      contract_size: size,
+      strike_price: strikePrice,
+      expiry_game_day: expiryGameDay || 220,
+      collateral_locked: size,
+      premium_paid: 0,
+      status: 'open',
+      created_at: new Date().toISOString(),
+    };
+    futuresContractsState.push(contract);
+    publish('market.futures_created', { contractId: contract.id, commodity: c, size, strikePrice });
+    const result = { ok: true, contractId: contract.id, commodity: c, size, strikePrice, expiryGameDay: contract.expiry_game_day };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  if (path.startsWith('/api/market/futures/') && path.endsWith('/buy') && body.method === 'POST') {
+    const player = human('amara', req);
+    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const contractId = path.split('/')[4];
+    const contract = futuresContractsState.find(f => f.id === contractId);
+    if (!contract) throw new ApiError('Futures contract not found', 404, 'NOT_FOUND');
+    if (contract.status !== 'open') throw new ApiError('Contract is not open', 400, 'INVALID_STATUS');
+    contract.buyer_human_id = player.id;
+    contract.status = 'matched';
+    const totalCost = Number(contract.contract_size) * Number(contract.strike_price);
+    contract.premium_paid = totalCost;
+    publish('market.futures_matched', { contractId, buyerId: player.id, totalCost });
+    const result = { ok: true, contractId, totalPaid: totalCost.toFixed(2), status: 'matched' };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  if (path.startsWith('/api/market/futures/') && path.endsWith('/cancel') && body.method === 'POST') {
+    const player = human('amara', req);
+    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const contractId = path.split('/')[4];
+    const contract = futuresContractsState.find(f => f.id === contractId);
+    if (!contract) throw new ApiError('Futures contract not found', 404, 'NOT_FOUND');
+    if (contract.seller_human_id !== player.id) throw new ApiError('Only seller can cancel', 403, 'FORBIDDEN');
+    if (contract.status !== 'open') throw new ApiError('Contract is not open', 400, 'INVALID_STATUS');
+    contract.status = 'cancelled';
+    publish('market.futures_cancelled', { contractId });
+    const result = { ok: true, contractId, status: 'cancelled' };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }

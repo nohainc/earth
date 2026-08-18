@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/format_helpers.dart';
 
@@ -432,6 +433,31 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                       Icons.public,
                       size: 21,
                       color: EarthColors.cyanAccent,
+                    ),
+                  ),
+                ),
+              ),
+
+              // AUDIO / SOUND ENGINE CONTROLLER
+              Tooltip(
+                message: EarthAudioEngine.instance.isMuted ? 'Unmute Audio & SFX' : 'Audio Atmosphere & SFX Settings',
+                child: InkWell(
+                  key: const Key('btn-audio-toggle'),
+                  onTap: () {
+                    setState(() {
+                      EarthAudioEngine.instance.toggleMute();
+                      if (!EarthAudioEngine.instance.isMuted) {
+                        EarthAudioEngine.instance.playClick();
+                      }
+                    });
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Icon(
+                      EarthAudioEngine.instance.isMuted ? Icons.volume_off : Icons.volume_up,
+                      size: 21,
+                      color: EarthAudioEngine.instance.isMuted ? EarthColors.textMuted : EarthColors.cyanAccent,
                     ),
                   ),
                 ),

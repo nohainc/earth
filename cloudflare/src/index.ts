@@ -27,6 +27,7 @@ import { communicationsRoutes } from './communications-routes';
 import { listSupplyContracts, proposeSupplyContract, acceptSupplyContract, cancelSupplyContract, getContractDeliveryTicks } from './supply-contracts-postgres.ts';
 import { listPlanetaryRegionsAndPlots, claimPlotLease, upgradePlotInfrastructure, harvestPlotYield } from './map-regions-postgres.ts';
 import { getDynastyOverview, unlockDynastyPerk, equipDynastyHeirloom, forgeDynastyHeirloom, updateDynastyMotto } from './dynasty-postgres.ts';
+import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -1145,6 +1146,90 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Motto update failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
+    }
+
+    if (url.pathname === '/api/market/derivatives' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const commodity = url.searchParams.get('commodity') || 'energy';
+      const humanId = viewer?.id || 'H-0044';
+      try {
+        const result = await withRepository(env, (repository) => listCommodityDerivativesAndOHLC(repository, commodity, humanId));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to fetch derivatives';
+        return Response.json({ ok: false, error: message }, { status: 400 });
+      }
+    }
+
+    if (url.pathname === '/api/market/futures/create' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ commodity?: string; size?: number; strikePrice?: number; expiryGameDay?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const commodity = parsed.value.commodity?.toLowerCase().trim() ?? 'energy';
+      const size = Number(parsed.value.size);
+      const strikePrice = Number(parsed.value.strikePrice);
+      const expiryGameDay = Number(parsed.value.expiryGameDay);
+      const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+
+      try {
+        const result = await withRepository(env, (repository) => createFuturesListing(repository, {
+          sellerId: viewer.id,
+          commodity,
+          size,
+          strikePrice,
+          expiryGameDay,
+          correlationId,
+        }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Futures creation failed';
+        return Response.json({ ok: false, error: message }, { status: /insufficient/i.test(message) ? 409 : 400 });
+      }
+    }
+
+    if (url.pathname.startsWith('/api/market/futures/') && url.pathname.endsWith('/buy') && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const segments = url.pathname.split('/');
+      const contractId = segments[4];
+      if (!contractId) return Response.json({ ok: false, error: 'Contract ID is required' }, { status: 400 });
+      const correlationId = resolveIdempotencyKey(request);
+
+      try {
+        const result = await withRepository(env, (repository) => matchFuturesContract(repository, {
+          buyerId: viewer.id,
+          contractId,
+          correlationId,
+        }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Futures matching failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : (/insufficient/i.test(message) ? 409 : 400) });
+      }
+    }
+
+    if (url.pathname.startsWith('/api/market/futures/') && url.pathname.endsWith('/cancel') && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const segments = url.pathname.split('/');
+      const contractId = segments[4];
+      if (!contractId) return Response.json({ ok: false, error: 'Contract ID is required' }, { status: 400 });
+
+      try {
+        const result = await withRepository(env, (repository) => cancelFuturesListing(repository, {
+          sellerId: viewer.id,
+          contractId,
+        }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Futures cancellation failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 400 });
       }
     }
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {

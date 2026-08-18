@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
+import 'derivatives_dialog.dart';
 
 /// Commodity configuration mapping symbol codes and themes.
 class CommodityMeta {
@@ -469,7 +471,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
                         children: [
                           const Text(
                             'PERIODIC BATCH AUCTION',
@@ -480,7 +484,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               color: inkColor,
                             ),
                           ),
-                          const SizedBox(width: 8),
                           Container(
                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                             decoration: BoxDecoration(
@@ -503,33 +506,58 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       Text(
                         'Next batch clearing in $countdownStr · Uniform Clearing Price (P*) · Zero Slippage',
                         style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                        overflow: TextOverflow.ellipsis,
                       ),
                     ],
                   ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: cyanAccentColor.withValues(alpha: .12),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: cyanAccentColor.withValues(alpha: .3)),
-                  ),
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(Icons.sync_outlined, size: 11, color: cyanAccentColor),
-                      SizedBox(width: 4),
-                      Text(
-                        'POOLING ORDERS',
-                        style: TextStyle(
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: .6,
-                          color: cyanAccentColor,
-                        ),
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ElevatedButton.icon(
+                      key: const Key('btn-open-derivatives-dialog'),
+                      onPressed: () => showDerivativesDialog(
+                        context,
+                        api: const EarthApi(),
+                        state: widget.state,
+                        initialCommodity: _selectedCommodity,
                       ),
-                    ],
-                  ),
+                      icon: const Icon(Icons.show_chart, size: 13),
+                      label: const Text('FUTURES & CHARTS'),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: cyanAccentColor.withAlpha(40),
+                        foregroundColor: cyanAccentColor,
+                        side: BorderSide(color: cyanAccentColor.withAlpha(120)),
+                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: cyanAccentColor.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: cyanAccentColor.withValues(alpha: .3)),
+                      ),
+                      child: const Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.sync_outlined, size: 11, color: cyanAccentColor),
+                          SizedBox(width: 4),
+                          Text(
+                            'POOLING ORDERS',
+                            style: TextStyle(
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .6,
+                              color: cyanAccentColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
