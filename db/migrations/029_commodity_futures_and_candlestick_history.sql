@@ -53,12 +53,12 @@ begin
     c := commodities[idx];
     base_p := base_prices[idx];
     for day in 155..185 loop
-      step_noise := (sin(day * 0.4 + idx) * 3.5) + (cos(day * 0.15) * 2.0);
-      o := round(base_p + step_noise, 2);
-      cls := round(o + (sin(day * 0.7) * 2.2), 2);
-      h := round(greatest(o, cls) + abs(cos(day * 0.3)) * 2.0 + 0.5, 2);
-      l := round(least(o, cls) - abs(sin(day * 0.5)) * 1.8 - 0.3, 2);
-      vol := round(1000.0 + abs(sin(day * 0.9)) * 1500.0, 0);
+      step_noise := ((sin(day * 0.4 + idx) * 3.5) + (cos(day * 0.15) * 2.0))::numeric;
+      o := round((base_p + step_noise)::numeric, 2);
+      cls := round((o + (sin(day * 0.7) * 2.2)::numeric)::numeric, 2);
+      h := round((greatest(o, cls) + (abs(cos(day * 0.3)) * 2.0 + 0.5)::numeric)::numeric, 2);
+      l := round((least(o, cls) - (abs(sin(day * 0.5)) * 1.8 + 0.3)::numeric)::numeric, 2);
+      vol := round((1000.0 + (abs(sin(day * 0.9)) * 1500.0)::numeric)::numeric, 0);
 
       insert into market_ohlc_snapshots (id, commodity, game_day, open_price, high_price, low_price, close_price, volume)
       values (
@@ -75,31 +75,42 @@ begin
   end loop;
 end $$;
 
--- Seed sample open and active futures contracts for player H-0044
-insert into commodity_futures_contracts (
-  id, seller_human_id, buyer_human_id, commodity, contract_size, strike_price, expiry_game_day, collateral_locked, premium_paid, status
-) values
-(
-  'FUT-ENERGY-101',
-  'H-0044',
-  null,
-  'energy',
-  250.00,
-  28.50,
-  210,
-  250.00,
-  0.00,
-  'open'
-),
-(
-  'FUT-COMPUTE-102',
-  'H-0012',
-  'H-0044',
-  'compute',
-  100.00,
-  58.00,
-  200,
-  100.00,
-  250.00,
-  'matched'
-) on conflict (id) do nothing;
+-- Seed sample open and active futures contracts for player H-0044 if humans exist
+do $$
+begin
+  if exists (select 1 from humans where id = 'H-0044') then
+    insert into commodity_futures_contracts (
+      id, seller_human_id, buyer_human_id, commodity, contract_size, strike_price, expiry_game_day, collateral_locked, premium_paid, status
+    ) values
+    (
+      'FUT-ENERGY-101',
+      'H-0044',
+      null,
+      'energy',
+      250.00,
+      28.50,
+      210,
+      250.00,
+      0.00,
+      'open'
+    ) on conflict (id) do nothing;
+  end if;
+
+  if exists (select 1 from humans where id = 'H-0044') and exists (select 1 from humans where id = 'H-0045') then
+    insert into commodity_futures_contracts (
+      id, seller_human_id, buyer_human_id, commodity, contract_size, strike_price, expiry_game_day, collateral_locked, premium_paid, status
+    ) values
+    (
+      'FUT-COMPUTE-102',
+      'H-0045',
+      'H-0044',
+      'compute',
+      100.00,
+      58.00,
+      200,
+      100.00,
+      250.00,
+      'matched'
+    ) on conflict (id) do nothing;
+  end if;
+end $$;
