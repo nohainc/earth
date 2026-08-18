@@ -1,42 +1,36 @@
+import { verifyDeploymentEndpoints } from './verify-deployment-endpoints.mjs';
+
 export async function verifyCanary(targetUrl = 'http://127.0.0.1:8787') {
+  const deploymentReport = await verifyDeploymentEndpoints(targetUrl);
+
   const results = {
-    target: targetUrl,
-    timestamp: new Date().toISOString(),
-    probes: {},
-    allPassed: false,
+    target: deploymentReport.target,
+    timestamp: deploymentReport.timestamp,
+    probes: {
+      ...deploymentReport.probes,
+      // Backwards-compatible probe alias keys
+      health: deploymentReport.probes.apiHealth,
+      flutterShell: deploymentReport.probes.app,
+    },
+    details: deploymentReport.details,
+    errors: deploymentReport.errors,
+    allPassed: deploymentReport.allPassed,
   };
 
   try {
-    // 1. Health Probe
-    const healthRes = await fetch(`${targetUrl}/api/health`);
-    results.probes.health = healthRes.ok && (await healthRes.json()).ok === true;
-  } catch (err) {
-    results.probes.health = false;
-  }
-
-  try {
-    // 2. Readiness Probe
-    const readyRes = await fetch(`${targetUrl}/api/ready`);
-    results.probes.readiness = readyRes.ok && (await readyRes.json()).ok === true;
-  } catch (err) {
-    results.probes.readiness = false;
-  }
-
-  try {
-    // 3. Landing & Flutter Shell Probe
-    const shellRes = await fetch(`${targetUrl}/app`);
-    const shellHtml = await shellRes.text();
-    results.probes.flutterShell = shellRes.ok && shellHtml.includes('flutter_bootstrap.js');
-  } catch (err) {
-    results.probes.flutterShell = false;
-  }
-
-  try {
-    // 4. World State Snapshot Probe
-    const worldRes = await fetch(`${targetUrl}/api/world`);
+    // Additional World State Snapshot Probe
+    const worldRes = await fetch(`${deploymentReport.target}/api/world`);
     results.probes.worldSnapshot = worldRes.ok && (await worldRes.json()).clock !== undefined;
   } catch (err) {
     results.probes.worldSnapshot = false;
+  }
+
+  try {
+    // Additional Readiness Probe
+    const readyRes = await fetch(`${deploymentReport.target}/api/ready`);
+    results.probes.readiness = readyRes.ok && (await readyRes.json()).ok === true;
+  } catch (err) {
+    results.probes.readiness = false;
   }
 
   results.allPassed = Object.values(results.probes).every(Boolean);
