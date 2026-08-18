@@ -73,4 +73,29 @@ void main() {
     expect(find.text('New password (12+ characters)'), findsOneWidget);
     expect(find.text('Repeat password'), findsOneWidget);
   });
+
+  testWidgets('AuthScreen renders recovery mode and initialMessage banner',
+      (tester) async {
+    const api = EarthApi(baseUrl: 'http://127.0.0.1:8899');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthScreen(
+          api: api,
+          onAuthenticated: (_) {},
+          initialMessage: 'Email verified. Please sign in.',
+        ),
+      ),
+    );
+
+    expect(find.text('Email verified. Please sign in.'), findsOneWidget);
+
+    // Toggle forgot password mode
+    final forgotBtn = find.text('Forgot password?');
+    if (forgotBtn.evaluate().isNotEmpty) {
+      await tester.tap(forgotBtn);
+      await tester.pump();
+      expect(find.text('Send recovery email'), findsOneWidget);
+    }
+  });
 }

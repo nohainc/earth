@@ -151,6 +151,8 @@ lib/
 
 ## 7. Testing and verification gate
 
+- **Minimum Test Coverage Requirement (80% Line Coverage)**: All codebase modules (Dart/Flutter client and TypeScript/Node backend) must maintain at least **80% automated test coverage** (`LF`/`LH` lines covered $\ge 80.0\%$). New features and refactors must include unit and widget/integration tests to ensure total coverage remains at or above 80%.
+
 Run the smallest relevant tests during development, then the full gate before
 handoff:
 
@@ -158,7 +160,7 @@ handoff:
 npm test
 npm run cf:check
 cd flutter_client && flutter analyze
-cd flutter_client && flutter test
+cd flutter_client && flutter test --coverage
 cd flutter_client && flutter build web --release --base-href /
 npm run flutter:prepare:web
 npm run cf:smoke

@@ -450,22 +450,28 @@ class EarthFlowMetric extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(icon, size: 14, color: accent),
-                    const SizedBox(width: 6),
-                    Text(
-                      label,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        letterSpacing: 1.1,
-                        color: accent,
-                        fontWeight: FontWeight.w700,
+                Expanded(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(icon, size: 14, color: accent),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          label,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            letterSpacing: 1.1,
+                            color: accent,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+                const SizedBox(width: 4),
                 Container(
                   padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
                   decoration: BoxDecoration(
@@ -496,7 +502,9 @@ class EarthFlowMetric extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 6),
-            Row(
+            Wrap(
+              spacing: 8,
+              runSpacing: 2,
               children: [
                 Text(
                   '▲ +$inStr in',
@@ -506,7 +514,6 @@ class EarthFlowMetric extends StatelessWidget {
                     color: Colors.greenAccent,
                   ),
                 ),
-                const SizedBox(width: 8),
                 Text(
                   '▼ -$outStr out',
                   style: TextStyle(

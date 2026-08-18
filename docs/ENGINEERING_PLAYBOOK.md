@@ -227,11 +227,17 @@ PostgreSQL transaction slices currently live in production:
 The remaining entries are feature-completion slices, not persistence-authority
 promotion gates.
 
-### Feature boundary rule
+### Feature boundary rule & 80% Test Coverage
 
 The PostgreSQL path is authoritative while `PERSISTENCE_AUTHORITY=postgres`.
 A route is not considered complete merely because its schema exists: every
 state-changing branch must have an idempotent PostgreSQL transaction, stable
-error behavior, and a rollback/replay test. Continue adding gameplay features
+error behavior, and a rollback/replay test.
+
+**Automated Test Coverage Gate**:
+- All code across the repository must maintain **at least 80% automated line test coverage** (`LF`/`LH` $\ge 80.0\%$).
+- Any PR or feature slice resulting in aggregate test coverage under 80% is blocked from release until corresponding unit and widget/integration tests are added.
+
+Continue adding gameplay features
 as vertical slices, with the full route, Flutter surface, and verification
 before moving to the next slice.

@@ -62,9 +62,20 @@ void main() {
     expect(find.text('SELL MACHINE'), findsOneWidget);
     expect(find.text('RECYCLE'), findsOneWidget);
 
-    await tester.tap(find.text('MAINTAIN (10 COMP)'));
+    // Upgrade dialog
+    await tester.tap(find.text('UPGRADE (+0.2x)'));
     await tester.pumpAndSettle();
+    expect(find.text('Upgrade machine'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Upgrade'));
+    await tester.pumpAndSettle();
+    expect(executedAction, 'action_executed');
 
+    // Recycle dialog
+    await tester.tap(find.text('RECYCLE'));
+    await tester.pumpAndSettle();
+    expect(find.text('Recycle machine?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(FilledButton, 'Recycle'));
+    await tester.pumpAndSettle();
     expect(executedAction, 'action_executed');
   });
 

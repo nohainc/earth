@@ -1558,18 +1558,23 @@ class WorldIntegrityPanel extends StatelessWidget {
         spacing: 8,
         runSpacing: 8,
         children: state.audit.entries
-            .map((entry) => Chip(
-                  label: Text(
-                    '${entry.key}: ${entry.value ? 'OK' : 'CHECK'}',
-                    style: const TextStyle(fontSize: 10),
-                  ),
-                  avatar: Icon(
-                    entry.value ? Icons.check_circle : Icons.warning,
-                    size: 14,
-                    color: entry.value ? cyanAccentColor : Colors.orange,
-                  ),
-                  backgroundColor: Colors.white10,
-                ))
+            .map((entry) {
+              final isBool = entry.value is bool;
+              final isOk = isBool ? (entry.value as bool) : entry.value != null;
+              final valStr = isBool ? ((entry.value as bool) ? 'OK' : 'CHECK') : entry.value.toString();
+              return Chip(
+                label: Text(
+                  '${entry.key}: $valStr',
+                  style: const TextStyle(fontSize: 10),
+                ),
+                avatar: Icon(
+                  isOk ? Icons.check_circle : Icons.warning,
+                  size: 14,
+                  color: isOk ? cyanAccentColor : Colors.orange,
+                ),
+                backgroundColor: Colors.white10,
+              );
+            })
             .toList(),
       ),
     );
