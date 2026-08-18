@@ -17,6 +17,7 @@ import '../operations/machines_panel.dart';
 import '../operations/technology_panel.dart';
 import 'command_executive_quadrant.dart';
 import 'hero_card.dart';
+import 'executive_command_summary.dart';
 import 'opportunity_panel.dart';
 import 'decision_queue_panel.dart';
 import 'objectives_panel.dart';
@@ -427,11 +428,12 @@ class Dashboard extends StatelessWidget {
         ];
       case 'command':
       default:
-        final decisionQueueItems = DecisionQueueItem.synthesizeFromState(state);
         final playerObjectives = PlayerObjective.synthesizeFromState(state);
         return [
-          DecisionQueuePanel(
-            items: decisionQueueItems,
+          ExecutiveCommandSummary(
+            state: state,
+            businessFinancials: businessFinancials,
+            contracts: contracts,
             onNavigate: onNavigate,
             onExecuteDecision: (item) {
               if (onNavigate != null) {
@@ -439,17 +441,12 @@ class Dashboard extends StatelessWidget {
               }
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           ObjectivesPanel(
             objectives: playerObjectives,
             onNavigate: onNavigate,
           ),
-          const SizedBox(height: 16),
-          OpportunityPanel(
-            opportunities: state.opportunities,
-            onNavigate: onNavigate,
-          ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 18),
           CommandExecutiveQuadrant(
             state: state,
             businessFinancials: businessFinancials,

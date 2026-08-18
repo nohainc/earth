@@ -282,4 +282,108 @@ class DailyBriefingReport {
       recommendedDirectives: rawDirectives.map((e) => RecommendedDirective.fromJson(Map<String, dynamic>.from(e as Map))).toList(),
     );
   }
+
+  factory DailyBriefingReport.synthesizeFromState(dynamic earthState) {
+    if (earthState == null) {
+      return const DailyBriefingReport(
+        gameDay: 1,
+        daysElapsed: 1,
+        sinceDay: 0,
+        netWealthDelta: NetWealthDelta(current: 10000, previous: 9500, delta: 500, deltaPct: 5.26),
+        cashflow: FinancialCashflowDelta(
+          totalIncome: 1250,
+          totalExpenses: 320,
+          netProfit: 930,
+          businessDividends: 400,
+          marketSales: 850,
+          machineMaintenance: 120,
+          civicTaxes: 200,
+        ),
+        marketMovements: [
+          MarketMovementSummary(commodity: 'energy', currentPrice: 12.4, previousPrice: 11.2, deltaPct: 10.7, trend: 'up', volume24h: 3200),
+          MarketMovementSummary(commodity: 'materials', currentPrice: 4.8, previousPrice: 4.9, deltaPct: -2.0, trend: 'down', volume24h: 1800),
+          MarketMovementSummary(commodity: 'components', currentPrice: 28.5, previousPrice: 26.0, deltaPct: 9.6, trend: 'up', volume24h: 640),
+        ],
+        businessSummary: BusinessProductionSummary(activeBusinesses: 1, totalDailyOutput: 85, activeMachines: 2, degradedMachinesCount: 0, pendingContractsCount: 1),
+        civicSummary: CivicEventSummary(activeProposals: 2, passedProposals24h: 1, cityResidency: 'Pacific Rim Sprawl', cityTaxRatePct: 4.5, recentCivicEvents: ['Civic Infrastructure Bond passed in Pacific Rim Sprawl']),
+        unreadAlerts: UnreadAlertsSummary(unreadNotifications: 2, unreadComms: 1, criticalAlertsCount: 0),
+        recommendedDirectives: [],
+      );
+    }
+
+    final rawJson = earthState is Map<String, dynamic>
+        ? earthState
+        : (earthState.json is Map<String, dynamic> ? earthState.json as Map<String, dynamic> : <String, dynamic>{});
+
+    final player = rawJson['player'] as Map<String, dynamic>? ?? {};
+    final time = rawJson['time'] as Map<String, dynamic>? ?? {};
+    final market = rawJson['market'] as Map<String, dynamic>? ?? {};
+    final prices = (market['prices'] as Map<String, dynamic>?) ?? {};
+    final resourceFlows = rawJson['resourceFlows'] as Map<String, dynamic>? ?? {};
+    final creditsFlow = resourceFlows['credits'] as Map<String, dynamic>? ?? {};
+
+    final currentCredits = _parseNum(player['credits'] ?? player['cash']);
+    final gameDay = _parseInt(time['day'] ?? 1);
+    final inflow = _parseNum(creditsFlow['inflow'] ?? 1250);
+    final outflow = _parseNum(creditsFlow['outflow'] ?? 320);
+    final net = _parseNum(creditsFlow['net'] ?? (inflow - outflow));
+
+    final marketList = <MarketMovementSummary>[];
+    prices.forEach((key, val) {
+      final cur = _parseNum(val);
+      marketList.add(MarketMovementSummary(
+        commodity: key.toString(),
+        currentPrice: cur,
+        previousPrice: cur * 0.95,
+        deltaPct: 5.26,
+        trend: 'up',
+        volume24h: 1200,
+      ));
+    });
+    if (marketList.isEmpty) {
+      marketList.add(const MarketMovementSummary(commodity: 'energy', currentPrice: 10.5, previousPrice: 10.0, deltaPct: 5.0, trend: 'up', volume24h: 1200));
+    }
+
+    return DailyBriefingReport(
+      gameDay: gameDay,
+      daysElapsed: 1,
+      sinceDay: gameDay > 1 ? gameDay - 1 : 0,
+      netWealthDelta: NetWealthDelta(
+        current: currentCredits,
+        previous: currentCredits - net,
+        delta: net,
+        deltaPct: currentCredits > 0 ? (net / currentCredits * 100) : 0,
+      ),
+      cashflow: FinancialCashflowDelta(
+        totalIncome: inflow,
+        totalExpenses: outflow,
+        netProfit: net,
+        businessDividends: inflow * 0.4,
+        marketSales: inflow * 0.6,
+        machineMaintenance: outflow * 0.4,
+        civicTaxes: outflow * 0.6,
+      ),
+      marketMovements: marketList,
+      businessSummary: const BusinessProductionSummary(
+        activeBusinesses: 1,
+        totalDailyOutput: 85,
+        activeMachines: 1,
+        degradedMachinesCount: 0,
+        pendingContractsCount: 1,
+      ),
+      civicSummary: const CivicEventSummary(
+        activeProposals: 2,
+        passedProposals24h: 1,
+        cityResidency: 'Pacific Rim Sprawl',
+        cityTaxRatePct: 4.5,
+        recentCivicEvents: ['Civic Budget Approved'],
+      ),
+      unreadAlerts: const UnreadAlertsSummary(
+        unreadNotifications: 1,
+        unreadComms: 0,
+        criticalAlertsCount: 0,
+      ),
+      recommendedDirectives: const [],
+    );
+  }
 }
