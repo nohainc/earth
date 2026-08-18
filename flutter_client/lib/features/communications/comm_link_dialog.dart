@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../contracts/supply_contracts_dialog.dart';
 
 Future<void> showCommLinkDialog(
   BuildContext context, {
@@ -1093,8 +1094,12 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                             ),
                             ElevatedButton(
                               onPressed: () {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(content: Text('Action executed for: ${payload.values.firstOrNull}')),
+                                final contractId = payload['contractId']?.toString();
+                                showSupplyContractsDialog(
+                                  context,
+                                  api: widget.api,
+                                  state: widget.state,
+                                  initialContractId: contractId,
                                 );
                               },
                               style: ElevatedButton.styleFrom(

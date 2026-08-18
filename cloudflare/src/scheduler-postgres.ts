@@ -69,6 +69,171 @@ async function runAiMaintenance(tx: PostgresRepository, day: number): Promise<vo
   }
 }
 
+async function settleSupplyContracts(tx: PostgresRepository, day: number): Promise<void> {
+  const active = await tx.query<{
+    contract_id: string;
+    resource_type: string;
+    daily_quantity: string;
+    unit_price: string;
+    total_days: number;
+    delivered_days: number;
+    default_days: number;
+    consecutive_defaults: number;
+    max_consecutive_defaults: number;
+    escrow_remaining: string;
+    penalty_per_default: string;
+    buyer_id: string;
+    seller_id: string;
+    vault_id: string;
+    title: string;
+  }>(
+    `SELECT sc.contract_id, sc.resource_type, sc.daily_quantity, sc.unit_price,
+            sc.total_days, sc.delivered_days, sc.default_days, sc.consecutive_defaults,
+            sc.max_consecutive_defaults, sc.escrow_remaining, sc.penalty_per_default,
+            ev.id AS vault_id, ev.buyer_id, ev.seller_id, nc.title
+     FROM supply_contracts sc
+     JOIN negotiated_contracts nc ON nc.id = sc.contract_id
+     JOIN contract_escrow_vaults ev ON ev.contract_id = sc.contract_id
+     WHERE nc.status = 'accepted' AND (sc.last_settled_game_day IS NULL OR sc.last_settled_game_day < $1)
+     FOR UPDATE`,
+    [day],
+  );
+
+  for (const contract of active.rows) {
+    const qty = Number(contract.daily_quantity);
+    const dailyPriceCents = BigInt(Math.round(qty * 100)) * BigInt(Math.round(Number(contract.unit_price) * 100)) / 100n;
+    const dailyPrice = centsToMoney(dailyPriceCents);
+    const penaltyCents = moneyToCents(contract.penalty_per_default);
+
+    const sellerRes = await tx.query<{ amount: string }>(
+      'SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = $2 FOR UPDATE',
+      [contract.seller_id, contract.resource_type],
+    );
+    const sellerHas = Number(sellerRes.rows[0]?.amount ?? 0);
+
+    if (sellerHas >= qty) {
+      await tx.query(
+        'UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3',
+        [qty, contract.seller_id, contract.resource_type],
+      );
+      await tx.query(
+        `INSERT INTO resource_balances (owner_id, resource, amount)
+         VALUES ($1, $2, $3)
+         ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + $3`,
+        [contract.buyer_id, contract.resource_type, qty],
+      );
+
+      const sellerAcc = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [contract.seller_id],
+      );
+      if (sellerAcc.rows[0]) {
+        const newBal = centsToMoney(moneyToCents(sellerAcc.rows[0].balance) + dailyPriceCents);
+        await tx.query('UPDATE account_balances SET balance = $1 WHERE account_id = $2', [
+          newBal,
+          sellerAcc.rows[0].account_id,
+        ]);
+      }
+
+      const newRemaining = centsToMoney(moneyToCents(contract.escrow_remaining) - dailyPriceCents);
+      const isComplete = (contract.delivered_days + 1) >= contract.total_days;
+
+      await tx.query(
+        `UPDATE supply_contracts 
+         SET delivered_days = delivered_days + 1,
+             consecutive_defaults = 0,
+             escrow_remaining = $1,
+             last_settled_game_day = $2
+         WHERE contract_id = $3`,
+        [newRemaining, day, contract.contract_id],
+      );
+
+      await tx.query(
+        `UPDATE contract_escrow_vaults 
+         SET released_amount = released_amount + $1,
+             status = CASE WHEN $2 THEN 'released' ELSE status END,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $3`,
+        [dailyPrice, isComplete, contract.vault_id],
+      );
+
+      if (isComplete) {
+        await tx.query("UPDATE negotiated_contracts SET status = 'completed' WHERE id = $1", [contract.contract_id]);
+      }
+
+      await tx.query(
+        `INSERT INTO contract_delivery_ticks (id, contract_id, game_day, status, quantity_delivered, credits_transferred)
+         VALUES ($1, $2, $3, 'delivered', $4, $5)`,
+        [crypto.randomUUID(), contract.contract_id, day, qty, dailyPrice],
+      );
+    } else {
+      const newConsecutive = contract.consecutive_defaults + 1;
+      let penaltyPaid = '0.00';
+
+      if (penaltyCents > 0n) {
+        const sellerAcc = await tx.query<{ account_id: string; balance: string }>(
+          "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+          [contract.seller_id],
+        );
+        const buyerAcc = await tx.query<{ account_id: string; balance: string }>(
+          "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+          [contract.buyer_id],
+        );
+        if (sellerAcc.rows[0] && buyerAcc.rows[0] && moneyToCents(sellerAcc.rows[0].balance) >= penaltyCents) {
+          const newSellerBal = centsToMoney(moneyToCents(sellerAcc.rows[0].balance) - penaltyCents);
+          const newBuyerBal = centsToMoney(moneyToCents(buyerAcc.rows[0].balance) + penaltyCents);
+          await tx.query('UPDATE account_balances SET balance = $1 WHERE account_id = $2', [newSellerBal, sellerAcc.rows[0].account_id]);
+          await tx.query('UPDATE account_balances SET balance = $1 WHERE account_id = $2', [newBuyerBal, buyerAcc.rows[0].account_id]);
+          penaltyPaid = centsToMoney(penaltyCents);
+        }
+      }
+
+      const isBreached = newConsecutive >= contract.max_consecutive_defaults;
+
+      await tx.query(
+        `UPDATE supply_contracts 
+         SET default_days = default_days + 1,
+             consecutive_defaults = $1,
+             last_settled_game_day = $2
+         WHERE contract_id = $3`,
+        [newConsecutive, day, contract.contract_id],
+      );
+
+      await tx.query(
+        `INSERT INTO contract_delivery_ticks (id, contract_id, game_day, status, quantity_delivered, credits_transferred, penalty_charged, notes)
+         VALUES ($1, $2, $3, 'defaulted', 0, 0, $4, 'Insufficient inventory for scheduled delivery')`,
+        [crypto.randomUUID(), contract.contract_id, day, penaltyPaid],
+      );
+
+      if (isBreached) {
+        const remainingCents = moneyToCents(contract.escrow_remaining);
+        if (remainingCents > 0n) {
+          const buyerAcc = await tx.query<{ account_id: string; balance: string }>(
+            "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+            [contract.buyer_id],
+          );
+          if (buyerAcc.rows[0]) {
+            const newBal = centsToMoney(moneyToCents(buyerAcc.rows[0].balance) + remainingCents);
+            await tx.query('UPDATE account_balances SET balance = $1 WHERE account_id = $2', [newBal, buyerAcc.rows[0].account_id]);
+          }
+        }
+        await tx.query(
+          "UPDATE contract_escrow_vaults SET refunded_amount = refunded_amount + $1, status = 'refunded', updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+          [contract.escrow_remaining, contract.vault_id],
+        );
+        await tx.query("UPDATE supply_contracts SET escrow_remaining = '0.00' WHERE contract_id = $1", [contract.contract_id]);
+        await tx.query("UPDATE negotiated_contracts SET status = 'cancelled' WHERE id = $1", [contract.contract_id]);
+        await tx.query(
+          `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
+           VALUES ($1, $2, 'contract', 'Supply Contract Terminated', 'Agreement was terminated due to consecutive delivery defaults. Remaining escrow refunded.', $3),
+                  ($4, $5, 'contract', 'Supply Contract Terminated', 'Agreement was terminated due to consecutive delivery defaults.', $3)`,
+          [crypto.randomUUID(), contract.buyer_id, contract.contract_id, crypto.randomUUID(), contract.seller_id, contract.contract_id],
+        );
+      }
+    }
+  }
+}
+
 async function completeContracts(tx: PostgresRepository, day: number): Promise<void> {
   const contracts = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; title: string }>("SELECT id, proposer_id, counterparty_id, title FROM negotiated_contracts WHERE status = 'accepted' AND ends_game_day <= $1 FOR UPDATE", [day]);
   for (const contract of contracts.rows) {
@@ -283,6 +448,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const productionEvents = await settleProduction(tx, day);
     await settleTechnologyRoyalties(tx, day);
     await runAiMaintenance(tx, day);
+    await settleSupplyContracts(tx, day);
     await completeContracts(tx, day);
     if (idempotencyKey) {
       await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, toNanoMarkup({ day, minute, newDay, productionEvents })]);

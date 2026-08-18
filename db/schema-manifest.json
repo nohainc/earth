@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 25,
+  "migrationVersion": 26,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -27,7 +27,9 @@
     "comm_messages": ["id", "channel_id", "sender_human_id", "body"],
     "communities": ["id", "founder_id", "shared_credits"],
     "community_members": ["community_id", "human_id", "role"],
+    "contract_delivery_ticks": ["id", "contract_id", "game_day", "status", "quantity_delivered", "credits_transferred"],
     "contract_disputes": ["id", "contract_id", "status"],
+    "contract_escrow_vaults": ["id", "contract_id", "buyer_id", "seller_id", "locked_amount", "status"],
     "corporations": ["id", "institution_id", "treasury"],
     "deceased_profiles": ["human_id", "death_game_day", "cause_of_death", "epitaph", "dynasty_name"],
     "diplomatic_dispatches": ["id", "sender_human_id", "recipient_human_id", "subject", "status"],
@@ -64,6 +66,7 @@
     "resource_balances": ["owner_id", "resource", "amount"],
     "role_assignments": ["id", "role_id", "institution_id", "human_id"],
     "succession_plans": ["human_id", "successor_name", "successor_human_id"],
+    "supply_contracts": ["contract_id", "resource_type", "daily_quantity", "unit_price", "total_days", "escrow_total", "escrow_remaining"],
     "tax_rules": ["id", "scope", "category", "rate"],
     "technologies": ["id", "name", "progress", "version", "required_compute", "cost_credits"],
     "technology_licenses": ["id", "patent_id", "licensor_id", "licensee_id"],
@@ -103,6 +106,9 @@
     "deceased_profiles_dynasty_idx",
     "comm_messages_channel_idx",
     "diplomatic_dispatches_recipient_idx",
-    "diplomatic_dispatches_sender_idx"
+    "diplomatic_dispatches_sender_idx",
+    "supply_contracts_resource_idx",
+    "contract_escrow_vaults_contract_idx",
+    "contract_delivery_ticks_contract_day_idx"
   ]
 }

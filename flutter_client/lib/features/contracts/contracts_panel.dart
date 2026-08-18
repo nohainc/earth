@@ -7,6 +7,7 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../governance/governance_dialogs.dart';
 import '../lifecycle/lifecycle_dialogs.dart';
+import './supply_contracts_dialog.dart';
 
 class ContractsPanel extends StatefulWidget {
   final EarthState state;
@@ -151,6 +152,52 @@ class _ContractsPanelState extends State<ContractsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 0. SUPPLY CONTRACTS & ESCROW VAULT LAUNCHER
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            margin: const EdgeInsets.only(bottom: 14),
+            decoration: BoxDecoration(
+              color: EarthColors.goldMetallic.withAlpha(20),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: EarthColors.goldMetallic.withAlpha(80)),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Row(
+                  children: [
+                    Icon(Icons.bolt, color: EarthColors.goldMetallic, size: 16),
+                    SizedBox(width: 8),
+                    Text(
+                      'B2B COMMODITY SUPPLY & ESCROW VAULT',
+                      style: TextStyle(
+                        color: EarthColors.goldMetallic,
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 0.8,
+                      ),
+                    ),
+                  ],
+                ),
+                ElevatedButton.icon(
+                  onPressed: () => showSupplyContractsDialog(
+                    context,
+                    api: const EarthApi(),
+                    state: widget.state,
+                  ),
+                  icon: const Icon(Icons.handshake_outlined, size: 14),
+                  label: const Text('OPEN ESCROW VAULT'),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: EarthColors.goldMetallic,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           // 1. EXECUTIVE CONTRACT PORTFOLIO HEADER
           Container(
             width: double.infinity,

@@ -373,6 +373,107 @@ const commState = {
   ],
 };
 
+const supplyContractsState = [
+  {
+    contract_id: 'CTR-882',
+    title: 'Quantum Core Energy Supply Agreement',
+    proposer_id: 'H-0012',
+    counterparty_id: 'H-0044',
+    status: 'accepted',
+    starts_game_day: 160,
+    ends_game_day: 190,
+    proposer_display_name: 'Dmitri Rostov',
+    counterparty_display_name: 'Amara Vance',
+    resource_type: 'energy',
+    daily_quantity: '50.00',
+    unit_price: '14.50',
+    total_days: 30,
+    delivered_days: 18,
+    default_days: 1,
+    consecutive_defaults: 0,
+    max_consecutive_defaults: 3,
+    escrow_total: '21750.00',
+    escrow_remaining: '8700.00',
+    penalty_per_default: '100.00',
+    last_settled_game_day: 184,
+    vault_id: 'VAULT-CTR-882',
+    vault_locked_amount: '21750.00',
+    vault_released_amount: '13050.00',
+    vault_refunded_amount: '0.00',
+    vault_penalty_paid: '100.00',
+    vault_status: 'locked',
+    created_at: new Date(Date.now() - 86400000).toISOString(),
+  },
+  {
+    contract_id: 'CTR-904',
+    title: 'High-Purity Silicon Supply Tender',
+    proposer_id: 'H-0089',
+    counterparty_id: 'H-0044',
+    status: 'proposed',
+    starts_game_day: 184,
+    ends_game_day: 214,
+    proposer_display_name: 'Elena Thorne',
+    counterparty_display_name: 'Amara Vance',
+    resource_type: 'material',
+    daily_quantity: '25.00',
+    unit_price: '28.00',
+    total_days: 30,
+    delivered_days: 0,
+    default_days: 0,
+    consecutive_defaults: 0,
+    max_consecutive_defaults: 3,
+    escrow_total: '21000.00',
+    escrow_remaining: '21000.00',
+    penalty_per_default: '250.00',
+    last_settled_game_day: null,
+    vault_id: 'VAULT-CTR-904',
+    vault_locked_amount: '21000.00',
+    vault_released_amount: '0.00',
+    vault_refunded_amount: '0.00',
+    vault_penalty_paid: '0.00',
+    vault_status: 'locked',
+    created_at: new Date(Date.now() - 14400000).toISOString(),
+  },
+];
+
+const supplyTicksState = {
+  'CTR-882': [
+    {
+      id: 'tick-184',
+      contract_id: 'CTR-882',
+      game_day: 184,
+      status: 'delivered',
+      quantity_delivered: '50.00',
+      credits_transferred: '725.00',
+      penalty_charged: '0.00',
+      notes: null,
+      created_at: new Date(Date.now() - 3600000).toISOString(),
+    },
+    {
+      id: 'tick-183',
+      contract_id: 'CTR-882',
+      game_day: 183,
+      status: 'delivered',
+      quantity_delivered: '50.00',
+      credits_transferred: '725.00',
+      penalty_charged: '0.00',
+      notes: null,
+      created_at: new Date(Date.now() - 7200000).toISOString(),
+    },
+    {
+      id: 'tick-182',
+      contract_id: 'CTR-882',
+      game_day: 182,
+      status: 'defaulted',
+      quantity_delivered: '0.00',
+      credits_transferred: '0.00',
+      penalty_charged: '100.00',
+      notes: 'Insufficient inventory for scheduled delivery',
+      created_at: new Date(Date.now() - 10800000).toISOString(),
+    },
+  ],
+};
+
 const EPOCH_START_TIME_MS = Date.parse('2026-01-01T00:00:00.000Z');
 
 function computeCosmicClock(serverNow = Date.now()) {
@@ -1014,6 +1115,69 @@ function command(path, body, req = null) {
     return { ok: true, contracts: state.contracts || [], persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
 
+  if (path === '/api/contracts/supply' && body.method === 'GET') {
+    return { ok: true, supplyContracts: supplyContractsState, persistence: database ? 'postgres-reference' : 'reference-simulator' };
+  }
+
+  if (path === '/api/contracts/supply/propose' && body.method === 'POST') {
+    const player = human('amara', req);
+    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+
+    const contractId = `CTR-${randomUUID().slice(0, 8).toUpperCase()}`;
+    const dailyQuantity = Number(body.dailyQuantity || 10);
+    const unitPrice = Number(body.unitPrice || 10);
+    const totalDays = Number(body.totalDays || 30);
+    const totalAmount = (dailyQuantity * unitPrice * totalDays).toFixed(2);
+    const penaltyAmount = Number(body.penaltyPerDefault || 0).toFixed(2);
+    const resourceType = body.resourceType || 'energy';
+    const counterpartyId = body.counterpartyId?.trim() || 'H-0012';
+    const title = body.title?.trim() || `${dailyQuantity} ${resourceType.toUpperCase()} / Day Supply Agreement`;
+
+    const newSupplyContract = {
+      contract_id: contractId,
+      title,
+      proposer_id: player.id,
+      counterparty_id: counterpartyId,
+      status: 'proposed',
+      starts_game_day: state.clock.day,
+      ends_game_day: state.clock.day + totalDays,
+      proposer_display_name: player.name,
+      counterparty_display_name: 'Dmitri Rostov',
+      resource_type: resourceType,
+      daily_quantity: dailyQuantity.toFixed(2),
+      unit_price: unitPrice.toFixed(2),
+      total_days: totalDays,
+      delivered_days: 0,
+      default_days: 0,
+      consecutive_defaults: 0,
+      max_consecutive_defaults: 3,
+      escrow_total: totalAmount,
+      escrow_remaining: totalAmount,
+      penalty_per_default: penaltyAmount,
+      last_settled_game_day: null,
+      vault_id: `VAULT-${contractId}`,
+      vault_locked_amount: totalAmount,
+      vault_released_amount: '0.00',
+      vault_refunded_amount: '0.00',
+      vault_penalty_paid: '0.00',
+      vault_status: 'locked',
+      created_at: new Date().toISOString(),
+    };
+
+    supplyContractsState.unshift(newSupplyContract);
+    publish('supply_contract.proposed', newSupplyContract);
+    const result = { ok: true, contractId, totalAmount, status: 'proposed' };
+    if (correlationId) commandResults.set(correlationId, result);
+    return result;
+  }
+
+  const contractTicksMatch = path.match(/^\/api\/contracts\/([^/]+)\/ticks$/);
+  if (contractTicksMatch && body.method === 'GET') {
+    const contractId = contractTicksMatch[1];
+    const ticks = supplyTicksState[contractId] || [];
+    return { ok: true, ticks, persistence: database ? 'postgres-reference' : 'reference-simulator' };
+  }
+
   if (path === '/api/contracts' && body.method === 'POST') {
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
@@ -1041,6 +1205,14 @@ function command(path, body, req = null) {
   const acceptContractMatch = path.match(/^\/api\/contracts\/([^/]+)\/accept$/);
   if (acceptContractMatch && body.method === 'POST') {
     const contractId = acceptContractMatch[1];
+    const supplyContract = supplyContractsState.find((c) => c.contract_id === contractId);
+    if (supplyContract) {
+      supplyContract.status = 'accepted';
+      publish('supply_contract.accepted', supplyContract);
+      const result = { ok: true, status: 'accepted', contractId, escrowLocked: supplyContract.escrow_total };
+      if (correlationId) commandResults.set(correlationId, result);
+      return result;
+    }
     const contract = state.contracts.find((c) => c.id === contractId);
     if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
     if (contract.status === 'accepted') throw new ApiError('Contract already accepted', 409, 'CONFLICT');
@@ -1055,6 +1227,17 @@ function command(path, body, req = null) {
   const cancelContractMatch = path.match(/^\/api\/contracts\/([^/]+)\/cancel$/);
   if (cancelContractMatch && body.method === 'POST') {
     const contractId = cancelContractMatch[1];
+    const supplyContract = supplyContractsState.find((c) => c.contract_id === contractId);
+    if (supplyContract) {
+      supplyContract.status = 'cancelled';
+      const refunded = supplyContract.escrow_remaining;
+      supplyContract.escrow_remaining = '0.00';
+      supplyContract.vault_status = 'refunded';
+      publish('supply_contract.cancelled', supplyContract);
+      const result = { ok: true, status: 'cancelled', contractId, refundedAmount: refunded };
+      if (correlationId) commandResults.set(correlationId, result);
+      return result;
+    }
     const contract = state.contracts.find((c) => c.id === contractId);
     if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
     if (contract.status === 'cancelled') throw new ApiError('Contract already cancelled', 409, 'CONFLICT');

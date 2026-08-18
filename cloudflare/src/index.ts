@@ -24,6 +24,7 @@ import { currentHuman, sensitiveActionAllowed } from './auth-session';
 import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
 import { communicationsRoutes } from './communications-routes';
+import { listSupplyContracts, proposeSupplyContract, acceptSupplyContract, cancelSupplyContract, getContractDeliveryTicks } from './supply-contracts-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -834,14 +835,105 @@ const worker = {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Contract creation failed' }, { status: 409 });
       }
     }
+
+    if (url.pathname === '/api/contracts/supply' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const result = await withRepository(env, (repository) => listSupplyContracts(repository, viewer.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
+
+    if (url.pathname === '/api/contracts/supply/propose' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{
+        counterpartyId?: string;
+        proposerRole?: 'buyer' | 'seller';
+        resourceType?: 'food' | 'energy' | 'material' | 'compute';
+        dailyQuantity?: number;
+        unitPrice?: number;
+        totalDays?: number;
+        penaltyPerDefault?: number;
+        title?: string;
+        correlationId?: string;
+      }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const counterpartyId = body.counterpartyId?.trim() ?? '';
+      const proposerRole = body.proposerRole === 'seller' ? 'seller' : 'buyer';
+      const resourceType = body.resourceType ?? 'energy';
+      const dailyQuantity = Number(body.dailyQuantity ?? 0);
+      const unitPrice = Number(body.unitPrice ?? 0);
+      const totalDays = Number(body.totalDays ?? 30);
+      const penaltyPerDefault = Number(body.penaltyPerDefault ?? 0);
+      const title = body.title?.trim();
+
+      if (!counterpartyId || counterpartyId === viewer.id) {
+        return Response.json({ ok: false, error: 'An active counterparty Human is required' }, { status: 400 });
+      }
+      if (!['food', 'energy', 'material', 'compute'].includes(resourceType)) {
+        return Response.json({ ok: false, error: 'Invalid commodity resource type' }, { status: 400 });
+      }
+      if (dailyQuantity <= 0 || unitPrice <= 0 || totalDays < 1 || totalDays > 365) {
+        return Response.json({ ok: false, error: 'Quantity, price, and duration are outside engine bounds' }, { status: 400 });
+      }
+
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key is required' }, { status: 400 });
+
+      try {
+        const result = await withRepository(env, (repository) =>
+          proposeSupplyContract(repository, {
+            proposerId: viewer.id,
+            counterpartyId,
+            proposerRole,
+            resourceType,
+            dailyQuantity,
+            unitPrice,
+            totalDays,
+            penaltyPerDefault,
+            title,
+            correlationId,
+          }),
+        );
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Supply contract proposal failed' }, { status: 409 });
+      }
+    }
+
+    const contractTicksMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/ticks$/);
+    if (contractTicksMatch && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      try {
+        const result = await withRepository(env, (repository) => getContractDeliveryTicks(repository, contractTicksMatch[1], viewer.id));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to fetch delivery ticks';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /denied/i.test(message) ? 403 : 409 });
+      }
+    }
+
     const contractActionMatch = url.pathname.match(/^\/api\/contracts\/([^/]+)\/(accept|cancel)$/);
     if (contractActionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       try {
         const result = contractActionMatch[2] === 'cancel'
-          ? await withRepository(env, (repository) => cancelContractPostgres(repository, contractActionMatch[1], viewer.id))
-          : await withRepository(env, (repository) => acceptContractPostgres(repository, contractActionMatch[1], viewer.id));
+          ? await withRepository(env, async (repository) => {
+              const isSupply = await repository.query('SELECT contract_id FROM supply_contracts WHERE contract_id = $1', [contractActionMatch[1]]);
+              if (isSupply.rows[0]) return cancelSupplyContract(repository, contractActionMatch[1], viewer.id);
+              return cancelContractPostgres(repository, contractActionMatch[1], viewer.id);
+            })
+          : await withRepository(env, async (repository) => {
+              const isSupply = await repository.query('SELECT contract_id FROM supply_contracts WHERE contract_id = $1', [contractActionMatch[1]]);
+              if (isSupply.rows[0]) return acceptSupplyContract(repository, contractActionMatch[1], viewer.id);
+              return acceptContractPostgres(repository, contractActionMatch[1], viewer.id);
+            });
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
