@@ -211,7 +211,13 @@ async function institutionsFromPostgres(request: Request, env: Env): Promise<Res
 }
 
 async function rankingsFromPostgres(request: Request, env: Env): Promise<Response> {
-  const result = await withRepository(env, (repository) => listRankingsPostgres(repository));
+  const url = new URL(request.url);
+  const category = url.searchParams.get('category') ?? undefined;
+  const metric = url.searchParams.get('metric') ?? undefined;
+  const search = url.searchParams.get('search') ?? undefined;
+  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
+  const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
+  const result = await withRepository(env, (repository) => listRankingsPostgres(repository, { category, metric, search, limit, offset }));
   if (!result) throw new Error('PostgreSQL repository is unavailable');
   return Response.json({ ...result, persistence: 'planetscale-postgres' });
 }

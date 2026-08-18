@@ -7,6 +7,7 @@ import '../../shared/widgets/format_helpers.dart';
 import '../governance/governance_dialogs.dart';
 import 'lifecycle_dialogs.dart';
 import 'cemetery_pantheon_dialog.dart';
+import 'global_rankings_dialog.dart';
 
 class SuccessionPanel extends StatelessWidget {
   final EarthState state;
@@ -1198,6 +1199,58 @@ class WorldRankingsPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Leaderboards Action Header
+          Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 12),
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: EarthColors.cardSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: EarthColors.goldMetallic.withAlpha(100)),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.emoji_events, color: EarthColors.goldMetallic, size: 24),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: const [
+                      Text(
+                        'GLOBAL CIVILIZATIONAL LEADERBOARDS',
+                        style: TextStyle(
+                          color: EarthColors.goldMetallic,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                          letterSpacing: 1.1,
+                        ),
+                      ),
+                      SizedBox(height: 2),
+                      Text(
+                        'Explore full rankings, apex podiums, rank deltas, and citizen tiers.',
+                        style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Builder(
+                  builder: (ctx) => ElevatedButton.icon(
+                    onPressed: () => showGlobalRankingsDialog(ctx, state: state),
+                    icon: const Icon(Icons.leaderboard, size: 16),
+                    label: const Text('EXPLORE LEADERBOARDS'),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: EarthColors.goldMetallic,
+                      foregroundColor: Colors.black,
+                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+
           RankingLine('CITIES', cities),
           const SizedBox(height: 8),
           RankingLine('CORPORATIONS', corps),

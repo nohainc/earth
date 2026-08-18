@@ -76,8 +76,26 @@ extension EarthApiWorld on EarthApi {
     return (await _request(uri.toString())) as Map<String, dynamic>;
   }
 
-  Future<Map<String, dynamic>> rankings() async =>
-      (await _request('/api/rankings')) as Map<String, dynamic>;
+  Future<Map<String, dynamic>> rankings({
+    String? category,
+    String? metric,
+    String? search,
+    int limit = 50,
+    int offset = 0,
+  }) async {
+    final params = <String, String>{
+      'limit': limit.toString(),
+      'offset': offset.toString(),
+      if (category != null && category.trim().isNotEmpty)
+        'category': category.trim(),
+      if (metric != null && metric.trim().isNotEmpty)
+        'metric': metric.trim(),
+      if (search != null && search.trim().isNotEmpty)
+        'search': search.trim(),
+    };
+    final uri = Uri(path: '/api/rankings', queryParameters: params);
+    return (await _request(uri.toString())) as Map<String, dynamic>;
+  }
 
   Future<List<dynamic>> worldHistory({int limit = 30}) async {
     final response =

@@ -51,14 +51,143 @@ export async function listInstitutions(repository: PostgresRepository): Promise<
   return { community: community.rows, city: city.rows, corporation: corporation.rows, membership: membership.rows, budgets: budgets.rows };
 }
 
-export async function listRankings(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const [wealth, cities, corporations, technologies] = await Promise.all([
-    repository.query("SELECT owner_id AS human_id, balance FROM account_balances WHERE currency = 'CREDIT' ORDER BY balance DESC"),
-    repository.query('SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities ORDER BY treasury DESC'),
-    repository.query('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC'),
-    repository.query('SELECT id, name, owner_id, progress FROM technologies ORDER BY progress DESC'),
+export interface RankingsQueryOptions {
+  category?: string;
+  metric?: string;
+  search?: string;
+  limit?: number;
+  offset?: number;
+  currentHumanId?: string;
+}
+
+export async function listRankings(repository: PostgresRepository, options: RankingsQueryOptions = {}): Promise<Record<string, unknown>> {
+  const limit = Math.min(100, Math.max(1, options.limit ?? 50));
+  const [wealth, cities, corporations, technologies, humans, dynasticHouses, snapshots] = await Promise.all([
+    repository.query<{ human_id: string; balance: string }>(
+      "SELECT owner_id AS human_id, balance FROM account_balances WHERE currency = 'CREDIT' ORDER BY balance DESC LIMIT $1",
+      [limit]
+    ),
+    repository.query<{ id: string; residents: number; treasury: string; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number }>(
+      'SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities ORDER BY treasury DESC LIMIT $1',
+      [limit]
+    ),
+    repository.query<{ id: string; member_count: number; treasury: string }>(
+      'SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT $1',
+      [limit]
+    ),
+    repository.query<{ id: string; name: string; owner_id: string; progress: number }>(
+      'SELECT id, name, owner_id, progress FROM technologies ORDER BY progress DESC LIMIT $1',
+      [limit]
+    ),
+    repository.query<{
+      id: string;
+      display_name: string;
+      age_years: number;
+      standing: number;
+      legacy: number;
+      life_status: string;
+      city_id: string | null;
+      dynasty_name: string | null;
+      balance: string;
+    }>(`
+      SELECT h.id, h.display_name, h.age_years, h.standing, h.legacy, h.life_status,
+             h.city_id, h.dynasty_name,
+             COALESCE(ab.balance, '0') AS balance
+      FROM humans h
+      LEFT JOIN account_balances ab ON ab.account_id = h.account_id AND ab.currency = 'CREDIT'
+      WHERE h.life_status = 'active'
+      ORDER BY (h.legacy * 3 + h.standing * 2 + FLOOR(COALESCE(ab.balance::numeric, 0) / 100)) DESC, h.legacy DESC
+      LIMIT $1
+    `, [limit]).catch(() => ({ rows: [] })),
+    repository.query<{
+      dynasty_name: string;
+      deceased_count: number;
+      peak_legacy: number;
+      peak_standing: number;
+    }>(`
+      SELECT dp.dynasty_name,
+             COUNT(*)::int AS deceased_count,
+             MAX(dp.final_legacy)::int AS peak_legacy,
+             MAX(dp.final_standing)::int AS peak_standing
+      FROM deceased_profiles dp
+      WHERE dp.dynasty_name IS NOT NULL AND dp.dynasty_name != ''
+      GROUP BY dp.dynasty_name
+      ORDER BY MAX(dp.final_legacy) DESC, COUNT(*) DESC
+      LIMIT $1
+    `, [limit]).catch(() => ({ rows: [] })),
+    repository.query<{
+      ranking_type: string;
+      entity_id: string;
+      rank: number;
+      game_day: number;
+    }>(`
+      SELECT ranking_type, entity_id, rank, game_day
+      FROM rankings_snapshots
+      WHERE game_day = (SELECT MAX(game_day) FROM rankings_snapshots)
+      LIMIT 200
+    `).catch(() => ({ rows: [] })),
   ]);
-  return { wealth: wealth.rows, cities: cities.rows, corporations: corporations.rows, technologies: technologies.rows, generatedFrom: 'planetscale-postgres' };
+
+  const snapshotMap = new Map<string, number>();
+  for (const s of snapshots.rows) {
+    snapshotMap.set(`${s.ranking_type}:${s.entity_id}`, Number(s.rank));
+  }
+
+  const totalHumans = humans.rows.length;
+  const enrichedHumans = humans.rows.map((h, idx) => {
+    const currentRank = idx + 1;
+    const prevRank = snapshotMap.get(`citizens:${h.id}`);
+    const rankDelta = prevRank ? prevRank - currentRank : 0;
+    const isNew = prevRank === undefined;
+    const percentile = totalHumans > 0 ? (currentRank / totalHumans) * 100 : 100;
+
+    let tierBadge = 'Citizen';
+    if (percentile <= 1) tierBadge = 'Sovereign';
+    else if (percentile <= 5) tierBadge = 'Patrician';
+    else if (percentile <= 20) tierBadge = 'Pioneer';
+
+    const credits = Number(h.balance ?? 0);
+    const compositeScore = Number(h.legacy) * 3 + Number(h.standing) * 2 + Math.floor(credits / 100);
+
+    return {
+      rank: currentRank,
+      rankDelta: isNew ? 'NEW' : rankDelta,
+      tierBadge,
+      id: h.id,
+      displayName: h.display_name,
+      ageYears: Number(h.age_years),
+      standing: Number(h.standing),
+      legacy: Number(h.legacy),
+      credits,
+      cityId: h.city_id,
+      dynastyName: h.dynasty_name,
+      compositeScore,
+    };
+  });
+
+  return {
+    ok: true,
+    wealth: wealth.rows,
+    cities: cities.rows.map((c, idx) => ({
+      rank: idx + 1,
+      ...c,
+      qolIndex: Math.min(100, Math.round(((Number(c.housing_capacity || 0) + Number(c.energy_capacity || 0) + Number(c.health_capacity || 0)) / 300) * 100)),
+    })),
+    corporations: corporations.rows.map((corp, idx) => ({
+      rank: idx + 1,
+      ...corp,
+    })),
+    technologies: technologies.rows.map((t, idx) => ({
+      rank: idx + 1,
+      ...t,
+    })),
+    citizens: enrichedHumans,
+    dynasticHouses: dynasticHouses.rows.map((d, idx) => ({
+      rank: idx + 1,
+      ...d,
+    })),
+    generatedFrom: 'planetscale-postgres',
+  };
 }
 
 export async function listHistory(repository: PostgresRepository, limit: number): Promise<Record<string, unknown>> {
