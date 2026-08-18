@@ -178,7 +178,23 @@ For money, ownership, governance, lifecycle, or scheduler work, also verify:
 
 Tests are evidence only when they cover the requirement being claimed.
 
-## 8. Deployment and commits
+## 8. Simulation Time Model & Actuarial Mortality Engine
+
+- **Canonical Time Dilation (1:60 Ratio)**:
+  - `1 Real Second = 1 Simulation Game Minute`.
+  - `60 Real Seconds (1 Real Minute) = 1 Simulation Game Hour`.
+  - `24 Real Minutes = 1 Simulation Game Day (24 Game Hours / 1,440 Game Minutes)`.
+  - `1 Real Day (24 Real Hours) = 60 Simulation Game Days (2 Game Months)`.
+  - `6 Real Days (144 Real Hours) = 360 Simulation Game Days (1 Game Year)`.
+  - `6.08 Real Days = 365 Simulation Game Days (1 Solar Game Year)`.
+  - **Natural Character Lifespan**: Characters enter at legal adulthood (Age 20) and have an actuarial life expectancy of 75–90+ simulation years (~55–70 simulation years of active play = **~330–425 Real Days / ~1 Real Year**).
+
+- **Biometric Health & Stochastic Actuarial Mortality**:
+  - **Health Impact (0–100%)**: Affects physical labor throughput, machine maintenance speed, corporate executive stamina, and periodic medical costs.
+  - **Non-Linear Mortality**: Mortality is **not** a deterministic countdown to 0% health. Citizens can live long lives with sub-optimal or chronic health conditions (30–60%).
+  - **Stochastic Actuarial Hazard**: Past retirement age (65+), an annual probabilistic hazard roll (Gompertz-Makeham curve) determines mortality risk. Lower health increases the annual hazard rate, while advanced municipal healthcare, high vitality, and clean environment increase longevity (up to 95–100+ simulation years).
+
+## 9. Deployment and commits
 
 - Keep commits focused and reversible.
 - Commit major vertical slices separately from unrelated cleanup.
@@ -192,7 +208,7 @@ Tests are evidence only when they cover the requirement being claimed.
 - Never include database connection strings, tokens, or provider credentials in
   source, commits, logs, or responses.
 
-## 9. When an ADR is required
+## 10. When an ADR is required
 
 Stop and write or amend an ADR before:
 
@@ -207,7 +223,7 @@ Stop and write or amend an ADR before:
 The ADR must state the problem, alternatives, migration plan, rollback plan,
 operational cost, and verification evidence.
 
-## 10. Final handoff format
+## 11. Final handoff format
 
 Every completed AI task should report:
 

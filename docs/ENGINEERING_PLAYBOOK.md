@@ -238,6 +238,19 @@ error behavior, and a rollback/replay test.
 - All code across the repository must maintain **at least 80% automated line test coverage** (`LF`/`LH` $\ge 80.0\%$).
 - Any PR or feature slice resulting in aggregate test coverage under 80% is blocked from release until corresponding unit and widget/integration tests are added.
 
+### Simulation Time Scale & Actuarial Mortality Standard
+- **Time Dilation Ratio (1:60)**:
+  - 1 Real Second = 1 Simulation Game Minute.
+  - 60 Real Seconds (1 Real Minute) = 1 Simulation Game Hour.
+  - 24 Real Minutes = 1 Simulation Game Day (1,440 Game Minutes).
+  - 6 Real Days = 360 Simulation Game Days (1 Game Year).
+  - 6.08 Real Days = 365 Simulation Game Days (1 Solar Game Year).
+  - A character lifespan of ~60 active simulation years (Age 20 to 80) corresponds to **~365 Real Days (~1 Real Calendar Year)**.
+- **Biometric Health & Stochastic Mortality Engine**:
+  - Health (0–100%) governs operational labor capacity, machine maintenance speed, and living medical expenses.
+  - Mortality is not a simple countdown to 0% health. Citizens can live long lives with chronic or moderate health ratings (30–60%).
+  - Mortality past age 65 operates as an actuarial hazard rate roll per annual epoch (Gompertz-Makeham curve), with variance allowing lucky or well-cared-for citizens to live up to 95–100+ simulation years.
+
 Continue adding gameplay features
 as vertical slices, with the full route, Flutter surface, and verification
 before moving to the next slice.
