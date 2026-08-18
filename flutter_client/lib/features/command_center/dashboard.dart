@@ -19,7 +19,9 @@ import 'command_executive_quadrant.dart';
 import 'hero_card.dart';
 import 'opportunity_panel.dart';
 import 'decision_queue_panel.dart';
+import 'objectives_panel.dart';
 import '../../core/models/decision_queue_item.dart';
+import '../../core/models/player_objective.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
       'market' => 'MARKET',
@@ -374,6 +376,7 @@ class Dashboard extends StatelessWidget {
       case 'command':
       default:
         final decisionQueueItems = DecisionQueueItem.synthesizeFromState(state);
+        final playerObjectives = PlayerObjective.synthesizeFromState(state);
         return [
           DecisionQueuePanel(
             items: decisionQueueItems,
@@ -383,6 +386,11 @@ class Dashboard extends StatelessWidget {
                 onNavigate!(item.targetSection);
               }
             },
+          ),
+          const SizedBox(height: 16),
+          ObjectivesPanel(
+            objectives: playerObjectives,
+            onNavigate: onNavigate,
           ),
           const SizedBox(height: 16),
           OpportunityPanel(
