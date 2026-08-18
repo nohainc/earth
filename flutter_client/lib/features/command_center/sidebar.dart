@@ -65,6 +65,7 @@ class Sidebar extends StatelessWidget {
       (
         'DEVELOPMENT',
         [
+          ('map', 'Planetary Grid', Icons.public),
           ('technology', 'Technology', Icons.biotech_outlined),
           ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
         ]

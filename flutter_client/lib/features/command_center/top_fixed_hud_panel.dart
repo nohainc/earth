@@ -22,6 +22,7 @@ class TopFixedHudPanel extends StatefulWidget {
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
   final VoidCallback? onCommLink;
+  final VoidCallback? onMapTap;
 
   const TopFixedHudPanel({
     super.key,
@@ -36,6 +37,7 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onLogout,
     this.onSecurity,
     this.onCommLink,
+    this.onMapTap,
   });
 
   @override
@@ -412,6 +414,25 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                           ),
                         ),
                     ],
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // PLANETARY MAP TACTICAL GRID BUTTON
+              Tooltip(
+                message: 'Planetary Tactical Grid & Concession Leases',
+                child: InkWell(
+                  onTap: widget.onMapTap,
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Icon(
+                      Icons.public,
+                      size: 21,
+                      color: EarthColors.cyanAccent,
+                    ),
                   ),
                 ),
               ),

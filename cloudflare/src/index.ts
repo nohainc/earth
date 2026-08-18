@@ -25,6 +25,7 @@ import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
 import { communicationsRoutes } from './communications-routes';
 import { listSupplyContracts, proposeSupplyContract, acceptSupplyContract, cancelSupplyContract, getContractDeliveryTicks } from './supply-contracts-postgres.ts';
+import { listPlanetaryRegionsAndPlots, claimPlotLease, upgradePlotInfrastructure, harvestPlotYield } from './map-regions-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -983,6 +984,86 @@ const worker = {
       });
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
+
+    if (url.pathname === '/api/map/regions' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const result = await withRepository(env, (repository) => listPlanetaryRegionsAndPlots(repository, viewer?.id));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
+
+    const plotLeaseMatch = url.pathname.match(/^\/api\/map\/plots\/([^/]+)\/lease$/);
+    if (plotLeaseMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ durationDays?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      try {
+        const result = await withRepository(env, (repository) =>
+          claimPlotLease(repository, {
+            humanId: viewer.id,
+            plotId: plotLeaseMatch[1],
+            durationDays: Number(body.durationDays ?? 30),
+            correlationId,
+          }),
+        );
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Lease claim failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
+    }
+
+    const plotUpgradeMatch = url.pathname.match(/^\/api\/map\/plots\/([^/]+)\/upgrade$/);
+    if (plotUpgradeMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      try {
+        const result = await withRepository(env, (repository) =>
+          upgradePlotInfrastructure(repository, {
+            humanId: viewer.id,
+            plotId: plotUpgradeMatch[1],
+            correlationId,
+          }),
+        );
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Plot upgrade failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
+    }
+
+    const plotHarvestMatch = url.pathname.match(/^\/api\/map\/plots\/([^/]+)\/harvest$/);
+    if (plotHarvestMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      try {
+        const result = await withRepository(env, (repository) =>
+          harvestPlotYield(repository, {
+            humanId: viewer.id,
+            plotId: plotHarvestMatch[1],
+            correlationId,
+          }),
+        );
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Yield harvest failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
+      }
     }
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);

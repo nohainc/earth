@@ -9,6 +9,7 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
 import '../communications/comm_link_dialog.dart';
+import '../map/planetary_map_dialog.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
@@ -260,6 +261,10 @@ class _CommandCenterState extends State<CommandCenter> {
   void _navigateToSection(BuildContext context, String section,
       {required bool closeDrawer}) {
     if (closeDrawer) Navigator.of(context).pop();
+    if (section == 'map') {
+      showPlanetaryMapDialog(context, api: api, state: state);
+      return;
+    }
     if (mounted) setState(() => selectedSection = section);
   }
 
@@ -338,6 +343,8 @@ class _CommandCenterState extends State<CommandCenter> {
                         onSecurity: () =>
                             showSecurityDialog(context, api, widget.onLogout),
                         onCommLink: () => showCommLinkDialog(context,
+                            api: api, state: current),
+                        onMapTap: () => showPlanetaryMapDialog(context,
                             api: api, state: current),
                       ),
                       Expanded(

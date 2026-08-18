@@ -234,6 +234,62 @@ async function settleSupplyContracts(tx: PostgresRepository, day: number): Promi
   }
 }
 
+async function settlePlotLeasesAndYields(tx: PostgresRepository, day: number): Promise<void> {
+  const leasedPlots = await tx.query<{
+    id: string;
+    region_id: string;
+    plot_name: string;
+    primary_resource: string;
+    base_yield_rate: string;
+    development_level: number;
+    lease_holder_id: string;
+    daily_lease_fee: string;
+    lease_expires_game_day: number;
+    accumulated_yield: string;
+  }>(
+    `SELECT * FROM territory_plots 
+     WHERE lease_holder_id IS NOT NULL AND lease_expires_game_day >= $1
+     FOR UPDATE`,
+    [day],
+  );
+
+  for (const plot of leasedPlots.rows) {
+    const yieldAmount = Number(plot.base_yield_rate);
+    const newAccumulated = (Number(plot.accumulated_yield) + yieldAmount).toFixed(2);
+
+    await tx.query(
+      `UPDATE territory_plots
+       SET accumulated_yield = $1,
+           updated_at = CURRENT_TIMESTAMP
+       WHERE id = $2`,
+      [newAccumulated, plot.id],
+    );
+
+    await tx.query(
+      `INSERT INTO plot_yield_logs (id, plot_id, game_day, resource_type, amount_generated, fee_deducted)
+       VALUES ($1, $2, $3, $4, $5, $6)`,
+      [crypto.randomUUID(), plot.id, day, plot.primary_resource, yieldAmount, plot.daily_lease_fee],
+    );
+
+    if (plot.lease_expires_game_day <= day) {
+      await tx.query(
+        `UPDATE territory_plots 
+         SET lease_holder_id = NULL,
+             lease_expires_game_day = NULL,
+             updated_at = CURRENT_TIMESTAMP
+         WHERE id = $1`,
+        [plot.id],
+      );
+
+      await tx.query(
+        `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
+         VALUES ($1, $2, 'concession', 'Territory Lease Expired', 'Your concession lease on ' || $3 || ' has expired.', $4)`,
+        [crypto.randomUUID(), plot.lease_holder_id, plot.plot_name, plot.id],
+      );
+    }
+  }
+}
+
 async function completeContracts(tx: PostgresRepository, day: number): Promise<void> {
   const contracts = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; title: string }>("SELECT id, proposer_id, counterparty_id, title FROM negotiated_contracts WHERE status = 'accepted' AND ends_game_day <= $1 FOR UPDATE", [day]);
   for (const contract of contracts.rows) {
@@ -449,6 +505,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await settleTechnologyRoyalties(tx, day);
     await runAiMaintenance(tx, day);
     await settleSupplyContracts(tx, day);
+    await settlePlotLeasesAndYields(tx, day);
     await completeContracts(tx, day);
     if (idempotencyKey) {
       await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, toNanoMarkup({ day, minute, newDay, productionEvents })]);
