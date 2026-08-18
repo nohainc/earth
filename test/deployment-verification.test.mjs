@@ -132,7 +132,7 @@ test('Deployment Configuration and Route Conflict Verification', async (t) => {
 });
 
 test('Live Automated Deployment Endpoints Verification', async () => {
-  const port = 8996;
+  const port = 9020 + Math.floor(Math.random() * 200);
   const env = {
     ...process.env,
     PORT: String(port),

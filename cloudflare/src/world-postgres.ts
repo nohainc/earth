@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { projectGameDeadline } from './game-clock';
 import { rankOpportunities } from './opportunities';
+import { generateDecisionQueue } from './decision-queue';
 import { economicStartIndex } from './starter-package';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
@@ -92,6 +93,19 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     proposals: proposals.rows as Array<{ id: string; title: string; status: string; closes_at?: unknown }>,
     communities: communities.rows as Array<{ id: string; name: string; status: string }>,
   });
+  const resourceMap = Object.fromEntries((resources.rows as Row[]).map((row) => [row.resource, row.amount]));
+  const decisionQueue = generateDecisionQueue({
+    resources: resourceMap,
+    machines: machineRows as Array<{ id: string; name?: string; condition?: unknown; utilization?: unknown; output_resource?: string }>,
+    contracts: contracts.rows as Array<{ id: string; title?: string; status?: string; delivery_tick?: unknown; terms?: string }>,
+    proposals: proposals.rows as Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>,
+    technology: { progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), is_funding_open: true },
+    dynasty: { successor_id: succession.rows[0]?.id ?? null },
+    business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100 },
+    finance: { unpaid_tax: 0, status: personalFinance.rows[0]?.status ?? 'active' },
+    market: prices.rows as Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>,
+    gameDay: currentGameDay,
+  });
   const recommendations = [
     ...machineRows.filter((machine) => Number(machine.condition ?? 100) < 40).map((machine) => ({ type: 'maintenance', priority: 'high', subject: machine.id, message: `${machine.name} is below 40% condition; allocate Components or enable maintenance automation.` })),
     ...machineRows.filter((machine) => Number(machine.utilization ?? 0) > 0 && Number(machine.condition ?? 100) < 70).map((machine) => ({ type: 'utilization', priority: 'medium', subject: machine.id, message: `Reduce utilization for ${machine.name} until its condition improves.` })),
@@ -116,11 +130,11 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     life: { generation: 1, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
     membership: membership.rows[0] ?? null,
     institutions: { ouc: mapByKind(institutions.rows, 'OUC'), corporation: { ...mapByKind(institutions.rows, 'CORPORATION'), ...corporation }, city: { ...mapByKind(institutions.rows, 'CITY'), ...city }, business: mapByKind(institutions.rows, 'BUSINESS') },
-    resources: Object.fromEntries((resources.rows as Row[]).map((row) => [row.resource, row.amount])), business: businessRow,
+    resources: resourceMap, business: businessRow,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
     technology: { research: technology.rows[0] ?? {}, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0) }, machines: machineRows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
-    publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, rankings: { cities: rankings[0].rows, corporations: rankings[1].rows }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, roles: roles.rows, communities: communities.rows,
+    publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, decisionQueue, rankings: { cities: rankings[0].rows, corporations: rankings[1].rows }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, roles: roles.rows, communities: communities.rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },
     persistence: 'planetscale-postgres',

@@ -18,6 +18,8 @@ import '../operations/technology_panel.dart';
 import 'command_executive_quadrant.dart';
 import 'hero_card.dart';
 import 'opportunity_panel.dart';
+import 'decision_queue_panel.dart';
+import '../../core/models/decision_queue_item.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
       'market' => 'MARKET',
@@ -371,7 +373,18 @@ class Dashboard extends StatelessWidget {
         ];
       case 'command':
       default:
+        final decisionQueueItems = DecisionQueueItem.synthesizeFromState(state);
         return [
+          DecisionQueuePanel(
+            items: decisionQueueItems,
+            onNavigate: onNavigate,
+            onExecuteDecision: (item) {
+              if (onNavigate != null) {
+                onNavigate!(item.targetSection);
+              }
+            },
+          ),
+          const SizedBox(height: 16),
           OpportunityPanel(
             opportunities: state.opportunities,
             onNavigate: onNavigate,

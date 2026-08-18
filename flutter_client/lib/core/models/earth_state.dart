@@ -54,6 +54,8 @@ class EarthState {
       (json['publicActivity'] as List<dynamic>?) ?? const [];
   List<dynamic> get opportunities =>
       (json['opportunities'] as List<dynamic>?) ?? const [];
+  List<dynamic> get decisionQueue =>
+      (json['decisionQueue'] as List<dynamic>?) ?? const [];
   Map<String, dynamic> get rankings =>
       (json['rankings'] as Map<String, dynamic>?) ?? const {};
   Map<String, dynamic> get history =>
