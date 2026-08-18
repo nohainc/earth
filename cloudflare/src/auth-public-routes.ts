@@ -34,17 +34,21 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
   if (url.pathname === '/api/auth/verify-email/resend' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ email?: string }>(request);
     if (!parsed.ok) return parsed.response;
+    const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
     const email = parsed.value.email?.trim().toLowerCase();
     if (email) {
       const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
       if (credential && !credential.email_verified_at) {
         const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
         if (!recentlySent) {
-          try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email); } catch { return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503 }); }
+          try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email, correlationId); } catch { return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503, headers: { 'x-correlation-id': correlationId } }); }
         }
       }
     }
-    return Response.json({ ok: true, message: 'If that identity exists and needs verification, a new email has been sent.' });
+    return Response.json(
+      { ok: true, message: 'If that identity exists and needs verification, a new email has been sent. Please wait at least 60 seconds before requesting another email.', cooldownSeconds: 60 },
+      { headers: { 'x-correlation-id': correlationId } },
+    );
   }
   if (url.pathname === '/api/auth/verify-email' && request.method === 'GET') {
     const token = url.searchParams.get('token');
@@ -63,10 +67,24 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
   if (url.pathname === '/api/auth/password-reset/request' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ email?: string }>(request);
     if (!parsed.ok) return parsed.response;
+    const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
     const email = parsed.value.email?.trim().toLowerCase();
     const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [email])))?.rows[0] : null;
-    if (credential) { try { await issueActionToken(env, credential.human_id, 'reset_password', credential.email); } catch { /* Keep recovery responses generic. */ } }
-    return Response.json({ ok: true, message: 'If that identity exists, recovery instructions have been sent.' });
+    if (credential) {
+      try {
+        await issueActionToken(env, credential.human_id, 'reset_password', credential.email, correlationId);
+      } catch {
+        /* Keep recovery responses generic for security while logging with correlation ID. */
+      }
+    }
+    return Response.json(
+      {
+        ok: true,
+        message: 'If that identity exists, recovery instructions have been sent. Please wait at least 60 seconds before requesting another reset.',
+        cooldownSeconds: 60,
+      },
+      { headers: { 'x-correlation-id': correlationId } },
+    );
   }
   if (url.pathname === '/api/auth/password-reset/complete' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ token?: string; password?: string }>(request);

@@ -30,6 +30,7 @@ import { getDynastyOverview, unlockDynastyPerk, equipDynastyHeirloom, forgeDynas
 import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
+import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -286,6 +287,25 @@ const worker = {
     if (url.pathname === '/api/ownership/events' && request.method === 'GET') return ownershipHistoryFromPostgres(request, env);
     if (url.pathname === '/api/membership/events' && request.method === 'GET') return membershipHistoryFromPostgres(request, env);
     if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);
+    if (url.pathname === '/api/admin/email-deliveries' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const result = await withRepository(env, (repository) => getEmailDeliveriesPostgres(repository, { bindingConfigured: Boolean(env.EMAIL && env.EMAIL_FROM) }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
+    if (url.pathname === '/api/health/email' && request.method === 'GET') {
+      const bindingConfigured = Boolean(env.EMAIL && env.EMAIL_FROM);
+      const result = await withRepository(env, (repository) => getEmailDeliveriesPostgres(repository, { limit: 10, bindingConfigured }));
+      const ok = bindingConfigured;
+      return Response.json({
+        ok,
+        status: ok ? 'healthy' : 'unconfigured',
+        bindingConfigured,
+        emailFromConfigured: Boolean(env.EMAIL_FROM),
+        recentDeliveries: result?.metrics ?? null,
+      });
+    }
     const commResponse = await communicationsRoutes(request, env, url);
     if (commResponse) return commResponse;
     const authRouteResponse = await authenticatedAuthRoute(request, env, url);

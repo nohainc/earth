@@ -1,6 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import 'admin_email_deliveries_dialog.dart';
 
 String? validateAuthInput({
   required String email,
@@ -54,6 +56,8 @@ class _AuthScreenState extends State<AuthScreen> {
   bool busy = false;
   String? error;
   bool noticeIsSuccess = false;
+  Timer? _cooldownTimer;
+  int _cooldownSeconds = 0;
 
   @override
   void initState() {
@@ -62,6 +66,23 @@ class _AuthScreenState extends State<AuthScreen> {
     resetMode = resetToken != null && resetToken!.isNotEmpty;
     error = widget.initialMessage;
     noticeIsSuccess = widget.initialMessage != null;
+  }
+
+  void _startCooldown([int seconds = 60]) {
+    _cooldownTimer?.cancel();
+    setState(() => _cooldownSeconds = seconds);
+    _cooldownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      if (_cooldownSeconds <= 1) {
+        timer.cancel();
+        setState(() => _cooldownSeconds = 0);
+      } else {
+        setState(() => _cooldownSeconds--);
+      }
+    });
   }
 
   Future<void> submit() async {
@@ -95,11 +116,16 @@ class _AuthScreenState extends State<AuthScreen> {
         return;
       }
       if (recoveryMode) {
+        if (_cooldownSeconds > 0) {
+          throw Exception('Please wait $_cooldownSeconds seconds before requesting another recovery email.');
+        }
         if (email.text.trim().isEmpty) throw Exception('Email is required');
-        await widget.api.requestPasswordReset(email.text.trim());
+        final res = await widget.api.requestPasswordReset(email.text.trim());
         if (mounted) {
+          _startCooldown(res['cooldownSeconds'] as int? ?? 60);
           setState(() {
-            error = 'If the identity exists, recovery instructions were sent.';
+            error = res['message']?.toString() ??
+                'If that identity exists, recovery instructions have been sent. Please wait at least 60 seconds before requesting another reset.';
             noticeIsSuccess = true;
             recoveryMode = false;
           });
@@ -119,6 +145,7 @@ class _AuthScreenState extends State<AuthScreen> {
             displayName.text.trim(),
             passwordConfirmation: passwordConfirmation.text);
         if (mounted) {
+          _startCooldown(60);
           setState(() {
             registerMode = false;
             verificationPending = true;
@@ -156,6 +183,7 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> resendVerification() async {
+    if (_cooldownSeconds > 0) return;
     if (email.text.trim().isEmpty) {
       setState(() {
         error = 'Email is required';
@@ -171,6 +199,7 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final result = await widget.api.resendVerification(email.text.trim());
       if (mounted) {
+        _startCooldown(result['cooldownSeconds'] as int? ?? 60);
         setState(() {
           error = result['message']?.toString() ??
               'If the identity exists, a new verification email was sent.';
@@ -191,6 +220,7 @@ class _AuthScreenState extends State<AuthScreen> {
 
   @override
   void dispose() {
+    _cooldownTimer?.cancel();
     email.dispose();
     password.dispose();
     passwordConfirmation.dispose();
@@ -286,15 +316,40 @@ class _AuthScreenState extends State<AuthScreen> {
                                     ? cyanAccentColor
                                     : Colors.redAccent))
                       ],
+                      if (_cooldownSeconds > 0) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF38BDF8).withAlpha(20),
+                            borderRadius: BorderRadius.circular(6),
+                            border: Border.all(color: const Color(0xFF38BDF8).withAlpha(80)),
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.timer_outlined, size: 14, color: Color(0xFF38BDF8)),
+                              const SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'Cooldown active: retry in ${_cooldownSeconds}s. Check your spam folder if no email arrives.',
+                                  style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                       const SizedBox(height: 20),
                       FilledButton(
-                          onPressed: busy ? null : submit,
+                          onPressed: busy || (recoveryMode && _cooldownSeconds > 0) ? null : submit,
                           child: Text(busy
                               ? 'Connecting…'
                               : resetMode
                                   ? 'Set new password'
                                   : recoveryMode
-                                      ? 'Send recovery email'
+                                      ? (_cooldownSeconds > 0
+                                          ? 'Wait (${_cooldownSeconds}s)'
+                                          : 'Send recovery email')
                                       : registerMode
                                           ? 'Create identity'
                                           : 'Enter EARTH')),
@@ -307,8 +362,10 @@ class _AuthScreenState extends State<AuthScreen> {
                                       .contains('verify your email') ??
                                   false)))
                         TextButton(
-                            onPressed: busy ? null : resendVerification,
-                            child: const Text('Resend verification email')),
+                            onPressed: busy || _cooldownSeconds > 0 ? null : resendVerification,
+                            child: Text(_cooldownSeconds > 0
+                                ? 'Resend verification (${_cooldownSeconds}s)'
+                                : 'Resend verification email')),
                       if (!resetMode && !registerMode && !recoveryMode)
                         TextButton(
                             onPressed: busy
@@ -341,6 +398,12 @@ class _AuthScreenState extends State<AuthScreen> {
                                       error = null;
                                     }),
                             child: const Text('Back to sign in')),
+                      const SizedBox(height: 8),
+                      TextButton.icon(
+                        onPressed: () => showAdminEmailDeliveriesDialog(context, api: widget.api),
+                        icon: const Icon(Icons.mark_email_read_outlined, size: 13, color: EarthColors.textMuted),
+                        label: const Text('Email Observability & Audit', style: TextStyle(color: EarthColors.textMuted, fontSize: 10)),
+                      ),
                     ]),
               ),
             ),

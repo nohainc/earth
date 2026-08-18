@@ -1,10 +1,10 @@
-import { withRepository } from './repository';
+import { withRepository } from './repository.ts';
 import {
   bytesToBase64,
   digest,
   SESSION_DAYS,
   validTotp,
-} from './auth-crypto';
+} from './auth-crypto.ts';
 
 export interface AuthenticatedHuman {
   id: string;
@@ -81,15 +81,30 @@ export async function sensitiveActionAllowed(
   );
 }
 
+export function maskEmail(email: string): string {
+  const parts = email.split('@');
+  if (parts.length !== 2) return '***@***';
+  const name = parts[0];
+  const domain = parts[1];
+  const maskedName =
+    name.length <= 2
+      ? `${name[0]}*`
+      : `${name[0]}${'*'.repeat(Math.max(1, name.length - 2))}${name[name.length - 1]}`;
+  return `${maskedName}@${domain}`;
+}
+
 export async function issueActionToken(
   env: Env,
   humanId: string,
   action: 'verify_email' | 'reset_password',
   email: string,
-): Promise<void> {
+  correlationId?: string,
+): Promise<{ correlationId: string; accepted: boolean; messageId?: string | null }> {
   const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
   const tokenHash = await digest(token);
   const id = crypto.randomUUID();
+  const corrId = correlationId || crypto.randomUUID();
+  const masked = maskEmail(email);
   const expires = new Date(
     Date.now() + (action === 'verify_email' ? 24 : 1) * 3600000,
   ).toISOString();
@@ -101,6 +116,23 @@ export async function issueActionToken(
   );
   if (!result) throw new Error('PostgreSQL authentication repository is unavailable');
   if (!env.EMAIL || !env.EMAIL_FROM) {
+    await withRepository(env, (repository) =>
+      repository.query(
+        'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', 'UNCONFIGURED', 'Transactional email is not configured'],
+      ),
+    ).catch(() => {});
+    console.error(
+      JSON.stringify({
+        event: 'transactional_email_failed',
+        correlationId: corrId,
+        humanId,
+        recipientMasked: masked,
+        action,
+        code: 'UNCONFIGURED',
+        message: 'Transactional email is not configured',
+      }),
+    );
     throw new Error('Transactional email is not configured');
   }
   const path =
@@ -121,24 +153,45 @@ export async function issueActionToken(
       text,
       html: `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>`,
     });
+    await withRepository(env, (repository) =>
+      repository.query(
+        'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, provider_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'accepted', delivery?.messageId ?? null],
+      ),
+    ).catch(() => {});
     console.info(
       JSON.stringify({
         event: 'transactional_email_accepted',
+        correlationId: corrId,
+        humanId,
+        recipientMasked: masked,
         action,
         messageId: delivery?.messageId ?? null,
       }),
     );
+    return { correlationId: corrId, accepted: true, messageId: delivery?.messageId ?? null };
   } catch (error) {
     const details =
       error && typeof error === 'object'
         ? (error as { code?: unknown; message?: unknown })
         : {};
+    const errorCode = String(details.code ?? 'unknown');
+    const errorMessage = String(details.message ?? 'unknown');
+    await withRepository(env, (repository) =>
+      repository.query(
+        'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', errorCode, errorMessage],
+      ),
+    ).catch(() => {});
     console.error(
       JSON.stringify({
         event: 'transactional_email_failed',
+        correlationId: corrId,
+        humanId,
+        recipientMasked: masked,
         action,
-        code: String(details.code ?? 'unknown'),
-        message: String(details.message ?? 'unknown'),
+        code: errorCode,
+        message: errorMessage,
       }),
     );
     // Do not let a failed delivery consume the resend throttle window.

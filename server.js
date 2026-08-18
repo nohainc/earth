@@ -693,6 +693,21 @@ if (serverClockInterval.unref) serverClockInterval.unref();
 
 const money = (n) => Math.round(n * 100) / 100;
 
+const authEmailDeliveries = [
+  {
+    id: 'DEL-SIM-001',
+    correlationId: 'corr-sim-001',
+    humanId: 'H-0044',
+    recipientMasked: 'a***a@earthuc.com',
+    action: 'reset_password',
+    status: 'accepted',
+    providerMessageId: 'sim-msg-001',
+    errorCode: null,
+    errorMessage: null,
+    createdAt: new Date(Date.now() - 3600000).toISOString(),
+  },
+];
+
 function appendLedger({ debit, credit, amount, reason, correlationId }) {
   if (amount <= 0) throw new ApiError('Ledger amount must be positive', 400, 'VALIDATION_ERROR');
   const entry = { id: randomUUID(), gameDay: state.clock.day, debit, credit, amount: money(amount), currency: 'CREDIT', reason, correlationId };
@@ -2014,16 +2029,74 @@ function command(path, body, req = null) {
   }
 
   if (path === '/api/auth/verify-email/resend' && body.method === 'POST') {
-    return { ok: true, message: 'If that identity exists and needs verification, a new email has been sent.' };
+    const corrId = (req.headers && req.headers['x-correlation-id']) || 'corr-' + Date.now();
+    authEmailDeliveries.unshift({
+      id: 'DEL-' + Date.now(),
+      correlationId: corrId,
+      humanId: 'H-0044',
+      recipientMasked: 'u***@earthuc.com',
+      action: 'verify_email',
+      status: 'accepted',
+      providerMessageId: 'sim-msg-' + Date.now(),
+      errorCode: null,
+      errorMessage: null,
+      createdAt: new Date().toISOString(),
+    });
+    return { ok: true, message: 'If that identity exists and needs verification, a new email has been sent. Please wait at least 60 seconds before requesting another email.', cooldownSeconds: 60 };
   }
   if (path.startsWith('/api/auth/verify-email') && body.method === 'GET') {
     return { ok: true, message: 'Email verified. You can now sign in.' };
   }
   if (path === '/api/auth/password-reset/request' && body.method === 'POST') {
-    return { ok: true, message: 'If that identity exists, recovery instructions have been sent.' };
+    const corrId = (req.headers && req.headers['x-correlation-id']) || 'corr-' + Date.now();
+    authEmailDeliveries.unshift({
+      id: 'DEL-' + Date.now(),
+      correlationId: corrId,
+      humanId: 'H-0044',
+      recipientMasked: 'u***@earthuc.com',
+      action: 'reset_password',
+      status: 'accepted',
+      providerMessageId: 'sim-msg-' + Date.now(),
+      errorCode: null,
+      errorMessage: null,
+      createdAt: new Date().toISOString(),
+    });
+    return { ok: true, message: 'If that identity exists, recovery instructions have been sent. Please wait at least 60 seconds before requesting another reset.', cooldownSeconds: 60 };
   }
   if (path === '/api/auth/password-reset/complete' && body.method === 'POST') {
     return { ok: true, message: 'Password reset. All previous sessions were revoked.' };
+  }
+  if (path === '/api/admin/email-deliveries' && body.method === 'GET') {
+    const accepted = authEmailDeliveries.filter((d) => d.status === 'accepted').length;
+    const failed = authEmailDeliveries.filter((d) => d.status === 'failed').length;
+    const total = accepted + failed;
+    return {
+      ok: true,
+      bindingConfigured: true,
+      metrics: {
+        totalAccepted: accepted,
+        totalFailed: failed,
+        lastDeliveryAt: authEmailDeliveries[0]?.createdAt || null,
+        successRatePct: total > 0 ? Number(((accepted / total) * 100).toFixed(2)) : 100.0,
+      },
+      deliveries: authEmailDeliveries.slice(0, 50),
+    };
+  }
+  if (path === '/api/health/email' && body.method === 'GET') {
+    const accepted = authEmailDeliveries.filter((d) => d.status === 'accepted').length;
+    const failed = authEmailDeliveries.filter((d) => d.status === 'failed').length;
+    return {
+      ok: true,
+      status: 'healthy',
+      bindingConfigured: true,
+      emailFromConfigured: true,
+      recentDeliveries: {
+        totalAccepted: accepted,
+        totalFailed: failed,
+        lastDeliveryAt: authEmailDeliveries[0]?.createdAt || null,
+        successRatePct: 100.0,
+      },
+    };
   }
   if (path === '/api/auth/mfa/enroll' && body.method === 'POST') {
     const session = resolveSession(req);

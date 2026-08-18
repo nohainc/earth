@@ -98,4 +98,20 @@ void main() {
       expect(find.text('Send recovery email'), findsOneWidget);
     }
   });
+
+  testWidgets('AuthScreen exposes Email Observability and diagnostics dialog trigger',
+      (tester) async {
+    const api = EarthApi(baseUrl: 'http://127.0.0.1:8899');
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: AuthScreen(
+          api: api,
+          onAuthenticated: (_) {},
+        ),
+      ),
+    );
+
+    expect(find.text('Email Observability & Audit'), findsOneWidget);
+  });
 }

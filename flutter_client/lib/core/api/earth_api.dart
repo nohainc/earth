@@ -20,6 +20,7 @@ part 'earth_api_dynasty.dart';
 part 'earth_api_derivatives.dart';
 part 'earth_api_net_worth.dart';
 part 'earth_api_briefing.dart';
+part 'earth_api_email_observability.dart';
 
 class EarthApi {
   final String baseUrl;
