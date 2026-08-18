@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 22,
+  "migrationVersion": 23,
   "requiredTables": {
     "account_balances": ["account_id", "owner_id", "balance"],
     "ai_assistants": ["id", "owner_id"],
@@ -21,12 +21,13 @@
     "business_management": ["business_id", "manager_id"],
     "business_shares": ["business_id", "holder_id", "shares"],
     "businesses": ["id", "owner_id", "status"],
+    "character_lineage": ["id", "email", "human_id", "generation", "birth_game_day", "dynasty_name"],
     "cities": ["id", "institution_id", "treasury"],
     "communities": ["id", "founder_id", "shared_credits"],
     "community_members": ["community_id", "human_id", "role"],
     "contract_disputes": ["id", "contract_id", "status"],
     "corporations": ["id", "institution_id", "treasury"],
-    "deceased_profiles": ["human_id", "death_game_day"],
+    "deceased_profiles": ["human_id", "death_game_day", "cause_of_death", "epitaph", "dynasty_name"],
     "earth_schema_migrations": ["version", "name", "checksum"],
     "event_outbox": ["id", "event_key", "topic", "payload", "processed_at"],
     "financial_states": ["institution_id", "status", "since_game_day"],
@@ -93,6 +94,9 @@
     "proposals_game_deadline_idx",
     "recycling_events_machine_correlation_idx",
     "bankruptcy_events_institution_correlation_idx",
-    "world_events_correlation_idx"
+    "world_events_correlation_idx",
+    "character_lineage_email_idx",
+    "deceased_profiles_rank_idx",
+    "deceased_profiles_dynasty_idx"
   ]
 }
