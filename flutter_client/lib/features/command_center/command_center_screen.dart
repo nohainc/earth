@@ -12,6 +12,7 @@ import '../communications/comm_link_dialog.dart';
 import '../map/planetary_map_dialog.dart';
 import '../dynasty/dynasty_tree_dialog.dart';
 import '../market/derivatives_dialog.dart';
+import '../finance/net_worth_analytics_dialog.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
@@ -273,6 +274,10 @@ class _CommandCenterState extends State<CommandCenter> {
     }
     if (section == 'derivatives') {
       showDerivativesDialog(context, api: api, state: state);
+      return;
+    }
+    if (section == 'net_worth') {
+      showNetWorthAnalyticsDialog(context, api: api);
       return;
     }
     if (mounted) setState(() => selectedSection = section);

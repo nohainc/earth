@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/format_helpers.dart';
+import '../finance/net_worth_analytics_dialog.dart';
+import 'theme_customizer_dialog.dart';
 
 class YearAndDay {
   final int year;
@@ -273,7 +276,17 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: false),
+                            _hudResourceItem(
+                              Icons.account_balance_wallet_outlined,
+                              credits,
+                              violetColor,
+                              isCompact: false,
+                              tooltip: 'Liquid Credits & Net-Worth Analytics',
+                              onTap: () {
+                                EarthAudioEngine.instance.playClick();
+                                showNetWorthAnalyticsDialog(context, api: const EarthApi());
+                              },
+                            ),
                             _dotSeparator(),
                             _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: false),
                             _dotSeparator(),
@@ -293,7 +306,19 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                         children: [
                           Row(
                             children: [
-                              Expanded(child: _hudResourceItem(Icons.account_balance_wallet_outlined, credits, violetColor, isCompact: true)),
+                              Expanded(
+                                child: _hudResourceItem(
+                                  Icons.account_balance_wallet_outlined,
+                                  credits,
+                                  violetColor,
+                                  isCompact: true,
+                                  tooltip: 'Liquid Credits & Net-Worth Analytics',
+                                  onTap: () {
+                                    EarthAudioEngine.instance.playClick();
+                                    showNetWorthAnalyticsDialog(context, api: const EarthApi());
+                                  },
+                                ),
+                              ),
                               Expanded(child: _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: true)),
                               Expanded(child: _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: true)),
                             ],
@@ -465,6 +490,29 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
               const SizedBox(width: 4),
 
+              // THEME & AESTHETICS CONTROLLER
+              Tooltip(
+                message: 'Command Center Themes & Palettes',
+                child: InkWell(
+                  key: const Key('btn-theme-customizer'),
+                  onTap: () {
+                    EarthAudioEngine.instance.playClick();
+                    showThemeCustomizerDialog(context);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Icon(
+                      Icons.palette_outlined,
+                      size: 21,
+                      color: EarthColors.cyanAccent,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
               // 5. USER ACCOUNT MENU (ICON INSTEAD OF AVATAR CIRCLE)
               PopupMenuButton<String>(
                 position: PopupMenuPosition.under,
@@ -577,21 +625,39 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         ),
       );
 
-  Widget _hudResourceItem(IconData icon, String value, Color color, {required bool isCompact}) => Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, size: isCompact ? 11 : 13, color: color),
-          const SizedBox(width: 3.5),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: isCompact ? 9.5 : 11,
-              fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: -.2,
-            ),
-            overflow: TextOverflow.ellipsis,
+  Widget _hudResourceItem(IconData icon, String value, Color color, {required bool isCompact, VoidCallback? onTap, String? tooltip}) {
+    final row = Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: isCompact ? 11 : 13, color: color),
+        const SizedBox(width: 3.5),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: isCompact ? 9.5 : 11,
+            fontWeight: FontWeight.w700,
+            color: color,
+            letterSpacing: -.2,
           ),
-        ],
+          overflow: TextOverflow.ellipsis,
+        ),
+      ],
+    );
+
+    if (onTap != null) {
+      return Tooltip(
+        message: tooltip ?? '',
+        child: InkWell(
+          key: const Key('btn-hud-credits-analytics'),
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(4),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+            child: row,
+          ),
+        ),
       );
+    }
+    return row;
+  }
 }

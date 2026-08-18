@@ -51,6 +51,7 @@ class Sidebar extends StatelessWidget {
         [
           ('market', 'Market', Icons.swap_horiz),
           ('derivatives', 'Futures & Charts', Icons.show_chart),
+          ('net_worth', 'Net Worth Analytics', Icons.pie_chart_outline),
           ('business', 'Business', Icons.storefront_outlined),
           ('finance', 'Finance', Icons.account_balance_wallet_outlined),
         ]

@@ -28,6 +28,7 @@ import { listSupplyContracts, proposeSupplyContract, acceptSupplyContract, cance
 import { listPlanetaryRegionsAndPlots, claimPlotLease, upgradePlotInfrastructure, harvestPlotYield } from './map-regions-postgres.ts';
 import { getDynastyOverview, unlockDynastyPerk, equipDynastyHeirloom, forgeDynastyHeirloom, updateDynastyMotto } from './dynasty-postgres.ts';
 import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
+import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
 
@@ -1230,6 +1231,19 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Futures cancellation failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 400 });
+      }
+    }
+
+    if (url.pathname === '/api/finance/net-worth-history' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const humanId = viewer?.id || 'H-0044';
+      try {
+        const result = await withRepository(env, (repository) => getNetWorthHistory(repository, humanId));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Failed to fetch net-worth history';
+        return Response.json({ ok: false, error: message }, { status: 400 });
       }
     }
     if (url.pathname === '/api/finance/recover' && request.method === 'POST') {

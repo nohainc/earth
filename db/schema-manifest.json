@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 29,
+  "migrationVersion": 30,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -481,6 +481,16 @@
       "high_price",
       "low_price",
       "close_price"
+    ],
+    "net_worth_snapshots": [
+      "id",
+      "human_id",
+      "game_day",
+      "liquid_credits",
+      "commodity_valuation",
+      "equity_valuation",
+      "real_estate_valuation",
+      "total_net_worth"
     ]
   },
   "requiredUniqueConstraints": [
@@ -557,6 +567,7 @@
     "idx_commodity_futures_status",
     "idx_commodity_futures_seller",
     "idx_commodity_futures_buyer",
-    "idx_market_ohlc_commodity_day"
+    "idx_market_ohlc_commodity_day",
+    "idx_net_worth_human_day"
   ]
 }

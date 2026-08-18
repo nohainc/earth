@@ -1625,6 +1625,77 @@ function command(path, body, req = null) {
     return result;
   }
 
+  if (path === '/api/finance/net-worth-history' && body.method === 'GET') {
+    const player = human('amara', req);
+    const humanId = player?.id || 'H-0044';
+    const currentDay = state.clock?.day || 185;
+
+    const snapshots = [];
+    let baseCash = 15000;
+    let baseComm = 8000;
+    let baseEq = 25000;
+    let baseRe = 12000;
+
+    for (let day = currentDay - 30; day <= currentDay; day++) {
+      const cVal = Math.round((baseCash + ((day - (currentDay - 30)) * 850) + (Math.sin(day * 0.5) * 1200)) * 100) / 100;
+      const mVal = Math.round((baseComm + ((day - (currentDay - 30)) * 420) + (Math.cos(day * 0.3) * 800)) * 100) / 100;
+      const eVal = Math.round((baseEq + ((day - (currentDay - 30)) * 1450) + (Math.sin(day * 0.8) * 2500)) * 100) / 100;
+      const rVal = Math.round((baseRe + ((day - (currentDay - 30)) * 600)) * 100) / 100;
+      const tot = Math.round((cVal + mVal + eVal + rVal) * 100) / 100;
+
+      snapshots.push({
+        id: `NW-${humanId}-${day}`,
+        human_id: humanId,
+        game_day: day,
+        liquid_credits: cVal,
+        commodity_valuation: mVal,
+        equity_valuation: eVal,
+        real_estate_valuation: rVal,
+        total_net_worth: tot,
+        created_at: new Date(Date.now() - (currentDay - day) * 86400000).toISOString(),
+      });
+    }
+
+    const latest = snapshots[snapshots.length - 1];
+    const first = snapshots[0];
+    const currentNetWorth = latest.total_net_worth;
+    const initialTotal = first.total_net_worth;
+    const growthRatePct = Math.round(((currentNetWorth - initialTotal) / initialTotal) * 10000) / 100;
+
+    let peakNetWorth = 0;
+    let peakDay = currentDay;
+    for (const s of snapshots) {
+      if (s.total_net_worth > peakNetWorth) {
+        peakNetWorth = s.total_net_worth;
+        peakDay = s.game_day;
+      }
+    }
+
+    const assetAllocation = {
+      cashPct: Math.round((latest.liquid_credits / currentNetWorth) * 1000) / 10,
+      commodityPct: Math.round((latest.commodity_valuation / currentNetWorth) * 1000) / 10,
+      equityPct: Math.round((latest.equity_valuation / currentNetWorth) * 1000) / 10,
+      realEstatePct: Math.round((latest.real_estate_valuation / currentNetWorth) * 1000) / 10,
+    };
+
+    return {
+      ok: true,
+      humanId,
+      snapshots,
+      summary: {
+        currentNetWorth,
+        liquidCredits: latest.liquid_credits,
+        commodityValuation: latest.commodity_valuation,
+        equityValuation: latest.equity_valuation,
+        realEstateValuation: latest.real_estate_valuation,
+        growthRatePct,
+        peakNetWorth,
+        peakDay,
+        assetAllocation,
+      },
+    };
+  }
+
   if (path === '/api/contracts' && body.method === 'POST') {
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
