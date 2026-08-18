@@ -145,10 +145,10 @@ void main() {
     expect(find.text('DISTRESSED'), findsOneWidget);
     expect(find.text('-400 C'), findsWidgets);
     expect(find.text('WARNING: FINANCIAL DISTRESS'), findsOneWidget);
-    expect(find.text('LIQUIDATE BUSINESS'), findsWidgets);
+    expect(find.text('LIQUIDATE ENTERPRISE'), findsWidgets);
 
-    await tester.ensureVisible(find.text('LIQUIDATE BUSINESS'));
-    await tester.tap(find.text('LIQUIDATE BUSINESS'));
+    await tester.ensureVisible(find.text('LIQUIDATE ENTERPRISE'));
+    await tester.tap(find.text('LIQUIDATE ENTERPRISE'));
     await tester.pumpAndSettle();
 
     expect(find.text('Liquidate business?'), findsOneWidget);
@@ -158,5 +158,67 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(liquidationTriggered, isTrue);
+  });
+
+  testWidgets('BusinessPanel opens shareholder resolution and AI assistant config dialogs',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {
+        'id': 'B-1048',
+        'name': 'Kline Works',
+        'policy': 'reliability',
+        'status': 'active',
+        'condition': 96,
+      },
+      'technology': {'research': {}},
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: BusinessPanel(
+              state: state,
+              busy: false,
+              businessOwnership: const {},
+              businessFinancials: const {},
+              businessProfile: const {},
+              action: (cb) async {},
+            ),
+          ),
+        ),
+      ),
+    );
+
+    // Shareholder Resolution
+    expect(find.text('SHAREHOLDER RESOLUTION (>66.7%)'), findsOneWidget);
+    await tester.ensureVisible(find.text('SHAREHOLDER RESOLUTION (>66.7%)'));
+    await tester.tap(find.text('SHAREHOLDER RESOLUTION (>66.7%)'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Propose shareholder resolution'), findsOneWidget);
+    expect(find.textContaining('>66.7% Supermajority Approval'), findsOneWidget);
+    await tester.tap(find.text('CANCEL'));
+    await tester.pumpAndSettle();
+
+    // AI Operational Assistant
+    expect(find.text('AI OPERATIONAL ASSISTANT'), findsOneWidget);
+    await tester.ensureVisible(find.text('AI OPERATIONAL ASSISTANT'));
+    await tester.tap(find.text('AI OPERATIONAL ASSISTANT'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('AI Operational Assistant'), findsOneWidget);
+    expect(find.text('Automated Machine Maintenance'), findsOneWidget);
+    expect(find.text('SAVE AI CONFIG'), findsOneWidget);
+    await tester.tap(find.text('CANCEL'));
+    await tester.pumpAndSettle();
   });
 }

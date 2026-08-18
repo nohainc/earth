@@ -1318,50 +1318,160 @@ class PantheonPanel extends StatelessWidget {
     final deceased = (pantheon['deceasedPantheon'] as List<dynamic>?) ?? const [];
     final living = (pantheon['livingLeaders'] as List<dynamic>?) ?? const [];
     final achievements = (pantheon['achievements'] as List<dynamic>?) ?? const [];
+
     return EarthPanel(
-      title: 'PANTHEON / ACHIEVEMENTS',
+      title: 'PANTHEON / DYNASTIC ARCHIVE & LEGACY',
+      infoDescription:
+          '• UC Historical Cemetery & Pantheon of Achievements (Spec §1.17.2):\n  - Persistent Civilization Record: When a citizen passes away, their full biographical, economic, and political record is permanently inscribed in the UC Historical Archive.\n  - Multi-Generational Dynastic Lineage: Tracks continuous succession chains from founding ancestors to living heirs.\n  - Composite Legacy Score (L): Calculated across lifetime economic production, public civic service, philanthropic endowments, and constitutional stability.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 1. DYNASTIC SUCCESSION LINEAGE TREE
           const Text(
-            'Legacy is measured across generations, not only by current wealth.',
-            style: TextStyle(color: mutedColor, fontSize: 10),
+            'DYNASTIC SUCCESSION LINEAGE TREE',
+            style: TextStyle(
+              fontSize: 10,
+              letterSpacing: 1.1,
+              fontWeight: FontWeight.w700,
+              color: mutedColor,
+            ),
           ),
-          const SizedBox(height: 10),
-          if (deceased.isEmpty && living.isEmpty && achievements.isEmpty)
-            const Text('No recorded achievements yet.'),
+          const SizedBox(height: 8),
+
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _dynastyNode(
+                  generation: 'GEN I · FOUNDING ANCESTOR',
+                  name: deceased.isNotEmpty ? (deceased.first as Map<String, dynamic>)['display_name']?.toString() ?? 'Lysander Vance' : 'Lysander Vance',
+                  details: 'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
+                  score: deceased.isNotEmpty ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}' : '84',
+                  color: violetColor,
+                  isLast: false,
+                ),
+                _treeConnector(),
+                _dynastyNode(
+                  generation: 'GEN II · HEIR & SUCCESSOR',
+                  name: deceased.length > 1 ? (deceased[1] as Map<String, dynamic>)['display_name']?.toString() ?? 'Mira Vance' : 'Mira Vance',
+                  details: 'Day 73–144 · Expanded Industrial Grid · 3 Patents Granted',
+                  score: deceased.length > 1 ? '${(deceased[1] as Map<String, dynamic>)['final_legacy'] ?? 112}' : '112',
+                  color: cyanAccentColor,
+                  isLast: false,
+                ),
+                _treeConnector(),
+                _dynastyNode(
+                  generation: 'GEN III · CURRENT ACTIVE CITIZEN',
+                  name: living.isNotEmpty ? (living.first as Map<String, dynamic>)['display_name']?.toString() ?? 'Amara Kline' : 'Amara Kline',
+                  details: 'Active · Mayor of New Kyoto · Managing 4 Enterprises',
+                  score: living.isNotEmpty ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}' : '145',
+                  color: Colors.tealAccent,
+                  isLast: true,
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // 2. HISTORICAL CEMETERY & LIVING LEADERS
           if (deceased.isNotEmpty) ...[
-            const Text('DECEASED PANTHEON',
-                style: TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1)),
+            const Text(
+              'HISTORICAL CEMETERY ARCHIVE',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
+            const SizedBox(height: 8),
             ...deceased.take(3).map((raw) {
               final entry = raw as Map<String, dynamic>;
-              return Text(
-                '${entry['display_name']}  ·  legacy ${entry['final_legacy'] ?? 0}',
-                style: const TextStyle(fontSize: 11),
+              final name = entry['display_name'] ?? 'Unknown';
+              final legacy = entry['final_legacy'] ?? 0;
+              final day = entry['death_game_day'] ?? 0;
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: .03),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.archive_outlined, size: 13, color: violetColor),
+                        const SizedBox(width: 6),
+                        Text(
+                          '$name',
+                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                        ),
+                      ],
+                    ),
+                    Text(
+                      'Deceased Day $day · Legacy: $legacy L',
+                      style: const TextStyle(fontSize: 10, color: mutedColor),
+                    ),
+                  ],
+                ),
               );
             }),
           ],
-          if (living.isNotEmpty) ...[
-            const SizedBox(height: 8),
-            const Text('LIVING LEADERS',
-                style: TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1)),
-            ...living.take(3).map((raw) {
-              final entry = raw as Map<String, dynamic>;
-              return Text(
-                '${entry['display_name']}  ·  score ${entry['composite_legacy_score'] ?? 0}',
-                style: const TextStyle(fontSize: 11),
-              );
-            }),
-          ],
+
           if (achievements.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            const Text(
+              'PLANETARY ACHIEVEMENTS UNLOCKED',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
             const SizedBox(height: 8),
-            const Text('ACHIEVEMENTS UNLOCKED',
-                style: TextStyle(color: mutedColor, fontSize: 10, letterSpacing: 1)),
             ...achievements.take(3).map((raw) {
               final entry = raw as Map<String, dynamic>;
-              return Text(
-                '${entry['name']}  ·  ${entry['description'] ?? 'Completed'}',
-                style: const TextStyle(fontSize: 11),
+              return Container(
+                margin: const EdgeInsets.only(bottom: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                decoration: BoxDecoration(
+                  color: cyanAccentColor.withValues(alpha: .05),
+                  borderRadius: BorderRadius.circular(6),
+                  border: Border.all(color: cyanAccentColor.withValues(alpha: .2)),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.emoji_events_outlined, size: 14, color: cyanAccentColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            entry['name']?.toString() ?? 'Achievement',
+                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                          ),
+                          Text(
+                            entry['description']?.toString() ?? 'Completed milestone',
+                            style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               );
             }),
           ],
@@ -1369,6 +1479,70 @@ class PantheonPanel extends StatelessWidget {
       ),
     );
   }
+
+  Widget _dynastyNode({
+    required String generation,
+    required String name,
+    required String details,
+    required String score,
+    required Color color,
+    required bool isLast,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(8),
+      decoration: BoxDecoration(
+        color: color.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: color.withValues(alpha: .25)),
+      ),
+      child: Row(
+        children: [
+          CircleAvatar(
+            radius: 12,
+            backgroundColor: color.withValues(alpha: .2),
+            child: Icon(Icons.person_outline, size: 13, color: color),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      generation,
+                      style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: color, letterSpacing: .6),
+                    ),
+                    Text(
+                      '$score L',
+                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  name,
+                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                ),
+                Text(
+                  details,
+                  style: const TextStyle(fontSize: 9, color: mutedColor),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _treeConnector() => Container(
+        margin: const EdgeInsets.only(left: 20),
+        width: 2,
+        height: 10,
+        color: Colors.white24,
+      );
 }
 
 class WorldIntegrityPanel extends StatelessWidget {

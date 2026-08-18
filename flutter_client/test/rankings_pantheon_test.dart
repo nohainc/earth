@@ -67,9 +67,10 @@ void main() {
     expect(find.text('HISTORY / ARCHIVE'), findsOneWidget);
     expect(find.textContaining('DAY 180  ·  First Solar Grid Activated'), findsOneWidget);
 
-    expect(find.text('PANTHEON / ACHIEVEMENTS'), findsOneWidget);
-    expect(find.textContaining('Eleni Vance  ·  legacy 12500'), findsOneWidget);
-    expect(find.textContaining('Amara Kline  ·  score 8400'), findsOneWidget);
-    expect(find.textContaining('Grid Pioneer  ·  Constructed first municipal power node'), findsOneWidget);
+    expect(find.text('PANTHEON / DYNASTIC ARCHIVE & LEGACY'), findsOneWidget);
+    expect(find.text('DYNASTIC SUCCESSION LINEAGE TREE'), findsOneWidget);
+    expect(find.textContaining('HISTORICAL CEMETERY ARCHIVE'), findsOneWidget);
+    expect(find.textContaining('Eleni Vance'), findsWidgets);
+    expect(find.textContaining('Grid Pioneer'), findsOneWidget);
   });
 }

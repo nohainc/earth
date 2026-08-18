@@ -713,6 +713,15 @@ class BusinessPanel extends StatelessWidget {
                               : () => showMergerDialog(
                                   context, action, businessId),
                         ),
+                        _actionButton(
+                          label: 'SHAREHOLDER RESOLUTION (>66.7%)',
+                          icon: Icons.how_to_vote_outlined,
+                          accentColor: violetColor,
+                          onPressed: busy || isDissolved
+                              ? null
+                              : () => showShareholderResolutionDialog(
+                                  context, action, businessId),
+                        ),
                       ],
                     ),
 
@@ -741,6 +750,15 @@ class BusinessPanel extends StatelessWidget {
                               : () => showBusinessManagerDialog(
                                   context, action, businessId),
                         ),
+                        _actionButton(
+                          label: 'AI OPERATIONAL ASSISTANT',
+                          icon: Icons.smart_toy_outlined,
+                          accentColor: cyanAccentColor,
+                          onPressed: busy || isDissolved
+                              ? null
+                              : () => showAiAssistantConfigDialog(
+                                  context, action, businessId),
+                        ),
                       ],
                     ),
 
@@ -762,16 +780,24 @@ class BusinessPanel extends StatelessWidget {
                               : () =>
                                   showBusinessComposerDialog(context, action),
                         ),
-                        if (isDistressed || isInsolvent)
-                          _actionButton(
-                            label: 'LIQUIDATE BUSINESS',
-                            icon: Icons.warning_amber_rounded,
-                            accentColor: Colors.redAccent,
-                            onPressed: busy
-                                ? null
-                                : () => showBusinessLiquidationDialog(
-                                    context, action, businessId),
-                          ),
+                        _actionButton(
+                          label: 'RECEIVERSHIP & WORKOUT',
+                          icon: Icons.account_balance_outlined,
+                          accentColor: Colors.orangeAccent,
+                          onPressed: busy || isDissolved
+                              ? null
+                              : () => showReceivershipRestructuringDialog(
+                                  context, action, businessId),
+                        ),
+                        _actionButton(
+                          label: 'LIQUIDATE ENTERPRISE',
+                          icon: Icons.delete_forever_outlined,
+                          accentColor: Colors.redAccent,
+                          onPressed: busy || isDissolved
+                              ? null
+                              : () => showBusinessLiquidationDialog(
+                                  context, action, businessId),
+                        ),
                       ],
                     ),
                   ],
