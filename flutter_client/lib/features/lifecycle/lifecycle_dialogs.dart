@@ -16,6 +16,9 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
   final _name = TextEditingController();
   final _humanId = TextEditingController();
   final _estateDays = TextEditingController(text: '30');
+  double _heirPct = 70.0;
+  double _trustPct = 20.0;
+  double _reservePct = 10.0;
 
   @override
   void dispose() {
@@ -27,41 +30,154 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final totalPct = (_heirPct + _trustPct + _reservePct).round();
+    final isBalanced = totalPct == 100;
+
     return AlertDialog(
-      title: const Text('Plan succession'),
-      content: Column(mainAxisSize: MainAxisSize.min, children: [
-        TextField(
-            controller: _name,
-            decoration: const InputDecoration(labelText: 'Successor name')),
-        const SizedBox(height: 10),
-        TextField(
-            controller: _humanId,
-            textCapitalization: TextCapitalization.characters,
-            decoration: const InputDecoration(labelText: 'Existing Human ID (optional)')),
-        const SizedBox(height: 10),
-        TextField(
-            controller: _estateDays,
-            keyboardType: TextInputType.number,
-            decoration: const InputDecoration(labelText: 'Estate period (7–90 days)')),
-      ]),
+      title: const Text('Plan succession & testamentary will'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Designate your legal successor and configure testamentary asset distribution across heirs, municipal endowments, and dynastic reserves.',
+              style: TextStyle(fontSize: 11, color: mutedColor),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _name,
+              decoration: const InputDecoration(
+                labelText: 'Successor name',
+                hintText: 'e.g. Kaelen Vance',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _humanId,
+              textCapitalization: TextCapitalization.characters,
+              decoration: const InputDecoration(
+                labelText: 'Existing Human ID (optional)',
+                hintText: 'e.g. H-0045',
+              ),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _estateDays,
+              keyboardType: TextInputType.number,
+              decoration: const InputDecoration(
+                labelText: 'Estate period (7–90 days)',
+                hintText: '30',
+              ),
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'TESTAMENTARY ALLOCATION',
+              style: TextStyle(
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1,
+                color: inkColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            _allocationRow('Primary Designated Heir', _heirPct, cyanAccentColor, (val) {
+              setState(() {
+                _heirPct = val;
+              });
+            }),
+            _allocationRow('Municipal Public Trust', _trustPct, Colors.tealAccent, (val) {
+              setState(() {
+                _trustPct = val;
+              });
+            }),
+            _allocationRow('Dynastic Family Reserve', _reservePct, violetColor, (val) {
+              setState(() {
+                _reservePct = val;
+              });
+            }),
+            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: (isBalanced ? Colors.tealAccent : Colors.orangeAccent).withValues(alpha: .12),
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: (isBalanced ? Colors.tealAccent : Colors.orangeAccent).withValues(alpha: .3)),
+              ),
+              child: Row(
+                children: [
+                  Icon(isBalanced ? Icons.check_circle_outline : Icons.error_outline, size: 14, color: isBalanced ? Colors.tealAccent : Colors.orangeAccent),
+                  const SizedBox(width: 6),
+                  Expanded(
+                    child: Text(
+                      isBalanced
+                          ? 'Total: $totalPct% (100% Balanced Allocation)'
+                          : 'Total: $totalPct% (Allocation must equal 100%)',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        color: isBalanced ? Colors.tealAccent : Colors.orangeAccent,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
       actions: [
         TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel')),
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
         FilledButton(
-            onPressed: () async {
-              if (_name.text.trim().length < 2) return;
-              final parsedDays = int.tryParse(_estateDays.text.trim()) ?? 30;
-              final clampedDays = parsedDays.clamp(7, 90);
-              final n = _name.text.trim();
-              final hId = _humanId.text.trim();
-              Navigator.pop(context);
-              await widget.action(() => const EarthApi().registerSuccessor(
+          onPressed: () async {
+            if (_name.text.trim().length < 2 || !isBalanced) return;
+            final parsedDays = int.tryParse(_estateDays.text.trim()) ?? 30;
+            final clampedDays = parsedDays.clamp(7, 90);
+            final n = _name.text.trim();
+            final hId = _humanId.text.trim();
+            Navigator.pop(context);
+            await widget.action(() => const EarthApi().registerSuccessor(
                   n,
                   successorHumanId: hId,
-                  estatePeriodDays: clampedDays));
-            },
-            child: const Text('Save plan')),
+                  estatePeriodDays: clampedDays,
+                ));
+          },
+          child: const Text('Save plan'),
+        ),
+      ],
+    );
+  }
+
+  Widget _allocationRow(String title, double value, Color color, ValueChanged<double> onChanged) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(title, style: const TextStyle(fontSize: 10, color: mutedColor)),
+            Text('${value.round()}%', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color)),
+          ],
+        ),
+        SliderTheme(
+          data: SliderThemeData(
+            thumbColor: color,
+            activeTrackColor: color,
+            inactiveTrackColor: Colors.white12,
+            trackHeight: 3,
+            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+          ),
+          child: Slider(
+            value: value,
+            min: 0,
+            max: 100,
+            divisions: 20,
+            onChanged: onChanged,
+          ),
+        ),
       ],
     );
   }

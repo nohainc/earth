@@ -28,7 +28,7 @@ void main() {
     await tester.tap(find.text('Open Succession Dialog'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Plan succession'), findsOneWidget);
+    expect(find.textContaining('Plan succession'), findsOneWidget);
     expect(find.text('Save plan'), findsOneWidget);
 
     await tester.enterText(

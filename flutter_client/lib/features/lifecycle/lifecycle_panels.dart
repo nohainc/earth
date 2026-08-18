@@ -24,17 +24,21 @@ class SuccessionPanel extends StatelessWidget {
     final life = state.life;
     final human = state.human;
     final lifeStatus = (life['status']?.toString() ?? human['life_status']?.toString() ?? 'active').toLowerCase();
-    final age = life['ageYears'] ?? human['age_years'] ?? human['ageYears'] ?? 31;
-    final politicalEligibleDay = life['politicalEligibilityDay'] ?? 180;
-    final currentDay = state.clock['day'] ?? 184;
-    final isPoliticallyEligible = (currentDay is num && currentDay >= politicalEligibleDay) || (age is num && age >= 25);
+    final age = asIntOr(life['ageYears'] ?? human['age_years'] ?? human['ageYears'], 31);
+    final politicalEligibleDay = asIntOr(life['politicalEligibilityDay'], 180);
+    final currentDay = asIntOr(state.clock['day'], 184);
+    final isPoliticallyEligible = currentDay >= politicalEligibleDay || age >= 25;
 
     final rawSuccessor = life['successor'];
     final successor = rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
     final successorName = successor?['successor_name']?.toString() ?? successor?['name']?.toString();
     final successorHumanId = successor?['successor_human_id']?.toString() ?? successor?['successorHumanId']?.toString();
     final registeredDay = successor?['registered_game_day'] ?? successor?['registeredOnDay'];
-    final estatePeriodDays = successor?['estate_period_days'] ?? life['estatePeriodDays'] ?? 30;
+    final estatePeriodDays = asIntOr(successor?['estate_period_days'] ?? life['estatePeriodDays'], 30);
+
+    final heirPct = asIntOr(successor?['heir_pct'], 70);
+    final trustPct = asIntOr(successor?['trust_pct'], 20);
+    final reservePct = asIntOr(successor?['reserve_pct'], 10);
 
     final isEstatePeriod = lifeStatus == 'estate';
     final isDeceased = lifeStatus == 'deceased';
@@ -43,51 +47,154 @@ class SuccessionPanel extends StatelessWidget {
     if (isEstatePeriod) statusColor = Colors.orangeAccent;
     if (isDeceased) statusColor = Colors.redAccent;
 
+    String generationalStage = 'PRIME OPERATIVE (100% LABOR EFFICIENCY)';
+    Color stageColor = cyanAccentColor;
+    if (age >= 65) {
+      generationalStage = 'DYNASTIC PATRIARCH/MATRIARCH (+25% GOVERNANCE WISDOM)';
+      stageColor = violetColor;
+    } else if (age >= 45) {
+      generationalStage = 'SENIOR EXECUTIVE (BALANCED PRODUCTIVITY)';
+      stageColor = Colors.tealAccent;
+    }
+
+    final credits = asDouble(human['credits']) ?? 0.0;
+    final estimatedTax = isEstatePeriod ? credits * 0.20 : credits * 0.10;
+    final estimatedNet = (credits - estimatedTax).clamp(0.0, double.infinity);
+
     return EarthPanel(
-      title: 'LIFE / SUCCESSION & ESTATE',
+      title: 'LIFE / BIOLOGICAL AGING & SUCCESSION',
+      infoDescription:
+          '• Biological Aging & Generational Succession (Spec §1.4, §1.5):\n  - Simulation Time: 1 Real Day = 1 Simulation Month (12 Real Days = 1 Simulation Year).\n  - Biological Lifespan: Characters enter at legal adulthood (Age 20) and reach natural mortality around 75–90 simulation years.\n  - Generational Wisdom Shift: Past age 65, physical labor efficiency gently declines while governance influence and political wisdom bonuses increase (+25%).\n\n• Testamentary Will & Estate Probate (Spec §1.4.2):\n  - Multi-Beneficiary Testament: Designate custom asset distributions across Primary Heirs, Municipal Public Trusts, and Dynastic Family Reserves.\n  - Progressive Estate Tax: Deducted automatically upon probate (10% standard, 20% late estate settlement).',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Text(
-                  'Age: $age years · ${isPoliticallyEligible ? 'Politically mature' : 'Political lock (Day $politicalEligibleDay)'}',
-                  style: const TextStyle(color: mutedColor, fontSize: 11),
+          // 1. BIOLOGICAL AGE & GENERATIONAL STAGE
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'BIOLOGICAL AGE: $age YEARS',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: .8,
+                        color: inkColor,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      decoration: BoxDecoration(
+                        color: statusColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: statusColor.withValues(alpha: .35)),
+                      ),
+                      child: Text(
+                        lifeStatus.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: statusColor,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                lifeStatus.toUpperCase(),
-                style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: statusColor,
+                const SizedBox(height: 6),
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: stageColor.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: stageColor.withValues(alpha: .3)),
+                      ),
+                      child: Text(
+                        generationalStage,
+                        style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
+                          color: stageColor,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 8),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: (age / 90.0).clamp(0.0, 1.0),
+                    minHeight: 5,
+                    color: stageColor,
+                    backgroundColor: Colors.white10,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  'Lifespan Expectancy ~90y · ${isPoliticallyEligible ? 'Politically mature' : 'Political lock (Day $politicalEligibleDay)'}',
+                  style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                ),
+              ],
+            ),
           ),
-          const SizedBox(height: 10),
+
+          const SizedBox(height: 12),
+
+          // 2. TESTAMENTARY WILL & SUCCESSOR PLAN
           if (successorName != null) ...[
             Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
-                color: Colors.white.withAlpha(6),
-                borderRadius: BorderRadius.circular(6),
+                color: surfaceColor.withValues(alpha: .75),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: Colors.white10),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Successor: $successorName ${successorHumanId != null ? '($successorHumanId)' : ''}',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 11),
+                  Row(
+                    children: [
+                      const Icon(Icons.history_edu_outlined, size: 14, color: cyanAccentColor),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'SUCCESSOR: $successorName ${successorHumanId != null ? '($successorHumanId)' : ''}',
+                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: inkColor),
+                        ),
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 2),
+                  const SizedBox(height: 4),
                   Text(
                     'Registered on Day $registeredDay · Estate buffer: $estatePeriodDays days',
                     style: const TextStyle(fontSize: 10, color: mutedColor),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      _beneficiaryChip('PRIMARY HEIR', '$heirPct%', cyanAccentColor),
+                      _beneficiaryChip('MUNICIPAL TRUST', '$trustPct%', Colors.tealAccent),
+                      _beneficiaryChip('DYNASTIC RESERVE', '$reservePct%', violetColor),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
+                    style: const TextStyle(fontSize: 10, color: mutedColor, fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
                   Text(
@@ -110,9 +217,14 @@ class SuccessionPanel extends StatelessWidget {
             spacing: 8,
             runSpacing: 8,
             children: [
-              OutlinedButton(
+              OutlinedButton.icon(
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: cyanAccentColor,
+                  side: BorderSide(color: cyanAccentColor.withValues(alpha: .3)),
+                ),
                 onPressed: busy ? null : () => showSuccessorComposerDialog(context, action),
-                child: Text(successorName == null ? 'PLAN SUCCESSION' : 'UPDATE SUCCESSION PLAN'),
+                icon: const Icon(Icons.edit_note_outlined, size: 14),
+                label: Text(successorName == null ? 'PLAN SUCCESSION & WILL' : 'UPDATE WILL & SUCCESSOR'),
               ),
               if (isEstatePeriod && successorName != null)
                 OutlinedButton(
@@ -132,6 +244,38 @@ class SuccessionPanel extends StatelessWidget {
       ),
     );
   }
+
+  Widget _beneficiaryChip(String label, String pct, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withValues(alpha: .12),
+          borderRadius: BorderRadius.circular(4),
+          border: Border.all(color: color.withValues(alpha: .3)),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              label,
+              style: const TextStyle(
+                fontSize: 8.5,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+                letterSpacing: .6,
+              ),
+            ),
+            const SizedBox(width: 5),
+            Text(
+              pct,
+              style: TextStyle(
+                fontSize: 9.5,
+                fontWeight: FontWeight.w800,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      );
 }
 
 class LegacyPersonalFinancePanel extends StatelessWidget {

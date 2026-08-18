@@ -54,19 +54,19 @@ void main() {
       ),
     );
 
-    expect(find.text('LIFE / SUCCESSION & ESTATE'), findsOneWidget);
+    expect(find.text('LIFE / BIOLOGICAL AGING & SUCCESSION'), findsOneWidget);
     expect(find.text('ACTIVE'), findsOneWidget);
-    expect(find.textContaining('Age: 31 years · Politically mature'), findsOneWidget);
-    expect(find.textContaining('Successor: Mira Kline (H-0088)'), findsOneWidget);
+    expect(find.textContaining('Lifespan Expectancy ~90y'), findsOneWidget);
+    expect(find.textContaining('SUCCESSOR: Mira Kline (H-0088)'), findsOneWidget);
     expect(find.textContaining('Registered on Day 180 · Estate buffer: 30 days'), findsOneWidget);
     expect(find.textContaining('Estate state: PENDING'), findsOneWidget);
-    expect(find.text('UPDATE SUCCESSION PLAN'), findsOneWidget);
+    expect(find.text('UPDATE WILL & SUCCESSOR'), findsOneWidget);
 
     // Open plan dialog
-    await tester.tap(find.text('UPDATE SUCCESSION PLAN'));
+    await tester.tap(find.text('UPDATE WILL & SUCCESSOR'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Plan succession'), findsOneWidget);
+    expect(find.textContaining('Plan succession'), findsOneWidget);
     expect(find.text('Save plan'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'Mira Kline');

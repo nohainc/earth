@@ -50,11 +50,18 @@ class TechnologyPanel extends StatelessWidget {
     if (focus == 'SAFETY') focusColor = Colors.lightGreenAccent;
     if (focus == 'COST') focusColor = Colors.amberAccent;
 
+    final currentDay = asIntOr(state.clock['day'], 184);
+    final patentGrantedDay = asIntOr(research['patentGrantedDay'], 1);
+    const patentDurationDays = 288; // 24 simulation years (12 sim days/yr)
+    final patentExpiryDay = patentGrantedDay + patentDurationDays;
+    final daysToPublicDomain = (patentExpiryDay - currentDay).clamp(0, patentDurationDays);
+    final isPublicDomain = isComplete && daysToPublicDomain <= 0;
+
     return EarthPanel(
       key: panelKey,
       title: 'TECHNOLOGY / RESEARCH & PATENTS',
       infoDescription:
-          '• Collaborative R&D Laboratory: Planetary technological development funded through citizen and enterprise contributions.\n\n• Focus Specialization:\n  - EFFICIENCY: Boosts machine output per cycle.\n  - DURABILITY: Reduces wear rate and extends mean time between maintenance.\n  - SAFETY: Eliminates catastrophic failure risks during continuous overload.\n  - COST: Minimizes input feedstock requirements.\n\n• Intellectual Property & Patents: Completed research (100% progress) can be registered as canonical patents granting exclusive manufacturing rights or licensed to other citizens for recurring royalties (5.00% standard rate).',
+          '• Collaborative R&D Laboratory: Planetary technological development funded through citizen and enterprise contributions.\n\n• Focus Specialization:\n  - EFFICIENCY: Boosts machine output per cycle.\n  - DURABILITY: Reduces wear rate and extends mean time between maintenance.\n  - SAFETY: Eliminates catastrophic failure risks during continuous overload.\n  - COST: Minimizes input feedstock requirements.\n\n• Intellectual Property & 24-Year Patent Term (Spec §1.14.2):\n  - Commercial Exclusivity: Completed research (100%) registers a patent granting exclusive manufacturing rights and recurring royalties (5.00% standard rate).\n  - Public Domain Transition: After 24 simulation years (288 game days), all patents expire into the Public Domain, becoming free open-source blueprints (0% royalty) to advance civilization.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -253,7 +260,7 @@ class TechnologyPanel extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              'INTELLECTUAL PROPERTY & COMMERCIAL LICENSES',
+              'INTELLECTUAL PROPERTY & 24-YEAR STATUTORY TERM',
               style: TextStyle(
                 fontSize: 10,
                 letterSpacing: 1.2,
@@ -267,10 +274,8 @@ class TechnologyPanel extends StatelessWidget {
           LayoutBuilder(
             builder: (context, ipConstraints) {
               final ipWidth = ipConstraints.maxWidth;
-              final numCols = ipWidth >= 500 ? 2 : 1;
-              final itemWidth = numCols == 1
-                  ? ipWidth
-                  : (ipWidth - (numCols - 1) * 12) / numCols;
+              final numCols = ipWidth >= 650 ? 3 : (ipWidth >= 440 ? 2 : 1);
+              final itemWidth = (ipWidth - (numCols - 1) * 12) / numCols;
 
               return Wrap(
                 spacing: 12,
@@ -291,6 +296,14 @@ class TechnologyPanel extends StatelessWidget {
                     subtext: 'Active licenses: $activeLicenses (5.00% royalty)',
                     accent: cyanAccentColor,
                     icon: Icons.gavel_outlined,
+                  ),
+                  _ipMetricCard(
+                    width: itemWidth,
+                    title: 'PUBLIC DOMAIN TERM',
+                    value: isPublicDomain ? 'PUBLIC DOMAIN' : '${daysToPublicDomain}d remaining',
+                    subtext: isPublicDomain ? '0% open royalty blueprint' : '24-year statutory term',
+                    accent: isPublicDomain ? Colors.lightGreenAccent : Colors.amberAccent,
+                    icon: Icons.public_outlined,
                   ),
                 ],
               );

@@ -122,8 +122,6 @@ void main() {
 
     expect(find.text('100%'), findsOneWidget);
     expect(find.textContaining('Status: COMPLETED'), findsOneWidget);
-    expect(find.text('Patents granted: 1'), findsOneWidget);
-
     final grantButton = find.text('GRANT PATENT');
     expect(grantButton, findsOneWidget);
     await tester.tap(grantButton);
@@ -131,4 +129,57 @@ void main() {
 
     expect(patentTriggered, isTrue);
   });
+
+  testWidgets('TechnologyPanel renders 24-year statutory patent term and public domain transition',
+      (tester) async {
+    const patentState = EarthState({
+      'clock': {'day': 40, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {
+        'research': {
+          'id': 'TECH-001',
+          'name': 'Adaptive Maintenance AI',
+          'progress': 100,
+          'budget': 2400,
+          'focus': 'efficiency',
+          'status': 'completed',
+          'patentGrantedDay': 10,
+        },
+        'activePatents': 1,
+        'activeLicenses': 2,
+      },
+      'technologyRegistry': {
+        'activePatents': 1,
+        'activeLicenses': 2,
+      },
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: TechnologyPanel(
+              state: patentState,
+              busy: false,
+              action: _dummyAction,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('INTELLECTUAL PROPERTY & 24-YEAR STATUTORY TERM'), findsOneWidget);
+    expect(find.text('PUBLIC DOMAIN TERM'), findsOneWidget);
+    expect(find.text('258d remaining'), findsOneWidget);
+    expect(find.text('24-year statutory term'), findsOneWidget);
+  });
 }
+
+Future<void> _dummyAction(Future<EarthState> Function() fn) async {}
