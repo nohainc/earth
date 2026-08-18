@@ -228,7 +228,6 @@ class Dashboard extends StatelessWidget {
           ),
           ProductionEventsPanel(state: state),
           InstitutionSolvencyPanel(state: state, busy: busy, action: action),
-          PersonalFinancePanel(state: state, busy: busy, action: action),
         ];
       case 'civic':
         return [
