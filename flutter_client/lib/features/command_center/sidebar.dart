@@ -26,6 +26,18 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    String cityName = 'City';
+    final rawMembership = state.json['membership'];
+    if (rawMembership is Map && rawMembership['city_id'] != null) {
+      final rawInstitutions = state.json['institutions'];
+      if (rawInstitutions is Map) {
+        final city = rawInstitutions['city'];
+        if (city is Map && city['name'] != null) {
+          cityName = city['name'].toString();
+        }
+      }
+    }
+
     final groups = [
       (
         'OVERVIEW',
@@ -39,15 +51,14 @@ class Sidebar extends StatelessWidget {
         [
           ('market', 'Market', Icons.swap_horiz),
           ('business', 'Business', Icons.storefront_outlined),
-          ('finance', 'Personal Finance', Icons.account_balance_wallet_outlined),
+          ('finance', 'Finance', Icons.account_balance_wallet_outlined),
         ]
       ),
       (
         'CIVIC & LAW',
         [
           ('civic', 'Civic', Icons.account_balance_outlined),
-          ('city', 'New Carthage', Icons.location_city_outlined),
-          ('governance', 'Governance', Icons.how_to_vote_outlined),
+          ('city', cityName, Icons.location_city_outlined),
           ('contracts', 'Contracts', Icons.handshake_outlined),
         ]
       ),
@@ -129,6 +140,8 @@ class Sidebar extends StatelessWidget {
                                 Expanded(
                                   child: Text(
                                     item.$2,
+                                    overflow: TextOverflow.ellipsis,
+                                    maxLines: 1,
                                     style: TextStyle(
                                       color: item.$1 == selectedSection
                                           ? inkColor

@@ -11,6 +11,7 @@ void main() {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
+      'membership': {'city_id': 'CITY-001'},
       'institutions': {
         'city': {'name': 'New Kyoto'}
       },
@@ -42,13 +43,54 @@ void main() {
 
     expect(find.text('OVERVIEW'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Command'), findsOneWidget);
+    expect(find.text('Activity'), findsOneWidget);
+    expect(find.text('Market'), findsOneWidget);
+    expect(find.text('Business'), findsOneWidget);
+    expect(find.text('Finance'), findsOneWidget);
+    expect(find.text('Civic'), findsOneWidget);
+    expect(find.text('New Kyoto'), findsOneWidget);
+    expect(find.text('Contracts'), findsOneWidget);
+    expect(find.text('Technology'), findsOneWidget);
+    expect(find.text('Life & Legacy'), findsOneWidget);
 
-    final marketButton = find.text('Market');
-    expect(marketButton, findsOneWidget);
-    await tester.tap(marketButton);
+    final financeButton = find.text('Finance');
+    expect(financeButton, findsOneWidget);
+    await tester.tap(financeButton);
     await tester.pumpAndSettle();
 
-    expect(navigatedTo, 'market');
+    expect(navigatedTo, 'finance');
+  });
+
+  testWidgets('Sidebar falls back to City when unaffiliated', (tester) async {
+    const state = EarthState({
+      'clock': {'day': 185, 'minute': 720},
+      'human': {'name': 'Amara Vance'},
+      'membership': {},
+      'institutions': {
+        'city': {'name': 'New Kyoto'}
+      },
+      'business': {},
+      'technology': {'research': {}},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 250,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'command',
+              onNavigate: (section) {},
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('City'), findsOneWidget);
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',
