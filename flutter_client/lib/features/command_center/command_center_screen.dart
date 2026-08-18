@@ -13,6 +13,8 @@ import '../map/planetary_map_dialog.dart';
 import '../dynasty/dynasty_tree_dialog.dart';
 import '../market/derivatives_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
+import '../onboarding/onboarding_guidance_bar.dart';
+import '../../core/onboarding_controller.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
@@ -263,7 +265,20 @@ class _CommandCenterState extends State<CommandCenter> {
 
   void _navigateToSection(BuildContext context, String section,
       {required bool closeDrawer}) {
-    if (closeDrawer) Navigator.of(context).pop();
+    if (section == 'command') {
+      OnboardingController.instance.completeStep('world_status');
+    } else if (section == 'net_worth' || section == 'finance') {
+      OnboardingController.instance.completeStep('personal_resources');
+    } else if (section == 'city' || section == 'civic') {
+      OnboardingController.instance.completeStep('join_community');
+    } else if (section == 'market' || section == 'derivatives') {
+      OnboardingController.instance.completeStep('first_market_decision');
+    } else if (section == 'business' || section == 'technology') {
+      OnboardingController.instance.completeStep('start_enterprise');
+    } else if (section == 'activity' || section == 'comm') {
+      OnboardingController.instance.completeStep('receive_consequence');
+    }
+
     if (section == 'map') {
       showPlanetaryMapDialog(context, api: api, state: state);
       return;
@@ -408,7 +423,15 @@ class _CommandCenterState extends State<CommandCenter> {
                                         ],
                                       ),
                                     ),
-                                  ConstrainedBox(
+                                   OnboardingGuidanceBar(
+                                     onNavigate: (section) => _navigateToSection(
+                                       context,
+                                       section,
+                                       closeDrawer: false,
+                                     ),
+                                   ),
+                                   const SizedBox(height: 8),
+                                   ConstrainedBox(
                                     constraints: BoxConstraints(
                                       minWidth: compact ? 320 : 860,
                                     ),

@@ -6,6 +6,8 @@ import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../finance/net_worth_analytics_dialog.dart';
+import '../onboarding/onboarding_welcome_dialog.dart';
+import '../../core/onboarding_controller.dart';
 import 'theme_customizer_dialog.dart';
 
 class YearAndDay {
@@ -504,6 +506,30 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                     padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                     child: Icon(
                       Icons.palette_outlined,
+                      size: 21,
+                      color: EarthColors.cyanAccent,
+                    ),
+                  ),
+                ),
+              ),
+
+              const SizedBox(width: 4),
+
+              // ORIENTATION & FIRST-SESSION GUIDE
+              Tooltip(
+                message: 'First-Session Orientation Guide',
+                child: InkWell(
+                  key: const Key('btn-orientation-guide'),
+                  onTap: () {
+                    EarthAudioEngine.instance.playClick();
+                    OnboardingController.instance.setDismissed(false);
+                    showOnboardingWelcomeDialog(context);
+                  },
+                  borderRadius: BorderRadius.circular(8),
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                    child: Icon(
+                      Icons.help_outline,
                       size: 21,
                       color: EarthColors.cyanAccent,
                     ),
