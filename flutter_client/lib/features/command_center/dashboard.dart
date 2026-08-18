@@ -20,14 +20,24 @@ import 'hero_card.dart';
 import 'opportunity_panel.dart';
 import 'decision_queue_panel.dart';
 import 'objectives_panel.dart';
+import '../map/planetary_map_dialog.dart';
+import '../dynasty/dynasty_tree_dialog.dart';
+import '../contracts/supply_contracts_dialog.dart';
+import '../market/derivatives_dialog.dart';
+import '../finance/net_worth_analytics_dialog.dart';
+import '../../core/api/earth_api.dart';
 import '../../core/models/decision_queue_item.dart';
 import '../../core/models/player_objective.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
       'market' => 'MARKET',
+      'derivatives' => 'FUTURES & CHARTS',
+      'net_worth' => 'NET WORTH ANALYTICS',
       'business' => 'BUSINESS',
       'civic' => 'CIVIC',
       'city' => 'CITY',
+      'map' => 'PLANETARY GRID',
+      'dynasty' => 'DYNASTY TREE',
       'technology' => 'TECHNOLOGY',
       'life' => 'LEGACY',
       'contracts' => 'CONTRACTS',
@@ -222,6 +232,41 @@ class Dashboard extends StatelessWidget {
           MyMarketOrdersPanel(state: state, busy: busy, action: action),
           MacroLiquidityPanel(state: state),
         ];
+      case 'derivatives':
+        return [
+          DerivativesDialog(
+            api: const EarthApi(),
+            state: state,
+            isPageMode: true,
+            onNavigate: onNavigate,
+          ),
+        ];
+      case 'net_worth':
+        return [
+          NetWorthAnalyticsDialog(
+            api: const EarthApi(),
+            isPageMode: true,
+            onNavigate: onNavigate,
+          ),
+        ];
+      case 'map':
+        return [
+          PlanetaryMapDialog(
+            api: const EarthApi(),
+            state: state,
+            isPageMode: true,
+            onNavigate: onNavigate,
+          ),
+        ];
+      case 'dynasty':
+        return [
+          DynastyTreeDialog(
+            api: const EarthApi(),
+            state: state,
+            isPageMode: true,
+            onNavigate: onNavigate,
+          ),
+        ];
       case 'business':
         return [
           BusinessPanel(
@@ -336,6 +381,13 @@ class Dashboard extends StatelessWidget {
         ];
       case 'contracts':
         return [
+          SupplyContractsDialog(
+            api: const EarthApi(),
+            state: state,
+            isPageMode: true,
+            onNavigate: onNavigate,
+          ),
+          const SizedBox(height: 16),
           ContractsPanel(
             panelKey: sectionKeys['contracts'],
             state: state,

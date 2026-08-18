@@ -25,12 +25,16 @@ class DynastyTreeDialog extends StatefulWidget {
   final EarthApi api;
   final EarthState? state;
   final String? initialMemberId;
+  final bool isPageMode;
+  final ValueChanged<String>? onNavigate;
 
   const DynastyTreeDialog({
     super.key,
     required this.api,
     this.state,
     this.initialMemberId,
+    this.isPageMode = false,
+    this.onNavigate,
   });
 
   @override
@@ -250,47 +254,55 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
     final legacyPoints = _dynasty['legacy_points'] ?? 0;
     final totalWealth = _parseNum(_dynasty['total_wealth_generated']);
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Container(
-        width: dialogWidth,
-        height: dialogHeight,
-        decoration: BoxDecoration(
-          color: canvasColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: EarthColors.goldMetallic.withAlpha(140)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(220),
-              blurRadius: 36,
-              spreadRadius: 8,
+    Widget content = Container(
+      width: widget.isPageMode ? double.infinity : dialogWidth,
+      height: widget.isPageMode ? 740 : dialogHeight,
+      decoration: BoxDecoration(
+        color: canvasColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: EarthColors.goldMetallic.withAlpha(140)),
+        boxShadow: widget.isPageMode
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(220),
+                  blurRadius: 36,
+                  spreadRadius: 8,
+                ),
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          children: [
+            _buildTopHeader(dynastyName, motto, legacyPoints, totalWealth),
+            if (_error != null) _buildAlertBanner(_error!, isError: true),
+            if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
+            Expanded(
+              child: _loading && _lineage.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: EarthColors.goldMetallic))
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildLineageTreeTab(),
+                        _buildPerksMatrixTab(),
+                        _buildHeirloomsVaultTab(),
+                      ],
+                    ),
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Column(
-            children: [
-              _buildTopHeader(dynastyName, motto, legacyPoints, totalWealth),
-              if (_error != null) _buildAlertBanner(_error!, isError: true),
-              if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
-              Expanded(
-                child: _loading && _lineage.isEmpty
-                    ? const Center(child: CircularProgressIndicator(color: EarthColors.goldMetallic))
-                    : TabBarView(
-                        controller: _tabController,
-                        children: [
-                          _buildLineageTreeTab(),
-                          _buildPerksMatrixTab(),
-                          _buildHeirloomsVaultTab(),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
       ),
+    );
+
+    if (widget.isPageMode) {
+      return content;
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: content,
     );
   }
 
@@ -362,12 +374,45 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                   const SizedBox(width: 8),
                   _headerStatPill('TOTAL WEALTH', '${totalWealth.toStringAsFixed(0)} CR', Icons.account_balance_wallet, EarthColors.cyanAccent),
                   const SizedBox(width: 8),
-                  IconButton(
-                    icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
+                  if (widget.isPageMode)
+                    InkWell(
+                      onTap: () {
+                        if (widget.onNavigate != null) {
+                          widget.onNavigate!('command');
+                        }
+                      },
+                      borderRadius: BorderRadius.circular(4),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                          color: EarthColors.goldMetallic.withValues(alpha: 0.15),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(color: EarthColors.goldMetallic.withValues(alpha: 0.5)),
+                        ),
+                        child: const Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.arrow_back, size: 11, color: EarthColors.goldMetallic),
+                            SizedBox(width: 4),
+                            Text(
+                              'RETURN TO COMMAND',
+                              style: TextStyle(
+                                color: EarthColors.goldMetallic,
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
                 ],
               ),
             ],

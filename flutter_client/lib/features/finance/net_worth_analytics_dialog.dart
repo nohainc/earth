@@ -13,8 +13,15 @@ void showNetWorthAnalyticsDialog(BuildContext context, {required EarthApi api}) 
 
 class NetWorthAnalyticsDialog extends StatefulWidget {
   final EarthApi api;
+  final bool isPageMode;
+  final ValueChanged<String>? onNavigate;
 
-  const NetWorthAnalyticsDialog({super.key, required this.api});
+  const NetWorthAnalyticsDialog({
+    super.key,
+    required this.api,
+    this.isPageMode = false,
+    this.onNavigate,
+  });
 
   @override
   State<NetWorthAnalyticsDialog> createState() => _NetWorthAnalyticsDialogState();
@@ -77,73 +84,81 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
-      child: Container(
-        width: 1000,
-        constraints: const BoxConstraints(maxHeight: 780),
-        decoration: BoxDecoration(
-          color: EarthColors.panelSurface,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: EarthThemeController.instance.primaryAccent.withAlpha(120), width: 1.5),
-          boxShadow: [
-            BoxShadow(
-              color: EarthThemeController.instance.primaryAccent.withAlpha(40),
-              blurRadius: 30,
-              spreadRadius: 2,
-            ),
-          ],
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            _buildTopHeader(),
-            Flexible(
-              child: _loading
-                  ? const Center(
-                      child: Padding(
-                        padding: EdgeInsets.all(48),
-                        child: CircularProgressIndicator(),
-                      ),
-                    )
-                  : _error != null
-                      ? Padding(
-                          padding: const EdgeInsets.all(32),
-                          child: Center(
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                const Icon(Icons.error_outline, color: Colors.redAccent, size: 32),
-                                const SizedBox(height: 12),
-                                Text(_error!, style: const TextStyle(color: Colors.redAccent)),
-                                const SizedBox(height: 16),
-                                FilledButton(
-                                  onPressed: _loadHistory,
-                                  child: const Text('RETRY'),
-                                ),
-                              ],
-                            ),
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          padding: const EdgeInsets.all(16),
+    Widget content = Container(
+      width: widget.isPageMode ? double.infinity : 1000,
+      constraints: BoxConstraints(maxHeight: widget.isPageMode ? 740 : 780),
+      decoration: BoxDecoration(
+        color: EarthColors.panelSurface,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: EarthThemeController.instance.primaryAccent.withAlpha(120), width: 1.5),
+        boxShadow: widget.isPageMode
+            ? null
+            : [
+                BoxShadow(
+                  color: EarthThemeController.instance.primaryAccent.withAlpha(40),
+                  blurRadius: 30,
+                  spreadRadius: 2,
+                ),
+              ],
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _buildTopHeader(),
+          Flexible(
+            child: _loading
+                ? const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(48),
+                      child: CircularProgressIndicator(),
+                    ),
+                  )
+                : _error != null
+                    ? Padding(
+                        padding: const EdgeInsets.all(32),
+                        child: Center(
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            mainAxisSize: MainAxisSize.min,
                             children: [
-                              _buildKpiSummaryRow(),
+                              const Icon(Icons.error_outline, color: Colors.redAccent, size: 32),
+                              const SizedBox(height: 12),
+                              Text(_error!, style: const TextStyle(color: Colors.redAccent)),
                               const SizedBox(height: 16),
-                              NetWorthChartWidget(snapshots: _snapshots, height: 280),
-                              const SizedBox(height: 16),
-                              _buildAssetAllocationSection(),
+                              FilledButton(
+                                onPressed: _loadHistory,
+                                child: const Text('RETRY'),
+                              ),
                             ],
                           ),
                         ),
-            ),
-          ],
-        ),
+                      )
+                    : SingleChildScrollView(
+                        padding: const EdgeInsets.all(16),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            _buildKpiSummaryRow(),
+                            const SizedBox(height: 16),
+                            NetWorthChartWidget(snapshots: _snapshots, height: 280),
+                            const SizedBox(height: 16),
+                            _buildAssetAllocationSection(),
+                          ],
+                        ),
+                      ),
+          ),
+        ],
       ),
+    );
+
+    if (widget.isPageMode) {
+      return content;
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+      child: content,
     );
   }
 
@@ -201,15 +216,49 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                 },
               ),
               const SizedBox(width: 6),
-              IconButton(
-                icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () {
-                  EarthAudioEngine.instance.playClick();
-                  Navigator.of(context).pop();
-                },
-              ),
+              if (widget.isPageMode)
+                InkWell(
+                  onTap: () {
+                    EarthAudioEngine.instance.playClick();
+                    if (widget.onNavigate != null) {
+                      widget.onNavigate!('command');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: EarthThemeController.instance.primaryAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: EarthThemeController.instance.primaryAccent.withValues(alpha: 0.5)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_back, size: 11, color: EarthThemeController.instance.primaryAccent),
+                        const SizedBox(width: 4),
+                        Text(
+                          'RETURN TO COMMAND',
+                          style: TextStyle(
+                            color: EarthThemeController.instance.primaryAccent,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    Navigator.of(context).pop();
+                  },
+                ),
             ],
           ),
         ],

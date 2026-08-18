@@ -16,6 +16,7 @@ import '../finance/net_worth_analytics_dialog.dart';
 import '../onboarding/onboarding_guidance_bar.dart';
 import 'daily_briefing_dialog.dart';
 import '../../core/onboarding_controller.dart';
+import '../../core/navigation_deep_link.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
@@ -85,6 +86,15 @@ class _CommandCenterState extends State<CommandCenter> {
   @override
   void initState() {
     super.initState();
+    final initialSec = NavigationDeepLink.getInitialSection();
+    if (initialSec != null && initialSec.isNotEmpty) {
+      selectedSection = initialSec;
+    }
+    NavigationDeepLink.listen((sec) {
+      if (mounted && sec.isNotEmpty && sec != selectedSection) {
+        _navigateToSection(context, sec, closeDrawer: false, updateUrl: false);
+      }
+    });
     _run(api.world);
     _loadProductionCatalog();
     _refreshEvents();
@@ -337,7 +347,11 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   void _navigateToSection(BuildContext context, String section,
-      {required bool closeDrawer}) {
+      {required bool closeDrawer, bool updateUrl = true}) {
+    if (closeDrawer && Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
+    }
+
     if (section == 'command') {
       OnboardingController.instance.completeStep('world_status');
     } else if (section == 'net_worth' || section == 'finance') {
@@ -352,22 +366,6 @@ class _CommandCenterState extends State<CommandCenter> {
       OnboardingController.instance.completeStep('receive_consequence');
     }
 
-    if (section == 'map') {
-      showPlanetaryMapDialog(context, api: api, state: state);
-      return;
-    }
-    if (section == 'dynasty') {
-      showDynastyTreeDialog(context, api: api, state: state);
-      return;
-    }
-    if (section == 'derivatives') {
-      showDerivativesDialog(context, api: api, state: state);
-      return;
-    }
-    if (section == 'net_worth') {
-      showNetWorthAnalyticsDialog(context, api: api);
-      return;
-    }
     if (section == 'briefing') {
       showDailyBriefingDialog(
         context,
@@ -376,7 +374,13 @@ class _CommandCenterState extends State<CommandCenter> {
       );
       return;
     }
-    if (mounted) setState(() => selectedSection = section);
+
+    if (updateUrl) {
+      NavigationDeepLink.updateSection(section);
+    }
+    if (mounted) {
+      setState(() => selectedSection = section);
+    }
   }
 
   @override
@@ -456,8 +460,8 @@ class _CommandCenterState extends State<CommandCenter> {
                             showSecurityDialog(context, api, widget.onLogout),
                         onCommLink: () => showCommLinkDialog(context,
                             api: api, state: current),
-                        onMapTap: () => showPlanetaryMapDialog(context,
-                            api: api, state: current),
+                        onMapTap: () => _navigateToSection(context, 'map',
+                            closeDrawer: false),
                       ),
                       Expanded(
                         child: Row(

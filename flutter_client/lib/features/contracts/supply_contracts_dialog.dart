@@ -24,12 +24,16 @@ class SupplyContractsDialog extends StatefulWidget {
   final EarthApi api;
   final EarthState? state;
   final String? initialContractId;
+  final bool isPageMode;
+  final ValueChanged<String>? onNavigate;
 
   const SupplyContractsDialog({
     super.key,
     required this.api,
     this.state,
     this.initialContractId,
+    this.isPageMode = false,
+    this.onNavigate,
   });
 
   @override
@@ -221,40 +225,48 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     final proposedContracts = _contracts.where((c) => c['status'] == 'proposed').toList();
     final historyContracts = _contracts.where((c) => c['status'] == 'completed' || c['status'] == 'cancelled').toList();
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Container(
-        width: 1040,
-        height: 720,
-        decoration: BoxDecoration(
-          color: canvasColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: EarthColors.borderSubtle),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(200),
-              blurRadius: 36,
-              spreadRadius: 8,
+    Widget content = Container(
+      width: widget.isPageMode ? double.infinity : 1040,
+      height: widget.isPageMode ? 740 : 720,
+      decoration: BoxDecoration(
+        color: canvasColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: EarthColors.borderSubtle),
+        boxShadow: widget.isPageMode
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(200),
+                  blurRadius: 36,
+                  spreadRadius: 8,
+                ),
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          children: [
+            _buildTopBar(activeContracts.length, proposedContracts.length),
+            if (_error != null) _buildAlertBanner(_error!, isError: true),
+            if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
+            Expanded(
+              child: _loading && _contracts.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
+                  : _buildTabBody(activeContracts, proposedContracts, historyContracts),
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Column(
-            children: [
-              _buildTopBar(activeContracts.length, proposedContracts.length),
-              if (_error != null) _buildAlertBanner(_error!, isError: true),
-              if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
-              Expanded(
-                child: _loading && _contracts.isEmpty
-                    ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
-                    : _buildTabBody(activeContracts, proposedContracts, historyContracts),
-              ),
-            ],
-          ),
-        ),
       ),
+    );
+
+    if (widget.isPageMode) {
+      return content;
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      child: content,
     );
   }
 
@@ -308,10 +320,43 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
             ),
           ),
           const SizedBox(width: 12),
-          IconButton(
-            icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 20),
-            onPressed: () => Navigator.of(context).pop(),
-          ),
+          if (widget.isPageMode)
+            InkWell(
+              onTap: () {
+                if (widget.onNavigate != null) {
+                  widget.onNavigate!('command');
+                }
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: EarthColors.goldMetallic.withValues(alpha: 0.15),
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: EarthColors.goldMetallic.withValues(alpha: 0.5)),
+                ),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.arrow_back, size: 11, color: EarthColors.goldMetallic),
+                    SizedBox(width: 4),
+                    Text(
+                      'RETURN TO COMMAND',
+                      style: TextStyle(
+                        color: EarthColors.goldMetallic,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            )
+          else
+            IconButton(
+              icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 20),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
         ],
       ),
     );

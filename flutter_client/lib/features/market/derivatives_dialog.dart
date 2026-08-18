@@ -28,12 +28,16 @@ class DerivativesDialog extends StatefulWidget {
   final EarthApi api;
   final EarthState? state;
   final String initialCommodity;
+  final bool isPageMode;
+  final ValueChanged<String>? onNavigate;
 
   const DerivativesDialog({
     super.key,
     required this.api,
     this.state,
     this.initialCommodity = 'energy',
+    this.isPageMode = false,
+    this.onNavigate,
   });
 
   @override
@@ -224,78 +228,98 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
     final dialogWidth = math.min(1060.0, screenSize.width - 24);
     final dialogHeight = math.min(760.0, screenSize.height - 24);
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Container(
-        width: dialogWidth,
-        height: dialogHeight,
-        decoration: BoxDecoration(
-          color: canvasColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: EarthColors.cyanAccent.withAlpha(140)),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(220),
-              blurRadius: 36,
-              spreadRadius: 8,
+    Widget content = Container(
+      width: widget.isPageMode ? double.infinity : dialogWidth,
+      height: widget.isPageMode ? 740 : dialogHeight,
+      decoration: BoxDecoration(
+        color: canvasColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: EarthColors.cyanAccent.withAlpha(140)),
+        boxShadow: widget.isPageMode
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(220),
+                  blurRadius: 36,
+                  spreadRadius: 8,
+                ),
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          children: [
+            _buildTopHeader(),
+            if (_error != null) _buildAlertBanner(_error!, isError: true),
+            if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
+            Expanded(
+              child: _loading && _ohlc.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
+                  : SingleChildScrollView(
+                      padding: const EdgeInsets.all(16),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // 1. Candlestick Chart
+                          CandlestickChartWidget(
+                            ohlc: _ohlc,
+                            ma7: _ma7,
+                            ma25: _ma25,
+                            commodity: _selectedCommodity,
+                            height: 250,
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 2. Orderbook & Issue Futures Form Grid
+                          LayoutBuilder(
+                            builder: (context, constraints) {
+                              final isNarrow = constraints.maxWidth < 650;
+                              if (isNarrow) {
+                                return Column(
+                                  children: [
+                                    _buildOrderbookPanel(),
+                                    const SizedBox(height: 16),
+                                    _buildIssueFuturesPanel(),
+                                  ],
+                                );
+                              }
+                              return Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Expanded(
+                                    flex: 6,
+                                    child: _buildOrderbookPanel(),
+                                  ),
+                                  const SizedBox(width: 16),
+                                  Expanded(
+                                    flex: 4,
+                                    child: _buildIssueFuturesPanel(),
+                                  ),
+                                ],
+                              );
+                            },
+                          ),
+                          const SizedBox(height: 16),
+
+                          // 3. User's Active Futures Portfolio
+                          _buildUserPositionsPanel(),
+                        ],
+                      ),
+                    ),
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Column(
-            children: [
-              _buildTopHeader(),
-              if (_error != null) _buildAlertBanner(_error!, isError: true),
-              if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
-              Expanded(
-                child: _loading && _ohlc.isEmpty
-                    ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
-                    : SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            // 1. Candlestick Chart
-                            CandlestickChartWidget(
-                              ohlc: _ohlc,
-                              ma7: _ma7,
-                              ma25: _ma25,
-                              commodity: _selectedCommodity,
-                              height: 250,
-                            ),
-                            const SizedBox(height: 16),
-
-                            // 2. Orderbook & Issue Futures Form Grid
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                // Left: Open Futures Orderbook
-                                Expanded(
-                                  flex: 6,
-                                  child: _buildOrderbookPanel(),
-                                ),
-                                const SizedBox(width: 16),
-                                // Right: Issue Futures Form
-                                Expanded(
-                                  flex: 4,
-                                  child: _buildIssueFuturesPanel(),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 16),
-
-                            // 3. User's Active Futures Portfolio
-                            _buildUserPositionsPanel(),
-                          ],
-                        ),
-                      ),
-              ),
-            ],
-          ),
-        ),
       ),
+    );
+
+    if (widget.isPageMode) {
+      return content;
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: content,
     );
   }
 
@@ -370,15 +394,49 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
                 );
               }),
               const SizedBox(width: 8),
-              IconButton(
-                icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () {
-                  EarthAudioEngine.instance.playClick();
-                  Navigator.of(context).pop();
-                },
-              ),
+              if (widget.isPageMode)
+                InkWell(
+                  onTap: () {
+                    EarthAudioEngine.instance.playClick();
+                    if (widget.onNavigate != null) {
+                      widget.onNavigate!('command');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: EarthColors.cyanAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.5)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_back, size: 11, color: EarthColors.cyanAccent),
+                        SizedBox(width: 4),
+                        Text(
+                          'RETURN TO COMMAND',
+                          style: TextStyle(
+                            color: EarthColors.cyanAccent,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    Navigator.of(context).pop();
+                  },
+                ),
             ],
           ),
         ],
@@ -430,10 +488,14 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'OPEN FORWARD CONTRACTS (${_selectedCommodity.toUpperCase()})',
-                style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+              Flexible(
+                child: Text(
+                  'OPEN FORWARD CONTRACTS (${_selectedCommodity.toUpperCase()})',
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${_orderbook.length} Available',
                 style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),
@@ -610,10 +672,14 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
-                'MY DERIVATIVES & FUTURES PORTFOLIO',
-                style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+              Flexible(
+                child: Text(
+                  'MY DERIVATIVES & FUTURES PORTFOLIO',
+                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                  overflow: TextOverflow.ellipsis,
+                ),
               ),
+              const SizedBox(width: 8),
               Text(
                 '${_userPositions.length} Positions Active',
                 style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),

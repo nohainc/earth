@@ -28,6 +28,8 @@ class PlanetaryMapDialog extends StatefulWidget {
   final EarthState? state;
   final String? initialRegionId;
   final String? initialPlotId;
+  final bool isPageMode;
+  final ValueChanged<String>? onNavigate;
 
   const PlanetaryMapDialog({
     super.key,
@@ -35,6 +37,8 @@ class PlanetaryMapDialog extends StatefulWidget {
     this.state,
     this.initialRegionId,
     this.initialPlotId,
+    this.isPageMode = false,
+    this.onNavigate,
   });
 
   @override
@@ -225,66 +229,93 @@ class _PlanetaryMapDialogState extends State<PlanetaryMapDialog>
 
     final currentRegionPlots = _plots.where((p) => p['region_id'] == _selectedRegionId).toList();
 
-    return Dialog(
-      backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-      child: Container(
-        width: dialogWidth,
-        height: dialogHeight,
-        decoration: BoxDecoration(
-          color: canvasColor,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: EarthColors.borderSubtle),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withAlpha(220),
-              blurRadius: 36,
-              spreadRadius: 8,
+    Widget content = Container(
+      width: widget.isPageMode ? double.infinity : dialogWidth,
+      height: widget.isPageMode ? 740 : dialogHeight,
+      decoration: BoxDecoration(
+        color: canvasColor,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: EarthColors.borderSubtle),
+        boxShadow: widget.isPageMode
+            ? null
+            : [
+                BoxShadow(
+                  color: Colors.black.withAlpha(220),
+                  blurRadius: 36,
+                  spreadRadius: 8,
+                ),
+              ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(14),
+        child: Column(
+          children: [
+            _buildTopHeader(),
+            if (_error != null) _buildAlertBanner(_error!, isError: true),
+            if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
+            Expanded(
+              child: _loading && _regions.isEmpty
+                  ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
+                  : LayoutBuilder(
+                      builder: (context, constraints) {
+                        final isNarrow = constraints.maxWidth < 650;
+                        if (isNarrow) {
+                          return SingleChildScrollView(
+                            child: Column(
+                              children: [
+                                SizedBox(
+                                  height: 380,
+                                  child: _buildTacticalMapCanvas(selectedRegion, currentRegionPlots),
+                                ),
+                                if (_selectedPlot != null)
+                                  _buildPlotInspector(_selectedPlot!, selectedRegion),
+                              ],
+                            ),
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(
+                              flex: 6,
+                              child: _buildTacticalMapCanvas(selectedRegion, currentRegionPlots),
+                            ),
+                            Container(
+                              width: math.min(360.0, constraints.maxWidth * 0.42),
+                              decoration: const BoxDecoration(
+                                color: EarthColors.cardSurface,
+                                border: Border(left: BorderSide(color: EarthColors.borderSubtle)),
+                              ),
+                              child: _selectedPlot != null
+                                  ? _buildPlotInspector(_selectedPlot!, selectedRegion)
+                                  : const Center(
+                                      child: Padding(
+                                        padding: EdgeInsets.all(16),
+                                        child: Text(
+                                          'Select a territory node on the tactical map to inspect concession rights.',
+                                          style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                                          textAlign: TextAlign.center,
+                                        ),
+                                      ),
+                                    ),
+                            ),
+                          ],
+                        );
+                      },
+                    ),
             ),
           ],
         ),
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(14),
-          child: Column(
-            children: [
-              _buildTopHeader(),
-              if (_error != null) _buildAlertBanner(_error!, isError: true),
-              if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
-              Expanded(
-                child: _loading && _regions.isEmpty
-                    ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
-                    : Row(
-                        children: [
-                          Expanded(
-                            flex: 6,
-                            child: _buildTacticalMapCanvas(selectedRegion, currentRegionPlots),
-                          ),
-                          Container(
-                            width: math.min(360.0, dialogWidth * 0.42),
-                            decoration: const BoxDecoration(
-                              color: EarthColors.cardSurface,
-                              border: Border(left: BorderSide(color: EarthColors.borderSubtle)),
-                            ),
-                            child: _selectedPlot != null
-                                ? _buildPlotInspector(_selectedPlot!, selectedRegion)
-                                : const Center(
-                                    child: Padding(
-                                      padding: EdgeInsets.all(16),
-                                      child: Text(
-                                        'Select a territory node on the tactical map to inspect concession rights.',
-                                        style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
-                                        textAlign: TextAlign.center,
-                                      ),
-                                    ),
-                                  ),
-                          ),
-                        ],
-                      ),
-              ),
-            ],
-          ),
-        ),
       ),
+    );
+
+    if (widget.isPageMode) {
+      return content;
+    }
+
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      child: content,
     );
   }
 
@@ -316,12 +347,45 @@ class _PlanetaryMapDialogState extends State<PlanetaryMapDialog>
                   ),
                 ],
               ),
-              IconButton(
-                icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
-                padding: EdgeInsets.zero,
-                constraints: const BoxConstraints(),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
+              if (widget.isPageMode)
+                InkWell(
+                  onTap: () {
+                    if (widget.onNavigate != null) {
+                      widget.onNavigate!('command');
+                    }
+                  },
+                  borderRadius: BorderRadius.circular(4),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: EarthColors.cyanAccent.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.5)),
+                    ),
+                    child: const Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(Icons.arrow_back, size: 11, color: EarthColors.cyanAccent),
+                        SizedBox(width: 4),
+                        Text(
+                          'RETURN TO COMMAND',
+                          style: TextStyle(
+                            color: EarthColors.cyanAccent,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  onPressed: () => Navigator.of(context).pop(),
+                ),
             ],
           ),
           const SizedBox(height: 8),
