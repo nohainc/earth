@@ -54,7 +54,7 @@ class CommodityMeta {
   static const all = [
     CommodityMeta(
       key: 'food',
-      name: 'FOOD & NUTRITION',
+      name: 'FOOD',
       symbol: 'FOOD',
       description:
           'Vertical farm harvest & bio-nutrients for human metabolic survival.',
@@ -1206,6 +1206,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                           Text(owned,
                                               style: const TextStyle(
                                                   fontSize: 10,
+                                                  fontWeight: FontWeight.w700,
                                                   color: mutedColor)),
                                           const Spacer(),
                                           _MiniTrendBadge(
@@ -1264,7 +1265,10 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 _commodityName(meta),
                 const SizedBox(height: 3),
                 Text(owned,
-                    style: const TextStyle(fontSize: 10, color: mutedColor)),
+                    style: const TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: mutedColor)),
               ],
             ),
           ),
