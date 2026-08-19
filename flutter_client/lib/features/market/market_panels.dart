@@ -807,7 +807,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                   child: _orderValue(
                                       'FEE',
                                       isBuy
-                                          ? '${fee.toStringAsFixed(2)} C'
+                                          ? fee.toStringAsFixed(2)
                                           : '—'),
                                 ),
                                 const SizedBox(width: 8),
@@ -894,7 +894,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontSize: 12,
+                  fontSize: 16,
                   fontWeight: FontWeight.w700,
                   letterSpacing: .7,
                   color: mutedColor)),
@@ -917,7 +917,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           const SizedBox(height: 3),
           Text(value,
               style: const TextStyle(
-                  fontSize: 16, fontWeight: FontWeight.w700, color: inkColor),
+                  fontSize: 14, fontWeight: FontWeight.w700, color: inkColor),
               overflow: TextOverflow.ellipsis),
         ],
       );
