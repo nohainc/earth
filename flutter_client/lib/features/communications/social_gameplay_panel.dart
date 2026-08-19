@@ -22,6 +22,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   final title = TextEditingController();
   final body = TextEditingController();
   final search = TextEditingController();
+  final partnerFocus = FocusNode();
   final credits = TextEditingController(text: '0');
   final deadline = TextEditingController(text: '7');
   final target = TextEditingController(text: '100');
@@ -36,6 +37,9 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   @override
   void initState() {
     super.initState();
+    partnerFocus.addListener(() {
+      if (mounted) setState(() {});
+    });
     _loadHistory();
   }
 
@@ -44,6 +48,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     title.dispose();
     body.dispose();
     search.dispose();
+    partnerFocus.dispose();
     credits.dispose();
     deadline.dispose();
     target.dispose();
@@ -395,12 +400,13 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         const SizedBox(height: 8),
         TextField(
             controller: search,
+            focusNode: partnerFocus,
             onChanged: _loadDirectory,
             decoration: const InputDecoration(
               labelText: 'Search citizens or dynasties',
               prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),
             )),
-        if (search.text.trim().isNotEmpty) ...[
+        if (partnerFocus.hasFocus && search.text.trim().isNotEmpty) ...[
           const SizedBox(height: 10),
           SizedBox(
             height: 74,
@@ -419,15 +425,22 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                             selected: selected,
                             label: Text(
                                 '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                            onSelected: (_) => setState(() {
-                              targetId = p['id']?.toString();
-                              selectedPerson = p;
-                            }),
+                            onSelected: (_) {
+                              setState(() {
+                                targetId = p['id']?.toString();
+                                selectedPerson = p;
+                                search.text = (p['display_name'] ??
+                                        p['dynasty_name'] ??
+                                        p['id'])
+                                    .toString();
+                              });
+                              partnerFocus.unfocus();
+                            },
                           ));
                     }).toList()),
           ),
         ],
-        const SizedBox(height: 10),
+        const SizedBox(height: 16),
         LayoutBuilder(builder: (context, constraints) {
           final controlWidth = (constraints.maxWidth - 24) / 4;
           final controls = [
@@ -478,12 +491,13 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
           ];
           return Wrap(spacing: 8, runSpacing: 8, children: controls);
         }),
-        const SizedBox(height: 8),
+        const SizedBox(height: 16),
         TextField(
             controller: title,
             decoration: const InputDecoration(
               labelText: 'What are you proposing?',
             )),
+        const SizedBox(height: 16),
         TextField(
             controller: body,
             minLines: 1,
@@ -494,7 +508,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         Align(
             alignment: Alignment.centerRight,
             child: Padding(
-                padding: const EdgeInsets.only(top: 10),
+                padding: const EdgeInsets.only(top: 14),
                 child: FilledButton.icon(
                     onPressed: loading ? null : _create,
                     icon: const Icon(Icons.send, size: 16),
