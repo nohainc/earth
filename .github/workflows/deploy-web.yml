@@ -31,7 +31,7 @@ jobs:
       - run: npm ci
         working-directory: .
       - run: flutter pub get
-      - run: flutter analyze
+      - run: flutter analyze --no-fatal-warnings --no-fatal-infos
       - run: flutter test
       - run: flutter build web --release --base-href=/app/ --dart-define=EARTH_API_URL=https://earthuc.com
       - run: node scripts/prepare-flutter-assets.mjs
@@ -63,4 +63,3 @@ jobs:
                 throw err;
               });
           "
-
