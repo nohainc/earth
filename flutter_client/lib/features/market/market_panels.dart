@@ -347,6 +347,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   final TextEditingController _qtyController =
       TextEditingController(text: '10');
   final TextEditingController _priceController = TextEditingController();
+  final FocusNode _qtyFocusNode = FocusNode();
+  final FocusNode _priceFocusNode = FocusNode();
 
   Color get _groupSurface => EarthThemeController.instance.cardSurface;
 
@@ -368,6 +370,18 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         _sellPrice = _priceController.text;
       }
     });
+    _qtyFocusNode.addListener(_refreshOrderTotalsOnFocusLoss);
+    _priceFocusNode.addListener(_refreshOrderTotalsOnFocusLoss);
+  }
+
+  void _refreshOrderTotalsOnFocusLoss() {
+    if (!_qtyFocusNode.hasFocus && !_priceFocusNode.hasFocus && mounted) {
+      setState(() {});
+    }
+  }
+
+  void _refreshOrderTotals() {
+    if (mounted) setState(() {});
   }
 
   void _initDefaultCommodity() {
@@ -420,6 +434,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   void dispose() {
     _qtyController.dispose();
     _priceController.dispose();
+    _qtyFocusNode.dispose();
+    _priceFocusNode.dispose();
     super.dispose();
   }
 
@@ -544,8 +560,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         ],
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        'Next batch clearing in $countdownStr · Uniform Clearing Price (P*) · Zero Slippage',
+                      const Text(
+                        'Uniform clearing price (P*) · Zero slippage',
                         style:
                             const TextStyle(fontSize: 9.5, color: mutedColor),
                         overflow: TextOverflow.ellipsis,
@@ -669,168 +685,163 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 ],
               );
 
-              final tradeTerminalSection = Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Buy / Sell Selector
-                  Row(
+              final tradeTerminalSection = Container(
+                  decoration: BoxDecoration(
+                    color: _groupSurface,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: EarthColors.borderSubtle),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _onSideChanged('buy'),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: isBuy
-                                  ? cyanAccentColor.withValues(alpha: .2)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: isBuy ? cyanAccentColor : Colors.white12,
-                              ),
-                            ),
-                            child: Text(
-                              'BUY ${meta.symbol}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.1,
-                                color: isBuy ? cyanAccentColor : mutedColor,
-                              ),
-                            ),
-                          ),
+                      DefaultTabController(
+                        length: 2,
+                        initialIndex: isBuy ? 0 : 1,
+                        child: TabBar(
+                          onTap: (index) =>
+                              _onSideChanged(index == 0 ? 'buy' : 'sell'),
+                          indicatorColor:
+                              isBuy ? cyanAccentColor : Colors.orangeAccent,
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          indicatorWeight: 2.5,
+                          dividerColor: EarthColors.borderSubtle,
+                          labelColor: inkColor,
+                          unselectedLabelColor: mutedColor,
+                          labelStyle: const TextStyle(
+                              fontSize: 11, fontWeight: FontWeight.w800),
+                          tabs: [
+                            Tab(text: 'BUY ${meta.symbol}'),
+                            Tab(text: 'SELL ${meta.symbol}'),
+                          ],
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: InkWell(
-                          onTap: () => _onSideChanged('sell'),
-                          borderRadius: BorderRadius.circular(8),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(vertical: 8),
-                            alignment: Alignment.center,
-                            decoration: BoxDecoration(
-                              color: !isBuy
-                                  ? Colors.orangeAccent.withValues(alpha: .2)
-                                  : Colors.transparent,
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(
-                                color: !isBuy
-                                    ? Colors.orangeAccent
-                                    : Colors.white12,
+                      Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // All order inputs and calculated values stay in one scan line.
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.center,
+                              children: [
+                                Expanded(
+                                  flex: 14,
+                                  child: TextField(
+                                    controller: _qtyController,
+                                    focusNode: _qtyFocusNode,
+                                    keyboardType: TextInputType.number,
+                                    onEditingComplete: () =>
+                                        FocusScope.of(context).unfocus(),
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600),
+                                    decoration: InputDecoration(
+                                      labelText: 'QUANTITY',
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 10),
+                                      suffixIcon: TextButton(
+                                        onPressed: () {
+                                          final maxUnits = isBuy
+                                              ? maxAffordableUnits
+                                              : maxSellableUnits;
+                                          _qtyController.text = maxUnits
+                                              .clamp(1, 99999)
+                                              .toString();
+                                          _refreshOrderTotals();
+                                        },
+                                        child: const Text('MAX'),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  flex: 15,
+                                  child: TextField(
+                                    controller: _priceController,
+                                    focusNode: _priceFocusNode,
+                                    keyboardType:
+                                        const TextInputType.numberWithOptions(
+                                            decimal: true),
+                                    onEditingComplete: () =>
+                                        FocusScope.of(context).unfocus(),
+                                    style: const TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.w600),
+                                    decoration: InputDecoration(
+                                      labelText: 'LIMIT PRICE',
+                                      isDense: true,
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                              horizontal: 10, vertical: 10),
+                                      suffixIcon: TextButton(
+                                        onPressed: () {
+                                          _priceController.text =
+                                              currentPrice.toStringAsFixed(2);
+                                          _refreshOrderTotals();
+                                        },
+                                        child: const Text('SPOT'),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                _orderValue(
+                                    'FEE',
+                                    isBuy
+                                        ? '${fee.toStringAsFixed(2)} C'
+                                        : '—'),
+                                const SizedBox(width: 16),
+                                _orderValue(isBuy ? 'TOTAL' : 'PROCEEDS',
+                                    '${totalEscrow.toStringAsFixed(2)} C'),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+
+                            // Submit Action Button
+                            SizedBox(
+                              width: double.infinity,
+                              child: FilledButton(
+                                onPressed: widget.busy ||
+                                        qty <= 0 ||
+                                        limitPrice <= 0
+                                    ? null
+                                    : () async {
+                                        await widget.action(
+                                            () => const EarthApi().submitOrder(
+                                                  _selectedCommodity,
+                                                  limitPrice,
+                                                  side: _orderSide,
+                                                  quantity: qty,
+                                                ));
+                                      },
+                                style: FilledButton.styleFrom(
+                                  backgroundColor:
+                                      sideColor.withValues(alpha: .85),
+                                  foregroundColor: Colors.black,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 12),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(8)),
+                                ),
+                                child: Text(
+                                  'PLACE ${_orderSide.toUpperCase()} ORDER',
+                                  style: const TextStyle(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w800,
+                                    letterSpacing: 1.1,
+                                  ),
+                                ),
                               ),
                             ),
-                            child: Text(
-                              'SELL ${meta.symbol}',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 1.1,
-                                color:
-                                    !isBuy ? Colors.orangeAccent : mutedColor,
-                              ),
-                            ),
-                          ),
+                          ],
                         ),
                       ),
                     ],
-                  ),
-                  const SizedBox(height: 12),
-
-                  // All order inputs and calculated values stay in one scan line.
-                  Container(
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: _groupSurface,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: EarthColors.borderSubtle),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.center,
-                      children: [
-                        Expanded(
-                          flex: 14,
-                          child: TextField(
-                            controller: _qtyController,
-                            keyboardType: TextInputType.number,
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            decoration: InputDecoration(
-                              labelText: 'QUANTITY',
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                              suffixIcon: TextButton(
-                                onPressed: () {
-                                  final maxUnits = isBuy ? maxAffordableUnits : maxSellableUnits;
-                                  _qtyController.text = maxUnits.clamp(1, 99999).toString();
-                                },
-                                child: const Text('MAX'),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          flex: 15,
-                          child: TextField(
-                            controller: _priceController,
-                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
-                            decoration: InputDecoration(
-                              labelText: 'LIMIT PRICE',
-                              isDense: true,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
-                              suffixIcon: TextButton(
-                                onPressed: () => _priceController.text = currentPrice.toStringAsFixed(2),
-                                child: const Text('SPOT'),
-                              ),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 16),
-                        _orderValue('FEE', isBuy ? '${fee.toStringAsFixed(2)} C' : '—'),
-                        const SizedBox(width: 16),
-                        _orderValue(isBuy ? 'TOTAL' : 'PROCEEDS', '${totalEscrow.toStringAsFixed(2)} C', emphasized: true),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Submit Action Button
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton(
-                      onPressed: widget.busy || qty <= 0 || limitPrice <= 0
-                          ? null
-                          : () async {
-                              await widget
-                                  .action(() => const EarthApi().submitOrder(
-                                        _selectedCommodity,
-                                        limitPrice,
-                                        side: _orderSide,
-                                        quantity: qty,
-                                      ));
-                            },
-                      style: FilledButton.styleFrom(
-                        backgroundColor: sideColor.withValues(alpha: .85),
-                        foregroundColor: Colors.black,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8)),
-                      ),
-                      child: Text(
-                        'PLACE ${_orderSide.toUpperCase()} ORDER',
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.1,
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              );
+                  ));
 
               if (isWide) {
                 return Row(
@@ -870,14 +881,11 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           const SizedBox(height: 2),
           Text(value,
               style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  color: inkColor)),
+                  fontSize: 10, fontWeight: FontWeight.w800, color: inkColor)),
         ],
       );
 
-  Widget _orderValue(String label, String value, {bool emphasized = false}) =>
-      Column(
+  Widget _orderValue(String label, String value) => Column(
         crossAxisAlignment: CrossAxisAlignment.end,
         children: [
           Text(label,
@@ -888,10 +896,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   color: mutedColor)),
           const SizedBox(height: 3),
           Text(value,
-              style: TextStyle(
-                  fontSize: emphasized ? 12 : 11,
-                  fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
-                  color: emphasized ? inkColor : mutedColor)),
+              style: const TextStyle(
+                  fontSize: 13, fontWeight: FontWeight.w600, color: inkColor)),
         ],
       );
 
