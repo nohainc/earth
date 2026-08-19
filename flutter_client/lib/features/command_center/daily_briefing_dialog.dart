@@ -185,11 +185,42 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
                 ],
               ),
             ),
+            Container(
+              width: 1,
+              height: 42,
+              margin: const EdgeInsets.symmetric(horizontal: 14),
+              color: EarthColors.borderSubtle,
+            ),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text('NET CHANGE',
+                      style: TextStyle(
+                          color: mutedColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 1.1)),
+                  const SizedBox(height: 3),
+                  Text('${isPos ? '+' : ''}${delta.toStringAsFixed(2)} CR',
+                      style: TextStyle(
+                          color: isPos
+                              ? const Color(0xFF00E676)
+                              : const Color(0xFFFF5252),
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -.4)),
+                  Text(
+                      '${isPos ? '+' : ''}${r.netWealthDelta.deltaPct.toStringAsFixed(2)}% since previous day close',
+                      style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                ],
+              ),
+            ),
           ],
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 14),
         const Text(
-          'EXECUTIVE POSITION SINCE THE PREVIOUS GAME DAY',
+          'PREVIOUS GAME-DAY',
           textAlign: TextAlign.left,
           style: TextStyle(
             color: mutedColor,
@@ -198,61 +229,51 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
             letterSpacing: .7,
           ),
         ),
-        const SizedBox(height: 16),
-        Wrap(
-          spacing: 10,
-          runSpacing: 10,
-          children: [
-            _summaryMetric(
-              'NET CHANGE',
-              '${isPos ? '+' : ''}${delta.toStringAsFixed(2)} CR',
-              '${isPos ? '+' : ''}${r.netWealthDelta.deltaPct.toStringAsFixed(2)}%',
-              isPos ? const Color(0xFF00E676) : const Color(0xFFFF5252),
-            ),
-            _summaryMetric(
-              'ALERTS',
-              '${r.unreadAlerts.unreadNotifications}',
-              'unread notifications',
-              cyanAccentColor,
-            ),
-            _summaryMetric(
-              'MESSAGES',
-              '${r.unreadAlerts.unreadComms}',
-              'unread messages',
-              violetColor,
-            ),
-          ],
-        ),
+        const SizedBox(height: 14),
+        _cashflowResult(r.cashflow),
+        const SizedBox(height: 14),
+        _buildCashflowContent(r),
       ],
     );
   }
 
-  Widget _summaryMetric(
-      String label, String value, String detail, Color accent) {
+  Widget _cashflowResult(FinancialCashflowDelta cf) {
+    final isPositive = cf.netProfit >= 0;
+    final color = isPositive
+        ? EarthThemeController.instance.primaryAccent
+        : const Color(0xFFFF5252);
     return Container(
-      width: 170,
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
         color: EarthColors.cardSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Row(
         children: [
-          Text(label,
-              style: const TextStyle(
-                  color: mutedColor,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .8)),
-          const SizedBox(height: 5),
-          Text(value,
+          Icon(isPositive ? Icons.trending_up : Icons.trending_down,
+              color: color, size: 18),
+          const SizedBox(width: 9),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text('NET CASHFLOW',
+                    style: TextStyle(
+                        color: mutedColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .8)),
+                const SizedBox(height: 3),
+                Text(isPositive ? 'OPERATING SURPLUS' : 'OPERATING DEFICIT',
+                    style: const TextStyle(color: inkColor, fontSize: 11)),
+              ],
+            ),
+          ),
+          Text('${isPositive ? '+' : ''}${cf.netProfit.toStringAsFixed(2)} CR',
               style: TextStyle(
-                  color: accent, fontSize: 14, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 2),
-          Text(detail,
-              style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                  color: color, fontSize: 16, fontWeight: FontWeight.w800)),
         ],
       ),
     );
@@ -265,8 +286,6 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         final left = <Widget>[
           _buildSectionLabel('STRATEGIC DIRECTIVES REQUIRING ATTENTION'),
           _buildDirectivesContent(r),
-          _buildSectionLabel('CASHFLOW'),
-          _buildCashflowContent(r),
         ];
         final right = <Widget>[
           _buildSectionLabel(
@@ -332,7 +351,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         children: [
           const Flexible(
             child: Text(
-              'EXECUTIVE INTELLIGENCE BRIEFING',
+              'EXECUTIVE POSITION & CASHFLOW',
               style: TextStyle(
                 color: EarthColors.textMuted,
                 fontSize: 10,
@@ -350,11 +369,11 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
                 size: 14, color: mutedColor.withValues(alpha: .8)),
             onPressed: () => showEarthInfoDialog(
               context,
-              title: 'EXECUTIVE INTELLIGENCE BRIEFING',
+              title: 'EXECUTIVE POSITION & CASHFLOW',
               description:
-                  '• Your executive position is a high-level snapshot of your current net worth, its change since the previous game day, and unread alerts or messages.\n\n'
-                  '• NET WORTH is the current combined value of your liquid credits and tracked assets. NET CHANGE compares that value with the end of the prior game day.\n\n'
-                  '• This topic is a status summary only; the following topics explain the causes and actions behind the change.',
+                  '• NET WORTH is the current combined value of your liquid credits and tracked assets. NET CHANGE compares that value with the end of the previous game day.\n\n'
+                  '• INCOME, EXPENSES, and NET CASHFLOW show the operating result for the previous game day. The breakdown identifies the main sources of income and costs.\n\n'
+                  '• Alerts and messages are available from the global HUD, where they can be acted on directly.',
             ),
           ),
         ],
@@ -472,67 +491,82 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
 
   Widget _buildCashflowContent(DailyBriefingReport r) {
     final cf = r.cashflow;
-    return Padding(
-      padding: EdgeInsets.zero,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final income = _cashflowBreakdown(
+          title: 'INCOME SOURCES',
+          total: '+${cf.totalIncome.toStringAsFixed(2)} CR',
+          color: const Color(0xFF00E676),
+          rows: [
+            (
+              'Market commodity sales',
+              '+${cf.marketSales.toStringAsFixed(2)} CR'
+            ),
+            (
+              'Corporate equity dividends',
+              '+${cf.businessDividends.toStringAsFixed(2)} CR'
+            ),
+          ],
+        );
+        final expenses = _cashflowBreakdown(
+          title: 'EXPENSES',
+          total: '-${cf.totalExpenses.toStringAsFixed(2)} CR',
+          color: const Color(0xFFFF5252),
+          rows: [
+            (
+              'Machine maintenance & fuel',
+              '-${cf.machineMaintenance.toStringAsFixed(2)} CR'
+            ),
+            (
+              'Municipal civic taxes',
+              '-${cf.civicTaxes.toStringAsFixed(2)} CR'
+            ),
+          ],
+        );
+        if (constraints.maxWidth > 520) {
+          return Row(children: [
+            Expanded(child: income),
+            const SizedBox(width: 16),
+            Expanded(child: expenses)
+          ]);
+        }
+        return Column(children: [income, const SizedBox(height: 10), expenses]);
+      },
+    );
+  }
+
+  Widget _cashflowBreakdown({
+    required String title,
+    required String total,
+    required Color color,
+    required List<(String, String)> rows,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: EarthColors.cardSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: EarthColors.borderSubtle),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: EarthColors.cardSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: EarthColors.borderSubtle),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text(
-                  'ONE GAME-DAY FINANCIAL WATERFALL',
-                  style: TextStyle(
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(title,
+                  style: const TextStyle(
                       color: EarthColors.textMuted,
-                      fontSize: 10,
+                      fontSize: 9,
                       fontWeight: FontWeight.bold,
-                      letterSpacing: .8),
-                ),
-                const SizedBox(height: 12),
-                _flowRow(
-                    'Total Income',
-                    '+${cf.totalIncome.toStringAsFixed(2)} CR',
-                    const Color(0xFF00E676),
-                    isBold: true),
-                _flowRow(
-                    'Total Expenses',
-                    '-${cf.totalExpenses.toStringAsFixed(2)} CR',
-                    const Color(0xFFFF5252),
-                    isBold: true),
-                const Divider(color: EarthColors.borderSubtle, height: 16),
-                _flowRow(
-                    'Market Commodity Sales',
-                    '+${cf.marketSales.toStringAsFixed(2)} CR',
-                    const Color(0xFF00E676)),
-                _flowRow(
-                    'Corporate Equity Dividends',
-                    '+${cf.businessDividends.toStringAsFixed(2)} CR',
-                    const Color(0xFF00E676)),
-                const Divider(color: EarthColors.borderSubtle, height: 16),
-                _flowRow(
-                    'Machine Maintenance & Fuel',
-                    '-${cf.machineMaintenance.toStringAsFixed(2)} CR',
-                    const Color(0xFFFF5252)),
-                _flowRow(
-                    'Municipal Civic Taxes',
-                    '-${cf.civicTaxes.toStringAsFixed(2)} CR',
-                    const Color(0xFFFF5252)),
-                const Divider(color: EarthColors.borderSubtle, height: 20),
-                _flowRow(
-                    'Net Cashflow Profit',
-                    '${cf.netProfit >= 0 ? '+' : ''}${cf.netProfit.toStringAsFixed(2)} CR',
-                    EarthThemeController.instance.primaryAccent,
-                    isBold: true),
-              ],
-            ),
+                      letterSpacing: .8)),
+              Text(total,
+                  style: TextStyle(
+                      color: color, fontSize: 11, fontWeight: FontWeight.w800)),
+            ],
           ),
+          const SizedBox(height: 8),
+          for (final row in rows) _flowRow(row.$1, row.$2, color),
         ],
       ),
     );
@@ -545,15 +579,19 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(label,
-              style: TextStyle(
-                  color: Colors.white70,
-                  fontSize: isBold ? 12 : 11,
-                  fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          Expanded(
+            child: Text(label,
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: isBold ? 12 : 11,
+                    fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
+          ),
+          const SizedBox(width: 8),
           Text(val,
+              textAlign: TextAlign.right,
               style: TextStyle(
                   color: color,
-                  fontSize: isBold ? 13 : 11.5,
+                  fontSize: isBold ? 13 : 10,
                   fontWeight: FontWeight.bold)),
         ],
       ),

@@ -188,10 +188,10 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('EXECUTIVE INTELLIGENCE BRIEFING'), findsOneWidget);
+    expect(find.text('EXECUTIVE POSITION & CASHFLOW'), findsOneWidget);
     expect(find.text('158000.00 CR'), findsOneWidget);
     expect(find.text('+5600.00 CR'), findsOneWidget);
-    expect(find.text('+3.67%'), findsOneWidget);
+    expect(find.textContaining('+3.67% since previous day close'), findsOneWidget);
     expect(
         find.text('STRATEGIC DIRECTIVES REQUIRING ATTENTION'), findsOneWidget);
     expect(find.text('Capitalize on Energy Rally'), findsOneWidget);

@@ -292,7 +292,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     if (recipient.isEmpty || subject.isEmpty || body.isEmpty || _sending) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Please fill out Recipient, Subject, and Message body.'),
+          content:
+              Text('Please fill out Recipient, Subject, and Message body.'),
           backgroundColor: Colors.amber,
         ),
       );
@@ -369,12 +370,15 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.signal_cellular_connected_no_internet_4_bar,
-                          color: Colors.redAccent, size: 36),
+                      const Icon(
+                          Icons.signal_cellular_connected_no_internet_4_bar,
+                          color: Colors.redAccent,
+                          size: 36),
                       const SizedBox(height: 12),
                       Text(
                         'Comm-Link Relay Error: $_error',
-                        style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                        style: const TextStyle(
+                            color: Colors.redAccent, fontSize: 13),
                         textAlign: TextAlign.center,
                       ),
                       const SizedBox(height: 16),
@@ -394,8 +398,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
             : Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  _buildTopMetricsHud(),
-                  const SizedBox(height: 8),
                   _buildSegmentedNavHeader(),
                   const SizedBox(height: 8),
                   Expanded(
@@ -413,9 +415,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
       showTitle: true,
       helpAfterTitle: true,
       titleColor: mutedColor,
-      contentPadding: widget.isPageMode
-          ? EdgeInsets.zero
-          : const EdgeInsets.all(12),
+      contentPadding:
+          widget.isPageMode ? EdgeInsets.zero : const EdgeInsets.all(12),
       infoDescription:
           '• Universal Comm-Link connects all planetary citizens and institutions across sub-space relays.\n\n'
           '• FREQUENCIES: Real-time public broadcasts and regional municipal forum channels.\n\n'
@@ -438,7 +439,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final gameDay = widget.state?.clock['day'] ?? 1;
     final hour = _parseNumber(widget.state?.clock['minute']) ~/ 60;
     final min = _parseNumber(widget.state?.clock['minute']) % 60;
-    final clockStr = 'Day $gameDay · ${hour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')}';
+    final clockStr =
+        'Day $gameDay · ${hour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')}';
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -613,7 +615,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
             id: 'channels',
             label: 'CHANNELS',
             icon: Icons.settings_input_antenna,
-            badge: _channels.length,
           ),
           const SizedBox(width: 4),
           _buildNavTabItem(
@@ -754,8 +755,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                 children: [
                   // Scope filter bar
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 7),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                     decoration: const BoxDecoration(
                       border: Border(bottom: BorderSide(color: Colors.white12)),
                     ),
@@ -783,8 +784,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                               padding: EdgeInsets.all(16),
                               child: Text(
                                 'No matching channels found.',
-                                style: TextStyle(
-                                    color: mutedColor, fontSize: 11),
+                                style:
+                                    TextStyle(color: mutedColor, fontSize: 11),
                                 textAlign: TextAlign.center,
                               ),
                             ),
@@ -794,8 +795,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                             itemBuilder: (ctx, i) {
                               final ch = filteredChannels[i];
                               final isSelected = ch['id'] == _selectedChannelId;
-                              final scope =
-                                  ch['scope']?.toString() ?? 'global';
+                              final scope = ch['scope']?.toString() ?? 'global';
                               final name = ch['name']?.toString() ??
                                   ch['id']?.toString() ??
                                   'Channel';
@@ -804,13 +804,15 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                               return Material(
                                 color: Colors.transparent,
                                 child: InkWell(
-                                  onTap: () => _selectChannel(ch['id'] as String),
+                                  onTap: () =>
+                                      _selectChannel(ch['id'] as String),
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 10, vertical: 8),
                                     decoration: BoxDecoration(
                                       color: isSelected
-                                          ? cyanAccentColor.withValues(alpha: .12)
+                                          ? cyanAccentColor.withValues(
+                                              alpha: .12)
                                           : Colors.transparent,
                                       border: Border(
                                         left: BorderSide(
@@ -829,12 +831,11 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                       children: [
                                         Container(
                                           padding: const EdgeInsets.all(4),
-                                          margin:
-                                              const EdgeInsets.only(top: 2),
+                                          margin: const EdgeInsets.only(top: 2),
                                           decoration: BoxDecoration(
                                             color: isSelected
-                                                ? cyanAccentColor
-                                                    .withValues(alpha: .2)
+                                                ? cyanAccentColor.withValues(
+                                                    alpha: .2)
                                                 : Colors.white
                                                     .withValues(alpha: .05),
                                             borderRadius:
@@ -859,15 +860,14 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                                 style: TextStyle(
                                                   color: isSelected
                                                       ? inkColor
-                                                      : inkColor
-                                                          .withValues(alpha: .85),
+                                                      : inkColor.withValues(
+                                                          alpha: .85),
                                                   fontWeight: isSelected
                                                       ? FontWeight.w800
                                                       : FontWeight.w600,
                                                   fontSize: 11.5,
                                                 ),
-                                                overflow:
-                                                    TextOverflow.ellipsis,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                               if (desc.isNotEmpty) ...[
                                                 const SizedBox(height: 1),
@@ -939,9 +939,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                   ),
                                 ),
                                 const SizedBox(width: 6),
-                                _buildScopeBadge(currentChannel['scope']
-                                        ?.toString() ??
-                                    'global'),
+                                _buildScopeBadge(
+                                    currentChannel['scope']?.toString() ??
+                                        'global'),
                               ],
                             ),
                             if (currentChannel['description'] != null &&
@@ -991,7 +991,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                       ),
                       const SizedBox(width: 4),
                       IconButton(
-                        icon: const Icon(Icons.refresh, size: 15, color: mutedColor),
+                        icon: const Icon(Icons.refresh,
+                            size: 15, color: mutedColor),
                         tooltip: 'Refresh frequency',
                         onPressed: () => _selectChannel(_selectedChannelId),
                       ),
@@ -1012,7 +1013,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                   children: [
                                     Icon(Icons.speaker_notes_off_outlined,
                                         size: 36,
-                                        color: mutedColor.withValues(alpha: .5)),
+                                        color:
+                                            mutedColor.withValues(alpha: .5)),
                                     const SizedBox(height: 8),
                                     const Text(
                                       'No transmissions on this frequency yet.',
@@ -1052,39 +1054,14 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      SingleChildScrollView(
-                        scrollDirection: Axis.horizontal,
-                        padding: const EdgeInsets.only(bottom: 5),
-                        child: Row(
-                          children: [
-                            const Text(
-                              'QUICK:',
-                              style: TextStyle(
-                                  color: mutedColor,
-                                  fontSize: 8,
-                                  fontWeight: FontWeight.w700,
-                                  letterSpacing: 0.8),
-                            ),
-                            const SizedBox(width: 5),
-                            _quickMessageChip('🤝 Seeking resource supply contract'),
-                            const SizedBox(width: 4),
-                            _quickMessageChip('⚡ Clean energy surplus available'),
-                            const SizedBox(width: 4),
-                            _quickMessageChip('🔬 Research coalition forming'),
-                            const SizedBox(width: 4),
-                            _quickMessageChip('📢 Municipal quorum requested'),
-                          ],
-                        ),
-                      ),
-
                       // Input Bar
                       Row(
                         children: [
                           Expanded(
                             child: TextField(
                               controller: _msgInputController,
-                              style:
-                                  const TextStyle(fontSize: 11.5, color: inkColor),
+                              style: const TextStyle(
+                                  fontSize: 11.5, color: inkColor),
                               decoration: InputDecoration(
                                 hintText:
                                     'Transmit message to #${currentChannel['name'] ?? 'relay'}...',
@@ -1146,33 +1123,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _quickMessageChip(String text) {
-    return InkWell(
-      onTap: () {
-        _msgInputController.text = text;
-        _msgInputController.selection =
-            TextSelection.fromPosition(TextPosition(offset: text.length));
-      },
-      borderRadius: BorderRadius.circular(5),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: .05),
-          borderRadius: BorderRadius.circular(5),
-          border: Border.all(color: Colors.white12),
-        ),
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: inkColor,
-            fontSize: 9,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ),
     );
   }
@@ -1324,7 +1274,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                 'Associated Record';
                             return InkWell(
                               onTap: () {
-                                final contractId = map['contractId']?.toString();
+                                final contractId =
+                                    map['contractId']?.toString();
                                 if (contractId != null) {
                                   showSupplyContractsDialog(
                                     context,
@@ -1437,15 +1388,16 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                         const SizedBox(width: 4),
                         _folderButton('sent', 'SENT', Icons.send_outlined),
                         const SizedBox(width: 4),
-                        _folderButton('compose', 'COMPOSE', Icons.edit_outlined),
+                        _folderButton(
+                            'compose', 'COMPOSE', Icons.edit_outlined),
                       ],
                     ),
                   ),
 
                   // Filter Row
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 6),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
                     decoration: const BoxDecoration(
                       border: Border(bottom: BorderSide(color: Colors.white12)),
                     ),
@@ -1459,7 +1411,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                           const SizedBox(width: 4),
                           _dispatchTypeFilterChip('diplomatic', 'DIPLOMATIC'),
                           const SizedBox(width: 4),
-                          _dispatchTypeFilterChip('contract_offer', 'CONTRACTS'),
+                          _dispatchTypeFilterChip(
+                              'contract_offer', 'CONTRACTS'),
                         ],
                       ),
                     ),
@@ -1514,7 +1467,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                         horizontal: 10, vertical: 8),
                                     decoration: BoxDecoration(
                                       color: isSelected
-                                          ? cyanAccentColor.withValues(alpha: .14)
+                                          ? cyanAccentColor.withValues(
+                                              alpha: .14)
                                           : (isUnread
                                               ? Colors.white
                                                   .withValues(alpha: .06)
@@ -1575,8 +1529,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                           style: TextStyle(
                                             color: isUnread
                                                 ? inkColor
-                                                : inkColor
-                                                    .withValues(alpha: .85),
+                                                : inkColor.withValues(
+                                                    alpha: .85),
                                             fontWeight: isUnread
                                                 ? FontWeight.w800
                                                 : FontWeight.w600,
@@ -1609,7 +1563,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Icon(Icons.drafts_outlined,
-                              size: 40, color: mutedColor.withValues(alpha: .4)),
+                              size: 40,
+                              color: mutedColor.withValues(alpha: .4)),
                           const SizedBox(height: 10),
                           const Text(
                             'Select a diplomatic dispatch to review',
@@ -1697,8 +1652,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 Icon(icon,
-                    size: 12,
-                    color: isSelected ? cyanAccentColor : mutedColor),
+                    size: 12, color: isSelected ? cyanAccentColor : mutedColor),
                 const SizedBox(width: 3),
                 Flexible(
                   child: Text(
@@ -1784,8 +1738,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                       children: [
                         Text(
                           'Day $day · $hour:$minute',
-                          style:
-                              const TextStyle(color: mutedColor, fontSize: 10.5),
+                          style: const TextStyle(
+                              color: mutedColor, fontSize: 10.5),
                         ),
                         const SizedBox(width: 6),
                         IconButton(
@@ -1914,8 +1868,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                             payload.entries
                                 .map((e) => '${e.key}: ${e.value}')
                                 .join(' | '),
-                            style: const TextStyle(
-                                color: inkColor, fontSize: 11),
+                            style:
+                                const TextStyle(color: inkColor, fontSize: 11),
                           ),
                           const SizedBox(height: 10),
                           FilledButton.icon(
@@ -2009,8 +1963,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                     labelText: 'Recipient ID / Name (e.g. H-0012)',
                     labelStyle:
                         const TextStyle(color: mutedColor, fontSize: 11),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: .04),
                     border: OutlineInputBorder(
@@ -2040,8 +1994,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                     labelText: 'Dispatch Type',
                     labelStyle:
                         const TextStyle(color: mutedColor, fontSize: 11),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 10, vertical: 8),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: .04),
                     border: OutlineInputBorder(
@@ -2072,57 +2026,30 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
           ),
           const SizedBox(height: 10),
 
-          // Subject Field with Quick Templates (TextField 1)
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              TextField(
-                controller: _composeSubjectController,
-                style: const TextStyle(fontSize: 11.5, color: inkColor),
-                decoration: InputDecoration(
-                  labelText: 'Subject',
-                  labelStyle:
-                      const TextStyle(color: mutedColor, fontSize: 11),
-                  contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 10, vertical: 8),
-                  filled: true,
-                  fillColor: Colors.white.withValues(alpha: .04),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: Colors.white12),
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: Colors.white12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(7),
-                    borderSide: const BorderSide(color: cyanAccentColor),
-                  ),
-                ),
+          // Subject field
+          TextField(
+            controller: _composeSubjectController,
+            style: const TextStyle(fontSize: 11.5, color: inkColor),
+            decoration: InputDecoration(
+              labelText: 'Subject',
+              labelStyle: const TextStyle(color: mutedColor, fontSize: 11),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+              filled: true,
+              fillColor: Colors.white.withValues(alpha: .04),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(7),
+                borderSide: const BorderSide(color: Colors.white12),
               ),
-              const SizedBox(height: 5),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    const Text('TEMPLATES:',
-                        style: TextStyle(
-                            color: mutedColor,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w700)),
-                    const SizedBox(width: 5),
-                    _subjectTemplateChip('Trade Agreement Proposal'),
-                    const SizedBox(width: 4),
-                    _subjectTemplateChip('Bilateral Supply Contract Offer'),
-                    const SizedBox(width: 4),
-                    _subjectTemplateChip('Technology Patent Licensing Term Sheet'),
-                    const SizedBox(width: 4),
-                    _subjectTemplateChip('Diplomatic Non-Aggression Accord'),
-                  ],
-                ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(7),
+                borderSide: const BorderSide(color: Colors.white12),
               ),
-            ],
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(7),
+                borderSide: const BorderSide(color: cyanAccentColor),
+              ),
+            ),
           ),
           const SizedBox(height: 10),
 
@@ -2136,8 +2063,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
               textAlignVertical: TextAlignVertical.top,
               decoration: InputDecoration(
                 labelText: 'Formal Dispatch Body',
-                labelStyle:
-                    const TextStyle(color: mutedColor, fontSize: 11),
+                labelStyle: const TextStyle(color: mutedColor, fontSize: 11),
                 hintText:
                     'State diplomatic terms, bilateral stipulations, or contract proposals...',
                 hintStyle: const TextStyle(color: mutedColor, fontSize: 11),
@@ -2175,8 +2101,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                         size: 13, color: EarthColors.goldMetallic),
                     filled: true,
                     fillColor: Colors.white.withValues(alpha: .03),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 8, vertical: 7),
+                    contentPadding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(7),
                       borderSide: const BorderSide(color: Colors.white12),
@@ -2213,29 +2139,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
             ],
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _subjectTemplateChip(String text) {
-    return InkWell(
-      onTap: () => setState(() => _composeSubjectController.text = text),
-      borderRadius: BorderRadius.circular(4),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
-        decoration: BoxDecoration(
-          color: Colors.white.withValues(alpha: .05),
-          borderRadius: BorderRadius.circular(4),
-          border: Border.all(color: Colors.white12),
-        ),
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: inkColor,
-            fontSize: 8.5,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
       ),
     );
   }
