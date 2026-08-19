@@ -105,7 +105,7 @@ export async function listCommodityDerivativesAndOHLC(
 }
 
 export async function createFuturesListing(
-  client: any,
+  client: PostgresRepository,
   params: {
     sellerId: string;
     commodity: string;
@@ -131,6 +131,7 @@ export async function createFuturesListing(
     throw new Error('Invalid expiry game day.');
   }
 
+  return transactional(client, async () => {
   // Check seller resource balance
   const balRes = await client.query(
     `SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = $2 FOR UPDATE`,
@@ -163,16 +164,18 @@ export async function createFuturesListing(
     strikePrice,
     expiryGameDay,
   };
+  });
 }
 
 export async function matchFuturesContract(
-  client: any,
+  client: PostgresRepository,
   params: {
     buyerId: string;
     contractId: string;
     correlationId?: string;
   }
 ): Promise<{ ok: boolean; contractId: string; totalPaid: string; status: string }> {
+  return transactional(client, async () => {
   const { buyerId, contractId } = params;
 
   const fRes = await client.query(
@@ -229,15 +232,17 @@ export async function matchFuturesContract(
     totalPaid: totalCost.toFixed(2),
     status: 'matched',
   };
+  });
 }
 
 export async function cancelFuturesListing(
-  client: any,
+  client: PostgresRepository,
   params: {
     sellerId: string;
     contractId: string;
   }
 ): Promise<{ ok: boolean; contractId: string; status: string }> {
+  return transactional(client, async () => {
   const { sellerId, contractId } = params;
 
   const fRes = await client.query(
@@ -278,12 +283,14 @@ export async function cancelFuturesListing(
     contractId,
     status: 'cancelled',
   };
+  });
 }
 
 export async function settleExpiringFutures(
-  client: any,
+  client: PostgresRepository,
   currentDay: number
 ): Promise<{ settledCount: number }> {
+  return transactional(client, async () => {
   const maturingRes = await client.query(
     `SELECT * FROM commodity_futures_contracts
      WHERE status = 'matched' AND expiry_game_day <= $1
@@ -329,4 +336,10 @@ export async function settleExpiringFutures(
   }
 
   return { settledCount };
+  });
+}
+import type { PostgresRepository } from './repository.ts';
+
+async function transactional<T>(repository: PostgresRepository, work: () => Promise<T>): Promise<T> {
+  return repository.transaction(async () => work());
 }

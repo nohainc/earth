@@ -59,7 +59,7 @@ function createMockDb(initialData = {}) {
     },
   ];
 
-  return {
+  const repository = {
     async query(sql, params = []) {
       const s = sql.trim().toUpperCase();
 
@@ -146,6 +146,8 @@ function createMockDb(initialData = {}) {
       return { rows: [] };
     },
   };
+  repository.transaction = async (work) => work(repository);
+  return repository;
 }
 
 test('getDynastyOverview queries dynasty, lineage, perks, and catalog', async () => {

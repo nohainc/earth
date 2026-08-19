@@ -475,7 +475,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final isBuy = _orderSide == 'buy';
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
 
+    final currentDay = asIntOr(widget.state.clock['day'], 1);
     final currentMinute = asIntOr(widget.state.clock['minute'], 0);
+    final epochIndex = (currentDay * 6) + (currentMinute ~/ 240);
     final minutesToNextEpoch = 240 - (currentMinute % 240);
     final remHours = minutesToNextEpoch ~/ 60;
     final remMins = minutesToNextEpoch % 60;
@@ -493,9 +495,12 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _marketTopicHeading(context, 'CENTRAL MARKET / LIVE SIGNALS',
-              description:
-                  '• Review scheduled commodity auctions, liquidity pressure, and submit limit orders.'),
+          _marketTopicHeading(
+            context,
+            'CENTRAL MARKET / LIVE SIGNALS',
+            description:
+                '• Periodic Batch Auction Architecture: major commodities clear every 4 simulation hours at one uniform price.\n\n• Commodity Selector: choose Food, Materials, Energy, Components, or Compute to review price, change, and liquidity.\n\n• Liquidity Pressure Gauge: compares aggregated sell volume against buy volume.\n\n• Execution Terminal: submit limit buy or sell orders with explicit quantity and price controls.',
+          ),
           // 0. BATCH AUCTION CLEARING BANNER
           Container(
             width: double.infinity,
@@ -533,6 +538,24 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               fontWeight: FontWeight.w800,
                               letterSpacing: .8,
                               color: inkColor,
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: cyanAccentColor.withValues(alpha: .12),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                  color: cyanAccentColor.withValues(alpha: .3)),
+                            ),
+                            child: Text(
+                              'EPOCH #$epochIndex',
+                              style: const TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: cyanAccentColor,
+                              ),
                             ),
                           ),
                         ],
@@ -795,24 +818,37 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'BUY DEMAND: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)',
-                            style: const TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: cyanAccentColor),
-                          ),
-                          Text(
-                            'SELL SUPPLY: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)',
-                            style: const TextStyle(
-                                fontSize: 9.5,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.orangeAccent),
-                          ),
-                        ],
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          final demandLabel =
+                              'BUY DEMAND: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)';
+                          final supplyLabel =
+                              'SELL SUPPLY: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)';
+                          final demandText = Text(demandLabel,
+                              style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: cyanAccentColor));
+                          final supplyText = Text(supplyLabel,
+                              style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.orangeAccent));
+                          if (constraints.maxWidth < 520) {
+                            return Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                demandText,
+                                const SizedBox(height: 3),
+                                supplyText
+                              ],
+                            );
+                          }
+                          return Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [demandText, supplyText],
+                          );
+                        },
                       ),
                       const SizedBox(height: 5),
                       ClipRRect(
@@ -909,25 +945,33 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   const SizedBox(height: 12),
 
                   // Available balance tag
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
+                  LayoutBuilder(
+                    builder: (context, constraints) {
+                      final label = Text(
                         isBuy ? 'AVAILABLE CREDITS' : 'AVAILABLE INVENTORY',
                         style: const TextStyle(
                             fontSize: 9, color: mutedColor, letterSpacing: .8),
-                      ),
-                      Text(
+                      );
+                      final value = Text(
                         isBuy
                             ? '${formatCreditsAmount(userCredits)} (max ~$maxAffordableUnits u)'
                             : '$userStock ${meta.symbol}',
                         style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: isBuy ? violetColor : meta.color,
-                        ),
-                      ),
-                    ],
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: isBuy ? violetColor : meta.color),
+                      );
+                      if (constraints.maxWidth < 360) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [label, const SizedBox(height: 3), value],
+                        );
+                      }
+                      return Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [label, value],
+                      );
+                    },
                   ),
                   const SizedBox(height: 10),
 

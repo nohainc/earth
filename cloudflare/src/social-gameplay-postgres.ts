@@ -138,16 +138,18 @@ export async function contributeToSocialInitiative(repo: PostgresRepository, hum
   });
 }
 
-export async function expireSocialInitiatives(repo: PostgresRepository, gameDay: number) {
-  const expired = await repo.query<any>(`UPDATE social_initiatives SET status = 'expired', escrow_status = CASE WHEN escrow_status = 'locked' THEN 'forfeited' ELSE escrow_status END, updated_at = NOW() WHERE status IN ('proposed','active') AND deadline_game_day IS NOT NULL AND deadline_game_day < $1 RETURNING *`, [gameDay]);
-  for (const initiative of expired.rows) {
-    const escrow = `social-${initiative.id}`;
-    const target = (await repo.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [initiative.target_human_id ?? initiative.creator_human_id])).rows[0];
-    if (target && Number(initiative.escrow_amount) > 0 && initiative.escrow_status === 'forfeited') {
-      await transferCredits(repo, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrow, creditAccount: target.account_id, amount: initiative.escrow_amount, reasonType: 'social_escrow_forfeit', reasonId: initiative.id, ruleVersion: 'social-v1', correlationId: `FORFEIT-${initiative.id}` });
+export async function expireSocialInitiatives(repository: PostgresRepository, gameDay: number) {
+  return repository.transaction(async (tx) => {
+    const expired = await tx.query<any>(`UPDATE social_initiatives SET status = 'expired', escrow_status = CASE WHEN escrow_status = 'locked' THEN 'forfeited' ELSE escrow_status END, updated_at = NOW() WHERE status IN ('proposed','active') AND deadline_game_day IS NOT NULL AND deadline_game_day < $1 RETURNING *`, [gameDay]);
+    for (const initiative of expired.rows) {
+      const escrow = `social-${initiative.id}`;
+      const target = (await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [initiative.target_human_id ?? initiative.creator_human_id])).rows[0];
+      if (target && Number(initiative.escrow_amount) > 0 && initiative.escrow_status === 'forfeited') {
+        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrow, creditAccount: target.account_id, amount: initiative.escrow_amount, reasonType: 'social_escrow_forfeit', reasonId: initiative.id, ruleVersion: 'social-v1', correlationId: `FORFEIT-${initiative.id}` });
+      }
+      await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) SELECT 'SOCIAL-EXPIRED-' || $1, human_id, 'social', 'Social initiative expired', 'The initiative deadline passed without completion.', $1 FROM social_initiative_members WHERE initiative_id = $1 ON CONFLICT DO NOTHING", [initiative.id]);
+      await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'social.initiative_expired',$3,$4) ON CONFLICT DO NOTHING", [`SOCIAL-EXPIRED-${initiative.id}`, gameDay, `${initiative.title} expired`, JSON.stringify({ initiativeId: initiative.id })]);
     }
-    await repo.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) SELECT 'SOCIAL-EXPIRED-' || $1, human_id, 'social', 'Social initiative expired', 'The initiative deadline passed without completion.', $1 FROM social_initiative_members WHERE initiative_id = $1 ON CONFLICT DO NOTHING", [initiative.id]);
-    await repo.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'social.initiative_expired',$3,$4) ON CONFLICT DO NOTHING", [`SOCIAL-EXPIRED-${initiative.id}`, gameDay, `${initiative.title} expired`, JSON.stringify({ initiativeId: initiative.id })]);
-  }
-  return expired.rows.length;
+    return expired.rows.length;
+  });
 }

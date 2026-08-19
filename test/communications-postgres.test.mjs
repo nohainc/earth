@@ -93,6 +93,7 @@ test('communications domain logic handles channels, messages, dispatches, and un
       return { rows: [] };
     },
   };
+  mockRepo.transaction = async (work) => work(mockRepo);
 
   // 1. List channels
   const channels = await listAccessibleChannels(mockRepo, 'H-0044', 'city-new-tokyo');

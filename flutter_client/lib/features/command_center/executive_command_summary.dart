@@ -433,9 +433,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   children: [
                     Row(
                       children: [
-                        const Text(
-                          'RECENT SIMULATION CYCLE',
-                          style: TextStyle(
+                        Text(
+                          'DAY ${briefing.gameDay} CHRONICLE',
+                          style: const TextStyle(
                             color: EarthColors.goldMetallic,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,

@@ -58,7 +58,7 @@ function createMockDb() {
     'H-0012': { account_id: 'ACC-0012', balance: 25000 },
   };
 
-  return {
+  const repository = {
     async query(sql, params = []) {
       const s = sql.trim().toUpperCase();
 
@@ -156,6 +156,8 @@ function createMockDb() {
       return { rows: [] };
     },
   };
+  repository.transaction = async (work) => work(repository);
+  return repository;
 }
 
 test('listCommodityDerivativesAndOHLC computes moving averages and returns data', async () => {
