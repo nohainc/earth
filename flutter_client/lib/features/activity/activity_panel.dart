@@ -457,8 +457,7 @@ class _ActivityPanelState extends State<ActivityPanel>
                                           padding: const EdgeInsets.symmetric(
                                               horizontal: 12, vertical: 9),
                                           decoration: BoxDecoration(
-                                            color: surfaceColor.withValues(
-                                                alpha: .6),
+                                            color: _groupSurface,
                                             borderRadius:
                                                 BorderRadius.circular(8),
                                             border: Border.all(

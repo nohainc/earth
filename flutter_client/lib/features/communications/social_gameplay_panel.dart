@@ -34,6 +34,8 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   String kind = 'alliance';
   bool loading = false;
   String? error;
+
+  Color get _groupSurface => EarthThemeController.instance.cardSurface;
   @override
   void initState() {
     super.initState();
@@ -356,7 +358,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .7),
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(
             color: isInvited
@@ -430,7 +432,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
           width: double.infinity,
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
-            color: surfaceColor.withValues(alpha: .55),
+            color: _groupSurface,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(color: EarthColors.borderSubtle),
           ),
