@@ -176,7 +176,11 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   List<Widget> _historyWidgets() {
     final result = <Widget>[];
     if (relationships.isEmpty) {
-      result.add(const ListTile(title: Text('No relationship history yet.')));
+      result.add(const Padding(
+        padding: EdgeInsets.only(bottom: 12),
+        child: Text('No relationship history yet.',
+            style: TextStyle(color: mutedColor, fontSize: 11)),
+      ));
     } else {
       result.addAll(relationships.map((r) => ListTile(
           leading: const Icon(Icons.handshake_outlined),
@@ -187,7 +191,8 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
               'Trust ${r['trust'] ?? 0} · reputation ${r['public_reputation'] ?? 0} · completed ${r['completed_agreements'] ?? 0} · broken ${r['broken_commitments'] ?? 0}'))));
     }
     if (timeline.isEmpty) {
-      result.add(const ListTile(title: Text('No social timeline events yet.')));
+      result.add(const Text('No social timeline events yet.',
+          style: TextStyle(color: mutedColor, fontSize: 11)));
     } else {
       result.addAll(timeline.map((e) => ListTile(
           leading: const Icon(Icons.timeline),
@@ -388,87 +393,96 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.1)),
         const SizedBox(height: 8),
-        _composerSection(
-          'CHOOSE A PARTNER',
-          Column(children: [
-            TextField(
-                controller: search,
-                onChanged: _loadDirectory,
-                decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.search),
-                    labelText: 'Search citizens or dynasties')),
-            if (search.text.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              SizedBox(
-                height: 74,
-                child: people.isEmpty
-                    ? const Center(
-                        child: Text('No public citizens match this search.',
-                            style: TextStyle(color: mutedColor, fontSize: 11)))
-                    : ListView(
-                        scrollDirection: Axis.horizontal,
-                        children: people.map((raw) {
-                          final p = Map<String, dynamic>.from(raw as Map);
-                          final selected = p['id']?.toString() == targetId;
-                          return Padding(
-                              padding: const EdgeInsets.only(right: 8),
-                              child: ChoiceChip(
-                                selected: selected,
-                                label: Text(
-                                    '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                                onSelected: (_) => setState(() {
-                                  targetId = p['id']?.toString();
-                                  selectedPerson = p;
-                                }),
-                              ));
-                        }).toList()),
-              ),
-            ],
-          ]),
-        ),
+        _formSubtitle('CHOOSE A PARTNER'),
+        const SizedBox(height: 6),
+        TextField(
+            controller: search,
+            onChanged: _loadDirectory,
+            decoration: const InputDecoration(
+              hintText: 'Search citizens or dynasties',
+              hintStyle: TextStyle(color: mutedColor, fontSize: 11),
+              prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),
+            )),
+        if (search.text.trim().isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SizedBox(
+            height: 74,
+            child: people.isEmpty
+                ? const Center(
+                    child: Text('No public citizens match this search.',
+                        style: TextStyle(color: mutedColor, fontSize: 11)))
+                : ListView(
+                    scrollDirection: Axis.horizontal,
+                    children: people.map((raw) {
+                      final p = Map<String, dynamic>.from(raw as Map);
+                      final selected = p['id']?.toString() == targetId;
+                      return Padding(
+                          padding: const EdgeInsets.only(right: 8),
+                          child: ChoiceChip(
+                            selected: selected,
+                            label: Text(
+                                '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
+                            onSelected: (_) => setState(() {
+                              targetId = p['id']?.toString();
+                              selectedPerson = p;
+                            }),
+                          ));
+                    }).toList()),
+          ),
+        ],
         const SizedBox(height: 10),
-        _composerSection(
-          'DEFINE THE AGREEMENT',
-          Wrap(spacing: 8, runSpacing: 8, children: [
-            DropdownButton<String>(
-                value: kind,
-                items: const [
-                  'alliance',
-                  'negotiation',
-                  'campaign',
-                  'announcement',
-                  'lobbying',
-                  'shared_project',
-                  'agreement'
-                ]
-                    .map((v) => DropdownMenuItem(
-                        value: v,
-                        child: Text(v.replaceAll('_', ' ').toUpperCase())))
-                    .toList(),
-                onChanged: (v) => setState(() => kind = v ?? kind)),
+        _formSubtitle('DEFINE THE AGREEMENT'),
+        const SizedBox(height: 6),
+        LayoutBuilder(builder: (context, constraints) {
+          final controlWidth = (constraints.maxWidth - 24) / 4;
+          final controls = [
             SizedBox(
-                width: 110,
+              width: controlWidth,
+              child: DropdownButtonFormField<String>(
+                  value: kind,
+                  isExpanded: true,
+                  decoration:
+                      const InputDecoration(labelText: 'Initiative type'),
+                  items: const [
+                    'alliance',
+                    'negotiation',
+                    'campaign',
+                    'announcement',
+                    'lobbying',
+                    'shared_project',
+                    'agreement'
+                  ]
+                      .map((v) => DropdownMenuItem(
+                          value: v,
+                          child: Text(v.replaceAll('_', ' ').toUpperCase(),
+                              style: const TextStyle(fontSize: 11))))
+                      .toList(),
+                  onChanged: (v) => setState(() => kind = v ?? kind)),
+            ),
+            SizedBox(
+                width: controlWidth,
                 child: TextField(
                     controller: credits,
                     keyboardType: TextInputType.number,
                     decoration:
                         const InputDecoration(labelText: 'Escrow credits'))),
             SizedBox(
-                width: 110,
+                width: controlWidth,
                 child: TextField(
                     controller: deadline,
                     keyboardType: TextInputType.number,
                     decoration:
                         const InputDecoration(labelText: 'Days to complete'))),
             SizedBox(
-                width: 110,
+                width: controlWidth,
                 child: TextField(
                     controller: target,
                     keyboardType: TextInputType.number,
                     decoration:
                         const InputDecoration(labelText: 'Progress target'))),
-          ]),
-        ),
+          ];
+          return Wrap(spacing: 8, runSpacing: 8, children: controls);
+        }),
         const SizedBox(height: 8),
         TextField(
             controller: title,
@@ -492,23 +506,10 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     );
   }
 
-  Widget _composerSection(String label, Widget child) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .55),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: EarthColors.borderSubtle),
-        ),
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: const TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .6,
-                  color: mutedColor)),
-          const SizedBox(height: 8),
-          child,
-        ]),
-      );
+  Widget _formSubtitle(String label) => Text(label,
+      style: const TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          letterSpacing: .6,
+          color: mutedColor));
 }
