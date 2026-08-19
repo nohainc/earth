@@ -8,7 +8,8 @@ import 'package:earth_client/core/nano_markup_helper.dart';
 import 'package:earth_client/features/communications/comm_link_dialog.dart';
 
 void main() {
-  testWidgets('CommLinkDialog renders channels, messages, sends text, and switches to dispatches',
+  testWidgets(
+      'CommLinkDialog renders channels, messages, sends text, and switches to dispatches',
       (tester) async {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
@@ -110,12 +111,16 @@ void main() {
                 'sender_display_name': 'Dmitri Rostov',
                 'recipient_human_id': 'H-0044',
                 'subject': 'Tender Offer & Supply Contract',
-                'body': 'We are seeking to secure long-term rights to 250 units.',
+                'body':
+                    'We are seeking to secure long-term rights to 250 units.',
                 'status': 'unread',
                 'game_day': 184,
                 'game_minute': 510,
                 'dispatch_type': 'contract_offer',
-                'action_payload': {'contractId': 'CTR-904', 'creditsOffered': 1500},
+                'action_payload': {
+                  'contractId': 'CTR-904',
+                  'creditsOffered': 1500
+                },
               },
             ],
             'unreadCount': 1,
@@ -137,7 +142,8 @@ void main() {
     });
 
     final api = EarthApi(
-      transport: EarthApiTransport(baseUrl: 'http://127.0.0.1:8899', client: mockClient),
+      transport: EarthApiTransport(
+          baseUrl: 'http://127.0.0.1:8899', client: mockClient),
     );
 
     await tester.pumpWidget(
@@ -149,6 +155,7 @@ void main() {
     );
 
     await tester.pumpAndSettle();
+    expect(find.text('YEAR 1   DAY 184   07:00'), findsOneWidget);
 
     // 1. Verify Top Header & Mode Tabs
     expect(find.text('UNIVERSAL COMM-LINK / SUB-SPACE RELAY'), findsOneWidget);

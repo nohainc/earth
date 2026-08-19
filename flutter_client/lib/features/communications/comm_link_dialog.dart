@@ -4,6 +4,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import '../contracts/supply_contracts_dialog.dart';
 
 Future<void> showCommLinkDialog(
@@ -1170,8 +1171,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final body = msg['body'] ?? '';
     final day = _parseNumber(msg['game_day']);
     final min = _parseNumber(msg['game_minute']);
-    final hour = (min ~/ 60).toString().padLeft(2, '0');
-    final minute = (min % 60).toString().padLeft(2, '0');
+    final timestamp = formatGameDateTime(day, min);
     final attachments = msg['attachments'] as List<dynamic>? ?? const [];
 
     return Container(
@@ -1232,7 +1232,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                     ],
                     const Spacer(),
                     Text(
-                      'Day $day · $hour:$minute',
+                      timestamp,
                       style: const TextStyle(color: mutedColor, fontSize: 9.5),
                     ),
                   ],
@@ -1707,8 +1707,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final body = dispatch['body'] ?? '';
     final day = _parseNumber(dispatch['game_day']);
     final min = _parseNumber(dispatch['game_minute']);
-    final hour = (min ~/ 60).toString().padLeft(2, '0');
-    final minute = (min % 60).toString().padLeft(2, '0');
+    final timestamp = formatGameDateTime(day, min);
     final type = dispatch['dispatch_type']?.toString() ?? 'diplomatic';
     final payload = dispatch['action_payload'] is Map
         ? Map<String, dynamic>.from(dispatch['action_payload'] as Map)
@@ -1738,7 +1737,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                     Row(
                       children: [
                         Text(
-                          'Day $day · $hour:$minute',
+                          timestamp,
                           style: const TextStyle(
                               color: mutedColor, fontSize: 10.5),
                         ),
