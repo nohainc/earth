@@ -1895,19 +1895,6 @@ class MacroLiquidityPanel extends StatelessWidget {
     final liq = (state.finance['liquidity'] as Map<String, dynamic>?) ?? {};
     final supplyVal = asDouble(liq['moneySupply']);
     final targetVal = asDouble(liq['target']);
-    final rawStatus =
-        (liq['status']?.toString() ?? 'inside-corridor').toLowerCase();
-
-    String statusLabel = 'NOMINAL (INSIDE CORRIDOR)';
-    Color statusColor = cyanAccentColor;
-    if (rawStatus.contains('below') || rawStatus.contains('tight')) {
-      statusLabel = 'TIGHT LIQUIDITY (BELOW CORRIDOR)';
-      statusColor = Colors.orangeAccent;
-    } else if (rawStatus.contains('above') || rawStatus.contains('expanded')) {
-      statusLabel = 'EXPANDED LIQUIDITY (ABOVE CORRIDOR)';
-      statusColor = violetColor;
-    }
-
     final supplyStr =
         supplyVal != null ? formatCreditsAmount(supplyVal) : '142,500.00 C';
     final targetStr =
@@ -1940,40 +1927,6 @@ class MacroLiquidityPanel extends StatelessWidget {
               context, 'UC MONETARY STABILITY BOARD / MACRO BASE',
               description:
                   '• Review monetary supply, CPI, liquidity corridor, and macroeconomic stability.'),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Expanded(
-                child: Text(
-                  'UC PLANETARY MONETARY & STABILITY METRICS',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                    color: inkColor,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: statusColor.withValues(alpha: .15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: statusColor.withValues(alpha: .4)),
-                ),
-                child: Text(
-                  statusLabel,
-                  style: TextStyle(
-                    fontSize: 9,
-                    fontWeight: FontWeight.w800,
-                    color: statusColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 12),
           LayoutBuilder(
             builder: (context, constraints) {
               final isWide = constraints.maxWidth >= 600;

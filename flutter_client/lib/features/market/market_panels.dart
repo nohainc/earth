@@ -739,6 +739,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Expanded(
+                                  flex: 3,
                                   child: TextField(
                                     controller: _qtyController,
                                     focusNode: _qtyFocusNode,
@@ -771,6 +772,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
+                                  flex: 3,
                                   child: TextField(
                                     controller: _priceController,
                                     focusNode: _priceFocusNode,
@@ -801,6 +803,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
+                                  flex: 1,
                                   child: _orderValue(
                                       'FEE',
                                       isBuy
@@ -809,6 +812,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
+                                  flex: 3,
                                   child: _orderValue(
                                       isBuy ? 'TOTAL' : 'PROCEEDS',
                                       '${totalEscrow.toStringAsFixed(2)} C'),
@@ -890,7 +894,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontSize: 10.5,
+                  fontSize: 12,
                   fontWeight: FontWeight.w700,
                   letterSpacing: .7,
                   color: mutedColor)),
@@ -913,7 +917,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           const SizedBox(height: 3),
           Text(value,
               style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: inkColor),
+                  fontSize: 16, fontWeight: FontWeight.w700, color: inkColor),
               overflow: TextOverflow.ellipsis),
         ],
       );
