@@ -1164,6 +1164,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 final meta = CommodityMeta.forProduct(key);
                 final supply = asInt(data['supply']) ?? 0;
                 final demand = asInt(data['demand']) ?? 0;
+                final owned = formatWholeNumber(widget.state.resources[key]);
                 final selected = key == _selectedCommodity;
                 final pressure = _marketPressure(supply, demand);
                 final last = indexed.$1 == entries.length - 1;
@@ -1188,21 +1189,43 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                     child: compact
                         ? Column(
                             children: [
-                              Row(children: [
-                                Expanded(child: _commodityName(meta)),
-                                _commodityPrice(data),
-                              ]),
-                              const SizedBox(height: 5),
-                              Row(children: [
-                                _MiniTrendBadge(
-                                    history: widget.priceHistory[key]),
-                                const Spacer(),
-                                _pressureLabel(pressure, supply, demand),
-                              ]),
+                              Row(
+                                crossAxisAlignment: CrossAxisAlignment.center,
+                                children: [
+                                  Icon(meta.icon, size: 28, color: meta.color),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      children: [
+                                        Row(children: [
+                                          Expanded(child: _commodityName(meta)),
+                                          _commodityPrice(data),
+                                        ]),
+                                        const SizedBox(height: 4),
+                                        Row(children: [
+                                          Text(owned,
+                                              style: const TextStyle(
+                                                  fontSize: 10,
+                                                  color: mutedColor)),
+                                          const Spacer(),
+                                          _MiniTrendBadge(
+                                              history:
+                                                  widget.priceHistory[key]),
+                                          const SizedBox(width: 10),
+                                          _pressureLabel(
+                                              pressure, supply, demand),
+                                        ]),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ],
                           )
                         : Row(children: [
-                            Expanded(flex: 3, child: _commodityName(meta)),
+                            Expanded(
+                                flex: 3,
+                                child: _commodityIdentity(meta, owned)),
                             SizedBox(
                                 width: 100,
                                 child: Align(
@@ -1229,19 +1252,29 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         }),
       );
 
-  Widget _commodityName(CommodityMeta meta) => Row(
-        mainAxisSize: MainAxisSize.min,
+  Widget _commodityIdentity(CommodityMeta meta, String owned) => Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(meta.icon, size: 15, color: meta.color),
-          const SizedBox(width: 8),
-          Flexible(
-            child: Text(meta.name,
-                style: const TextStyle(
-                    fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
-                overflow: TextOverflow.ellipsis),
+          Icon(meta.icon, size: 28, color: meta.color),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _commodityName(meta),
+                const SizedBox(height: 3),
+                Text(owned,
+                    style: const TextStyle(fontSize: 10, color: mutedColor)),
+              ],
+            ),
           ),
         ],
       );
+
+  Widget _commodityName(CommodityMeta meta) => Text(meta.name,
+      style: const TextStyle(
+          fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+      overflow: TextOverflow.ellipsis);
 
   Widget _commodityPrice(Map<String, dynamic> data) => Text(
         '${asDouble(data['price'])?.toStringAsFixed(2) ?? '—'} C',
