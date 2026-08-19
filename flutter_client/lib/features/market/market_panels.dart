@@ -636,105 +636,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             description:
                 '• Choose a commodity to compare its clearing price, liquidity, demand, supply, and your current inventory.',
           ),
-          // 1. TOP COMMODITY SELECTOR MATRIX
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final availableWidth = constraints.maxWidth;
-              final numCols = availableWidth >= 800 ? 4 : 2;
-              final itemWidth = (availableWidth - (numCols - 1) * 12) / numCols;
-
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: widget.state.market.entries.map((entry) {
-                  final key = entry.key;
-                  final c = CommodityMeta.forProduct(key);
-                  final data = (entry.value as Map<String, dynamic>?) ?? {};
-                  final s = asInt(data['supply']) ?? 0;
-                  final d = asInt(data['demand']) ?? 0;
-                  final userOwned = widget.state.resources[key] ?? 0;
-                  final isSelected = key == _selectedCommodity;
-
-                  return InkWell(
-                    onTap: () => _selectCommodity(key),
-                    borderRadius: BorderRadius.circular(10),
-                    child: Container(
-                      width: itemWidth,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 12),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? c.color.withValues(alpha: .12)
-                            : _groupSurface,
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(
-                          color: isSelected
-                              ? c.color.withValues(alpha: .7)
-                              : EarthColors.borderSubtle,
-                          width: isSelected ? 1.5 : 1,
-                        ),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Flexible(
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(c.icon, size: 14, color: c.color),
-                                    const SizedBox(width: 6),
-                                    Flexible(
-                                      child: Text(
-                                        key.toUpperCase(),
-                                        style: TextStyle(
-                                          fontSize: 11,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: 1.1,
-                                          color: c.color,
-                                        ),
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              const SizedBox(width: 4),
-                              _MiniTrendBadge(
-                                  history: widget.priceHistory[key]),
-                            ],
-                          ),
-                          const SizedBox(height: 6),
-                          Text(
-                            '${data['price']} C',
-                            style: const TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: -.3,
-                              color: inkColor,
-                            ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'S $s  ·  D $d  ·  Owned $userOwned',
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              color: mutedColor,
-                              letterSpacing: .8,
-                            ),
-                          ),
-                          const SizedBox(height: 2),
-                          _PriceTrendText(history: widget.priceHistory[key]),
-                        ],
-                      ),
-                    ),
-                  );
-                }).toList(),
-              );
-            },
-          ),
+          _buildCommodityMarketTable(),
           const SizedBox(height: 34),
           _marketTopicHeading(
             context,
@@ -1215,7 +1117,161 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           ),
         ),
       );
+
+  Widget _buildCommodityMarketTable() => Container(
+        decoration: BoxDecoration(
+          color: _groupSurface,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: EarthColors.borderSubtle),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: LayoutBuilder(builder: (context, constraints) {
+          final compact = constraints.maxWidth < 640;
+          final entries = widget.state.market.entries.toList();
+          return Column(
+            children: [
+              if (!compact)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(14, 8, 14, 6),
+                  child: Row(
+                    children: [
+                      Expanded(
+                          flex: 3,
+                          child: Text('COMMODITY',
+                              style: _marketTableHeaderStyle)),
+                      SizedBox(
+                          width: 100,
+                          child: Text('PRICE',
+                              style: _marketTableHeaderStyle,
+                              textAlign: TextAlign.right)),
+                      SizedBox(
+                          width: 86,
+                          child: Text('TREND',
+                              style: _marketTableHeaderStyle,
+                              textAlign: TextAlign.right)),
+                      SizedBox(
+                          width: 120,
+                          child: Text('MARKET',
+                              style: _marketTableHeaderStyle,
+                              textAlign: TextAlign.right)),
+                    ],
+                  ),
+                ),
+              ...entries.indexed.map((indexed) {
+                final entry = indexed.$2;
+                final key = entry.key;
+                final data = (entry.value as Map<String, dynamic>?) ?? {};
+                final meta = CommodityMeta.forProduct(key);
+                final supply = asInt(data['supply']) ?? 0;
+                final demand = asInt(data['demand']) ?? 0;
+                final selected = key == _selectedCommodity;
+                final pressure = _marketPressure(supply, demand);
+                final last = indexed.$1 == entries.length - 1;
+                return InkWell(
+                  onTap: () => _selectCommodity(key),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: selected
+                          ? meta.color.withValues(alpha: .12)
+                          : Colors.transparent,
+                      border: Border(
+                        left: BorderSide(
+                            color: selected ? meta.color : Colors.transparent,
+                            width: 3),
+                        bottom: last
+                            ? BorderSide.none
+                            : const BorderSide(color: EarthColors.borderSubtle),
+                      ),
+                    ),
+                    child: compact
+                        ? Column(
+                            children: [
+                              Row(children: [
+                                Expanded(child: _commodityName(meta)),
+                                _commodityPrice(data),
+                              ]),
+                              const SizedBox(height: 5),
+                              Row(children: [
+                                _MiniTrendBadge(
+                                    history: widget.priceHistory[key]),
+                                const Spacer(),
+                                _pressureLabel(pressure, supply, demand),
+                              ]),
+                            ],
+                          )
+                        : Row(children: [
+                            Expanded(flex: 3, child: _commodityName(meta)),
+                            SizedBox(
+                                width: 100,
+                                child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: _commodityPrice(data))),
+                            SizedBox(
+                                width: 86,
+                                child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: _MiniTrendBadge(
+                                        history: widget.priceHistory[key]))),
+                            SizedBox(
+                                width: 120,
+                                child: Align(
+                                    alignment: Alignment.centerRight,
+                                    child: _pressureLabel(
+                                        pressure, supply, demand))),
+                          ]),
+                  ),
+                );
+              }),
+            ],
+          );
+        }),
+      );
+
+  Widget _commodityName(CommodityMeta meta) => Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(meta.icon, size: 15, color: meta.color),
+          const SizedBox(width: 8),
+          Flexible(
+            child: Text(meta.name,
+                style: const TextStyle(
+                    fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                overflow: TextOverflow.ellipsis),
+          ),
+        ],
+      );
+
+  Widget _commodityPrice(Map<String, dynamic> data) => Text(
+        '${asDouble(data['price'])?.toStringAsFixed(2) ?? '—'} C',
+        style: const TextStyle(
+            fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+      );
+
+  String _marketPressure(int supply, int demand) {
+    if (demand > supply * 1.15) return 'DEMAND HIGH';
+    if (supply > demand * 1.15) return 'SUPPLY HIGH';
+    return 'BALANCED';
+  }
+
+  Widget _pressureLabel(String pressure, int supply, int demand) {
+    final color = pressure == 'DEMAND HIGH'
+        ? cyanAccentColor
+        : pressure == 'SUPPLY HIGH'
+            ? Colors.orangeAccent
+            : mutedColor;
+    return Text(pressure,
+        style: TextStyle(
+            fontSize: 9.5, fontWeight: FontWeight.w700, color: color));
+  }
 }
+
+const _marketTableHeaderStyle = TextStyle(
+    fontSize: 8.5,
+    fontWeight: FontWeight.w700,
+    letterSpacing: .7,
+    color: mutedColor);
 
 class _MiniTrendBadge extends StatelessWidget {
   final dynamic history;

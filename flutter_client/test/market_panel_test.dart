@@ -64,8 +64,8 @@ void main() {
 
     expect(find.text('CENTRAL MARKET / LIVE SIGNALS'), findsOneWidget);
     expect(find.text('ENERGY'), findsOneWidget);
-    expect(find.text('12.5 C'), findsOneWidget);
-    expect(find.textContaining('S 100  ·  D 80'), findsOneWidget);
+    expect(find.text('12.50 C'), findsOneWidget);
+    expect(find.text('SUPPLY HIGH'), findsOneWidget);
     expect(find.text('PLACE BUY ORDER'), findsOneWidget);
 
     // Verify info icon is present and opens description dialog
@@ -81,7 +81,8 @@ void main() {
     expect(executedAction, 'called');
   });
 
-  testWidgets('MarketSignalsPanel preserves and restores quantity and price when switching buy and sell',
+  testWidgets(
+      'MarketSignalsPanel preserves and restores quantity and price when switching buy and sell',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 10, 'minute': 100},
@@ -156,7 +157,8 @@ void main() {
     expect(tester.widget<TextField>(priceField).controller!.text, '20.00');
   });
 
-  testWidgets('MyMarketOrdersPanel renders complete lifecycle, reserved escrow, and allows cancellation',
+  testWidgets(
+      'MyMarketOrdersPanel renders complete lifecycle, reserved escrow, and allows cancellation',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -226,15 +228,18 @@ void main() {
     );
 
     expect(find.text('MY MARKET ORDERS / LIFECYCLE'), findsOneWidget);
-    expect(find.textContaining('BUY COMPONENTS · 10 units @ 120.00 C'), findsOneWidget);
+    expect(find.textContaining('BUY COMPONENTS · 10 units @ 120.00 C'),
+        findsOneWidget);
     expect(find.text('PARTIAL'), findsOneWidget);
     expect(find.textContaining('Filled: 4 / 10 (6 remaining)'), findsOneWidget);
     expect(find.textContaining('Settlement price: 118.00 C'), findsOneWidget);
-    expect(find.textContaining('Reserved Credits in escrow: 720.00 C'), findsOneWidget);
+    expect(find.textContaining('Reserved Credits in escrow: 720.00 C'),
+        findsOneWidget);
 
     expect(find.text('FILLED'), findsOneWidget);
     expect(find.text('CANCELLED'), findsOneWidget);
-    expect(find.textContaining('Released escrow refund: 85.00 C'), findsOneWidget);
+    expect(
+        find.textContaining('Released escrow refund: 85.00 C'), findsOneWidget);
 
     // Cancel order button appears only for the open/partial order
     expect(find.text('CANCEL ORDER'), findsOneWidget);
