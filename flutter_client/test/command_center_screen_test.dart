@@ -31,10 +31,9 @@ void main() {
 
   testWidgets('CommandCenter builds and shows initial loading or error state',
       (tester) async {
-    bool loggedOut = false;
     await tester.pumpWidget(
       MaterialApp(
-        home: CommandCenter(onLogout: () => loggedOut = true),
+        home: CommandCenter(onLogout: () {}),
       ),
     );
 

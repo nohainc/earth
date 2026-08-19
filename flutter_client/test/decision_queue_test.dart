@@ -15,11 +15,20 @@ void main() {
       {'id': 'c-101', 'title': 'Aerospace Composites', 'status': 'active'}
     ],
     'machines': [
-      {'id': 'm-1', 'name': 'Precision Lathe', 'condition': 35.0, 'utilization': 80.0}
+      {
+        'id': 'm-1',
+        'name': 'Precision Lathe',
+        'condition': 35.0,
+        'utilization': 80.0
+      }
     ],
     'governance': {
       'proposals': [
-        {'id': 'prop-1', 'title': 'Municipal Tax Charter Revision', 'status': 'open'}
+        {
+          'id': 'prop-1',
+          'title': 'Municipal Tax Charter Revision',
+          'status': 'open'
+        }
       ]
     },
     'technology': {
@@ -68,25 +77,31 @@ void main() {
 
       final titles = items.map((i) => i.title).toList();
       expect(titles.any((t) => t.contains('losing energy')), isTrue);
-      expect(titles.any((t) => t.contains('contract expires in 2 days')), isTrue);
-      expect(titles.any((t) => t.contains('unresolved governance vote')), isTrue);
-      expect(titles.any((t) => t.contains('machine needs maintenance')), isTrue);
-      expect(titles.any((t) => t.contains('Research funding is available')), isTrue);
-      expect(titles.any((t) => t.contains('dynasty decision is pending')), isTrue);
+      expect(
+          titles.any((t) => t.contains('contract expires in 2 days')), isTrue);
+      expect(
+          titles.any((t) => t.contains('unresolved governance vote')), isTrue);
+      expect(
+          titles.any((t) => t.contains('machine needs maintenance')), isTrue);
+      expect(titles.any((t) => t.contains('Research funding is available')),
+          isTrue);
+      expect(
+          titles.any((t) => t.contains('dynasty decision is pending')), isTrue);
 
       // Verify sorted by urgency descending
       for (int i = 0; i < items.length - 1; i++) {
-        expect(items[i].urgencyScore, greaterThanOrEqualTo(items[i + 1].urgencyScore));
+        expect(items[i].urgencyScore,
+            greaterThanOrEqualTo(items[i + 1].urgencyScore));
       }
     });
   });
 
   group('DecisionQueuePanel Widget', () {
-    testWidgets('renders header, filter tabs, decision cards, and triggers action',
+    testWidgets(
+        'renders header, filter tabs, decision cards, and triggers action',
         (tester) async {
       final items = DecisionQueueItem.synthesizeFromState(testState);
       DecisionQueueItem? executedDecision;
-      String? navigatedSection;
 
       await tester.pumpWidget(
         MaterialApp(
@@ -95,7 +110,7 @@ void main() {
               child: DecisionQueuePanel(
                 items: items,
                 onExecuteDecision: (d) => executedDecision = d,
-                onNavigate: (s) => navigatedSection = s,
+                onNavigate: (_) {},
               ),
             ),
           ),
@@ -116,14 +131,17 @@ void main() {
       // Verify Decision Card Titles
       expect(find.text('Your corporation is losing energy'), findsOneWidget);
       expect(find.text('A contract expires in 2 days'), findsOneWidget);
-      expect(find.text('You have an unresolved governance vote'), findsOneWidget);
+      expect(
+          find.text('You have an unresolved governance vote'), findsOneWidget);
       expect(find.text('Your machine needs maintenance'), findsOneWidget);
       expect(find.text('Research funding is available'), findsOneWidget);
       expect(find.text('A dynasty decision is pending'), findsOneWidget);
 
       // Verify "Why it matters" narrative blocks exist
-      expect(find.textContaining('Energy reserves are dangerously depleted'), findsOneWidget);
-      expect(find.textContaining('Unfulfilled supply obligations risk'), findsOneWidget);
+      expect(find.textContaining('Energy reserves are dangerously depleted'),
+          findsOneWidget);
+      expect(find.textContaining('Unfulfilled supply obligations risk'),
+          findsOneWidget);
 
       // Verify Action Button Tap
       final procureBtn = find.text('PROCURE ENERGY');
@@ -144,13 +162,15 @@ void main() {
       await tester.pumpAndSettle();
 
       // In Civic & Dynasty filter: governance, technology, and dynasty should be present
-      expect(find.text('You have an unresolved governance vote'), findsOneWidget);
+      expect(
+          find.text('You have an unresolved governance vote'), findsOneWidget);
       expect(find.text('A dynasty decision is pending'), findsOneWidget);
       // Corporate machine maintenance should be filtered out
       expect(find.text('Your machine needs maintenance'), findsNothing);
     });
 
-    testWidgets('renders empty state when no decisions in queue', (tester) async {
+    testWidgets('renders empty state when no decisions in queue',
+        (tester) async {
       await tester.pumpWidget(
         const MaterialApp(
           home: Scaffold(
@@ -162,7 +182,8 @@ void main() {
       );
 
       expect(find.text('ALL OBLIGATIONS RESOLVED'), findsOneWidget);
-      expect(find.text('No pending decisions in this category.'), findsOneWidget);
+      expect(
+          find.text('No pending decisions in this category.'), findsOneWidget);
     });
   });
 }

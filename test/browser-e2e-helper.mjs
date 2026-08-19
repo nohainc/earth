@@ -1,5 +1,8 @@
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { mkdtemp, rm } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import assert from 'node:assert/strict';
 import { WebSocket } from 'ws';
 
@@ -32,10 +35,17 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
   }
 
   const port = 9333 + Math.floor(Math.random() * 500);
+  // Chrome cannot safely share its default profile between concurrent test
+  // processes. A dedicated profile also avoids first-run locks in GitHub CI.
+  const profileDir = await mkdtemp(join(tmpdir(), 'earth-browser-e2e-'));
+  let chromeOutput = '';
   const chrome = spawn(chromePath, [
     '--headless=new',
     `--remote-debugging-port=${port}`,
+    '--remote-debugging-address=127.0.0.1',
+    `--user-data-dir=${profileDir}`,
     '--disable-gpu',
+    '--disable-dev-shm-usage',
     '--no-first-run',
     '--no-default-browser-check',
     '--disable-default-apps',
@@ -44,11 +54,14 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     '--disable-sync',
     '--mute-audio',
     '--no-sandbox',
-  ], { stdio: 'ignore' });
+  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  chrome.stderr?.on('data', (chunk) => {
+    chromeOutput = `${chromeOutput}${chunk}`.slice(-2000);
+  });
 
   // Wait for Chrome to be ready
   let wsUrl = null;
-  for (let i = 0; i < 30; i++) {
+  for (let i = 0; i < 60; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/json/version`);
       if (res.ok) {
@@ -57,12 +70,13 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
         break;
       }
     } catch {}
-    await new Promise((r) => setTimeout(r, 200));
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   if (!wsUrl) {
     chrome.kill('SIGKILL');
-    throw new Error('Chrome failed to start CDP debugger');
+    await rm(profileDir, { recursive: true, force: true });
+    throw new Error(`Chrome failed to start CDP debugger: ${chromeOutput || 'no diagnostic output'}`);
   }
 
   const browserWs = new WebSocket(wsUrl);
@@ -276,5 +290,6 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     browserWs.close();
   } finally {
     chrome.kill('SIGKILL');
+    await rm(profileDir, { recursive: true, force: true });
   }
 }

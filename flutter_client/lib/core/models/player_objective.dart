@@ -31,7 +31,10 @@ class PlayerObjective {
     this.iconName = 'star',
   });
 
-  bool get isCompleted => status == 'completed' || status == 'claimed' || progressPercentage >= 100.0;
+  bool get isCompleted =>
+      status == 'completed' ||
+      status == 'claimed' ||
+      progressPercentage >= 100.0;
 
   Color get categoryColor {
     switch (category.toLowerCase()) {
@@ -105,7 +108,8 @@ class PlayerObjective {
         'iconName': iconName,
       };
 
-  factory PlayerObjective.fromJson(Map<String, dynamic> json) => PlayerObjective(
+  factory PlayerObjective.fromJson(Map<String, dynamic> json) =>
+      PlayerObjective(
         id: json['id']?.toString() ?? 'obj-generic',
         category: json['category']?.toString() ?? 'enterprise',
         title: json['title']?.toString() ?? 'Strategic Objective',
@@ -115,7 +119,8 @@ class PlayerObjective {
         progressPercentage: _toDouble(json['progressPercentage'], 0.0),
         metricLabel: json['metricLabel']?.toString() ?? '0 / 100',
         status: json['status']?.toString() ?? 'in_progress',
-        rewardDescription: json['rewardDescription']?.toString() ?? 'Legacy & Prestige Points',
+        rewardDescription:
+            json['rewardDescription']?.toString() ?? 'Legacy & Prestige Points',
         targetSection: json['targetSection']?.toString() ?? 'command',
         iconName: json['iconName']?.toString() ?? 'star',
       );
@@ -162,9 +167,6 @@ class PlayerObjective {
     }
     final researchProgress = _toDouble(techMap?['progress'], 45.0);
 
-    final rawMachines = state.json['machines'];
-    final machines = rawMachines is List ? rawMachines : const [];
-
     return [
       PlayerObjective(
         id: 'obj-valuable-corporation',
@@ -178,7 +180,8 @@ class PlayerObjective {
             ((35000.0 + profit * 10) / 100000.0 * 100.0).clamp(0.0, 100.0),
         metricLabel:
             '${(35000 + profit * 10).round().toString()} / 100,000 C Valuation',
-        status: (35000.0 + profit * 10) >= 100000.0 ? 'completed' : 'in_progress',
+        status:
+            (35000.0 + profit * 10) >= 100000.0 ? 'completed' : 'in_progress',
         rewardDescription:
             'Title: "Industrial Titan" · +500 Legacy Points · Corporate Tax Charter Exemption',
         targetSection: 'business',

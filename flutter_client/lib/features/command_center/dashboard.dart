@@ -18,8 +18,6 @@ import '../operations/technology_panel.dart';
 import 'command_executive_quadrant.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
-import 'opportunity_panel.dart';
-import 'decision_queue_panel.dart';
 import 'objectives_panel.dart';
 import '../dynasty/dynasty_tree_dialog.dart';
 import '../contracts/supply_contracts_dialog.dart';
@@ -27,7 +25,6 @@ import '../market/derivatives_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
 import 'daily_briefing_dialog.dart';
 import '../../core/api/earth_api.dart';
-import '../../core/models/decision_queue_item.dart';
 import '../../core/models/player_objective.dart';
 import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
@@ -375,14 +372,18 @@ class Dashboard extends StatelessWidget {
         return [
           LayoutBuilder(
             builder: (context, constraints) {
-              final humanServices =
-                  HumanServicesPanel(panelKey: sectionKeys['civic'], state: state);
-              final proposal = ProposalPanel(state: state, busy: busy, action: action);
-              final roles = RolesPanel(state: state, busy: busy, action: action);
-              final communities = CommunitiesPanel(state: state, busy: busy, action: action);
-              final membership =
-                  CivicMembershipHistoryPanel(membershipEvents: membershipEvents);
-              final authority = AuthorityHistoryPanel(authorityEvents: authorityEvents);
+              final humanServices = HumanServicesPanel(
+                  panelKey: sectionKeys['civic'], state: state);
+              final proposal =
+                  ProposalPanel(state: state, busy: busy, action: action);
+              final roles =
+                  RolesPanel(state: state, busy: busy, action: action);
+              final communities =
+                  CommunitiesPanel(state: state, busy: busy, action: action);
+              final membership = CivicMembershipHistoryPanel(
+                  membershipEvents: membershipEvents);
+              final authority =
+                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               final publicFinance = PublicFinanceGovernancePanel(
                 state: state,
                 busy: busy,
@@ -453,8 +454,8 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final communities = CommunitiesPanel(
-                  state: state, busy: busy, action: action);
+              final communities =
+                  CommunitiesPanel(state: state, busy: busy, action: action);
               final solvency = InstitutionSolvencyPanel(
                   state: state, busy: busy, action: action);
               final rankings = WorldRankingsPanel(state: state);
@@ -521,76 +522,76 @@ class Dashboard extends StatelessWidget {
                   AiAssistantPanel(state: state, busy: busy, action: action);
               final recommendations = AiRecommendationsPanel(state: state);
               final matrix = EarthPanel(
-            title: 'EIGHT-SECTOR ECONOMY / INTERDEPENDENT MATRIX',
-            showSurface: false,
-            contentPadding: EdgeInsets.zero,
-            helpAfterTitle: true,
-            titleColor: mutedColor,
-            infoDescription:
-                '• Eight-Sector Industrial Matrix: The macroeconomic production loop linking raw extraction, power generation, mechanical fabrication, residential housing, computational infrastructure, and research.\n\n• Interdependency Loops:\n  - ENERGY & EXTRACTION: Powers high-capacity mining and bio-nutrient yields.\n  - COMPONENTS & MACHINES: Converts raw ores into precision subassemblies and industrial fabrication rigs.\n  - MAINTENANCE & HOUSING: Preserves fleet condition and citizen vitality.\n  - COMPUTE & R&D: Fuels quantum research algorithms unlocking patentable technologies.',
-            child: Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                Chip(
-                  avatar: Icon(Icons.bolt_outlined,
-                      size: 14, color: Colors.amberAccent),
-                  label: Text('ENERGY',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
+                title: 'EIGHT-SECTOR ECONOMY / INTERDEPENDENT MATRIX',
+                showSurface: false,
+                contentPadding: EdgeInsets.zero,
+                helpAfterTitle: true,
+                titleColor: mutedColor,
+                infoDescription:
+                    '• Eight-Sector Industrial Matrix: The macroeconomic production loop linking raw extraction, power generation, mechanical fabrication, residential housing, computational infrastructure, and research.\n\n• Interdependency Loops:\n  - ENERGY & EXTRACTION: Powers high-capacity mining and bio-nutrient yields.\n  - COMPONENTS & MACHINES: Converts raw ores into precision subassemblies and industrial fabrication rigs.\n  - MAINTENANCE & HOUSING: Preserves fleet condition and citizen vitality.\n  - COMPUTE & R&D: Fuels quantum research algorithms unlocking patentable technologies.',
+                child: Wrap(
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    Chip(
+                      avatar: Icon(Icons.bolt_outlined,
+                          size: 14, color: Colors.amberAccent),
+                      label: Text('ENERGY',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.terrain_outlined,
+                          size: 14, color: Colors.tealAccent),
+                      label: Text('EXTRACTION',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.settings_outlined,
+                          size: 14, color: cyanAccentColor),
+                      label: Text('COMPONENTS',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.precision_manufacturing_outlined,
+                          size: 14, color: violetColor),
+                      label: Text('MACHINES',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.build_outlined,
+                          size: 14, color: Colors.orangeAccent),
+                      label: Text('MAINTENANCE',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.home_work_outlined,
+                          size: 14, color: Colors.lightGreenAccent),
+                      label: Text('HOUSING',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.memory_outlined,
+                          size: 14, color: cyanAccentColor),
+                      label: Text('COMPUTE',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                    Chip(
+                      avatar: Icon(Icons.biotech_outlined,
+                          size: 14, color: violetColor),
+                      label: Text('R&D',
+                          style: TextStyle(
+                              fontSize: 10.5, fontWeight: FontWeight.w700)),
+                    ),
+                  ],
                 ),
-                Chip(
-                  avatar: Icon(Icons.terrain_outlined,
-                      size: 14, color: Colors.tealAccent),
-                  label: Text('EXTRACTION',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-                Chip(
-                  avatar: Icon(Icons.settings_outlined,
-                      size: 14, color: cyanAccentColor),
-                  label: Text('COMPONENTS',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-                Chip(
-                  avatar: Icon(Icons.precision_manufacturing_outlined,
-                      size: 14, color: violetColor),
-                  label: Text('MACHINES',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-                Chip(
-                  avatar: Icon(Icons.build_outlined,
-                      size: 14, color: Colors.orangeAccent),
-                  label: Text('MAINTENANCE',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-                Chip(
-                  avatar: Icon(Icons.home_work_outlined,
-                      size: 14, color: Colors.lightGreenAccent),
-                  label: Text('HOUSING',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-                Chip(
-                  avatar: Icon(Icons.memory_outlined,
-                      size: 14, color: cyanAccentColor),
-                  label: Text('COMPUTE',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-                Chip(
-                  avatar: Icon(Icons.biotech_outlined,
-                      size: 14, color: violetColor),
-                  label: Text('R&D',
-                      style: TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.w700)),
-                ),
-              ],
-            ),
-          );
+              );
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -716,8 +717,8 @@ class Dashboard extends StatelessWidget {
                 contracts: contracts,
                 action: action,
               );
-              final authority = AuthorityHistoryPanel(
-                  authorityEvents: authorityEvents);
+              final authority =
+                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -801,8 +802,8 @@ class Dashboard extends StatelessWidget {
               );
               final social = SocialGameplayPanel(
                 initiatives: socialInitiatives,
-                gameDay: asInt(
-                        (state.json['clock'] as Map<String, dynamic>?)?['day']) ??
+                gameDay: asInt((state.json['clock']
+                        as Map<String, dynamic>?)?['day']) ??
                     1,
                 onChanged: onRefreshEvents,
               );
@@ -875,8 +876,8 @@ class Dashboard extends StatelessWidget {
               );
               final social = SocialGameplayPanel(
                 initiatives: socialInitiatives,
-                gameDay: asInt(
-                        (state.json['clock'] as Map<String, dynamic>?)?['day']) ??
+                gameDay: asInt((state.json['clock']
+                        as Map<String, dynamic>?)?['day']) ??
                     1,
                 onChanged: onRefreshEvents,
               );

@@ -1,4 +1,3 @@
-import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/audio/earth_audio_engine.dart';
@@ -39,9 +38,10 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
     }
 
     final latest = widget.snapshots.last;
-    final inspected = (_hoveredIndex != null && _hoveredIndex! < widget.snapshots.length)
-        ? widget.snapshots[_hoveredIndex!]
-        : latest;
+    final inspected =
+        (_hoveredIndex != null && _hoveredIndex! < widget.snapshots.length)
+            ? widget.snapshots[_hoveredIndex!]
+            : latest;
 
     final tot = _parseNum(inspected['total_net_worth']);
     final cash = _parseNum(inspected['liquid_credits']);
@@ -64,8 +64,10 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
             decoration: BoxDecoration(
               color: EarthColors.cardSurface,
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
-              border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+              borderRadius:
+                  const BorderRadius.vertical(top: Radius.circular(8)),
+              border: const Border(
+                  bottom: BorderSide(color: EarthColors.borderSubtle)),
             ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -73,7 +75,9 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.show_chart, color: EarthThemeController.instance.primaryAccent, size: 16),
+                    Icon(Icons.show_chart,
+                        color: EarthThemeController.instance.primaryAccent,
+                        size: 16),
                     const SizedBox(width: 6),
                     const Text(
                       'TOTAL WEALTH',
@@ -105,13 +109,21 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                       children: [
                         _statBadge('DAY', day, Colors.white),
                         const SizedBox(width: 8),
-                        _statBadge('CASH', '${cash.toStringAsFixed(0)} CR', EarthThemeController.instance.goldMetallic),
+                        _statBadge('CASH', '${cash.toStringAsFixed(0)} CR',
+                            EarthThemeController.instance.goldMetallic),
                         const SizedBox(width: 8),
-                        _statBadge('COMMODITIES', '${comm.toStringAsFixed(0)} CR', EarthThemeController.instance.primaryAccent),
+                        _statBadge(
+                            'COMMODITIES',
+                            '${comm.toStringAsFixed(0)} CR',
+                            EarthThemeController.instance.primaryAccent),
                         const SizedBox(width: 8),
-                        _statBadge('EQUITY', '${eq.toStringAsFixed(0)} CR', const Color(0xFFC084FC)),
+                        _statBadge('EQUITY', '${eq.toStringAsFixed(0)} CR',
+                            const Color(0xFFC084FC)),
                         const SizedBox(width: 8),
-                        _statBadge('OTHER ASSETS', '${re.toStringAsFixed(0)} CR', const Color(0xFFFB923C)),
+                        _statBadge(
+                            'OTHER ASSETS',
+                            '${re.toStringAsFixed(0)} CR',
+                            const Color(0xFFFB923C)),
                       ],
                     ),
                   ),
@@ -131,7 +143,9 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                     final n = widget.snapshots.length;
                     if (n > 1) {
                       final segWidth = width / (n - 1);
-                      final idx = (event.localPosition.dx / segWidth).round().clamp(0, n - 1);
+                      final idx = (event.localPosition.dx / segWidth)
+                          .round()
+                          .clamp(0, n - 1);
                       if (idx != _hoveredIndex) {
                         EarthAudioEngine.instance.playClick();
                         setState(() => _hoveredIndex = idx);
@@ -148,7 +162,8 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                     painter: _NetWorthChartPainter(
                       snapshots: widget.snapshots,
                       hoveredIndex: _hoveredIndex,
-                      primaryAccent: EarthThemeController.instance.primaryAccent,
+                      primaryAccent:
+                          EarthThemeController.instance.primaryAccent,
                       goldAccent: EarthThemeController.instance.goldMetallic,
                     ),
                   ),
@@ -172,8 +187,14 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Text('$label: ', style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5, fontWeight: FontWeight.bold)),
-          Text(value, style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.bold)),
+          Text('$label: ',
+              style: const TextStyle(
+                  color: EarthColors.textMuted,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold)),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontSize: 9.5, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -230,12 +251,15 @@ class _NetWorthChartPainter extends CustomPainter {
     const steps = 4;
     for (int i = 0; i <= steps; i++) {
       final y = padTop + chartH * (1.0 - (i / steps));
-      canvas.drawLine(Offset(padLeft, y), Offset(size.width - padRight, y), gridPaint);
+      canvas.drawLine(
+          Offset(padLeft, y), Offset(size.width - padRight, y), gridPaint);
 
       final val = (maxVal * (i / steps));
       final tp = TextPainter(
         text: TextSpan(
-          text: val >= 1000 ? '${(val / 1000).toStringAsFixed(1)}k' : val.toStringAsFixed(0),
+          text: val >= 1000
+              ? '${(val / 1000).toStringAsFixed(1)}k'
+              : val.toStringAsFixed(0),
           style: const TextStyle(color: Colors.white30, fontSize: 8.5),
         ),
         textDirection: TextDirection.ltr,
@@ -252,7 +276,8 @@ class _NetWorthChartPainter extends CustomPainter {
 
     for (int i = 0; i < n; i++) {
       final s = snapshots[i];
-      final x = n > 1 ? padLeft + (chartW * (i / (n - 1))) : padLeft + chartW / 2;
+      final x =
+          n > 1 ? padLeft + (chartW * (i / (n - 1))) : padLeft + chartW / 2;
 
       final t = _val(s['total_net_worth']);
       final c = _val(s['liquid_credits']);
@@ -275,8 +300,7 @@ class _NetWorthChartPainter extends CustomPainter {
 
     // 3. Fill Area under total wealth curve
     if (totalPoints.length > 1) {
-      final areaPath = Path()
-        ..moveTo(totalPoints.first.dx, padTop + chartH);
+      final areaPath = Path()..moveTo(totalPoints.first.dx, padTop + chartH);
       for (final p in totalPoints) {
         areaPath.lineTo(p.dx, p.dy);
       }
@@ -292,7 +316,8 @@ class _NetWorthChartPainter extends CustomPainter {
         ],
       );
       final areaPaint = Paint()
-        ..shader = areaGradient.createShader(Rect.fromLTWH(padLeft, padTop, chartW, chartH));
+        ..shader = areaGradient
+            .createShader(Rect.fromLTWH(padLeft, padTop, chartW, chartH));
       canvas.drawPath(areaPath, areaPaint);
     }
 
@@ -311,7 +336,8 @@ class _NetWorthChartPainter extends CustomPainter {
       final scrubPaint = Paint()
         ..color = Colors.white70
         ..strokeWidth = 1.0;
-      canvas.drawLine(Offset(hp.dx, padTop), Offset(hp.dx, padTop + chartH), scrubPaint);
+      canvas.drawLine(
+          Offset(hp.dx, padTop), Offset(hp.dx, padTop + chartH), scrubPaint);
 
       final dotPaint = Paint()
         ..color = primaryAccent
@@ -326,7 +352,8 @@ class _NetWorthChartPainter extends CustomPainter {
     }
   }
 
-  void _drawCurve(Canvas canvas, List<Offset> points, Color color, double width) {
+  void _drawCurve(
+      Canvas canvas, List<Offset> points, Color color, double width) {
     if (points.length < 2) return;
     final path = Path()..moveTo(points.first.dx, points.first.dy);
     for (int i = 1; i < points.length; i++) {

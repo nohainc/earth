@@ -140,7 +140,7 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       _error = null;
     });
     try {
-      final res = await widget.api.acceptContract(contractId);
+      await widget.api.acceptContract(contractId);
       if (mounted) {
         setState(() {
           _successMessage = 'Supply agreement accepted! Escrow vault locked.';
@@ -193,7 +193,7 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     });
 
     try {
-      final res = await widget.api.proposeSupplyContract(
+      await widget.api.proposeSupplyContract(
         counterpartyId: _recipientController.text.trim(),
         proposerRole: _proposerRole,
         resourceType: _resourceType,
@@ -240,7 +240,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       height: widget.isPageMode ? 740 : 720,
       decoration: BoxDecoration(
         color: widget.isPageMode ? Colors.transparent : canvasColor,
-        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+        borderRadius:
+            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
         border: widget.isPageMode
             ? null
             : Border.all(color: EarthColors.borderSubtle),
@@ -255,7 +256,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
               ],
       ),
       child: ClipRRect(
-        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+        borderRadius:
+            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
         child: Column(
           children: [
             _buildTopBar(activeContracts.length, proposedContracts.length),
@@ -686,8 +688,6 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     final title = c['title'] ?? 'Supply Agreement';
     final status = (c['status'] ?? 'proposed').toString();
     final resourceType = (c['resource_type'] ?? 'energy').toString();
-    final dailyQty = _parseNum(c['daily_quantity']);
-    final unitPrice = _parseNum(c['unit_price']);
     final totalDays = _parseInt(c['total_days']);
     final deliveredDays = _parseInt(c['delivered_days']);
     final defaultDays = _parseInt(c['default_days']);
