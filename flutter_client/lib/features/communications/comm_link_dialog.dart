@@ -398,18 +398,24 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                   ),
                 ),
               )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  _buildSegmentedNavHeader(),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: switch (_activeMode) {
-                      'dispatches' => _buildDispatchesContainer(),
-                      _ => _buildChannelsView(),
-                    },
-                  ),
-                ],
+            : Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: EarthColors.borderSubtle),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _buildSegmentedNavHeader(),
+                    Expanded(
+                      child: switch (_activeMode) {
+                        'dispatches' => _buildDispatchesContainer(),
+                        _ => _buildChannelsView(),
+                      },
+                    ),
+                  ],
+                ),
               );
 
     return EarthPanel(
@@ -733,9 +739,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
 
     return Container(
       decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: EarthColors.borderSubtle),
+        color: Colors.transparent,
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -745,8 +749,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
           SizedBox(
             width: 250,
             child: Container(
-              decoration: const BoxDecoration(
-                border: Border(right: BorderSide(color: Colors.white12)),
+              decoration: BoxDecoration(
+                color: _groupSurface,
+                border: const Border(right: BorderSide(color: Colors.white12)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1358,9 +1363,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
 
     return Container(
       decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: EarthColors.borderSubtle),
+        color: Colors.transparent,
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -1370,8 +1373,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
           SizedBox(
             width: 250,
             child: Container(
-              decoration: const BoxDecoration(
-                border: Border(right: BorderSide(color: Colors.white12)),
+              decoration: BoxDecoration(
+                color: _groupSurface,
+                border: const Border(right: BorderSide(color: Colors.white12)),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1714,7 +1718,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
         : {};
 
     return Container(
-      color: _groupSurface,
+      color: Colors.transparent,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
