@@ -86,6 +86,24 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     } catch (_) {}
   }
 
+  void _selectPartner(Map<String, dynamic> partner) {
+    final partnerName = (partner['display_name'] ??
+            partner['dynasty_name'] ??
+            partner['city_name'] ??
+            partner['name'] ??
+            partner['id'])
+        .toString();
+    setState(() {
+      targetId = partner['id']?.toString();
+      selectedPerson = partner;
+      search.value = TextEditingValue(
+        text: partnerName,
+        selection: TextSelection.collapsed(offset: partnerName.length),
+      );
+    });
+    partnerFocus.unfocus();
+  }
+
   Future<void> _create() async {
     if (title.text.trim().isEmpty ||
         body.text.trim().isEmpty ||
@@ -307,7 +325,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
             icon: const Icon(Icons.refresh_rounded, size: 16),
           ),
         ]),
-        const SizedBox(height: 8),
+        const SizedBox(height: 18),
         ...widget.initiatives.map(_buildInitiative),
       ],
     );
@@ -425,17 +443,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                             selected: selected,
                             label: Text(
                                 '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                            onSelected: (_) {
-                              setState(() {
-                                targetId = p['id']?.toString();
-                                selectedPerson = p;
-                                search.text = (p['display_name'] ??
-                                        p['dynasty_name'] ??
-                                        p['id'])
-                                    .toString();
-                              });
-                              partnerFocus.unfocus();
-                            },
+                            onSelected: (_) => _selectPartner(p),
                           ));
                     }).toList()),
           ),
@@ -508,7 +516,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         Align(
             alignment: Alignment.centerRight,
             child: Padding(
-                padding: const EdgeInsets.only(top: 14),
+                padding: const EdgeInsets.only(top: 22),
                 child: FilledButton.icon(
                     onPressed: loading ? null : _create,
                     icon: const Icon(Icons.send, size: 16),

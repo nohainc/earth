@@ -80,6 +80,10 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Ari\nStanding 20'), findsOneWidget);
     await tester.tap(find.text('Ari\nStanding 20'));
+    await tester.pump();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Ari');
     await tester.enterText(find.byType(TextField).at(4), 'Alliance');
     await tester.enterText(find.byType(TextField).at(5), 'Work together');
     await tester.ensureVisible(find.text('PREVIEW & PROPOSE'));
