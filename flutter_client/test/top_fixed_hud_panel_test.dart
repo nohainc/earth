@@ -43,7 +43,6 @@ void main() {
       'market': {'orders': []},
     });
 
-    String? navigatedRoute;
     bool drawerOpened = false;
     bool loggedOut = false;
     bool securityOpened = false;
@@ -65,7 +64,7 @@ void main() {
             isReconnecting: false,
             showDrawerButton: true,
             onOpenDrawer: () => drawerOpened = true,
-            onNavigate: (r) => navigatedRoute = r,
+            onNavigate: (_) {},
             onLogout: () => loggedOut = true,
             onSecurity: () => securityOpened = true,
             onCommLink: () => commLinkOpened = true,

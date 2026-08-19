@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
-import '../../shared/widgets/earth_primitives.dart';
-import '../../shared/widgets/format_helpers.dart';
 
 void showReincarnationDialog(
   BuildContext context, {
@@ -169,8 +167,8 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                 decoration: BoxDecoration(
                   color: EarthColors.cardSurface,
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(
-                      color: EarthColors.goldMetallic.withAlpha(80)),
+                  border:
+                      Border.all(color: EarthColors.goldMetallic.withAlpha(80)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -327,7 +325,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                           TextStyle(color: EarthColors.textMuted, fontSize: 11),
                     ),
                     const SizedBox(height: 14),
-
                     TextField(
                       controller: _nameController,
                       decoration: const InputDecoration(
@@ -339,7 +336,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     TextField(
                       controller: _dynastyController,
                       decoration: const InputDecoration(
@@ -351,7 +347,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                       ),
                     ),
                     const SizedBox(height: 12),
-
                     DropdownButtonFormField<String>(
                       value: _selectedCity,
                       isExpanded: true,
@@ -365,10 +360,12 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                       items: const [
                         DropdownMenuItem(
                             value: 'city-new-tokyo',
-                            child: Text('Neo-Tokyo (High Technology & Compute)')),
+                            child:
+                                Text('Neo-Tokyo (High Technology & Compute)')),
                         DropdownMenuItem(
                             value: 'city-new-york',
-                            child: Text('New York (Financial & Corporate Hub)')),
+                            child:
+                                Text('New York (Financial & Corporate Hub)')),
                         DropdownMenuItem(
                             value: 'city-london',
                             child: Text('London (Industrial & Trade Center)')),
@@ -384,7 +381,6 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                       },
                     ),
                     const SizedBox(height: 16),
-
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(

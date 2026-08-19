@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../shared/widgets/earth_primitives.dart';
-import '../../shared/widgets/format_helpers.dart';
 import '../dynasty/dynasty_tree_dialog.dart';
 
 void showCemeteryPantheonDialog(BuildContext context, {EarthApi? api}) {
@@ -105,11 +104,12 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
                     children: [
                       Text(
                         'PLANETARY PANTHEON & CEMETERY ARCHIVE',
-                        style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                              color: EarthColors.goldMetallic,
-                              fontWeight: FontWeight.bold,
-                              letterSpacing: 1.2,
-                            ),
+                        style:
+                            Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: EarthColors.goldMetallic,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 1.2,
+                                ),
                       ),
                       const SizedBox(height: 2),
                       Text(
@@ -123,14 +123,17 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
                 ),
                 ElevatedButton.icon(
                   key: const Key('btn-open-dynasty-tree'),
-                  onPressed: () => showDynastyTreeDialog(context, api: widget.api),
+                  onPressed: () =>
+                      showDynastyTreeDialog(context, api: widget.api),
                   icon: const Icon(Icons.account_tree_outlined, size: 14),
                   label: const Text('DYNASTY TREE'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: EarthColors.goldMetallic,
                     foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 10.5),
                   ),
                 ),
                 const SizedBox(width: 8),
@@ -151,8 +154,8 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
                     onSubmitted: (_) => _loadData(),
                     decoration: InputDecoration(
                       hintText: 'Search citizen name, dynasty, or successor...',
-                      prefixIcon:
-                          const Icon(Icons.search, color: EarthColors.textMuted),
+                      prefixIcon: const Icon(Icons.search,
+                          color: EarthColors.textMuted),
                       suffixIcon: IconButton(
                         icon: const Icon(Icons.arrow_forward,
                             color: EarthColors.cyanAccent),

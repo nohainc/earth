@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:earth_client/core/models/onboarding_state.dart';
 import 'package:earth_client/core/onboarding_controller.dart';
 import 'package:earth_client/features/onboarding/onboarding_guidance_bar.dart';
 import 'package:earth_client/features/onboarding/onboarding_welcome_dialog.dart';
 import 'package:earth_client/features/onboarding/onboarding_completion_dialog.dart';
 
 void main() {
-  test('OnboardingController handles full 6-step lifecycle, skip, and reset', () {
+  test('OnboardingController handles full 6-step lifecycle, skip, and reset',
+      () {
     final ctrl = OnboardingController.instance;
     ctrl.reset();
 
@@ -46,7 +46,9 @@ void main() {
     expect(ctrl.isDismissed, isFalse);
   });
 
-  testWidgets('OnboardingGuidanceBar renders steps, expands/minimizes, and navigates', (tester) async {
+  testWidgets(
+      'OnboardingGuidanceBar renders steps, expands/minimizes, and navigates',
+      (tester) async {
     final ctrl = OnboardingController.instance;
     ctrl.reset();
 
@@ -90,13 +92,15 @@ void main() {
     expect(find.text('REVIEW PERSONAL RESOURCES'), findsOneWidget);
 
     // Action button
-    final actionBtn = find.byKey(const Key('btn-onboarding-action-personal_resources'));
+    final actionBtn =
+        find.byKey(const Key('btn-onboarding-action-personal_resources'));
     expect(actionBtn, findsOneWidget);
     await tester.tap(actionBtn);
     await tester.pump();
 
     expect(navigatedTo, 'net_worth');
-    expect(ctrl.progress.completedStepIds.contains('personal_resources'), isTrue);
+    expect(
+        ctrl.progress.completedStepIds.contains('personal_resources'), isTrue);
 
     // Dismiss
     final skipBtn = find.byKey(const Key('btn-onboarding-skip'));
@@ -110,7 +114,9 @@ void main() {
     ctrl.reset();
   });
 
-  testWidgets('OnboardingWelcomeDialog renders 6 step previews and starts orientation', (tester) async {
+  testWidgets(
+      'OnboardingWelcomeDialog renders 6 step previews and starts orientation',
+      (tester) async {
     final ctrl = OnboardingController.instance;
     ctrl.reset();
 
@@ -139,7 +145,8 @@ void main() {
     expect(ctrl.currentStepIndex, 0);
   });
 
-  testWidgets('OnboardingCompletionDialog renders graduation and stipend award', (tester) async {
+  testWidgets('OnboardingCompletionDialog renders graduation and stipend award',
+      (tester) async {
     await tester.pumpWidget(
       const MaterialApp(
         home: Scaffold(
@@ -150,7 +157,8 @@ void main() {
 
     expect(find.text('ORIENTATION PROTOCOL COMPLETE'), findsOneWidget);
     expect(find.text('PIONEER INDUCTION RATIFIED'), findsOneWidget);
-    expect(find.text('+500.00 CR Civic Orientation Bonus Credited'), findsOneWidget);
+    expect(find.text('+500.00 CR Civic Orientation Bonus Credited'),
+        findsOneWidget);
     expect(find.byKey(const Key('btn-finish-onboarding')), findsOneWidget);
   });
 }
