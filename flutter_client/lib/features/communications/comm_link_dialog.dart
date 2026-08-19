@@ -1367,7 +1367,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
         children: [
           // Left Mail Drawer
           SizedBox(
-            width: 280,
+            width: 250,
             child: Container(
               decoration: const BoxDecoration(
                 border: Border(right: BorderSide(color: Colors.white12)),
