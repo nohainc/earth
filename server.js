@@ -756,7 +756,7 @@ function settleMarket() {
   return state.market.lastSettlement;
 }
 
-function command(path, body, req = null) {
+async function command(path, body, req = null) {
   // Social Commons local compatibility routes.
   if (path.startsWith('/api/social/')) {
     const session = resolveSession(req);
@@ -865,18 +865,32 @@ function command(path, body, req = null) {
     };
   }
   if (path === '/api/market/history' && body.method === 'GET') {
-    const product = body.product || 'energy';
-    const current = state.market?.prices?.[product] ?? 1.0;
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const product = (url?.searchParams.get('product') || body.product || 'energy').toLowerCase();
+    const days = Number(url?.searchParams.get('days') || body.days || 30);
+    const current = state.market?.products?.[product]?.price ?? 1.0;
+    let history = [];
+    if (database) {
+      try {
+        history = (await database.loadMarketHistory(product, days)).map((snapshot) => ({
+          gameDay: Number(snapshot.game_day),
+          price: Number(snapshot.close_price),
+        }));
+      } catch {}
+    }
+    if (history.length < 2) {
+      history = [
+        { gameDay: state.clock.day - 2, price: current * 0.98 },
+        { gameDay: state.clock.day - 1, price: current * 1.01 },
+        { gameDay: state.clock.day, price: current },
+      ];
+    }
     return {
       product,
       currentPrice: current,
       supply: 120,
       demand: 110,
-      history: [
-        { gameDay: state.clock.day - 2, price: current * 0.98 },
-        { gameDay: state.clock.day - 1, price: current * 1.01 },
-        { gameDay: state.clock.day, price: current },
-      ],
+      history,
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
@@ -3192,7 +3206,7 @@ const server = createServer(async (req, res) => {
   }
 
   try {
-    const result = command(url.pathname, { ...body, method: req.method }, req);
+    const result = await command(url.pathname, { ...body, method: req.method }, req);
     if (result && typeof result === 'object' && 'data' in result && 'status' in result) {
       return send(res, result.status, result.data, { 'x-request-id': correlationId, ...result.headers });
     }

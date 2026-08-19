@@ -110,6 +110,17 @@ export function createDatabase(connectionString = process.env.DATABASE_URL) {
     async saveLedger(entry) { await write(() => pool.query(`insert into ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, correlation_id) values ($1,$2,$3,$4,$5,$6,$7,$8,$9) on conflict (id) do nothing`, [entry.id, entry.gameDay, entry.debit, entry.credit, entry.amount, entry.currency, entry.reason, entry.reasonId || null, entry.correlationId])); },
     async saveOrder(order) { await write(() => pool.query(`insert into market_orders (id, human_id, product, quantity, limit_price, filled_quantity, status, created_at) values ($1,$2,$3,$4,$5,$6,$7,to_timestamp($8/1000.0)) on conflict (id) do update set filled_quantity=excluded.filled_quantity,status=excluded.status`, [order.id, order.humanId === 'amara' ? 'H-0044' : order.humanId, order.product, order.quantity, order.limitPrice, order.filled, order.status, order.createdAt])); },
     async saveBallot(proposalId, humanId, choice, weight = 1) { await write(() => pool.query(`insert into ballots (proposal_id, human_id, choice, weight) values ($1,$2,$3,$4) on conflict (proposal_id,human_id) do nothing`, [proposalId, humanId === 'amara' ? 'H-0044' : humanId, choice, weight])); },
+    async loadMarketHistory(product, days = 30) {
+      const limit = Math.max(2, Math.min(Number(days) || 30, 90));
+      const result = await pool.query(`
+        select game_day, close_price
+        from market_ohlc_snapshots
+        where commodity = $1
+        order by game_day desc
+        limit $2
+      `, [product, limit]);
+      return result.rows.reverse();
+    },
     readOnly,
     async health() { const result = await pool.query('select 1 as ok'); return result.rows[0].ok === 1; }
   };
