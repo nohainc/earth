@@ -375,12 +375,25 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   }
 
   void _refreshOrderTotalsOnFocusLoss() {
+    _capBuyQuantityToBudget();
     if (!_qtyFocusNode.hasFocus && !_priceFocusNode.hasFocus && mounted) {
       setState(() {});
     }
   }
 
+  void _capBuyQuantityToBudget() {
+    if (_orderSide != 'buy') return;
+    final limitPrice = double.tryParse(_priceController.text.trim()) ?? 0;
+    final quantity = int.tryParse(_qtyController.text.trim()) ?? 0;
+    if (limitPrice <= 0 || quantity <= 0) return;
+    final credits = asDouble(widget.state.human['credits']) ?? 0;
+    final maximum =
+        (credits / (limitPrice * (1 + widget.state.marketFeeRate))).floor();
+    if (quantity > maximum) _qtyController.text = maximum.toString();
+  }
+
   void _refreshOrderTotals() {
+    _capBuyQuantityToBudget();
     if (mounted) setState(() {});
   }
 
@@ -726,7 +739,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               crossAxisAlignment: CrossAxisAlignment.center,
                               children: [
                                 Expanded(
-                                  flex: 14,
                                   child: TextField(
                                     controller: _qtyController,
                                     focusNode: _qtyFocusNode,
@@ -759,7 +771,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  flex: 15,
                                   child: TextField(
                                     controller: _priceController,
                                     focusNode: _priceFocusNode,
@@ -788,15 +799,20 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                     ),
                                   ),
                                 ),
-                                const SizedBox(width: 16),
-                                _orderValue(
-                                    'FEE',
-                                    isBuy
-                                        ? '${fee.toStringAsFixed(2)} C'
-                                        : '—'),
-                                const SizedBox(width: 16),
-                                _orderValue(isBuy ? 'TOTAL' : 'PROCEEDS',
-                                    '${totalEscrow.toStringAsFixed(2)} C'),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _orderValue(
+                                      'FEE',
+                                      isBuy
+                                          ? '${fee.toStringAsFixed(2)} C'
+                                          : '—'),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _orderValue(
+                                      isBuy ? 'TOTAL' : 'PROCEEDS',
+                                      '${totalEscrow.toStringAsFixed(2)} C'),
+                                ),
                               ],
                             ),
                             const SizedBox(height: 12),
@@ -874,7 +890,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontSize: 8.5,
+                  fontSize: 10.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: .7,
                   color: mutedColor)),
@@ -897,7 +913,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           const SizedBox(height: 3),
           Text(value,
               style: const TextStyle(
-                  fontSize: 13, fontWeight: FontWeight.w600, color: inkColor)),
+                  fontSize: 13, fontWeight: FontWeight.w600, color: inkColor),
+              overflow: TextOverflow.ellipsis),
         ],
       );
 
