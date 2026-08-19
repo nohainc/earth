@@ -103,7 +103,7 @@ void main() {
   });
 
   group('ActivityPanel keeps connection status out of the workspace', () {
-    testWidgets('shows the activity toolbar and refresh action',
+    testWidgets('shows the activity stream frame and refresh action',
         (tester) async {
       var refreshed = false;
 
@@ -124,10 +124,13 @@ void main() {
         ),
       );
 
-      expect(find.text('0 EVENTS BUFFERED'), findsOneWidget);
+      expect(find.text('ALERTS'), findsOneWidget);
+      expect(find.text('PUBLIC FEED'), findsOneWidget);
       expect(find.text('POLLING MODE (PERIODIC SYNC)'), findsNothing);
 
-      await tester.tap(find.byIcon(Icons.refresh_rounded));
+      await tester.tap(find.text('PUBLIC FEED'));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('Refresh events & notifications'));
       expect(refreshed, isTrue);
     });
 
