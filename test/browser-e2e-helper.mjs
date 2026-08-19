@@ -27,6 +27,23 @@ async function findChromePath() {
   return null;
 }
 
+async function stopChrome(chrome) {
+  if (!chrome.killed) chrome.kill('SIGKILL');
+  await Promise.race([
+    new Promise((resolve) => chrome.once('close', resolve)),
+    new Promise((resolve) => setTimeout(resolve, 2000)),
+  ]);
+}
+
+async function removeProfile(profileDir) {
+  await rm(profileDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 5,
+    retryDelay: 200,
+  });
+}
+
 export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
   const chromePath = await findChromePath();
   if (!chromePath) {
@@ -74,8 +91,8 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
   }
 
   if (!wsUrl) {
-    chrome.kill('SIGKILL');
-    await rm(profileDir, { recursive: true, force: true });
+    await stopChrome(chrome);
+    await removeProfile(profileDir);
     throw new Error(`Chrome failed to start CDP debugger: ${chromeOutput || 'no diagnostic output'}`);
   }
 
@@ -289,7 +306,7 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     await send(browserWs, 'Target.closeTarget', { targetId });
     browserWs.close();
   } finally {
-    chrome.kill('SIGKILL');
-    await rm(profileDir, { recursive: true, force: true });
+    await stopChrome(chrome);
+    await removeProfile(profileDir);
   }
 }
