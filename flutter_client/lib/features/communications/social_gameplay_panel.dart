@@ -74,6 +74,16 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     }
   }
 
+  void _onPartnerSearch(String query) {
+    if (targetId != null) {
+      setState(() {
+        targetId = null;
+        selectedPerson = null;
+      });
+    }
+    _loadDirectory(query);
+  }
+
   Future<void> _loadHistory() async {
     try {
       final r = await Future.wait(
@@ -419,7 +429,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         TextField(
             controller: search,
             focusNode: partnerFocus,
-            onChanged: _loadDirectory,
+            onChanged: _onPartnerSearch,
             decoration: const InputDecoration(
               labelText: 'Search citizens or dynasties',
               prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),

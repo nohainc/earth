@@ -21,6 +21,12 @@ class FakeSocialTransport extends EarthApiTransport {
             'display_name': 'Ari',
             'standing': 20,
             'dynasty_name': 'Sol'
+          },
+          {
+            'id': 'H-3',
+            'display_name': 'Benn',
+            'standing': 30,
+            'dynasty_name': 'Nova'
           }
         ]
       };
@@ -84,6 +90,14 @@ void main() {
     expect(
         tester.widget<TextField>(find.byType(TextField).first).controller!.text,
         'Ari');
+    await tester.tap(find.byType(TextField).first);
+    await tester.enterText(find.byType(TextField).first, 'Benn');
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('Benn\nStanding 30'));
+    await tester.pump();
+    expect(
+        tester.widget<TextField>(find.byType(TextField).first).controller!.text,
+        'Benn');
     await tester.enterText(find.byType(TextField).at(4), 'Alliance');
     await tester.enterText(find.byType(TextField).at(5), 'Work together');
     await tester.ensureVisible(find.text('PREVIEW & PROPOSE'));
