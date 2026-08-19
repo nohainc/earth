@@ -140,45 +140,7 @@ class _ActivityPanelState extends State<ActivityPanel>
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           _buildTopicHeading(context),
-          // 1. ACTIVITY TOOLBAR
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .75),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Row(
-              children: [
-                const Icon(Icons.receipt_long_outlined,
-                    size: 16, color: mutedColor),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    '${widget.events.length} EVENTS BUFFERED',
-                    style: const TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w600,
-                      color: mutedColor,
-                      letterSpacing: .5,
-                    ),
-                  ),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.refresh_rounded, size: 16),
-                  tooltip: 'Refresh events & notifications',
-                  padding: EdgeInsets.zero,
-                  visualDensity: VisualDensity.compact,
-                  constraints: const BoxConstraints(),
-                  onPressed: widget.onRefresh,
-                ),
-              ],
-            ),
-          ),
-
-          const SizedBox(height: 14),
-
-          // 2. SEGMENTED NAVIGATION TABS
+          // Stream controls remain adjacent to the stream they control.
           Container(
             decoration: BoxDecoration(
               color: surfaceColor.withValues(alpha: .5),
@@ -417,69 +379,90 @@ class _ActivityPanelState extends State<ActivityPanel>
                 ),
 
                 // TAB 2: PUBLIC ACTIVITY FEED
-                widget.events.isEmpty
-                    ? const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.sensors_off_rounded,
-                                size: 32, color: mutedColor),
-                            SizedBox(height: 8),
-                            Text(
-                              'No recent simulation activity recorded.',
-                              style: TextStyle(fontSize: 11, color: mutedColor),
-                            ),
-                          ],
-                        ),
-                      )
-                    : ListView.separated(
-                        itemCount: widget.events.length.clamp(0, 40),
-                        separatorBuilder: (_, __) => const SizedBox(height: 6),
-                        itemBuilder: (ctx, i) {
-                          final evt = widget.events[i];
-                          if (evt is! Map<String, dynamic>) {
-                            return const SizedBox.shrink();
-                          }
-                          final type = evt['type']?.toString() ?? 'event';
-                          final color = _getEventColor(type);
-                          final icon = _getEventIcon(type);
-                          final summary = _formatEventSummary(evt);
-
-                          return Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 9),
-                            decoration: BoxDecoration(
-                              color: surfaceColor.withValues(alpha: .6),
-                              borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.white10),
-                            ),
-                            child: Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(6),
-                                  decoration: BoxDecoration(
-                                    color: color.withValues(alpha: .15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: Icon(icon, size: 14, color: color),
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    summary,
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: inkColor,
-                                      fontWeight: FontWeight.w500,
-                                      height: 1.3,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          );
-                        },
+                Column(
+                  children: [
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: IconButton(
+                        icon: const Icon(Icons.refresh_rounded, size: 16),
+                        tooltip: 'Refresh events & notifications',
+                        padding: EdgeInsets.zero,
+                        visualDensity: VisualDensity.compact,
+                        constraints: const BoxConstraints(),
+                        onPressed: widget.onRefresh,
                       ),
+                    ),
+                    Expanded(
+                      child: widget.events.isEmpty
+                          ? const Center(
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(Icons.sensors_off_rounded,
+                                      size: 32, color: mutedColor),
+                                  SizedBox(height: 8),
+                                  Text(
+                                    'No recent simulation activity recorded.',
+                                    style: TextStyle(
+                                        fontSize: 11, color: mutedColor),
+                                  ),
+                                ],
+                              ),
+                            )
+                          : ListView.separated(
+                              itemCount: widget.events.length.clamp(0, 40),
+                              separatorBuilder: (_, __) =>
+                                  const SizedBox(height: 6),
+                              itemBuilder: (ctx, i) {
+                                final evt = widget.events[i];
+                                if (evt is! Map<String, dynamic>) {
+                                  return const SizedBox.shrink();
+                                }
+                                final type = evt['type']?.toString() ?? 'event';
+                                final color = _getEventColor(type);
+                                final icon = _getEventIcon(type);
+                                final summary = _formatEventSummary(evt);
+
+                                return Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 9),
+                                  decoration: BoxDecoration(
+                                    color: surfaceColor.withValues(alpha: .6),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: Colors.white10),
+                                  ),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.all(6),
+                                        decoration: BoxDecoration(
+                                          color: color.withValues(alpha: .15),
+                                          borderRadius:
+                                              BorderRadius.circular(6),
+                                        ),
+                                        child:
+                                            Icon(icon, size: 14, color: color),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          summary,
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            color: inkColor,
+                                            fontWeight: FontWeight.w500,
+                                            height: 1.3,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              },
+                            ),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),

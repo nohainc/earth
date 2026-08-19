@@ -46,9 +46,7 @@ void main() {
       ),
     ));
     await tester.pump();
-    expect(find.text('SOCIAL COMMONS'), findsOneWidget);
-    await tester.tap(find.text('CREATE AN INITIATIVE'));
-    await tester.pumpAndSettle();
+    expect(find.text('COLLABORATIVE INITIATIVES'), findsOneWidget);
     expect(find.text('What are you proposing?'), findsOneWidget);
     expect(find.text('No active initiatives yet.'), findsOneWidget);
   });
@@ -78,10 +76,10 @@ void main() {
       ),
     ));
     await tester.pump();
-    await tester.tap(find.text('CREATE AN INITIATIVE'));
+    await tester.enterText(find.byType(TextField).first, 'Ari');
     await tester.pumpAndSettle();
-    expect(find.textContaining('Ari'), findsOneWidget);
-    await tester.tap(find.textContaining('Ari'));
+    expect(find.text('Ari\nStanding 20'), findsOneWidget);
+    await tester.tap(find.text('Ari\nStanding 20'));
     await tester.enterText(find.byType(TextField).at(4), 'Alliance');
     await tester.enterText(find.byType(TextField).at(5), 'Work together');
     await tester.ensureVisible(find.text('PREVIEW & PROPOSE'));

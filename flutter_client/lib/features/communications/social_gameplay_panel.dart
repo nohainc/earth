@@ -36,7 +36,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   @override
   void initState() {
     super.initState();
-    _loadDirectory();
+    _loadHistory();
   }
 
   @override
@@ -51,6 +51,10 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   }
 
   Future<void> _loadDirectory([String query = '']) async {
+    if (query.trim().isEmpty) {
+      setState(() => people = const []);
+      return;
+    }
     try {
       final r = await widget.api.socialDirectory(query: query);
       if (mounted) {
@@ -196,7 +200,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   @override
   Widget build(BuildContext context) {
     return EarthPanel(
-      title: 'SOCIAL COMMONS',
+      title: 'COLLABORATIVE INITIATIVES',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -207,8 +211,6 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           _buildTopicHeading(context),
-          _buildIntro(),
-          const SizedBox(height: 14),
           if (error != null) ...[
             Text(error!,
                 style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
@@ -217,18 +219,15 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
           _buildInitiatives(),
           const SizedBox(height: 12),
           _buildComposer(),
-          const SizedBox(height: 6),
-          ExpansionTile(
-            tilePadding: EdgeInsets.zero,
-            title: const Text('RELATIONSHIPS & HISTORY',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-            subtitle: const Text('Your trust, reputation, and social timeline',
-                style: TextStyle(fontSize: 10.5, color: mutedColor)),
-            onExpansionChanged: (open) {
-              if (open) _loadHistory();
-            },
-            children: _historyWidgets(),
-          ),
+          const SizedBox(height: 20),
+          const Text('RELATIONSHIPS & HISTORY',
+              style: TextStyle(
+                  color: mutedColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 1.1)),
+          const SizedBox(height: 8),
+          ..._historyWidgets(),
         ],
       ),
     );
@@ -238,7 +237,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         padding: const EdgeInsets.only(bottom: 10),
         child: Row(children: [
           const Flexible(
-            child: Text('SOCIAL COMMONS',
+            child: Text('COLLABORATIVE INITIATIVES',
                 style: TextStyle(
                     color: mutedColor,
                     fontSize: 10,
@@ -254,7 +253,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 size: 14, color: mutedColor.withValues(alpha: .8)),
             onPressed: () => showEarthInfoDialog(
               context,
-              title: 'SOCIAL COMMONS',
+              title: 'COLLABORATIVE INITIATIVES',
               description:
                   '• Find other citizens and form initiatives that build trust and reputation.\n\n'
                   '• Review invitations and contribute to active shared projects.',
@@ -263,59 +262,41 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         ]),
       );
 
-  Widget _buildIntro() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .85),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Icon(Icons.people_outline, size: 18, color: mutedColor),
-          SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('Build relationships with other citizens',
-                    style:
-                        TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
-                SizedBox(height: 3),
-                Text(
-                    'Choose a partner, propose clear terms, then track progress together.',
-                    style: TextStyle(
-                        fontSize: 11, color: mutedColor, height: 1.35)),
-              ],
-            ),
-          ),
-          IconButton(
-            tooltip: 'Refresh people',
-            onPressed: _loadDirectory,
-            icon: const Icon(Icons.refresh_rounded, size: 18),
-          ),
-        ],
-      ),
-    );
-  }
-
   Widget _buildInitiatives() {
     if (widget.initiatives.isEmpty) {
-      return const Text('No active initiatives yet.',
-          style: TextStyle(color: mutedColor, fontSize: 11));
+      return Row(
+        children: [
+          const Expanded(
+            child: Text('No active initiatives yet.',
+                style: TextStyle(color: mutedColor, fontSize: 11)),
+          ),
+          IconButton(
+            tooltip: 'Refresh initiatives',
+            onPressed: widget.onChanged,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+          ),
+        ],
+      );
     }
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('ACTIVE INITIATIVES',
-            style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w700,
-                letterSpacing: .7,
-                color: mutedColor)),
+        Row(children: [
+          Expanded(
+            child: Text(
+                '${widget.initiatives.length} ACTIVE INITIATIVE${widget.initiatives.length == 1 ? '' : 'S'}',
+                style: const TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: .7,
+                    color: mutedColor)),
+          ),
+          IconButton(
+            tooltip: 'Refresh initiatives',
+            onPressed: widget.onChanged,
+            icon: const Icon(Icons.refresh_rounded, size: 16),
+          ),
+        ]),
         const SizedBox(height: 8),
         ...widget.initiatives.map(_buildInitiative),
       ],
@@ -397,18 +378,18 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   }
 
   Widget _buildComposer() {
-    return ExpansionTile(
-      tilePadding: EdgeInsets.zero,
-      title: const Text('CREATE AN INITIATIVE',
-          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700)),
-      subtitle: Text(
-          selectedPerson == null
-              ? '1. Choose a partner  ·  2. Define the agreement  ·  3. Send it'
-              : 'Partner selected: ${selectedPerson!['display_name'] ?? targetId}',
-          style: const TextStyle(fontSize: 10.5, color: mutedColor)),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text('CREATE AN INITIATIVE',
+            style: TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1)),
+        const SizedBox(height: 8),
         _composerSection(
-          '1. CHOOSE A PARTNER',
+          'CHOOSE A PARTNER',
           Column(children: [
             TextField(
                 controller: search,
@@ -416,36 +397,38 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 decoration: const InputDecoration(
                     prefixIcon: Icon(Icons.search),
                     labelText: 'Search citizens or dynasties')),
-            const SizedBox(height: 10),
-            SizedBox(
-              height: 74,
-              child: people.isEmpty
-                  ? const Center(
-                      child: Text('No public citizens match this search.',
-                          style: TextStyle(color: mutedColor, fontSize: 11)))
-                  : ListView(
-                      scrollDirection: Axis.horizontal,
-                      children: people.map((raw) {
-                        final p = Map<String, dynamic>.from(raw as Map);
-                        final selected = p['id']?.toString() == targetId;
-                        return Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: ChoiceChip(
-                              selected: selected,
-                              label: Text(
-                                  '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                              onSelected: (_) => setState(() {
-                                targetId = p['id']?.toString();
-                                selectedPerson = p;
-                              }),
-                            ));
-                      }).toList()),
-            ),
+            if (search.text.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                height: 74,
+                child: people.isEmpty
+                    ? const Center(
+                        child: Text('No public citizens match this search.',
+                            style: TextStyle(color: mutedColor, fontSize: 11)))
+                    : ListView(
+                        scrollDirection: Axis.horizontal,
+                        children: people.map((raw) {
+                          final p = Map<String, dynamic>.from(raw as Map);
+                          final selected = p['id']?.toString() == targetId;
+                          return Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: ChoiceChip(
+                                selected: selected,
+                                label: Text(
+                                    '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
+                                onSelected: (_) => setState(() {
+                                  targetId = p['id']?.toString();
+                                  selectedPerson = p;
+                                }),
+                              ));
+                        }).toList()),
+              ),
+            ],
           ]),
         ),
         const SizedBox(height: 10),
         _composerSection(
-          '2. DEFINE THE AGREEMENT',
+          'DEFINE THE AGREEMENT',
           Wrap(spacing: 8, runSpacing: 8, children: [
             DropdownButton<String>(
                 value: kind,
