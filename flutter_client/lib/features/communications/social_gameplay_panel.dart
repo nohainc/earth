@@ -426,125 +426,144 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.1)),
         const SizedBox(height: 8),
-        FocusScope(
-          node: partnerSearchScope,
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: surfaceColor.withValues(alpha: .55),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: EarthColors.borderSubtle),
+          ),
           child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              TextField(
-                  controller: search,
-                  onChanged: _onPartnerSearch,
-                  decoration: const InputDecoration(
-                    labelText: 'Search citizens or dynasties',
-                    prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),
-                  )),
-              if (partnerSearchScope.hasFocus &&
-                  search.text.trim().isNotEmpty) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 74,
-                  child: people.isEmpty
-                      ? const Center(
-                          child: Text('No public citizens match this search.',
-                              style:
-                                  TextStyle(color: mutedColor, fontSize: 11)))
-                      : ListView(
-                          scrollDirection: Axis.horizontal,
-                          children: people.map((raw) {
-                            final p = Map<String, dynamic>.from(raw as Map);
-                            final selected = p['id']?.toString() == targetId;
-                            return Padding(
-                                padding: const EdgeInsets.only(right: 8),
-                                child: ChoiceChip(
-                                  selected: selected,
-                                  label: Text(
-                                      '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                                  onSelected: (_) => _selectPartner(p),
-                                ));
-                          }).toList()),
+              FocusScope(
+                node: partnerSearchScope,
+                child: Column(
+                  children: [
+                    TextField(
+                        controller: search,
+                        onChanged: _onPartnerSearch,
+                        decoration: const InputDecoration(
+                          labelText: 'Search citizens or dynasties',
+                          prefixIcon:
+                              Icon(Icons.search, size: 16, color: mutedColor),
+                        )),
+                    if (partnerSearchScope.hasFocus &&
+                        search.text.trim().isNotEmpty) ...[
+                      const SizedBox(height: 10),
+                      SizedBox(
+                        height: 74,
+                        child: people.isEmpty
+                            ? const Center(
+                                child: Text(
+                                    'No public citizens match this search.',
+                                    style: TextStyle(
+                                        color: mutedColor, fontSize: 11)))
+                            : ListView(
+                                scrollDirection: Axis.horizontal,
+                                children: people.map((raw) {
+                                  final p =
+                                      Map<String, dynamic>.from(raw as Map);
+                                  final selected =
+                                      p['id']?.toString() == targetId;
+                                  return Padding(
+                                      padding: const EdgeInsets.only(right: 8),
+                                      child: ChoiceChip(
+                                        selected: selected,
+                                        label: Text(
+                                            '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
+                                        onSelected: (_) => _selectPartner(p),
+                                      ));
+                                }).toList()),
+                      ),
+                    ],
+                  ],
                 ),
-              ],
+              ),
+              const SizedBox(height: 16),
+              LayoutBuilder(builder: (context, constraints) {
+                final controlWidth = (constraints.maxWidth - 24) / 4;
+                final controls = [
+                  SizedBox(
+                    width: controlWidth,
+                    child: DropdownButtonFormField<String>(
+                        value: kind,
+                        isExpanded: true,
+                        decoration:
+                            const InputDecoration(labelText: 'Initiative type'),
+                        items: const [
+                          'alliance',
+                          'negotiation',
+                          'campaign',
+                          'announcement',
+                          'lobbying',
+                          'shared_project',
+                          'agreement'
+                        ]
+                            .map((v) => DropdownMenuItem(
+                                value: v,
+                                child: Text(
+                                    v.replaceAll('_', ' ').toUpperCase(),
+                                    style: const TextStyle(fontSize: 11))))
+                            .toList(),
+                        onChanged: (v) => setState(() => kind = v ?? kind)),
+                  ),
+                  SizedBox(
+                      width: controlWidth,
+                      child: TextField(
+                          controller: credits,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Escrow credits'))),
+                  SizedBox(
+                      width: controlWidth,
+                      child: TextField(
+                          controller: deadline,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Days to complete'))),
+                  SizedBox(
+                      width: controlWidth,
+                      child: TextField(
+                          controller: target,
+                          keyboardType: TextInputType.number,
+                          decoration: const InputDecoration(
+                              labelText: 'Progress target'))),
+                ];
+                return Wrap(spacing: 8, runSpacing: 8, children: controls);
+              }),
+              const SizedBox(height: 16),
+              TextField(
+                  controller: title,
+                  decoration: const InputDecoration(
+                    labelText: 'What are you proposing?',
+                  )),
+              const SizedBox(height: 16),
+              TextField(
+                  controller: body,
+                  minLines: 1,
+                  maxLines: 3,
+                  decoration: const InputDecoration(
+                    labelText: 'Describe the goal and public terms',
+                  )),
+              Align(
+                  alignment: Alignment.centerRight,
+                  child: Padding(
+                      padding: const EdgeInsets.only(top: 22),
+                      child: FilledButton.icon(
+                          onPressed: loading ? null : _create,
+                          icon: const Icon(Icons.send, size: 16),
+                          label: const Text('PREVIEW & PROPOSE'),
+                          style: FilledButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 12, vertical: 8),
+                            textStyle: const TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.bold),
+                          )))),
             ],
           ),
         ),
-        const SizedBox(height: 16),
-        LayoutBuilder(builder: (context, constraints) {
-          final controlWidth = (constraints.maxWidth - 24) / 4;
-          final controls = [
-            SizedBox(
-              width: controlWidth,
-              child: DropdownButtonFormField<String>(
-                  value: kind,
-                  isExpanded: true,
-                  decoration:
-                      const InputDecoration(labelText: 'Initiative type'),
-                  items: const [
-                    'alliance',
-                    'negotiation',
-                    'campaign',
-                    'announcement',
-                    'lobbying',
-                    'shared_project',
-                    'agreement'
-                  ]
-                      .map((v) => DropdownMenuItem(
-                          value: v,
-                          child: Text(v.replaceAll('_', ' ').toUpperCase(),
-                              style: const TextStyle(fontSize: 11))))
-                      .toList(),
-                  onChanged: (v) => setState(() => kind = v ?? kind)),
-            ),
-            SizedBox(
-                width: controlWidth,
-                child: TextField(
-                    controller: credits,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Escrow credits'))),
-            SizedBox(
-                width: controlWidth,
-                child: TextField(
-                    controller: deadline,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Days to complete'))),
-            SizedBox(
-                width: controlWidth,
-                child: TextField(
-                    controller: target,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Progress target'))),
-          ];
-          return Wrap(spacing: 8, runSpacing: 8, children: controls);
-        }),
-        const SizedBox(height: 16),
-        TextField(
-            controller: title,
-            decoration: const InputDecoration(
-              labelText: 'What are you proposing?',
-            )),
-        const SizedBox(height: 16),
-        TextField(
-            controller: body,
-            minLines: 1,
-            maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Describe the goal and public terms',
-            )),
-        Align(
-            alignment: Alignment.centerRight,
-            child: Padding(
-                padding: const EdgeInsets.only(top: 22),
-                child: FilledButton.icon(
-                    onPressed: loading ? null : _create,
-                    icon: const Icon(Icons.send, size: 16),
-                    label: const Text('PREVIEW & PROPOSE'),
-                    style: FilledButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      textStyle: const TextStyle(
-                          fontSize: 10.5, fontWeight: FontWeight.bold),
-                    )))),
       ],
     );
   }
