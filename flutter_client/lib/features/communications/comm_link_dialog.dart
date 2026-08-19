@@ -605,11 +605,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
 
   Widget _buildSegmentedNavHeader() {
     return Container(
-      padding: const EdgeInsets.all(3),
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.borderSubtle),
+      height: 48,
+      decoration: const BoxDecoration(
+        border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
       child: Row(
         children: [
@@ -618,7 +616,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
             label: 'CHANNELS',
             icon: Icons.settings_input_antenna,
           ),
-          const SizedBox(width: 4),
           _buildNavTabItem(
             id: 'dispatches',
             label: 'DISPATCHES',
@@ -649,18 +646,16 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
               _activeMode = id;
             });
           },
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: BorderRadius.zero,
           child: AnimatedContainer(
             duration: const Duration(milliseconds: 160),
             padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
             decoration: BoxDecoration(
-              color: isSelected
-                  ? cyanAccentColor.withValues(alpha: .18)
-                  : Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isSelected ? cyanAccentColor : Colors.transparent,
-                width: 1.2,
+              border: Border(
+                bottom: BorderSide(
+                  color: isSelected ? cyanAccentColor : Colors.transparent,
+                  width: 2.5,
+                ),
               ),
             ),
             child: Row(
@@ -905,100 +900,105 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Channel Header Bar
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFF141A24),
-                    border: Border(bottom: BorderSide(color: Colors.white12)),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        _getScopeIcon(
-                            currentChannel['scope']?.toString() ?? 'global'),
-                        color: cyanAccentColor,
-                        size: 15,
-                      ),
-                      const SizedBox(width: 7),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Flexible(
-                                  child: Text(
-                                    currentChannel['name']?.toString() ??
-                                        'Channel',
-                                    style: const TextStyle(
-                                      color: inkColor,
-                                      fontWeight: FontWeight.w800,
-                                      fontSize: 13,
+                // The selected channel is already identified in the left list.
+                // Keep its detail header out of the reading area.
+                Visibility(
+                  visible: false,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: _groupSurface,
+                      border: Border(bottom: BorderSide(color: Colors.white12)),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _getScopeIcon(
+                              currentChannel['scope']?.toString() ?? 'global'),
+                          color: cyanAccentColor,
+                          size: 15,
+                        ),
+                        const SizedBox(width: 7),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Flexible(
+                                    child: Text(
+                                      currentChannel['name']?.toString() ??
+                                          'Channel',
+                                      style: const TextStyle(
+                                        color: inkColor,
+                                        fontWeight: FontWeight.w800,
+                                        fontSize: 13,
+                                      ),
+                                      overflow: TextOverflow.ellipsis,
                                     ),
-                                    overflow: TextOverflow.ellipsis,
                                   ),
+                                  const SizedBox(width: 6),
+                                  _buildScopeBadge(
+                                      currentChannel['scope']?.toString() ??
+                                          'global'),
+                                ],
+                              ),
+                              if (currentChannel['description'] != null &&
+                                  currentChannel['description']
+                                      .toString()
+                                      .isNotEmpty) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  currentChannel['description'].toString(),
+                                  style: const TextStyle(
+                                      color: mutedColor, fontSize: 10),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
                                 ),
-                                const SizedBox(width: 6),
-                                _buildScopeBadge(
-                                    currentChannel['scope']?.toString() ??
-                                        'global'),
                               ],
-                            ),
-                            if (currentChannel['description'] != null &&
-                                currentChannel['description']
-                                    .toString()
-                                    .isNotEmpty) ...[
-                              const SizedBox(height: 1),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2.5),
+                          decoration: BoxDecoration(
+                            color:
+                                const Color(0xFF10B981).withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                                color: const Color(0xFF10B981)
+                                    .withValues(alpha: .5)),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.circle,
+                                  size: 5, color: Color(0xFF10B981)),
+                              SizedBox(width: 4),
                               Text(
-                                currentChannel['description'].toString(),
-                                style: const TextStyle(
-                                    color: mutedColor, fontSize: 10),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
+                                'LIVE RELAY',
+                                style: TextStyle(
+                                  color: Color(0xFF10B981),
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800,
+                                  letterSpacing: 0.6,
+                                ),
                               ),
                             ],
-                          ],
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 6),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: const Color(0xFF10B981).withValues(alpha: .15),
-                          borderRadius: BorderRadius.circular(5),
-                          border: Border.all(
-                              color: const Color(0xFF10B981)
-                                  .withValues(alpha: .5)),
+                        const SizedBox(width: 4),
+                        IconButton(
+                          icon: const Icon(Icons.refresh,
+                              size: 15, color: mutedColor),
+                          tooltip: 'Refresh frequency',
+                          onPressed: () => _selectChannel(_selectedChannelId),
                         ),
-                        child: const Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.circle,
-                                size: 5, color: Color(0xFF10B981)),
-                            SizedBox(width: 4),
-                            Text(
-                              'LIVE RELAY',
-                              style: TextStyle(
-                                color: Color(0xFF10B981),
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 0.6,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      IconButton(
-                        icon: const Icon(Icons.refresh,
-                            size: 15, color: mutedColor),
-                        tooltip: 'Refresh frequency',
-                        onPressed: () => _selectChannel(_selectedChannelId),
-                      ),
-                    ],
+                      ],
+                    ),
                   ),
                 ),
 
@@ -1050,7 +1050,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                 Container(
                   padding: const EdgeInsets.fromLTRB(10, 5, 10, 7),
                   decoration: const BoxDecoration(
-                    color: Color(0xFF141A24),
                     border: Border(top: BorderSide(color: Colors.white12)),
                   ),
                   child: Column(
@@ -1716,7 +1715,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
         : {};
 
     return Container(
-      color: const Color(0xFF141A24),
+      color: _groupSurface,
       padding: const EdgeInsets.all(14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
