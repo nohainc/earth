@@ -638,12 +638,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           ),
           _buildCommodityMarketTable(),
           const SizedBox(height: 34),
-          _marketTopicHeading(
-            context,
-            'MARKET DEPTH & EXECUTION',
-            description:
-                '• Review the selected commodity’s price history and supply-demand pressure, then place a limit order.',
-          ),
 
           // 2. INLINE COMMODITY GRAPH & BUY/SELL TRADING CONTROLS (NO EXTRA SUBWIDGET CONTAINER)
           LayoutBuilder(
@@ -653,59 +647,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
               final chartAndDepthSection = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              '${meta.name} (${meta.symbol})',
-                              style: const TextStyle(
-                                fontSize: 13,
-                                fontWeight: FontWeight.w800,
-                                letterSpacing: 1.1,
-                                color: inkColor,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              meta.description,
-                              style: const TextStyle(
-                                  fontSize: 10, color: mutedColor),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text(
-                            'P* ${currentPrice.toStringAsFixed(2)} C',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              color: meta.color,
-                              letterSpacing: -.5,
-                            ),
-                          ),
-                          const Text(
-                            'UNIFORM CLEARING PRICE',
-                            style: TextStyle(
-                                fontSize: 8.5,
-                                color: mutedColor,
-                                letterSpacing: .8),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
                   // Area Price Trend Chart
                   Container(
                     height: 140,
@@ -860,37 +801,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                     ],
                   ),
                   const SizedBox(height: 12),
-
-                  // Available balance tag
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      final label = Text(
-                        isBuy ? 'AVAILABLE CREDITS' : 'AVAILABLE INVENTORY',
-                        style: const TextStyle(
-                            fontSize: 9, color: mutedColor, letterSpacing: .8),
-                      );
-                      final value = Text(
-                        isBuy
-                            ? '${formatCreditsAmount(userCredits)} (max ~$maxAffordableUnits u)'
-                            : '$userStock ${meta.symbol}',
-                        style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: isBuy ? violetColor : meta.color),
-                      );
-                      if (constraints.maxWidth < 360) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [label, const SizedBox(height: 3), value],
-                        );
-                      }
-                      return Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [label, value],
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 10),
 
                   // Quantity Field + Preset Chips
                   TextField(
