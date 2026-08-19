@@ -393,14 +393,11 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.1)),
         const SizedBox(height: 8),
-        _formSubtitle('CHOOSE A PARTNER'),
-        const SizedBox(height: 6),
         TextField(
             controller: search,
             onChanged: _loadDirectory,
             decoration: const InputDecoration(
-              hintText: 'Search citizens or dynasties',
-              hintStyle: TextStyle(color: mutedColor, fontSize: 11),
+              labelText: 'Search citizens or dynasties',
               prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),
             )),
         if (search.text.trim().isNotEmpty) ...[
@@ -431,8 +428,6 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
           ),
         ],
         const SizedBox(height: 10),
-        _formSubtitle('DEFINE THE AGREEMENT'),
-        const SizedBox(height: 6),
         LayoutBuilder(builder: (context, constraints) {
           final controlWidth = (constraints.maxWidth - 24) / 4;
           final controls = [
@@ -487,16 +482,14 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         TextField(
             controller: title,
             decoration: const InputDecoration(
-              hintText: 'What are you proposing?',
-              hintStyle: TextStyle(color: mutedColor, fontSize: 11),
+              labelText: 'What are you proposing?',
             )),
         TextField(
             controller: body,
             minLines: 1,
             maxLines: 3,
             decoration: const InputDecoration(
-              hintText: 'Describe the goal and public terms',
-              hintStyle: TextStyle(color: mutedColor, fontSize: 11),
+              labelText: 'Describe the goal and public terms',
             )),
         Align(
             alignment: Alignment.centerRight,
@@ -515,11 +508,4 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
       ],
     );
   }
-
-  Widget _formSubtitle(String label) => Text(label,
-      style: const TextStyle(
-          fontSize: 8.5,
-          fontWeight: FontWeight.w600,
-          letterSpacing: .7,
-          color: mutedColor));
 }
