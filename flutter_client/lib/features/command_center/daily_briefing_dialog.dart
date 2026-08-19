@@ -36,6 +36,8 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
   bool _loading = true;
   String? _error;
   DailyBriefingReport? _report;
+
+  Color get _groupSurface => EarthThemeController.instance.cardSurface;
   @override
   void initState() {
     super.initState();
@@ -246,7 +248,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
@@ -425,7 +427,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
@@ -544,7 +546,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
@@ -613,7 +615,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
                 width: 190,
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: EarthColors.cardSurface,
+                  color: _groupSurface,
                   borderRadius: BorderRadius.circular(8),
                   border: Border.all(color: EarthColors.borderSubtle),
                 ),
@@ -675,7 +677,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       width: 145,
       padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
@@ -709,7 +711,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           Container(
             padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: EarthColors.cardSurface,
+              color: _groupSurface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: EarthColors.borderSubtle),
             ),

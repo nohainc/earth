@@ -186,6 +186,19 @@ creating one-off menu text styles.
   columns on the same baseline; for narrow pages, restore the normal topic
   spacing in the single vertical flow.
 
+### Group surface standard
+
+- The page background is the active theme canvas. Standard grouped controls,
+  widgets, and content cards use the active theme card surface as a solid,
+  fully opaque fill, with `EarthColors.borderSubtle` and an 8px radius.
+- Do not use fixed default-blue surface constants or arbitrary alpha values
+  for standard groups: they break theme consistency and make matching widgets
+  appear to have different backgrounds.
+- Reserve tinted fills and non-standard borders for semantic states only:
+  selected, unread, warning, success, error, or a meaningful domain status.
+- Do not add a nested card merely for decoration. Use a border or spacing
+  unless the nested content is independently actionable.
+
 ## 6. Database and migration rules
 
 - Add every schema change as a forward-only, human-reviewed SQL migration.

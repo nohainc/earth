@@ -38,6 +38,8 @@ class _ActivityPanelState extends State<ActivityPanel>
   late TabController _tabController;
   final Set<String> _locallyReadIds = <String>{};
 
+  Color get _groupSurface => EarthThemeController.instance.cardSurface;
+
   @override
   void initState() {
     super.initState();
@@ -142,7 +144,7 @@ class _ActivityPanelState extends State<ActivityPanel>
           _buildTopicHeading(context),
           Container(
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .5),
+              color: _groupSurface,
               borderRadius: BorderRadius.circular(8),
               border: Border.all(color: EarthColors.borderSubtle),
             ),

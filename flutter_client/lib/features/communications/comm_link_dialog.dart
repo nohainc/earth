@@ -57,6 +57,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
   // Top view mode: 'channels' vs 'dispatches'
   String _activeMode = 'channels';
 
+  Color get _groupSurface => EarthThemeController.instance.cardSurface;
+
   // Channels State
   List<Map<String, dynamic>> _channels = [];
   String _selectedChannelId = 'channel-global-relay';
@@ -531,9 +533,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
       decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .72),
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       child: Row(
         children: [
@@ -605,9 +607,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     return Container(
       padding: const EdgeInsets.all(3),
       decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .8),
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       child: Row(
         children: [
@@ -735,9 +737,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
 
     return Container(
       decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .72),
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -1357,9 +1359,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
 
     return Container(
       decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .72),
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       clipBehavior: Clip.antiAlias,
       child: Row(
@@ -1723,9 +1725,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
           Container(
             padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .72),
+              color: _groupSurface,
               borderRadius: BorderRadius.circular(9),
-              border: Border.all(color: Colors.white12),
+              border: Border.all(color: EarthColors.borderSubtle),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -1818,9 +1820,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: surfaceColor.withValues(alpha: .72),
+                      color: _groupSurface,
                       borderRadius: BorderRadius.circular(9),
-                      border: Border.all(color: Colors.white12),
+                      border: Border.all(color: EarthColors.borderSubtle),
                     ),
                     child: Text(
                       body.toString(),
@@ -1914,9 +1916,9 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
   Widget _buildComposeForm() {
     return Container(
       decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .72),
+        color: _groupSurface,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.white12),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       padding: const EdgeInsets.all(14),
       child: Column(
