@@ -84,15 +84,18 @@ export async function sendChannelMessage(
   body: string,
   gameDay: number,
   gameMinute: number,
-  attachments: unknown[] = []
+  attachments: unknown[] = [],
+  correlationId = crypto.randomUUID()
 ): Promise<CommMessage> {
-  const msgId = `msg-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const sql = `
+  const msgId = `msg-${correlationId}`;
+  return repository.transaction(async (tx) => {
+    const sql = `
     INSERT INTO comm_messages (id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+    ON CONFLICT (id) DO NOTHING
     RETURNING id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at
   `;
-  const res = await repository.query<CommMessage>(sql, [
+    const res = await tx.query<CommMessage>(sql, [
     msgId,
     channelId,
     senderHumanId,
@@ -102,8 +105,14 @@ export async function sendChannelMessage(
     gameDay,
     gameMinute,
     JSON.stringify(attachments),
-  ]);
-  return res.rows[0];
+    ]);
+    if (res.rows[0]) return res.rows[0];
+    const replay = await tx.query<CommMessage>(
+      `SELECT id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at FROM comm_messages WHERE id = $1`,
+      [msgId]
+    );
+    return replay.rows[0];
+  });
 }
 
 export async function listDiplomaticDispatches(
@@ -167,15 +176,18 @@ export async function sendDiplomaticDispatch(
   dispatchType: 'diplomatic' | 'contract_offer' | 'patent_license' | 'merger_tender' | 'succession_notice' = 'diplomatic',
   actionPayload: Record<string, unknown> = {},
   gameDay = 1,
-  gameMinute = 0
+  gameMinute = 0,
+  correlationId = crypto.randomUUID()
 ): Promise<DiplomaticDispatch> {
-  const dispatchId = `mail-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
-  const sql = `
+  const dispatchId = `mail-${correlationId}`;
+  return repository.transaction(async (tx) => {
+    const sql = `
     INSERT INTO diplomatic_dispatches (id, sender_human_id, recipient_human_id, subject, body, status, game_day, game_minute, dispatch_type, action_payload)
     VALUES ($1, $2, $3, $4, $5, 'unread', $6, $7, $8, $9)
+    ON CONFLICT (id) DO NOTHING
     RETURNING id, sender_human_id, recipient_human_id, subject, body, status, game_day, game_minute, dispatch_type, action_payload, created_at, read_at
   `;
-  const res = await repository.query<DiplomaticDispatch>(sql, [
+    const res = await tx.query<DiplomaticDispatch>(sql, [
     dispatchId,
     senderHumanId,
     recipientHumanId,
@@ -185,8 +197,14 @@ export async function sendDiplomaticDispatch(
     gameMinute,
     dispatchType,
     JSON.stringify(actionPayload),
-  ]);
-  return res.rows[0];
+    ]);
+    if (res.rows[0]) return res.rows[0];
+    const replay = await tx.query<DiplomaticDispatch>(
+      `SELECT id, sender_human_id, recipient_human_id, subject, body, status, game_day, game_minute, dispatch_type, action_payload, created_at, read_at FROM diplomatic_dispatches WHERE id = $1`,
+      [dispatchId]
+    );
+    return replay.rows[0];
+  });
 }
 
 export async function markDispatchRead(
@@ -194,13 +212,15 @@ export async function markDispatchRead(
   humanId: string,
   dispatchId: string
 ): Promise<boolean> {
-  const sql = `
+  return repository.transaction(async (tx) => {
+    const sql = `
     UPDATE diplomatic_dispatches
     SET status = 'read', read_at = NOW()
     WHERE id = $1 AND recipient_human_id = $2 AND status = 'unread'
   `;
-  await repository.query(sql, [dispatchId, humanId]);
-  return true;
+    await tx.query(sql, [dispatchId, humanId]);
+    return true;
+  });
 }
 
 export async function getCommunicationsMetrics(

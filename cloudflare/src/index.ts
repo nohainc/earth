@@ -1068,12 +1068,12 @@ const worker = {
     if (url.pathname === '/api/dynasty/perks/unlock' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ perkKey?: string }>(request);
+      const parsed = await parseJsonBody<{ perkKey?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const perkKey = parsed.value.perkKey?.trim() ?? '';
       if (!perkKey) return Response.json({ ok: false, error: 'Perk key is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => unlockDynastyPerk(repository, viewer.email || 'amara@earth.local', perkKey));
+        const result = await withRepository(env, (repository) => unlockDynastyPerk(repository, viewer.email || 'amara@earth.local', perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1085,12 +1085,12 @@ const worker = {
     if (url.pathname === '/api/dynasty/heirlooms/equip' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ heirloomId?: string }>(request);
+      const parsed = await parseJsonBody<{ heirloomId?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const heirloomId = parsed.value.heirloomId?.trim() ?? '';
       if (!heirloomId) return Response.json({ ok: false, error: 'Heirloom ID is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => equipDynastyHeirloom(repository, viewer.email || 'amara@earth.local', heirloomId, viewer.id));
+        const result = await withRepository(env, (repository) => equipDynastyHeirloom(repository, viewer.email || 'amara@earth.local', heirloomId, viewer.id, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1102,7 +1102,7 @@ const worker = {
     if (url.pathname === '/api/dynasty/heirlooms/forge' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ name?: string; heirloomType?: string; inscription?: string; statBuff?: string }>(request);
+      const parsed = await parseJsonBody<{ name?: string; heirloomType?: string; inscription?: string; statBuff?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const name = parsed.value.name?.trim() ?? '';
       const heirloomType = parsed.value.heirloomType?.trim() ?? 'dynasty_standard';
@@ -1110,7 +1110,7 @@ const worker = {
       const statBuff = parsed.value.statBuff?.trim() ?? '+5% Prestige & Influence';
       if (!name) return Response.json({ ok: false, error: 'Heirloom name is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => forgeDynastyHeirloom(repository, viewer.email || 'amara@earth.local', name, heirloomType, inscription, statBuff));
+        const result = await withRepository(env, (repository) => forgeDynastyHeirloom(repository, viewer.email || 'amara@earth.local', name, heirloomType, inscription, statBuff, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1122,12 +1122,12 @@ const worker = {
     if (url.pathname === '/api/dynasty/motto' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ motto?: string; dynastyName?: string }>(request);
+      const parsed = await parseJsonBody<{ motto?: string; dynastyName?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const motto = parsed.value.motto?.trim() ?? '';
       const dynastyName = parsed.value.dynastyName?.trim();
       try {
-        const result = await withRepository(env, (repository) => updateDynastyMotto(repository, viewer.email || 'amara@earth.local', motto, dynastyName));
+        const result = await withRepository(env, (repository) => updateDynastyMotto(repository, viewer.email || 'amara@earth.local', motto, dynastyName, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {

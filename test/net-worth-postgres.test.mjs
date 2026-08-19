@@ -77,6 +77,7 @@ test('Net Worth PostgreSQL Module: recordDailyNetWorthSnapshot creates and store
       return { rows: [] };
     },
   };
+  mockClient.transaction = async (work) => work(mockClient);
 
   const res = await recordDailyNetWorthSnapshot(mockClient, 'H-0044', 186);
   assert.equal(res.ok, true);

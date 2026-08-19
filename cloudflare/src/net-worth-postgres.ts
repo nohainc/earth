@@ -1,3 +1,5 @@
+import type { PostgresRepository } from './repository.ts';
+
 export interface NetWorthSnapshot {
   id: string;
   human_id: string;
@@ -104,12 +106,15 @@ export async function getNetWorthHistory(
 }
 
 export async function recordDailyNetWorthSnapshot(
-  client: any,
+  repository: PostgresRepository,
   humanId: string,
-  gameDay: number
+  gameDay: number,
+  correlationId = `net-worth-${humanId}-${gameDay}`
 ): Promise<{ ok: boolean; snapshot: NetWorthSnapshot }> {
+  // The deterministic snapshot key makes repeated scheduler delivery safe.
+  return repository.transaction(async (tx) => {
   // 1. Fetch liquid credits
-  const accRes = await client.query(
+  const accRes = await tx.query(
     `SELECT ab.balance FROM humans h
      JOIN account_balances ab ON h.account_id = ab.account_id
      WHERE h.id = $1`,
@@ -118,7 +123,7 @@ export async function recordDailyNetWorthSnapshot(
   const liquid = accRes.rows.length > 0 ? Number(accRes.rows[0].balance) : 0;
 
   // 2. Fetch commodity balances & approximate valuation
-  const resBalances = await client.query(
+  const resBalances = await tx.query(
     `SELECT resource, amount FROM resource_balances WHERE owner_id = $1`,
     [humanId]
   );
@@ -134,8 +139,8 @@ export async function recordDailyNetWorthSnapshot(
   const realEstateVal = 15000.0;
   const total = liquid + commodityVal + equityVal + realEstateVal;
 
-  const id = `NW-${humanId}-${gameDay}`;
-  const upsertRes = await client.query(
+  const id = `NW-${humanId}-${gameDay}-${correlationId}`;
+  const upsertRes = await tx.query<NetWorthSnapshot>(
     `INSERT INTO net_worth_snapshots (
        id, human_id, game_day, liquid_credits, commodity_valuation, equity_valuation, real_estate_valuation, total_net_worth
      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
@@ -153,4 +158,5 @@ export async function recordDailyNetWorthSnapshot(
     ok: true,
     snapshot: upsertRes.rows[0],
   };
+  });
 }

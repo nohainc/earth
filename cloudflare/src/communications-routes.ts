@@ -1,5 +1,5 @@
 import { currentHuman } from './auth-session';
-import { parseJsonBody } from './request-validation';
+import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { withRepository } from './repository';
 import {
   listAccessibleChannels,
@@ -52,6 +52,7 @@ export async function communicationsRoutes(
       attachments?: unknown[];
       gameDay?: number;
       gameMinute?: number;
+      correlationId?: string;
     }>(request);
     if (!parsed.ok) return parsed.response;
 
@@ -71,7 +72,8 @@ export async function communicationsRoutes(
         body,
         parsed.value.gameDay ?? 1,
         parsed.value.gameMinute ?? 0,
-        parsed.value.attachments ?? []
+        parsed.value.attachments ?? [],
+        resolveIdempotencyKey(request, parsed.value.correlationId)
       )
     );
     if (!message) return Response.json({ ok: false, error: 'Failed to send message' }, { status: 500 });
@@ -107,6 +109,7 @@ export async function communicationsRoutes(
       actionPayload?: Record<string, unknown>;
       gameDay?: number;
       gameMinute?: number;
+      correlationId?: string;
     }>(request);
     if (!parsed.ok) return parsed.response;
 
@@ -128,7 +131,8 @@ export async function communicationsRoutes(
         parsed.value.dispatchType ?? 'diplomatic',
         parsed.value.actionPayload ?? {},
         parsed.value.gameDay ?? 1,
-        parsed.value.gameMinute ?? 0
+        parsed.value.gameMinute ?? 0,
+        resolveIdempotencyKey(request, parsed.value.correlationId)
       )
     );
     if (!dispatch) return Response.json({ ok: false, error: 'Failed to send diplomatic dispatch' }, { status: 500 });

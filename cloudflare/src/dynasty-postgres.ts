@@ -1,3 +1,9 @@
+import type { PostgresRepository } from './repository.ts';
+
+async function transactional<T>(repository: PostgresRepository, work: () => Promise<T>): Promise<T> {
+  return repository.transaction(async () => work());
+}
+
 export interface DynastyRecord {
   id: string;
   email: string;
@@ -90,7 +96,7 @@ export const DYNASTY_PERK_CATALOG = [
 ];
 
 export async function getDynastyOverview(
-  client: any,
+  client: PostgresRepository,
   email: string,
   humanId: string = 'H-0044',
   humanName: string = 'Amara Vance'
@@ -102,6 +108,7 @@ export async function getDynastyOverview(
   heirlooms: DynastyHeirloom[];
   catalogPerks: typeof DYNASTY_PERK_CATALOG;
 }> {
+  return transactional(client, async () => {
   // Ensure dynasty exists or create initial one
   let dynastyRes = await client.query(
     `SELECT * FROM dynasties WHERE email = $1 OR id = $2 LIMIT 1`,
@@ -200,19 +207,22 @@ export async function getDynastyOverview(
     heirlooms: heirloomsRes.rows,
     catalogPerks: DYNASTY_PERK_CATALOG,
   };
+  });
 }
 
 export async function unlockDynastyPerk(
-  client: any,
+  client: PostgresRepository,
   email: string,
   perkKey: string,
-  gameDay: number = 1
+  gameDay: number = 1,
+  correlationId?: string
 ): Promise<{ ok: boolean; perkKey: string; remainingPoints: number; perkName: string }> {
   const catalogItem = DYNASTY_PERK_CATALOG.find((p) => p.key === perkKey);
   if (!catalogItem) {
     throw new Error(`Invalid or unknown dynasty perk key '${perkKey}'.`);
   }
 
+  return transactional(client, async () => {
   const dynRes = await client.query(
     `SELECT * FROM dynasties WHERE email = $1 LIMIT 1`,
     [email]
@@ -267,14 +277,17 @@ export async function unlockDynastyPerk(
     perkName: catalogItem.name,
     remainingPoints: remaining,
   };
+  });
 }
 
 export async function equipDynastyHeirloom(
-  client: any,
+  client: PostgresRepository,
   email: string,
   heirloomId: string,
-  humanId: string
+  humanId: string,
+  correlationId?: string
 ): Promise<{ ok: boolean; heirloomId: string; isEquipped: boolean; equippedBy: string | null }> {
+  return transactional(client, async () => {
   const dynRes = await client.query(
     `SELECT * FROM dynasties WHERE email = $1 LIMIT 1`,
     [email]
@@ -307,16 +320,19 @@ export async function equipDynastyHeirloom(
     isEquipped: newEquipped !== null,
     equippedBy: newEquipped,
   };
+  });
 }
 
 export async function forgeDynastyHeirloom(
-  client: any,
+  client: PostgresRepository,
   email: string,
   name: string,
   heirloomType: string,
   inscription: string,
-  statBuff: string
+  statBuff: string,
+  correlationId?: string
 ): Promise<{ ok: boolean; heirloom: DynastyHeirloom }> {
+  return transactional(client, async () => {
   const dynRes = await client.query(
     `SELECT * FROM dynasties WHERE email = $1 LIMIT 1`,
     [email]
@@ -331,10 +347,14 @@ export async function forgeDynastyHeirloom(
     throw new Error(`Invalid heirloom type. Allowed: ${allowedTypes.join(', ')}`);
   }
 
-  const heirloomId = `HLM-${dynasty.id}-${Date.now()}`;
+  // A client retry reuses the correlationId and therefore cannot forge twice.
+  const heirloomId = correlationId
+      ? `HLM-${dynasty.id}-${correlationId}`
+      : `HLM-${dynasty.id}-${crypto.randomUUID()}`;
   const insertRes = await client.query(
     `INSERT INTO dynasty_heirlooms (id, dynasty_id, name, heirloom_type, quality_tier, stat_buff, equipped_by_human_id, inscription)
      VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+     ON CONFLICT (id) DO UPDATE SET id = dynasty_heirlooms.id
      RETURNING *`,
     [
       heirloomId,
@@ -352,14 +372,17 @@ export async function forgeDynastyHeirloom(
     ok: true,
     heirloom: insertRes.rows[0],
   };
+  });
 }
 
 export async function updateDynastyMotto(
-  client: any,
+  client: PostgresRepository,
   email: string,
   motto: string,
-  dynastyName?: string
+  dynastyName?: string,
+  correlationId?: string
 ): Promise<{ ok: boolean; motto: string; dynastyName: string }> {
+  return transactional(client, async () => {
   const dynRes = await client.query(
     `SELECT * FROM dynasties WHERE email = $1 LIMIT 1`,
     [email]
@@ -382,4 +405,5 @@ export async function updateDynastyMotto(
     motto: newMotto,
     dynastyName: newName,
   };
+  });
 }
