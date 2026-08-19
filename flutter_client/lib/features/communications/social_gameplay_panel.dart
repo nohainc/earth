@@ -22,7 +22,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   final title = TextEditingController();
   final body = TextEditingController();
   final search = TextEditingController();
-  final partnerFocus = FocusNode();
+  final partnerSearchScope = FocusScopeNode();
   final credits = TextEditingController(text: '0');
   final deadline = TextEditingController(text: '7');
   final target = TextEditingController(text: '100');
@@ -37,7 +37,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   @override
   void initState() {
     super.initState();
-    partnerFocus.addListener(() {
+    partnerSearchScope.addListener(() {
       if (mounted) setState(() {});
     });
     _loadHistory();
@@ -48,7 +48,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     title.dispose();
     body.dispose();
     search.dispose();
-    partnerFocus.dispose();
+    partnerSearchScope.dispose();
     credits.dispose();
     deadline.dispose();
     target.dispose();
@@ -111,7 +111,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         selection: TextSelection.collapsed(offset: partnerName.length),
       );
     });
-    partnerFocus.unfocus();
+    partnerSearchScope.unfocus();
   }
 
   Future<void> _create() async {
@@ -426,38 +426,46 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 fontWeight: FontWeight.bold,
                 letterSpacing: 1.1)),
         const SizedBox(height: 8),
-        TextField(
-            controller: search,
-            focusNode: partnerFocus,
-            onChanged: _onPartnerSearch,
-            decoration: const InputDecoration(
-              labelText: 'Search citizens or dynasties',
-              prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),
-            )),
-        if (partnerFocus.hasFocus && search.text.trim().isNotEmpty) ...[
-          const SizedBox(height: 10),
-          SizedBox(
-            height: 74,
-            child: people.isEmpty
-                ? const Center(
-                    child: Text('No public citizens match this search.',
-                        style: TextStyle(color: mutedColor, fontSize: 11)))
-                : ListView(
-                    scrollDirection: Axis.horizontal,
-                    children: people.map((raw) {
-                      final p = Map<String, dynamic>.from(raw as Map);
-                      final selected = p['id']?.toString() == targetId;
-                      return Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: ChoiceChip(
-                            selected: selected,
-                            label: Text(
-                                '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                            onSelected: (_) => _selectPartner(p),
-                          ));
-                    }).toList()),
+        FocusScope(
+          node: partnerSearchScope,
+          child: Column(
+            children: [
+              TextField(
+                  controller: search,
+                  onChanged: _onPartnerSearch,
+                  decoration: const InputDecoration(
+                    labelText: 'Search citizens or dynasties',
+                    prefixIcon: Icon(Icons.search, size: 16, color: mutedColor),
+                  )),
+              if (partnerSearchScope.hasFocus &&
+                  search.text.trim().isNotEmpty) ...[
+                const SizedBox(height: 10),
+                SizedBox(
+                  height: 74,
+                  child: people.isEmpty
+                      ? const Center(
+                          child: Text('No public citizens match this search.',
+                              style:
+                                  TextStyle(color: mutedColor, fontSize: 11)))
+                      : ListView(
+                          scrollDirection: Axis.horizontal,
+                          children: people.map((raw) {
+                            final p = Map<String, dynamic>.from(raw as Map);
+                            final selected = p['id']?.toString() == targetId;
+                            return Padding(
+                                padding: const EdgeInsets.only(right: 8),
+                                child: ChoiceChip(
+                                  selected: selected,
+                                  label: Text(
+                                      '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
+                                  onSelected: (_) => _selectPartner(p),
+                                ));
+                          }).toList()),
+                ),
+              ],
+            ],
           ),
-        ],
+        ),
         const SizedBox(height: 16),
         LayoutBuilder(builder: (context, constraints) {
           final controlWidth = (constraints.maxWidth - 24) / 4;
