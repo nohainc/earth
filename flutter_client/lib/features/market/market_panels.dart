@@ -4,7 +4,6 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
-import 'derivatives_dialog.dart';
 
 Widget _marketTopicHeading(BuildContext context, String title,
     {required String description}) {
@@ -542,24 +541,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               color: inkColor,
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: cyanAccentColor.withValues(alpha: .12),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(
-                                  color: cyanAccentColor.withValues(alpha: .3)),
-                            ),
-                            child: Text(
-                              'EPOCH #$epochIndex',
-                              style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: cyanAccentColor,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 2),
@@ -572,57 +553,13 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                     ],
                   ),
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
+                Wrap(
+                  spacing: 14,
+                  runSpacing: 6,
+                  alignment: WrapAlignment.end,
                   children: [
-                    ElevatedButton.icon(
-                      key: const Key('btn-open-derivatives-dialog'),
-                      onPressed: () => showDerivativesDialog(
-                        context,
-                        api: const EarthApi(),
-                        state: widget.state,
-                        initialCommodity: _selectedCommodity,
-                      ),
-                      icon: const Icon(Icons.show_chart, size: 13),
-                      label: const Text('FUTURES & CHARTS'),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: cyanAccentColor.withAlpha(40),
-                        foregroundColor: cyanAccentColor,
-                        side: BorderSide(color: cyanAccentColor.withAlpha(120)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        textStyle: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 10),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 4),
-                      decoration: BoxDecoration(
-                        color: cyanAccentColor.withValues(alpha: .12),
-                        borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: cyanAccentColor.withValues(alpha: .3)),
-                      ),
-                      child: const Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.sync_outlined,
-                              size: 11, color: cyanAccentColor),
-                          SizedBox(width: 4),
-                          Text(
-                            'POOLING ORDERS',
-                            style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: .6,
-                              color: cyanAccentColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    _auctionMetric('EPOCH', '#$epochIndex'),
+                    _auctionMetric('NEXT CLEARING', countdownStr),
                   ],
                 ),
               ],
@@ -802,89 +739,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Quantity Field + Preset Chips
-                  TextField(
-                    controller: _qtyController,
-                    keyboardType: TextInputType.number,
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600),
-                    decoration: InputDecoration(
-                      labelText: 'ORDER QUANTITY (UNITS)',
-                      labelStyle:
-                          const TextStyle(fontSize: 10, letterSpacing: 1.1),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      suffixText: meta.symbol,
-                      suffixStyle: TextStyle(
-                          fontSize: 10,
-                          color: meta.color,
-                          fontWeight: FontWeight.w700),
-                    ),
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      _presetChip('25%', () {
-                        final maxU =
-                            isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text =
-                            (maxU * 0.25).clamp(1, 99999).round().toString();
-                      }),
-                      const SizedBox(width: 4),
-                      _presetChip('50%', () {
-                        final maxU =
-                            isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text =
-                            (maxU * 0.50).clamp(1, 99999).round().toString();
-                      }),
-                      const SizedBox(width: 4),
-                      _presetChip('75%', () {
-                        final maxU =
-                            isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text =
-                            (maxU * 0.75).clamp(1, 99999).round().toString();
-                      }),
-                      const SizedBox(width: 4),
-                      _presetChip('MAX', () {
-                        final maxU =
-                            isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text = maxU.clamp(1, 99999).toString();
-                      }),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-
-                  // Limit Price Field + Prefill button
-                  TextField(
-                    controller: _priceController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(
-                        fontSize: 13, fontWeight: FontWeight.w600),
-                    decoration: InputDecoration(
-                      labelText: 'LIMIT PRICE (C / UNIT)',
-                      labelStyle:
-                          const TextStyle(fontSize: 10, letterSpacing: 1.1),
-                      isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 10),
-                      suffixIcon: TextButton(
-                        style: TextButton.styleFrom(
-                          padding: const EdgeInsets.symmetric(horizontal: 8),
-                          minimumSize: Size.zero,
-                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        ),
-                        onPressed: () => _priceController.text =
-                            currentPrice.toStringAsFixed(2),
-                        child: Text('SPOT',
-                            style: TextStyle(fontSize: 9.5, color: meta.color)),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
-                  // Cost Summary Box
+                  // All order inputs and calculated values stay in one scan line.
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
@@ -892,55 +747,51 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       borderRadius: BorderRadius.circular(8),
                       border: Border.all(color: EarthColors.borderSubtle),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            const Text('Base value:',
-                                style:
-                                    TextStyle(fontSize: 10, color: mutedColor)),
-                            Text('${baseTotal.toStringAsFixed(2)} C',
-                                style: const TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w600)),
-                          ],
-                        ),
-                        if (isBuy && widget.state.marketFeeRate > 0) ...[
-                          const SizedBox(height: 3),
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                  'Exchange fee (${(widget.state.marketFeeRate * 100).toStringAsFixed(1)}%):',
-                                  style: const TextStyle(
-                                      fontSize: 10, color: mutedColor)),
-                              Text('${fee.toStringAsFixed(2)} C',
-                                  style: const TextStyle(
-                                      fontSize: 10, color: mutedColor)),
-                            ],
-                          ),
-                        ],
-                        const Divider(height: 10, color: Colors.white10),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text(
-                              isBuy ? 'Escrow Hold:' : 'Gross Proceeds:',
-                              style: const TextStyle(
-                                  fontSize: 11, fontWeight: FontWeight.w700),
-                            ),
-                            Text(
-                              '${totalEscrow.toStringAsFixed(2)} C',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                                color: sideColor,
+                        Expanded(
+                          flex: 14,
+                          child: TextField(
+                            controller: _qtyController,
+                            keyboardType: TextInputType.number,
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'QUANTITY',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              suffixIcon: TextButton(
+                                onPressed: () {
+                                  final maxUnits = isBuy ? maxAffordableUnits : maxSellableUnits;
+                                  _qtyController.text = maxUnits.clamp(1, 99999).toString();
+                                },
+                                child: const Text('MAX'),
                               ),
                             ),
-                          ],
+                          ),
                         ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          flex: 15,
+                          child: TextField(
+                            controller: _priceController,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                            decoration: InputDecoration(
+                              labelText: 'LIMIT PRICE',
+                              isDense: true,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 10),
+                              suffixIcon: TextButton(
+                                onPressed: () => _priceController.text = currentPrice.toStringAsFixed(2),
+                                child: const Text('SPOT'),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 16),
+                        _orderValue('FEE', isBuy ? '${fee.toStringAsFixed(2)} C' : '—'),
+                        const SizedBox(width: 16),
+                        _orderValue(isBuy ? 'TOTAL' : 'PROCEEDS', '${totalEscrow.toStringAsFixed(2)} C', emphasized: true),
                       ],
                     ),
                   ),
@@ -1007,25 +858,41 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     );
   }
 
-  Widget _presetChip(String label, VoidCallback onTap) => Expanded(
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 3),
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: Colors.white.withValues(alpha: .06),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Text(
-              label,
+  Widget _auctionMetric(String label, String value) => Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(label,
               style: const TextStyle(
-                  fontSize: 9, fontWeight: FontWeight.w600, color: mutedColor),
-            ),
-          ),
-        ),
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .7,
+                  color: mutedColor)),
+          const SizedBox(height: 2),
+          Text(value,
+              style: const TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  color: inkColor)),
+        ],
+      );
+
+  Widget _orderValue(String label, String value, {bool emphasized = false}) =>
+      Column(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: .7,
+                  color: mutedColor)),
+          const SizedBox(height: 3),
+          Text(value,
+              style: TextStyle(
+                  fontSize: emphasized ? 12 : 11,
+                  fontWeight: emphasized ? FontWeight.w800 : FontWeight.w600,
+                  color: emphasized ? inkColor : mutedColor)),
+        ],
       );
 
   Widget _buildCommodityMarketTable() => Container(
@@ -1035,38 +902,10 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           border: Border.all(color: EarthColors.borderSubtle),
         ),
         clipBehavior: Clip.antiAlias,
-        child: LayoutBuilder(builder: (context, constraints) {
-          final compact = constraints.maxWidth < 640;
+        child: Builder(builder: (context) {
           final entries = widget.state.market.entries.toList();
           return Column(
             children: [
-              if (!compact)
-                const Padding(
-                  padding: EdgeInsets.fromLTRB(14, 8, 14, 6),
-                  child: Row(
-                    children: [
-                      Expanded(
-                          flex: 3,
-                          child: Text('COMMODITY',
-                              style: _marketTableHeaderStyle)),
-                      SizedBox(
-                          width: 100,
-                          child: Text('PRICE',
-                              style: _marketTableHeaderStyle,
-                              textAlign: TextAlign.right)),
-                      SizedBox(
-                          width: 86,
-                          child: Text('TREND',
-                              style: _marketTableHeaderStyle,
-                              textAlign: TextAlign.right)),
-                      SizedBox(
-                          width: 120,
-                          child: Text('MARKET',
-                              style: _marketTableHeaderStyle,
-                              textAlign: TextAlign.right)),
-                    ],
-                  ),
-                ),
               ...entries.indexed.map((indexed) {
                 final entry = indexed.$2;
                 final key = entry.key;
@@ -1096,93 +935,42 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                             : const BorderSide(color: EarthColors.borderSubtle),
                       ),
                     ),
-                    child: compact
-                        ? Column(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Icon(meta.icon, size: 28, color: meta.color),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
                             children: [
-                              Row(
-                                crossAxisAlignment: CrossAxisAlignment.center,
-                                children: [
-                                  Icon(meta.icon, size: 28, color: meta.color),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      children: [
-                                        Row(children: [
-                                          Expanded(child: _commodityName(meta)),
-                                          _commodityPrice(data),
-                                        ]),
-                                        const SizedBox(height: 4),
-                                        Row(children: [
-                                          Text(owned,
-                                              style: const TextStyle(
-                                                  fontSize: 10,
-                                                  fontWeight: FontWeight.w700,
-                                                  color: mutedColor)),
-                                          const Spacer(),
-                                          _MiniTrendBadge(
-                                              history:
-                                                  widget.priceHistory[key]),
-                                          const SizedBox(width: 10),
-                                          _pressureLabel(
-                                              pressure, supply, demand),
-                                        ]),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
+                              Row(children: [
+                                Expanded(child: _commodityName(meta)),
+                                _commodityPrice(data),
+                              ]),
+                              const SizedBox(height: 4),
+                              Row(children: [
+                                Text(owned,
+                                    style: const TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700,
+                                        color: mutedColor)),
+                                const Spacer(),
+                                _MiniTrendBadge(
+                                    history: widget.priceHistory[key]),
+                                const SizedBox(width: 10),
+                                _pressureLabel(pressure, supply, demand),
+                              ]),
                             ],
-                          )
-                        : Row(children: [
-                            Expanded(
-                                flex: 3,
-                                child: _commodityIdentity(meta, owned)),
-                            SizedBox(
-                                width: 100,
-                                child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: _commodityPrice(data))),
-                            SizedBox(
-                                width: 86,
-                                child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: _MiniTrendBadge(
-                                        history: widget.priceHistory[key]))),
-                            SizedBox(
-                                width: 120,
-                                child: Align(
-                                    alignment: Alignment.centerRight,
-                                    child: _pressureLabel(
-                                        pressure, supply, demand))),
-                          ]),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 );
               }),
             ],
           );
         }),
-      );
-
-  Widget _commodityIdentity(CommodityMeta meta, String owned) => Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Icon(meta.icon, size: 28, color: meta.color),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _commodityName(meta),
-                const SizedBox(height: 3),
-                Text(owned,
-                    style: const TextStyle(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w700,
-                        color: mutedColor)),
-              ],
-            ),
-          ),
-        ],
       );
 
   Widget _commodityName(CommodityMeta meta) => Text(meta.name,
@@ -1213,12 +1001,6 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             fontSize: 9.5, fontWeight: FontWeight.w700, color: color));
   }
 }
-
-const _marketTableHeaderStyle = TextStyle(
-    fontSize: 8.5,
-    fontWeight: FontWeight.w700,
-    letterSpacing: .7,
-    color: mutedColor);
 
 class _MiniTrendBadge extends StatelessWidget {
   final dynamic history;
