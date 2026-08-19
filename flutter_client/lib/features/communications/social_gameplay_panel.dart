@@ -486,14 +486,18 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         const SizedBox(height: 8),
         TextField(
             controller: title,
-            decoration:
-                const InputDecoration(labelText: 'What are you proposing?')),
+            decoration: const InputDecoration(
+              hintText: 'What are you proposing?',
+              hintStyle: TextStyle(color: mutedColor, fontSize: 11),
+            )),
         TextField(
             controller: body,
             minLines: 1,
             maxLines: 3,
             decoration: const InputDecoration(
-                labelText: 'Describe the goal and public terms')),
+              hintText: 'Describe the goal and public terms',
+              hintStyle: TextStyle(color: mutedColor, fontSize: 11),
+            )),
         Align(
             alignment: Alignment.centerRight,
             child: Padding(
@@ -501,15 +505,21 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 child: FilledButton.icon(
                     onPressed: loading ? null : _create,
                     icon: const Icon(Icons.send, size: 16),
-                    label: const Text('PREVIEW & PROPOSE')))),
+                    label: const Text('PREVIEW & PROPOSE'),
+                    style: FilledButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      textStyle: const TextStyle(
+                          fontSize: 10.5, fontWeight: FontWeight.bold),
+                    )))),
       ],
     );
   }
 
   Widget _formSubtitle(String label) => Text(label,
       style: const TextStyle(
-          fontSize: 10,
-          fontWeight: FontWeight.w700,
-          letterSpacing: .6,
+          fontSize: 8.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: .7,
           color: mutedColor));
 }
