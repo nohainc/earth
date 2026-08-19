@@ -349,6 +349,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       TextEditingController(text: '10');
   final TextEditingController _priceController = TextEditingController();
 
+  Color get _groupSurface => EarthThemeController.instance.cardSurface;
+
   @override
   void initState() {
     super.initState();
@@ -507,8 +509,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             margin: const EdgeInsets.only(bottom: 12),
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .85),
-              borderRadius: BorderRadius.circular(10),
+              color: _groupSurface,
+              borderRadius: BorderRadius.circular(8),
               border: Border.all(color: EarthColors.borderSubtle),
             ),
             child: Row(
@@ -627,6 +629,13 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             ),
           ),
 
+          const SizedBox(height: 34),
+          _marketTopicHeading(
+            context,
+            'COMMODITY MARKET',
+            description:
+                '• Choose a commodity to compare its clearing price, liquidity, demand, supply, and your current inventory.',
+          ),
           // 1. TOP COMMODITY SELECTOR MATRIX
           LayoutBuilder(
             builder: (context, constraints) {
@@ -656,12 +665,12 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       decoration: BoxDecoration(
                         color: isSelected
                             ? c.color.withValues(alpha: .12)
-                            : surfaceColor.withValues(alpha: .6),
-                        borderRadius: BorderRadius.circular(10),
+                            : _groupSurface,
+                        borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected
                               ? c.color.withValues(alpha: .7)
-                              : Colors.white10,
+                              : EarthColors.borderSubtle,
                           width: isSelected ? 1.5 : 1,
                         ),
                       ),
@@ -726,12 +735,18 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
               );
             },
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 34),
+          _marketTopicHeading(
+            context,
+            'MARKET DEPTH & EXECUTION',
+            description:
+                '• Review the selected commodity’s price history and supply-demand pressure, then place a limit order.',
+          ),
 
           // 2. INLINE COMMODITY GRAPH & BUY/SELL TRADING CONTROLS (NO EXTRA SUBWIDGET CONTAINER)
           LayoutBuilder(
             builder: (context, constraints) {
-              final isWide = constraints.maxWidth >= 760;
+              final isWide = constraints.maxWidth > 1000;
 
               final chartAndDepthSection = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -1061,9 +1076,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   Container(
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.04),
+                      color: _groupSurface,
                       borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white10),
+                      border: Border.all(color: EarthColors.borderSubtle),
                     ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1169,9 +1184,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   chartAndDepthSection,
-                  const SizedBox(height: 20),
-                  const Divider(color: Colors.white12),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 34),
                   tradeTerminalSection,
                 ],
               );
