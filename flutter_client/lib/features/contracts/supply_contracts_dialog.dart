@@ -98,7 +98,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       if (mounted) {
         setState(() {
           _contracts = list;
-          _selectedContract = initial != null && initial.isNotEmpty ? initial : null;
+          _selectedContract =
+              initial != null && initial.isNotEmpty ? initial : null;
           _loading = false;
         });
 
@@ -120,7 +121,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     setState(() => _loadingTicks = true);
     try {
       final rawTicks = await widget.api.contractDeliveryTicks(contractId);
-      final list = rawTicks.map((e) => Map<String, dynamic>.from(e as Map)).toList();
+      final list =
+          rawTicks.map((e) => Map<String, dynamic>.from(e as Map)).toList();
       if (mounted) {
         setState(() {
           _selectedContractTicks = list;
@@ -164,7 +166,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       await widget.api.cancelContract(contractId);
       if (mounted) {
         setState(() {
-          _successMessage = 'Agreement cancelled and remaining escrow refunded.';
+          _successMessage =
+              'Agreement cancelled and remaining escrow refunded.';
         });
         await _loadContracts();
       }
@@ -198,13 +201,16 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
         unitPrice: _unitPrice,
         totalDays: _totalDays,
         penaltyPerDefault: _penaltyPerDefault,
-        title: _titleController.text.trim().isNotEmpty ? _titleController.text.trim() : null,
+        title: _titleController.text.trim().isNotEmpty
+            ? _titleController.text.trim()
+            : null,
       );
 
       if (mounted) {
         setState(() {
           _submittingProposal = false;
-          _successMessage = 'Supply tender submitted! Awaiting counterparty acceptance.';
+          _successMessage =
+              'Supply tender submitted! Awaiting counterparty acceptance.';
           _activeTab = 0;
         });
         await _loadContracts();
@@ -221,17 +227,23 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final activeContracts = _contracts.where((c) => c['status'] == 'accepted').toList();
-    final proposedContracts = _contracts.where((c) => c['status'] == 'proposed').toList();
-    final historyContracts = _contracts.where((c) => c['status'] == 'completed' || c['status'] == 'cancelled').toList();
+    final activeContracts =
+        _contracts.where((c) => c['status'] == 'accepted').toList();
+    final proposedContracts =
+        _contracts.where((c) => c['status'] == 'proposed').toList();
+    final historyContracts = _contracts
+        .where((c) => c['status'] == 'completed' || c['status'] == 'cancelled')
+        .toList();
 
     Widget content = Container(
       width: widget.isPageMode ? double.infinity : 1040,
       height: widget.isPageMode ? 740 : 720,
       decoration: BoxDecoration(
-        color: canvasColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: EarthColors.borderSubtle),
+        color: widget.isPageMode ? Colors.transparent : canvasColor,
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+        border: widget.isPageMode
+            ? null
+            : Border.all(color: EarthColors.borderSubtle),
         boxShadow: widget.isPageMode
             ? null
             : [
@@ -243,16 +255,20 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
               ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
         child: Column(
           children: [
             _buildTopBar(activeContracts.length, proposedContracts.length),
             if (_error != null) _buildAlertBanner(_error!, isError: true),
-            if (_successMessage != null) _buildAlertBanner(_successMessage!, isError: false),
+            if (_successMessage != null)
+              _buildAlertBanner(_successMessage!, isError: false),
             Expanded(
               child: _loading && _contracts.isEmpty
-                  ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
-                  : _buildTabBody(activeContracts, proposedContracts, historyContracts),
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: EarthColors.cyanAccent))
+                  : _buildTabBody(
+                      activeContracts, proposedContracts, historyContracts),
             ),
           ],
         ),
@@ -272,23 +288,35 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
 
   Widget _buildTopBar(int activeCount, int proposedCount) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-      decoration: const BoxDecoration(
-        color: EarthColors.cardSurface,
-        border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+      padding: widget.isPageMode
+          ? const EdgeInsets.only(bottom: 10)
+          : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+      decoration: BoxDecoration(
+        color: widget.isPageMode ? Colors.transparent : EarthColors.cardSurface,
+        border: widget.isPageMode
+            ? null
+            : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.handshake_outlined, color: EarthColors.goldMetallic, size: 22),
+          Icon(
+            Icons.handshake_outlined,
+            color: widget.isPageMode
+                ? EarthColors.textMuted
+                : EarthColors.goldMetallic,
+            size: 22,
+          ),
           const SizedBox(width: 10),
-          const Expanded(
+          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'AUTOMATED SUPPLY CONTRACTS & ESCROW VAULT',
                   style: TextStyle(
-                    color: EarthColors.goldMetallic,
+                    color: widget.isPageMode
+                        ? EarthColors.textMuted
+                        : EarthColors.goldMetallic,
                     fontWeight: FontWeight.bold,
                     fontSize: 13,
                     letterSpacing: 1.1,
@@ -311,9 +339,12 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                _topTabButton(0, 'ACTIVE ($activeCount)', Icons.check_circle_outline),
+                _topTabButton(
+                    0, 'ACTIVE ($activeCount)', Icons.check_circle_outline),
                 const SizedBox(width: 2),
-                _topTabButton(1, 'PROPOSALS ($proposedCount)', Icons.inbox_outlined, badge: proposedCount),
+                _topTabButton(
+                    1, 'PROPOSALS ($proposedCount)', Icons.inbox_outlined,
+                    badge: proposedCount),
                 const SizedBox(width: 2),
                 _topTabButton(2, 'NEW TENDER', Icons.add_circle_outline),
               ],
@@ -333,12 +364,14 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 decoration: BoxDecoration(
                   color: EarthColors.goldMetallic.withValues(alpha: 0.15),
                   borderRadius: BorderRadius.circular(4),
-                  border: Border.all(color: EarthColors.goldMetallic.withValues(alpha: 0.5)),
+                  border: Border.all(
+                      color: EarthColors.goldMetallic.withValues(alpha: 0.5)),
                 ),
                 child: const Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Icon(Icons.arrow_back, size: 11, color: EarthColors.goldMetallic),
+                    Icon(Icons.arrow_back,
+                        size: 11, color: EarthColors.goldMetallic),
                     SizedBox(width: 4),
                     Text(
                       'RETURN TO COMMAND',
@@ -354,7 +387,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
             )
           else
             IconButton(
-              icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 20),
+              icon: const Icon(Icons.close,
+                  color: EarthColors.textMuted, size: 20),
               onPressed: () => Navigator.of(context).pop(),
             ),
         ],
@@ -362,17 +396,20 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     );
   }
 
-  Widget _topTabButton(int tabIndex, String label, IconData icon, {int badge = 0}) {
+  Widget _topTabButton(int tabIndex, String label, IconData icon,
+      {int badge = 0}) {
     final isSelected = _activeTab == tabIndex;
     return InkWell(
       onTap: () {
         setState(() {
           _activeTab = tabIndex;
           if (tabIndex == 0) {
-            final active = _contracts.where((c) => c['status'] == 'accepted').toList();
+            final active =
+                _contracts.where((c) => c['status'] == 'accepted').toList();
             _selectedContract = active.isNotEmpty ? active.first : null;
           } else if (tabIndex == 1) {
-            final proposed = _contracts.where((c) => c['status'] == 'proposed').toList();
+            final proposed =
+                _contracts.where((c) => c['status'] == 'proposed').toList();
             _selectedContract = proposed.isNotEmpty ? proposed.first : null;
           }
         });
@@ -419,16 +456,19 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       color: color.withAlpha(25),
       child: Row(
         children: [
-          Icon(isError ? Icons.error_outline : Icons.check_circle_outline, color: color, size: 16),
+          Icon(isError ? Icons.error_outline : Icons.check_circle_outline,
+              color: color, size: 16),
           const SizedBox(width: 8),
           Expanded(
             child: Text(
               message,
-              style: TextStyle(color: color, fontSize: 11.5, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  color: color, fontSize: 11.5, fontWeight: FontWeight.w600),
             ),
           ),
           IconButton(
-            icon: const Icon(Icons.close, size: 14, color: EarthColors.textMuted),
+            icon:
+                const Icon(Icons.close, size: 14, color: EarthColors.textMuted),
             onPressed: () => setState(() {
               _error = null;
               _successMessage = null;
@@ -456,21 +496,29 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              _activeTab == 0 ? Icons.inventory_2_outlined : Icons.mark_email_read_outlined,
+              _activeTab == 0
+                  ? Icons.inventory_2_outlined
+                  : Icons.mark_email_read_outlined,
               size: 48,
               color: EarthColors.textMuted.withAlpha(100),
             ),
             const SizedBox(height: 12),
             Text(
-              _activeTab == 0 ? 'No Active Supply Agreements' : 'No Pending Supply Proposals',
-              style: const TextStyle(color: Colors.white70, fontSize: 14, fontWeight: FontWeight.bold),
+              _activeTab == 0
+                  ? 'No Active Supply Agreements'
+                  : 'No Pending Supply Proposals',
+              style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 14,
+                  fontWeight: FontWeight.bold),
             ),
             const SizedBox(height: 6),
             Text(
               _activeTab == 0
                   ? 'Propose a new recurring supply contract with automatic escrow settlement.'
                   : 'All incoming and outgoing proposals have been resolved.',
-              style: const TextStyle(color: EarthColors.textMuted, fontSize: 12),
+              style:
+                  const TextStyle(color: EarthColors.textMuted, fontSize: 12),
             ),
             const SizedBox(height: 16),
             if (_activeTab == 0)
@@ -481,7 +529,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 style: ElevatedButton.styleFrom(
                   backgroundColor: EarthColors.goldMetallic,
                   foregroundColor: Colors.black,
-                  textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                  textStyle: const TextStyle(
+                      fontWeight: FontWeight.bold, fontSize: 11),
                 ),
               ),
           ],
@@ -502,7 +551,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
             itemCount: targetList.length,
             itemBuilder: (ctx, i) {
               final item = targetList[i];
-              final isSelected = _selectedContract?['contract_id'] == item['contract_id'];
+              final isSelected =
+                  _selectedContract?['contract_id'] == item['contract_id'];
               return _buildContractListCard(item, isSelected);
             },
           ),
@@ -513,7 +563,9 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
           child: _selectedContract != null
               ? _buildContractInspector(_selectedContract!)
               : const Center(
-                  child: Text('Select an agreement to view details & escrow vault.', style: TextStyle(color: EarthColors.textMuted)),
+                  child: Text(
+                      'Select an agreement to view details & escrow vault.',
+                      style: TextStyle(color: EarthColors.textMuted)),
                 ),
         ),
       ],
@@ -531,7 +583,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     final totalEscrow = _parseNum(item['escrow_total']);
     final status = (item['status'] ?? 'proposed').toString();
 
-    final progress = totalDays > 0 ? (deliveredDays / totalDays).clamp(0.0, 1.0) : 0.0;
+    final progress =
+        totalDays > 0 ? (deliveredDays / totalDays).clamp(0.0, 1.0) : 0.0;
 
     return InkWell(
       onTap: () {
@@ -579,7 +632,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 Expanded(
                   child: Text(
                     'Rate: ${dailyQty.toStringAsFixed(1)} / day @ ${unitPrice.toStringAsFixed(2)} CR',
-                    style: const TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                    style: const TextStyle(
+                        color: EarthColors.textMuted, fontSize: 11),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -587,7 +641,10 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 const SizedBox(width: 6),
                 Text(
                   '${totalEscrow.toStringAsFixed(0)} CR Escrow',
-                  style: const TextStyle(color: EarthColors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 11),
+                  style: const TextStyle(
+                      color: EarthColors.cyanAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 11),
                 ),
               ],
             ),
@@ -599,15 +656,22 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                   value: progress,
                   minHeight: 4,
                   backgroundColor: Colors.white10,
-                  valueColor: const AlwaysStoppedAnimation<Color>(EarthColors.cyanAccent),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                      EarthColors.cyanAccent),
                 ),
               ),
               const SizedBox(height: 4),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('$deliveredDays / $totalDays Days Delivered', style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5)),
-                  Text('${(progress * 100).toStringAsFixed(0)}%', style: const TextStyle(color: EarthColors.cyanAccent, fontSize: 9.5, fontWeight: FontWeight.bold)),
+                  Text('$deliveredDays / $totalDays Days Delivered',
+                      style: const TextStyle(
+                          color: EarthColors.textMuted, fontSize: 9.5)),
+                  Text('${(progress * 100).toStringAsFixed(0)}%',
+                      style: const TextStyle(
+                          color: EarthColors.cyanAccent,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.bold)),
                 ],
               ),
             ],
@@ -628,14 +692,19 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     final deliveredDays = _parseInt(c['delivered_days']);
     final defaultDays = _parseInt(c['default_days']);
     final consecutiveDefaults = _parseInt(c['consecutive_defaults']);
-    final maxConsecutive = _parseInt(c['max_consecutive_defaults'], fallback: 3);
+    final maxConsecutive =
+        _parseInt(c['max_consecutive_defaults'], fallback: 3);
     final totalEscrow = _parseNum(c['escrow_total']);
     final remainingEscrow = _parseNum(c['escrow_remaining']);
     final penaltyPerDefault = _parseNum(c['penalty_per_default']);
-    final proposerName = c['proposer_display_name'] ?? c['proposer_id'] ?? 'Proposer';
-    final counterpartyName = c['counterparty_display_name'] ?? c['counterparty_id'] ?? 'Counterparty';
+    final proposerName =
+        c['proposer_display_name'] ?? c['proposer_id'] ?? 'Proposer';
+    final counterpartyName = c['counterparty_display_name'] ??
+        c['counterparty_id'] ??
+        'Counterparty';
 
-    final progress = totalDays > 0 ? (deliveredDays / totalDays).clamp(0.0, 1.0) : 0.0;
+    final progress =
+        totalDays > 0 ? (deliveredDays / totalDays).clamp(0.0, 1.0) : 0.0;
 
     return Container(
       padding: const EdgeInsets.all(20),
@@ -663,7 +732,10 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                         const SizedBox(width: 8),
                         Text(
                           contractId,
-                          style: const TextStyle(color: EarthColors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 13),
+                          style: const TextStyle(
+                              color: EarthColors.cyanAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13),
                         ),
                       ],
                     ),
@@ -673,18 +745,27 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 const SizedBox(height: 6),
                 Text(
                   title,
-                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold),
                 ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.person_outline, size: 14, color: EarthColors.textMuted),
+                    const Icon(Icons.person_outline,
+                        size: 14, color: EarthColors.textMuted),
                     const SizedBox(width: 4),
-                    Text('Proposer: $proposerName', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    Text('Proposer: $proposerName',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 11)),
                     const SizedBox(width: 16),
-                    const Icon(Icons.handshake_outlined, size: 14, color: EarthColors.textMuted),
+                    const Icon(Icons.handshake_outlined,
+                        size: 14, color: EarthColors.textMuted),
                     const SizedBox(width: 4),
-                    Text('Recipient: $counterpartyName', style: const TextStyle(color: Colors.white70, fontSize: 11)),
+                    Text('Recipient: $counterpartyName',
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 11)),
                   ],
                 ),
               ],
@@ -705,7 +786,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
               children: [
                 const Row(
                   children: [
-                    Icon(Icons.lock_outline, size: 16, color: EarthColors.cyanAccent),
+                    Icon(Icons.lock_outline,
+                        size: 16, color: EarthColors.cyanAccent),
                     SizedBox(width: 6),
                     Text(
                       'ESCROW VAULT METRICS',
@@ -725,7 +807,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                     value: progress,
                     minHeight: 8,
                     backgroundColor: Colors.black45,
-                    valueColor: const AlwaysStoppedAnimation<Color>(EarthColors.cyanAccent),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                        EarthColors.cyanAccent),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -733,17 +816,22 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                   spacing: 16,
                   runSpacing: 10,
                   children: [
-                    _buildMetricStat('Total Locked', '${totalEscrow.toStringAsFixed(2)} CR'),
-                    _buildMetricStat('Delivered Progress', '$deliveredDays / $totalDays Days (${(progress * 100).toStringAsFixed(0)}%)'),
-                    _buildMetricStat('Remaining in Vault', '${remainingEscrow.toStringAsFixed(2)} CR'),
-                    _buildMetricStat('Default Penalty', '${penaltyPerDefault.toStringAsFixed(0)} CR / tick'),
+                    _buildMetricStat(
+                        'Total Locked', '${totalEscrow.toStringAsFixed(2)} CR'),
+                    _buildMetricStat('Delivered Progress',
+                        '$deliveredDays / $totalDays Days (${(progress * 100).toStringAsFixed(0)}%)'),
+                    _buildMetricStat('Remaining in Vault',
+                        '${remainingEscrow.toStringAsFixed(2)} CR'),
+                    _buildMetricStat('Default Penalty',
+                        '${penaltyPerDefault.toStringAsFixed(0)} CR / tick'),
                   ],
                 ),
                 if (defaultDays > 0) ...[
                   const SizedBox(height: 8),
                   Text(
                     '⚠️ Warning: $defaultDays default(s) recorded. Consecutive defaults: $consecutiveDefaults / $maxConsecutive max before termination.',
-                    style: const TextStyle(color: Colors.orangeAccent, fontSize: 10.5),
+                    style: const TextStyle(
+                        color: Colors.orangeAccent, fontSize: 10.5),
                   ),
                 ],
               ],
@@ -771,12 +859,15 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 border: Border.all(color: EarthColors.borderSubtle),
               ),
               child: _loadingTicks
-                  ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
+                  ? const Center(
+                      child: CircularProgressIndicator(
+                          color: EarthColors.cyanAccent))
                   : (_selectedContractTicks.isEmpty
                       ? const Center(
                           child: Text(
                             'No delivery ticks recorded yet. First settlement occurs on the next game day.',
-                            style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                            style: TextStyle(
+                                color: EarthColors.textMuted, fontSize: 11),
                           ),
                         )
                       : ListView.builder(
@@ -784,28 +875,40 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                           itemBuilder: (ctx, i) {
                             final tick = _selectedContractTicks[i];
                             final day = tick['game_day'] ?? 1;
-                            final tickStatus = (tick['status'] ?? 'delivered').toString();
-                            final qtyDelivered = _parseNum(tick['quantity_delivered']);
-                            final creditsPaid = _parseNum(tick['credits_transferred']);
-                            final penaltyCharged = _parseNum(tick['penalty_charged']);
+                            final tickStatus =
+                                (tick['status'] ?? 'delivered').toString();
+                            final qtyDelivered =
+                                _parseNum(tick['quantity_delivered']);
+                            final creditsPaid =
+                                _parseNum(tick['credits_transferred']);
+                            final penaltyCharged =
+                                _parseNum(tick['penalty_charged']);
                             final isDelivered = tickStatus == 'delivered';
 
                             return Container(
                               padding: const EdgeInsets.symmetric(vertical: 6),
                               decoration: const BoxDecoration(
-                                border: Border(bottom: BorderSide(color: Colors.white10)),
+                                border: Border(
+                                    bottom: BorderSide(color: Colors.white10)),
                               ),
                               child: Row(
                                 children: [
                                   Icon(
-                                    isDelivered ? Icons.check_circle : Icons.warning_amber_rounded,
+                                    isDelivered
+                                        ? Icons.check_circle
+                                        : Icons.warning_amber_rounded,
                                     size: 14,
-                                    color: isDelivered ? EarthColors.cyanAccent : Colors.redAccent,
+                                    color: isDelivered
+                                        ? EarthColors.cyanAccent
+                                        : Colors.redAccent,
                                   ),
                                   const SizedBox(width: 8),
                                   Text(
                                     'Day $day',
-                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 11),
+                                    style: const TextStyle(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 11),
                                   ),
                                   const SizedBox(width: 12),
                                   Expanded(
@@ -814,21 +917,28 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                                           ? 'Delivered ${qtyDelivered.toStringAsFixed(1)} $resourceType · ${creditsPaid.toStringAsFixed(2)} CR released'
                                           : 'Stockout Default · ${penaltyCharged.toStringAsFixed(2)} CR penalty transferred',
                                       style: TextStyle(
-                                        color: isDelivered ? Colors.white70 : Colors.redAccent.shade100,
+                                        color: isDelivered
+                                            ? Colors.white70
+                                            : Colors.redAccent.shade100,
                                         fontSize: 11,
                                       ),
                                     ),
                                   ),
                                   Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 6, vertical: 2),
                                     decoration: BoxDecoration(
-                                      color: isDelivered ? EarthColors.cyanAccent.withAlpha(20) : Colors.redAccent.withAlpha(20),
+                                      color: isDelivered
+                                          ? EarthColors.cyanAccent.withAlpha(20)
+                                          : Colors.redAccent.withAlpha(20),
                                       borderRadius: BorderRadius.circular(4),
                                     ),
                                     child: Text(
                                       tickStatus.toUpperCase(),
                                       style: TextStyle(
-                                        color: isDelivered ? EarthColors.cyanAccent : Colors.redAccent,
+                                        color: isDelivered
+                                            ? EarthColors.cyanAccent
+                                            : Colors.redAccent,
                                         fontSize: 8.5,
                                         fontWeight: FontWeight.bold,
                                       ),
@@ -936,8 +1046,12 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                         border: OutlineInputBorder(),
                       ),
                       items: const [
-                        DropdownMenuItem(value: 'buyer', child: Text('I am BUYER (Locking Escrow)')),
-                        DropdownMenuItem(value: 'seller', child: Text('I am SELLER (Delivering Commodity)')),
+                        DropdownMenuItem(
+                            value: 'buyer',
+                            child: Text('I am BUYER (Locking Escrow)')),
+                        DropdownMenuItem(
+                            value: 'seller',
+                            child: Text('I am SELLER (Delivering Commodity)')),
                       ],
                       onChanged: (val) {
                         if (val != null) setState(() => _proposerRole = val);
@@ -979,18 +1093,25 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
               // Commodity Resource Picker
               const Text(
                 'SELECT COMMODITY RESOURCE',
-                style: TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: Colors.white70,
+                    fontSize: 11,
+                    fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _commodityOption('energy', 'Energy (kW)', Icons.bolt, Colors.amberAccent),
+                  _commodityOption('energy', 'Energy (kW)', Icons.bolt,
+                      EarthResourceColors.energy),
                   const SizedBox(width: 8),
-                  _commodityOption('food', 'Food (kg)', Icons.eco, Colors.greenAccent),
+                  _commodityOption(
+                      'food', 'Food (kg)', Icons.eco, EarthResourceColors.food),
                   const SizedBox(width: 8),
-                  _commodityOption('material', 'Material (t)', Icons.layers, Colors.orangeAccent),
+                  _commodityOption('material', 'Material (t)', Icons.layers,
+                      EarthResourceColors.materials),
                   const SizedBox(width: 8),
-                  _commodityOption('compute', 'Compute (FLOP)', Icons.memory, Colors.cyanAccent),
+                  _commodityOption('compute', 'Compute (FLOP)', Icons.memory,
+                      EarthResourceColors.compute),
                 ],
               ),
               const SizedBox(height: 16),
@@ -1002,7 +1123,10 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Daily Quantity: ${_dailyQuantity.toStringAsFixed(0)} units', style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
+                        Text(
+                            'Daily Quantity: ${_dailyQuantity.toStringAsFixed(0)} units',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11.5)),
                         Slider(
                           value: _dailyQuantity,
                           min: 5,
@@ -1019,7 +1143,10 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Unit Price: ${_unitPrice.toStringAsFixed(2)} CR / unit', style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
+                        Text(
+                            'Unit Price: ${_unitPrice.toStringAsFixed(2)} CR / unit',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11.5)),
                         Slider(
                           value: _unitPrice,
                           min: 1,
@@ -1042,14 +1169,17 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Agreement Duration: $_totalDays Game Days', style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
+                        Text('Agreement Duration: $_totalDays Game Days',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11.5)),
                         Slider(
                           value: _totalDays.toDouble(),
                           min: 7,
                           max: 180,
                           divisions: 173,
                           activeColor: EarthColors.cyanAccent,
-                          onChanged: (v) => setState(() => _totalDays = v.toInt()),
+                          onChanged: (v) =>
+                              setState(() => _totalDays = v.toInt()),
                         ),
                       ],
                     ),
@@ -1059,14 +1189,18 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('Breach Penalty / Default: ${_penaltyPerDefault.toStringAsFixed(0)} CR', style: const TextStyle(color: Colors.white70, fontSize: 11.5)),
+                        Text(
+                            'Breach Penalty / Default: ${_penaltyPerDefault.toStringAsFixed(0)} CR',
+                            style: const TextStyle(
+                                color: Colors.white70, fontSize: 11.5)),
                         Slider(
                           value: _penaltyPerDefault,
                           min: 0,
                           max: 1000,
                           divisions: 100,
                           activeColor: Colors.redAccent,
-                          onChanged: (v) => setState(() => _penaltyPerDefault = v),
+                          onChanged: (v) =>
+                              setState(() => _penaltyPerDefault = v),
                         ),
                       ],
                     ),
@@ -1081,24 +1215,31 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 decoration: BoxDecoration(
                   color: EarthColors.panelSurface,
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: EarthColors.cyanAccent.withAlpha(80)),
+                  border:
+                      Border.all(color: EarthColors.cyanAccent.withAlpha(80)),
                 ),
                 child: Column(
                   children: [
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Text('Total Escrow Requirement:', style: TextStyle(color: Colors.white70, fontSize: 12)),
+                        const Text('Total Escrow Requirement:',
+                            style:
+                                TextStyle(color: Colors.white70, fontSize: 12)),
                         Text(
                           '${totalCents.toStringAsFixed(2)} CREDITS',
-                          style: const TextStyle(color: EarthColors.cyanAccent, fontWeight: FontWeight.bold, fontSize: 14),
+                          style: const TextStyle(
+                              color: EarthColors.cyanAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 14),
                         ),
                       ],
                     ),
                     const SizedBox(height: 6),
                     Text(
                       'Locked in Escrow Vault upon acceptance. Transferred at ${(_dailyQuantity * _unitPrice).toStringAsFixed(2)} CR/day for $_totalDays consecutive days.',
-                      style: const TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
+                      style: const TextStyle(
+                          color: EarthColors.textMuted, fontSize: 10.5),
                     ),
                   ],
                 ),
@@ -1111,14 +1252,23 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 child: ElevatedButton.icon(
                   onPressed: _submittingProposal ? null : _submitProposal,
                   icon: _submittingProposal
-                      ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.black))
                       : const Icon(Icons.send, size: 16),
-                  label: Text(_submittingProposal ? 'TRANSMITTING TENDER...' : 'TRANSMIT BINDING SUPPLY TENDER'),
+                  label: Text(_submittingProposal
+                      ? 'TRANSMITTING TENDER...'
+                      : 'TRANSMIT BINDING SUPPLY TENDER'),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: EarthColors.goldMetallic,
                     foregroundColor: Colors.black,
                     padding: const EdgeInsets.symmetric(vertical: 14),
-                    textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12, letterSpacing: 0.8),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 12,
+                        letterSpacing: 0.8),
                   ),
                 ),
               ),
@@ -1129,7 +1279,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     );
   }
 
-  Widget _commodityOption(String type, String label, IconData icon, Color color) {
+  Widget _commodityOption(
+      String type, String label, IconData icon, Color color) {
     final isSelected = _resourceType == type;
     return Expanded(
       child: InkWell(
@@ -1140,11 +1291,13 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
           decoration: BoxDecoration(
             color: isSelected ? color.withAlpha(30) : EarthColors.panelSurface,
             borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: isSelected ? color : EarthColors.borderSubtle),
+            border: Border.all(
+                color: isSelected ? color : EarthColors.borderSubtle),
           ),
           child: Column(
             children: [
-              Icon(icon, color: isSelected ? color : EarthColors.textMuted, size: 18),
+              Icon(icon,
+                  color: isSelected ? color : EarthColors.textMuted, size: 18),
               const SizedBox(height: 4),
               Text(
                 type.toUpperCase(),
@@ -1165,40 +1318,49 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(label, style: const TextStyle(color: EarthColors.textMuted, fontSize: 10)),
+        Text(label,
+            style: const TextStyle(color: EarthColors.textMuted, fontSize: 10)),
         const SizedBox(height: 2),
-        Text(value, style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
+        Text(value,
+            style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.bold)),
       ],
     );
   }
 
   Widget _buildCommodityBadge(String resource) {
-    Color color = Colors.amberAccent;
+    Color color = EarthResourceColors.energy;
     IconData icon = Icons.bolt;
     if (resource == 'food') {
-      color = Colors.greenAccent;
+      color = EarthResourceColors.food;
       icon = Icons.eco;
     } else if (resource == 'material') {
-      color = Colors.orangeAccent;
+      color = EarthResourceColors.materials;
       icon = Icons.layers;
     } else if (resource == 'compute') {
-      color = Colors.cyanAccent;
+      color = EarthResourceColors.compute;
       icon = Icons.memory;
     }
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
       decoration: BoxDecoration(
-        color: color.withAlpha(25),
+        color: EarthColors.panelSurface,
         borderRadius: BorderRadius.circular(4),
-        border: Border.all(color: color.withAlpha(100)),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
           Icon(icon, size: 11, color: color),
           const SizedBox(width: 4),
-          Text(resource.toUpperCase(), style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.bold)),
+          Text(resource.toUpperCase(),
+              style: const TextStyle(
+                  color: EarthColors.textMuted,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -1220,7 +1382,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       ),
       child: Text(
         status.toUpperCase(),
-        style: TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
+        style:
+            TextStyle(color: color, fontSize: 9, fontWeight: FontWeight.bold),
       ),
     );
   }
@@ -1233,7 +1396,8 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
 
   static int _parseInt(dynamic val, {int fallback = 0}) {
     if (val is num) return val.toInt();
-    if (val is String) return int.tryParse(val) ?? double.tryParse(val)?.toInt() ?? fallback;
+    if (val is String)
+      return int.tryParse(val) ?? double.tryParse(val)?.toInt() ?? fallback;
     return fallback;
   }
 }

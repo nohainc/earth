@@ -111,7 +111,7 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
                         const SizedBox(width: 8),
                         _statBadge('EQUITY', '${eq.toStringAsFixed(0)} CR', const Color(0xFFC084FC)),
                         const SizedBox(width: 8),
-                        _statBadge('CONCESSIONS', '${re.toStringAsFixed(0)} CR', const Color(0xFFFB923C)),
+                        _statBadge('OTHER ASSETS', '${re.toStringAsFixed(0)} CR', const Color(0xFFFB923C)),
                       ],
                     ),
                   ),

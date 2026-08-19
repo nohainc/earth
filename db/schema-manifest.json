@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 30,
+  "migrationVersion": 35,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -166,6 +166,27 @@
       "subject",
       "status"
     ],
+    "social_initiatives": [
+      "id",
+      "creator_human_id",
+      "kind",
+      "status",
+      "deadline_game_day",
+      "escrow_amount"
+    ],
+    "social_initiative_members": [
+      "initiative_id",
+      "human_id",
+      "status",
+      "contribution"
+    ],
+    "social_relationships": [
+      "human_id",
+      "other_human_id",
+      "trust",
+      "completed_agreements",
+      "broken_commitments"
+    ],
     "earth_schema_migrations": [
       "version",
       "name",
@@ -305,19 +326,6 @@
       "status",
       "protected_credits"
     ],
-    "planetary_regions": [
-      "id",
-      "name",
-      "biome_type",
-      "climate_status"
-    ],
-    "plot_yield_logs": [
-      "id",
-      "plot_id",
-      "game_day",
-      "resource_type",
-      "amount_generated"
-    ],
     "production_events": [
       "id",
       "machine_id",
@@ -399,24 +407,6 @@
     "technology_prerequisites": [
       "technology_id",
       "required_technology_id"
-    ],
-    "territory_plot_leases": [
-      "id",
-      "plot_id",
-      "human_id",
-      "starts_game_day",
-      "expires_game_day",
-      "total_paid",
-      "status"
-    ],
-    "territory_plots": [
-      "id",
-      "region_id",
-      "plot_name",
-      "primary_resource",
-      "base_yield_rate",
-      "development_level",
-      "daily_lease_fee"
     ],
     "world_events": [
       "id",
@@ -555,10 +545,6 @@
     "supply_contracts_resource_idx",
     "contract_escrow_vaults_contract_idx",
     "contract_delivery_ticks_contract_day_idx",
-    "idx_territory_plots_region",
-    "idx_territory_plots_lease_holder",
-    "idx_territory_plot_leases_plot",
-    "idx_plot_yield_logs_plot_day",
     "idx_dynasties_email",
     "idx_dynasty_lineage_records_dynasty",
     "idx_dynasty_lineage_records_human",

@@ -9,7 +9,7 @@ void main() {
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
     expect(dashboardSectionTitle('life'), 'LEGACY');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
-    expect(dashboardSectionTitle('unknown'), 'COMMAND');
+    expect(dashboardSectionTitle('unknown'), 'COMMAND CENTER');
   });
 
   test('uses configured API origin for live events', () {
@@ -42,7 +42,8 @@ void main() {
     );
   });
 
-  testWidgets('CommandCenter state deduplicates incoming events by eventKey', (tester) async {
+  testWidgets('CommandCenter state deduplicates incoming events by eventKey',
+      (tester) async {
     await tester.pumpWidget(
       MaterialApp(
         home: CommandCenter(onLogout: () {}),
@@ -50,23 +51,28 @@ void main() {
     );
 
     final dynamic state = tester.state(find.byType(CommandCenter));
-    final first = state.handleLiveMessage('{"eventKey":"evt-1","type":"market_trade"}');
+    final first =
+        state.handleLiveMessage('{"eventKey":"evt-1","type":"market_trade"}');
     expect(first, isTrue);
 
     // Duplicate delivery of the exact same event key
-    final second = state.handleLiveMessage('{"eventKey":"evt-1","type":"market_trade"}');
+    final second =
+        state.handleLiveMessage('{"eventKey":"evt-1","type":"market_trade"}');
     expect(second, isFalse);
 
     // Distinct event key
-    final third = state.handleLiveMessage('{"eventKey":"evt-2","type":"market_trade"}');
+    final third =
+        state.handleLiveMessage('{"eventKey":"evt-2","type":"market_trade"}');
     expect(third, isTrue);
 
     // Handles map payload directly
-    final fourth = state.handleLiveMessage({'eventKey': 'evt-3', 'type': 'world_day_started'});
+    final fourth = state
+        .handleLiveMessage({'eventKey': 'evt-3', 'type': 'world_day_started'});
     expect(fourth, isTrue);
 
     // Duplicate map payload
-    final fifth = state.handleLiveMessage({'eventKey': 'evt-3', 'type': 'world_day_started'});
+    final fifth = state
+        .handleLiveMessage({'eventKey': 'evt-3', 'type': 'world_day_started'});
     expect(fifth, isFalse);
 
     // Malformed JSON string does not crash
@@ -77,7 +83,8 @@ void main() {
     expect(state.handleLiveMessage(null), isFalse);
 
     // Live event triggers world refresh
-    final worldEvent = state.handleLiveMessage('{"eventKey":"evt-4","type":"world_tick"}');
+    final worldEvent =
+        state.handleLiveMessage('{"eventKey":"evt-4","type":"world_tick"}');
     expect(worldEvent, isTrue);
   });
 }

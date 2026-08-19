@@ -39,8 +39,6 @@ class PlayerObjective {
         return Colors.orangeAccent;
       case 'civic':
         return cyanAccentColor;
-      case 'territory':
-        return const Color(0xFF00E5FF);
       case 'dynasty':
         return const Color(0xFFFFD54F);
       case 'technology':
@@ -60,8 +58,6 @@ class PlayerObjective {
         return 'ENTERPRISE & INDUSTRY';
       case 'civic':
         return 'CIVIC & GOVERNANCE';
-      case 'territory':
-        return 'TERRITORY & SUPPLY';
       case 'dynasty':
         return 'DYNASTY & LEGACY';
       case 'technology':
@@ -81,8 +77,6 @@ class PlayerObjective {
         return Icons.business_center_outlined;
       case 'civic':
         return Icons.how_to_vote_outlined;
-      case 'territory':
-        return Icons.landscape_outlined;
       case 'dynasty':
         return Icons.account_balance_outlined;
       case 'technology':
@@ -203,24 +197,6 @@ class PlayerObjective {
         rewardDescription:
             'Title: "Grand Tribune" · Veto Injunction Power on City Budgets · +350 Standing',
         targetSection: 'civic',
-      ),
-      PlayerObjective(
-        id: 'obj-regional-resource-control',
-        category: 'territory',
-        title: 'Control a Regional Resource',
-        description:
-            'Secure and operate at least 5 regional concession plots to control the supply chain for planetary manufacturing.',
-        currentValue: machines.length.toDouble().clamp(1.0, 5.0),
-        targetValue: 5.0,
-        progressPercentage:
-            (machines.length.toDouble().clamp(1.0, 5.0) / 5.0 * 100.0)
-                .clamp(0.0, 100.0),
-        metricLabel:
-            '${machines.length.clamp(1, 5)} / 5 Concession Plots Leased',
-        status: machines.length >= 5 ? 'completed' : 'in_progress',
-        rewardDescription:
-            'Title: "Planetary Baron" · 50% Reduction in Plot Upgrade Fees · Commodity Monopoly Dividend',
-        targetSection: 'market',
       ),
       PlayerObjective(
         id: 'obj-dynasty-traits',

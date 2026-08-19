@@ -54,6 +54,10 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     return EarthPanel(
       key: panelKey,
       title: 'INSTITUTIONS / CITY & CORP',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Municipal & Corporate Institutions: Legal entities established under the Planetary Constitution to manage collective urban infrastructure and private commercial enterprises.\n\n• Municipal Operations:\n  - Residency: Citizens affiliated with a city gain access to subsidized public services and municipal voting.\n  - Housing & Energy Capacity: Physical limits on municipal residency and industrial manufacturing.\n  - Service Pressure Ratios: Real-time telemetry monitoring municipal infrastructure load across housing, power, connectivity, and health.\n\n• Corporate Enterprises:\n  - Limited Liability Charters: Registered corporate entities providing shared commercial treasury funds and specialized manufacturing capabilities.',
       child: Column(
@@ -465,6 +469,10 @@ class CommunitiesPanel extends StatelessWidget {
     final communities = state.communities;
     return EarthPanel(
       title: 'COMMUNITIES / SHARED LIFE',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, and shared municipal governance.\n\n• Membership & Contributions:\n  - JOIN / LEAVE: Free association allowing citizens to participate in community governance and welfare dividends.\n  - CONTRIBUTE: Voluntary treasury contributions funding local public projects and communal resources.',
       child: Column(

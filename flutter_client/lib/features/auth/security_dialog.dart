@@ -3,6 +3,23 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../shared/widgets/format_helpers.dart';
 
+const _securityDialogShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(14)),
+  side: BorderSide(color: Colors.white12),
+);
+const _securityTitleStyle = TextStyle(
+  color: inkColor,
+  fontSize: 15,
+  fontWeight: FontWeight.w700,
+  letterSpacing: 0.4,
+);
+const _securitySectionStyle = TextStyle(
+  color: inkColor,
+  fontSize: 12,
+  fontWeight: FontWeight.w700,
+  letterSpacing: 0.7,
+);
+
 Future<void> showMfaDialog(BuildContext context, EarthApi api) async {
   final code = TextEditingController();
   try {
@@ -11,21 +28,34 @@ Future<void> showMfaDialog(BuildContext context, EarthApi api) async {
     await showDialog<void>(
         context: context,
         builder: (dialogContext) => AlertDialog(
-              title: const Text('Enable authenticator MFA'),
+              backgroundColor: surfaceColor,
+              surfaceTintColor: Colors.transparent,
+              shape: _securityDialogShape,
+              title: const Text('Enable authenticator MFA',
+                  style: _securityTitleStyle),
               content: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                        'Add this secret to your authenticator app, then enter the six-digit code.'),
+                        'Add this secret to your authenticator app, then enter the six-digit code.',
+                        style: TextStyle(color: mutedColor, fontSize: 12)),
                     const SizedBox(height: 12),
-                    SelectableText('${enrollment['secret']}'),
+                    SelectableText('${enrollment['secret']}',
+                        style: const TextStyle(
+                            color: inkColor,
+                            fontSize: 13,
+                            letterSpacing: 1.3,
+                            fontWeight: FontWeight.w700)),
                     const SizedBox(height: 12),
                     TextField(
                         controller: code,
                         keyboardType: TextInputType.number,
+                        style: const TextStyle(
+                            color: inkColor, letterSpacing: 1.3),
                         decoration: const InputDecoration(
-                            labelText: 'Authenticator code')),
+                            labelText: 'Authenticator code',
+                            labelStyle: TextStyle(color: mutedColor))),
                   ]),
               actions: [
                 TextButton(
@@ -42,8 +72,7 @@ Future<void> showMfaDialog(BuildContext context, EarthApi api) async {
   } catch (exception) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text(exception.toString().replaceFirst('Exception: ', ''))));
+          content: Text(exception.toString().replaceFirst('Exception: ', ''))));
     }
   }
 }
@@ -54,13 +83,19 @@ Future<void> showDisableMfaDialog(BuildContext context, EarthApi api) async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: const Text('Disable authenticator MFA'),
+        backgroundColor: surfaceColor,
+        surfaceTintColor: Colors.transparent,
+        shape: _securityDialogShape,
+        title:
+            const Text('Disable authenticator MFA', style: _securityTitleStyle),
         content: TextField(
             controller: code,
             autofocus: true,
             keyboardType: TextInputType.number,
-            decoration:
-                const InputDecoration(labelText: 'Current six-digit code')),
+            style: const TextStyle(color: inkColor, letterSpacing: 1.3),
+            decoration: const InputDecoration(
+                labelText: 'Current six-digit code',
+                labelStyle: TextStyle(color: mutedColor))),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
@@ -99,8 +134,7 @@ Future<void> showSecurityDialog(
   } catch (exception) {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content:
-              Text(exception.toString().replaceFirst('Exception: ', ''))));
+          content: Text(exception.toString().replaceFirst('Exception: ', ''))));
     }
     return;
   }
@@ -109,16 +143,25 @@ Future<void> showSecurityDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (dialogContext, setDialogState) => AlertDialog(
-        title: const Text('Account security'),
+        backgroundColor: surfaceColor,
+        surfaceTintColor: Colors.transparent,
+        shape: _securityDialogShape,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+        title: Row(
+          children: [
+            const Icon(Icons.shield_outlined, color: violetColor, size: 20),
+            const SizedBox(width: 10),
+            const Text('Account security', style: _securityTitleStyle),
+          ],
+        ),
         content: SizedBox(
-          width: 520,
+          width: 560,
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Text('Active sessions',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text('Active sessions', style: _securitySectionStyle),
                 const SizedBox(height: 8),
                 if (sessions.isEmpty)
                   const Text('No active sessions were found.',
@@ -127,51 +170,86 @@ Future<void> showSecurityDialog(
                   ...sessions.map((raw) {
                     final session = Map<String, dynamic>.from(raw as Map);
                     final current = session['current'] == true;
-                    return ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      leading: Icon(
-                          current ? Icons.devices : Icons.device_unknown,
-                          color: current ? violetColor : mutedColor),
-                      title: Text(current ? 'This device' : 'Other session'),
-                      subtitle: Text(
-                          'Created ${formatSecurityDate(session['created_at'])}\nExpires ${formatSecurityDate(session['expires_at'])}'),
-                      trailing: current
-                          ? const Chip(label: Text('CURRENT'))
-                          : IconButton(
-                              tooltip: 'Revoke session',
-                              icon: const Icon(Icons.close),
-                              onPressed: () async {
-                                try {
-                                  await api.revokeSession(
-                                      session['id'].toString());
-                                  sessions = await api.sessions();
-                                  if (dialogContext.mounted) {
-                                    setDialogState(() {});
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      decoration: BoxDecoration(
+                        color: EarthColors.cardSurface,
+                        borderRadius: BorderRadius.circular(9),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: ListTile(
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 4),
+                        leading: Icon(
+                            current ? Icons.devices : Icons.device_unknown,
+                            color: current ? violetColor : mutedColor,
+                            size: 19),
+                        title: Text(current ? 'This device' : 'Other session',
+                            style: const TextStyle(
+                                color: inkColor,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                letterSpacing: 0.4)),
+                        subtitle: Text(
+                            'Created ${formatSecurityDate(session['created_at'])}\nExpires ${formatSecurityDate(session['expires_at'])}',
+                            style: const TextStyle(
+                                color: mutedColor,
+                                fontSize: 10,
+                                height: 1.35,
+                                letterSpacing: 0.3)),
+                        trailing: current
+                            ? const Chip(
+                                label: Text('CURRENT',
+                                    style: TextStyle(
+                                        fontSize: 9,
+                                        letterSpacing: 0.8,
+                                        fontWeight: FontWeight.w700)),
+                                visualDensity: VisualDensity.compact,
+                                padding: EdgeInsets.zero)
+                            : IconButton(
+                                tooltip: 'Revoke session',
+                                icon: const Icon(Icons.close,
+                                    color: Colors.redAccent, size: 18),
+                                onPressed: () async {
+                                  try {
+                                    await api.revokeSession(
+                                        session['id'].toString());
+                                    sessions = await api.sessions();
+                                    if (dialogContext.mounted) {
+                                      setDialogState(() {});
+                                    }
+                                  } catch (exception) {
+                                    if (dialogContext.mounted) {
+                                      ScaffoldMessenger.of(dialogContext)
+                                          .showSnackBar(SnackBar(
+                                              content: Text(exception
+                                                  .toString()
+                                                  .replaceFirst(
+                                                      'Exception: ', ''))));
+                                    }
                                   }
-                                } catch (exception) {
-                                  if (dialogContext.mounted) {
-                                    ScaffoldMessenger.of(dialogContext)
-                                        .showSnackBar(SnackBar(
-                                            content: Text(exception
-                                                .toString()
-                                                .replaceFirst(
-                                                    'Exception: ', ''))));
-                                  }
-                                }
-                              },
-                            ),
+                                },
+                              ),
+                      ),
                     );
                   }),
                 const Divider(height: 28),
-                const Text('Authenticator MFA',
-                    style: TextStyle(fontWeight: FontWeight.w700)),
+                const Text('Authenticator MFA', style: _securitySectionStyle),
                 const SizedBox(height: 6),
                 const Text(
                     'Enroll or disable authenticator verification from this account.',
-                    style: TextStyle(color: mutedColor, fontSize: 12)),
+                    style: TextStyle(
+                        color: mutedColor, fontSize: 12, height: 1.35)),
                 const SizedBox(height: 10),
                 Wrap(spacing: 8, runSpacing: 8, children: [
                   OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: violetColor,
+                          side: const BorderSide(color: violetColor),
+                          textStyle: const TextStyle(
+                              fontSize: 10,
+                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.w700)),
                       onPressed: () {
                         Navigator.pop(dialogContext);
                         showMfaDialog(context, api);
@@ -179,6 +257,13 @@ Future<void> showSecurityDialog(
                       icon: const Icon(Icons.add_moderator),
                       label: const Text('ENROLL MFA')),
                   OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                          foregroundColor: violetColor,
+                          side: const BorderSide(color: violetColor),
+                          textStyle: const TextStyle(
+                              fontSize: 10,
+                              letterSpacing: 1.0,
+                              fontWeight: FontWeight.w700)),
                       onPressed: () {
                         Navigator.pop(dialogContext);
                         showDisableMfaDialog(context, api);
@@ -222,8 +307,13 @@ Future<void> showSecurityDialog(
                       }
                     }
                   },
-                  icon: const Icon(Icons.logout),
-                  label: const Text('REVOKE ALL OTHER ACCESS'),
+                  icon: const Icon(Icons.logout, color: Colors.redAccent),
+                  label: const Text('REVOKE ALL OTHER ACCESS',
+                      style: TextStyle(
+                          color: Colors.redAccent,
+                          fontSize: 10,
+                          letterSpacing: 1.0,
+                          fontWeight: FontWeight.w700)),
                 ),
               ],
             ),
@@ -232,7 +322,12 @@ Future<void> showSecurityDialog(
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('DONE'))
+              child: const Text('DONE',
+                  style: TextStyle(
+                      color: violetColor,
+                      fontSize: 10,
+                      letterSpacing: 1.0,
+                      fontWeight: FontWeight.w700)))
         ],
       ),
     ),

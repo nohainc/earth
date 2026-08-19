@@ -10,7 +10,8 @@ void main() {
     expect(y.dayOfYear, 45);
   });
 
-  testWidgets('TopFixedHudPanel renders brand header, live status, and triggers callbacks',
+  testWidgets(
+      'TopFixedHudPanel renders brand header, live status, and triggers callbacks',
       (tester) async {
     const state = EarthState({
       'clock': {
@@ -76,13 +77,20 @@ void main() {
     // Verify brand header
     expect(find.text('EARTH'), findsOneWidget);
     expect(find.text('UNITED CORPORATIONS'), findsOneWidget);
-    expect(find.text('5'), findsOneWidget); // Comm badge
+    expect(find.text('8'), findsOneWidget); // Combined alerts badge
 
-    // Test Comm-Link trigger
-    final commBtn = find.byIcon(Icons.settings_input_antenna);
-    expect(commBtn, findsOneWidget);
-    await tester.tap(commBtn);
+    // Test grouped alerts menu and Messages action
+    final notifBtn = find.byIcon(Icons.notifications_none_outlined);
+    expect(notifBtn, findsOneWidget);
+    await tester.tap(notifBtn);
+    await tester.pumpAndSettle();
+    expect(find.text('Notifications'), findsOneWidget);
+    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('Invitations'), findsOneWidget);
+    await tester.tap(find.text('Messages'));
     expect(commLinkOpened, isTrue);
+
+    // The comm-link action is now exposed through the grouped Messages item.
 
     // Test drawer trigger
     final drawerBtn = find.byIcon(Icons.menu);
@@ -96,13 +104,6 @@ void main() {
     if (securityBtn.evaluate().isNotEmpty) {
       await tester.tap(securityBtn.first);
       expect(securityOpened, isTrue);
-    }
-
-    // Test notification trigger
-    final notifBtn = find.byIcon(Icons.notifications_outlined);
-    if (notifBtn.evaluate().isNotEmpty) {
-      await tester.tap(notifBtn.first);
-      expect(navigatedRoute, 'activity');
     }
 
     // Test logout trigger

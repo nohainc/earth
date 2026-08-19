@@ -104,6 +104,10 @@ class AiAssistantPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'AI ASSISTANT / BOUNDED AUTOMATION',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Bounded AI Assistants: Algorithmic decision engines designed to optimize industrial and economic operations.\n\n• Constitutional Safeguards: All AI instances are strictly bounded tools under Planetary Law. They possess no legal personhood, cannot vote in governance referendums, and cannot hold corporate officer titles.\n\n• Automation Tiers:\n  - BASIC ADVISORY: Telemetry monitoring, anomaly detection, and explainable recommendations (10 C/day).\n  - BUSINESS OPERATIONS: Automated machine preventative maintenance and production cycle optimization (50 C/day).\n\n• Policy Modes:\n  - RECOMMEND: Advisory mode generating non-binding suggestions.\n  - MAINTAIN: Automated dispatch mode executing preventative maintenance on machines approaching critical wear.',
       child: state.aiAssistants.isEmpty
@@ -362,6 +366,10 @@ class AiRecommendationsPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'AI / EXPLAINABLE RECOMMENDATIONS',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Explainable Decision Engine: Real-time telemetry monitoring providing transparent, auditable optimization guidance across fleet maintenance, supply inventory, and market pricing.\n\n• Player Sovereignty: Recommendations are purely advisory and strictly non-binding. No economic action or fund transfer occurs without explicit player instruction.',
       child: Column(

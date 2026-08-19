@@ -63,15 +63,14 @@ void main() {
       expect(fromJson.isCompleted, isFalse);
     });
 
-    test('synthesizes all 7 exemplar objectives from state', () {
+    test('synthesizes all exemplar objectives from state', () {
       final objectives = PlayerObjective.synthesizeFromState(testState);
 
-      expect(objectives.length, 7);
+      expect(objectives.length, 6);
 
       final titles = objectives.map((o) => o.title).toList();
       expect(titles.any((t) => t.contains('Valuable Corporation')), isTrue);
       expect(titles.any((t) => t.contains('Civic Delegate')), isTrue);
-      expect(titles.any((t) => t.contains('Regional Resource')), isTrue);
       expect(titles.any((t) => t.contains('Dynasty with Sovereign Traits')), isTrue);
       expect(titles.any((t) => t.contains('Technology Licensor')), isTrue);
       expect(titles.any((t) => t.contains('Financial Independence')), isTrue);
@@ -104,8 +103,8 @@ void main() {
       expect(find.textContaining('TOTAL AMBITION'), findsOneWidget);
 
       // Verify Filter Pills
-      expect(find.textContaining('ALL (7)'), findsOneWidget);
-      expect(find.text('ENTERPRISE & SUPPLY'), findsOneWidget);
+      expect(find.textContaining('ALL (6)'), findsOneWidget);
+      expect(find.text('ENTERPRISE'), findsOneWidget);
       expect(find.text('CIVIC & DYNASTY'), findsOneWidget);
       expect(find.text('TECH & FINANCE'), findsOneWidget);
       expect(find.textContaining('COMPLETED ('), findsOneWidget);
@@ -113,7 +112,6 @@ void main() {
       // Verify Titles of Objectives
       expect(find.text('Build the Most Valuable Corporation'), findsOneWidget);
       expect(find.text('Become a Major Civic Delegate'), findsOneWidget);
-      expect(find.text('Control a Regional Resource'), findsOneWidget);
       expect(find.text('Create a Dynasty with Sovereign Traits'), findsOneWidget);
       expect(find.text('Become a Leading Technology Licensor'), findsOneWidget);
       expect(find.text('Reach Financial Independence'), findsOneWidget);

@@ -1,11 +1,37 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
-import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'derivatives_dialog.dart';
+
+Widget _marketTopicHeading(BuildContext context, String title,
+    {required String description}) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Flexible(
+        child: Text(title,
+            style: const TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1)),
+      ),
+      const SizedBox(width: 5),
+      IconButton(
+        tooltip: 'About $title',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(Icons.info_outline,
+            size: 14, color: mutedColor.withValues(alpha: .8)),
+        onPressed: () => showEarthInfoDialog(context,
+            title: title, description: description),
+      ),
+    ]),
+  );
+}
 
 /// Commodity configuration mapping symbol codes and themes.
 class CommodityMeta {
@@ -30,40 +56,45 @@ class CommodityMeta {
       key: 'food',
       name: 'FOOD & NUTRITION',
       symbol: 'FOOD',
-      description: 'Vertical farm harvest & bio-nutrients for human metabolic survival.',
-      color: Colors.lightGreenAccent,
+      description:
+          'Vertical farm harvest & bio-nutrients for human metabolic survival.',
+      color: EarthResourceColors.food,
       icon: Icons.eco_outlined,
     ),
     CommodityMeta(
       key: 'material',
       name: 'MATERIALS',
       symbol: 'MATR',
-      description: 'Raw industrial base feedstock for manufacturing and construction.',
-      color: Colors.tealAccent,
+      description:
+          'Raw industrial base feedstock for manufacturing and construction.',
+      color: EarthResourceColors.materials,
       icon: Icons.view_in_ar_outlined,
     ),
     CommodityMeta(
       key: 'components',
       name: 'COMPONENTS',
       symbol: 'FABR',
-      description: 'Precision mechanical sub-assemblies required to maintain and build machines.',
-      color: cyanAccentColor,
+      description:
+          'Precision mechanical sub-assemblies required to maintain and build machines.',
+      color: EarthResourceColors.components,
       icon: Icons.settings_outlined,
     ),
     CommodityMeta(
       key: 'energy',
       name: 'ENERGY',
       symbol: 'ENGY',
-      description: 'Electrical power units consumed per production and municipal cycle.',
-      color: Colors.amberAccent,
+      description:
+          'Electrical power units consumed per production and municipal cycle.',
+      color: EarthResourceColors.energy,
       icon: Icons.bolt_outlined,
     ),
     CommodityMeta(
       key: 'compute',
       name: 'COMPUTE',
       symbol: 'INFO',
-      description: 'Quantum processing and algorithmic research compute capacity.',
-      color: violetColor,
+      description:
+          'Quantum processing and algorithmic research compute capacity.',
+      color: EarthResourceColors.compute,
       icon: Icons.memory_outlined,
     ),
   ];
@@ -74,7 +105,9 @@ class CommodityMeta {
       orElse: () => CommodityMeta(
         key: product.toLowerCase(),
         name: product.toUpperCase(),
-        symbol: product.toUpperCase().substring(0, product.length >= 4 ? 4 : product.length),
+        symbol: product
+            .toUpperCase()
+            .substring(0, product.length >= 4 ? 4 : product.length),
         description: 'Standardized economic commodity asset.',
         color: cyanAccentColor,
         icon: Icons.grain_outlined,
@@ -201,7 +234,8 @@ Future<void> showPlaceOrderDialog(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
                           const Text('Base value:',
-                              style: TextStyle(fontSize: 11, color: mutedColor)),
+                              style:
+                                  TextStyle(fontSize: 11, color: mutedColor)),
                           Text('${baseTotal.toStringAsFixed(2)} C',
                               style: const TextStyle(
                                   fontSize: 11, fontWeight: FontWeight.w600)),
@@ -311,7 +345,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   String _sellQty = '10';
   String _sellPrice = '';
 
-  final TextEditingController _qtyController = TextEditingController(text: '10');
+  final TextEditingController _qtyController =
+      TextEditingController(text: '10');
   final TextEditingController _priceController = TextEditingController();
 
   @override
@@ -390,7 +425,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   @override
   Widget build(BuildContext context) {
     final meta = CommodityMeta.forProduct(_selectedCommodity);
-    final productData = (widget.state.market[_selectedCommodity] as Map<String, dynamic>?) ?? {};
+    final productData =
+        (widget.state.market[_selectedCommodity] as Map<String, dynamic>?) ??
+            {};
     final currentPrice = asDouble(productData['price']) ?? 50.0;
     final supply = asInt(productData['supply']) ?? 0;
     final demand = asInt(productData['demand']) ?? 0;
@@ -408,8 +445,12 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         .whereType<double>()
         .toList();
 
-    double minPrice = prices.isNotEmpty ? prices.reduce((a, b) => a < b ? a : b) : currentPrice * 0.9;
-    double maxPrice = prices.isNotEmpty ? prices.reduce((a, b) => a > b ? a : b) : currentPrice * 1.1;
+    double minPrice = prices.isNotEmpty
+        ? prices.reduce((a, b) => a < b ? a : b)
+        : currentPrice * 0.9;
+    double maxPrice = prices.isNotEmpty
+        ? prices.reduce((a, b) => a > b ? a : b)
+        : currentPrice * 1.1;
     if (minPrice == maxPrice) {
       minPrice *= 0.95;
       maxPrice *= 1.05;
@@ -421,31 +462,40 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     final qty = int.tryParse(_qtyController.text.trim()) ?? 0;
     final limitPrice = double.tryParse(_priceController.text.trim()) ?? 0.0;
     final baseTotal = qty * limitPrice;
-    final fee = _orderSide == 'buy' ? baseTotal * widget.state.marketFeeRate : 0.0;
+    final fee =
+        _orderSide == 'buy' ? baseTotal * widget.state.marketFeeRate : 0.0;
     final totalEscrow = _orderSide == 'buy' ? baseTotal + fee : baseTotal;
 
-    final maxAffordableUnits = limitPrice > 0 ? (userCredits / (limitPrice * (1 + widget.state.marketFeeRate))).floor() : 0;
+    final maxAffordableUnits = limitPrice > 0
+        ? (userCredits / (limitPrice * (1 + widget.state.marketFeeRate)))
+            .floor()
+        : 0;
     final maxSellableUnits = userStock;
 
     final isBuy = _orderSide == 'buy';
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
 
-    final currentDay = asIntOr(widget.state.clock['day'], 1);
     final currentMinute = asIntOr(widget.state.clock['minute'], 0);
-    final epochIndex = (currentDay * 6) + (currentMinute ~/ 240);
     final minutesToNextEpoch = 240 - (currentMinute % 240);
     final remHours = minutesToNextEpoch ~/ 60;
     final remMins = minutesToNextEpoch % 60;
-    final countdownStr = '${remHours.toString().padLeft(2, '0')}:${remMins.toString().padLeft(2, '0')}';
+    final countdownStr =
+        '${remHours.toString().padLeft(2, '0')}:${remMins.toString().padLeft(2, '0')}';
 
     return EarthPanel(
       key: widget.panelKey,
       title: 'CENTRAL MARKET / LIVE SIGNALS',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• Periodic Batch Auction Architecture (Spec §1.10):\n  - Major commodities clear via scheduled Batch Auctions (every 4 simulation hours) rather than continuous front-run order books.\n  - Uniform Price Clearing (P*): All buy orders >= P* and sell orders <= P* fill at the identical market clearing price.\n  - Pro-Rata Shortage Allocation: Excess supply or demand at exact P* is allocated proportionally.\n\n• Commodity Selector: Select between Food, Materials, Energy, Components, and Compute to view spot clearing price, 24h price delta, and market liquidity.\n\n• Liquidity Pressure Gauge: Real-time ratio comparing total aggregated sell volume against buy volume.\n\n• Execution Terminal: Submit limit Buy or Sell orders with explicit quantity and unit price controls.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _marketTopicHeading(context, 'CENTRAL MARKET / LIVE SIGNALS',
+              description:
+                  '• Review scheduled commodity auctions, liquidity pressure, and submit limit orders.'),
           // 0. BATCH AUCTION CLEARING BANNER
           Container(
             width: double.infinity,
@@ -454,7 +504,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             decoration: BoxDecoration(
               color: surfaceColor.withValues(alpha: .85),
               borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: cyanAccentColor.withValues(alpha: .25)),
+              border: Border.all(color: EarthColors.borderSubtle),
             ),
             child: Row(
               children: [
@@ -464,7 +514,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                     color: cyanAccentColor.withValues(alpha: .12),
                     borderRadius: BorderRadius.circular(6),
                   ),
-                  child: const Icon(Icons.layers_outlined, size: 16, color: cyanAccentColor),
+                  child: const Icon(Icons.layers_outlined,
+                      size: 16, color: cyanAccentColor),
                 ),
                 const SizedBox(width: 10),
                 Expanded(
@@ -484,28 +535,13 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               color: inkColor,
                             ),
                           ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: Colors.tealAccent.withValues(alpha: .12),
-                              borderRadius: BorderRadius.circular(4),
-                              border: Border.all(color: Colors.tealAccent.withValues(alpha: .3)),
-                            ),
-                            child: Text(
-                              'EPOCH #$epochIndex',
-                              style: const TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.w800,
-                                color: Colors.tealAccent,
-                              ),
-                            ),
-                          ),
                         ],
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Next batch clearing in $countdownStr · Uniform Clearing Price (P*) · Zero Slippage',
-                        style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                        style:
+                            const TextStyle(fontSize: 9.5, color: mutedColor),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -528,22 +564,27 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         backgroundColor: cyanAccentColor.withAlpha(40),
                         foregroundColor: cyanAccentColor,
                         side: BorderSide(color: cyanAccentColor.withAlpha(120)),
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                        textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        textStyle: const TextStyle(
+                            fontWeight: FontWeight.bold, fontSize: 10),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: cyanAccentColor.withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: cyanAccentColor.withValues(alpha: .3)),
+                        border: Border.all(
+                            color: cyanAccentColor.withValues(alpha: .3)),
                       ),
                       child: const Row(
                         mainAxisSize: MainAxisSize.min,
                         children: [
-                          Icon(Icons.sync_outlined, size: 11, color: cyanAccentColor),
+                          Icon(Icons.sync_outlined,
+                              size: 11, color: cyanAccentColor),
                           SizedBox(width: 4),
                           Text(
                             'POOLING ORDERS',
@@ -587,7 +628,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                     borderRadius: BorderRadius.circular(10),
                     child: Container(
                       width: itemWidth,
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 12),
                       decoration: BoxDecoration(
                         color: isSelected
                             ? c.color.withValues(alpha: .12)
@@ -628,7 +670,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 ),
                               ),
                               const SizedBox(width: 4),
-                              _MiniTrendBadge(history: widget.priceHistory[key]),
+                              _MiniTrendBadge(
+                                  history: widget.priceHistory[key]),
                             ],
                           ),
                           const SizedBox(height: 6),
@@ -690,7 +733,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                             const SizedBox(height: 2),
                             Text(
                               meta.description,
-                              style: const TextStyle(fontSize: 10, color: mutedColor),
+                              style: const TextStyle(
+                                  fontSize: 10, color: mutedColor),
                               overflow: TextOverflow.ellipsis,
                             ),
                           ],
@@ -711,7 +755,10 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                           ),
                           const Text(
                             'UNIFORM CLEARING PRICE',
-                            style: TextStyle(fontSize: 8.5, color: mutedColor, letterSpacing: .8),
+                            style: TextStyle(
+                                fontSize: 8.5,
+                                color: mutedColor,
+                                letterSpacing: .8),
                           ),
                         ],
                       ),
@@ -736,7 +783,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         : Center(
                             child: Text(
                               'Aggregating periodic batch clearing history…',
-                              style: TextStyle(fontSize: 10.5, color: mutedColor.withValues(alpha: .7)),
+                              style: TextStyle(
+                                  fontSize: 10.5,
+                                  color: mutedColor.withValues(alpha: .7)),
                             ),
                           ),
                   ),
@@ -751,11 +800,17 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         children: [
                           Text(
                             'BUY DEMAND: $demand UNITS (${(demandPct * 100).toStringAsFixed(0)}%)',
-                            style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: cyanAccentColor),
+                            style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: cyanAccentColor),
                           ),
                           Text(
                             'SELL SUPPLY: $supply UNITS (${((1 - demandPct) * 100).toStringAsFixed(0)}%)',
-                            style: const TextStyle(fontSize: 9.5, fontWeight: FontWeight.w700, color: Colors.orangeAccent),
+                            style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.orangeAccent),
                           ),
                         ],
                       ),
@@ -797,7 +852,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: isBuy ? cyanAccentColor.withValues(alpha: .2) : Colors.transparent,
+                              color: isBuy
+                                  ? cyanAccentColor.withValues(alpha: .2)
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
                                 color: isBuy ? cyanAccentColor : Colors.white12,
@@ -824,10 +881,14 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                             padding: const EdgeInsets.symmetric(vertical: 8),
                             alignment: Alignment.center,
                             decoration: BoxDecoration(
-                              color: !isBuy ? Colors.orangeAccent.withValues(alpha: .2) : Colors.transparent,
+                              color: !isBuy
+                                  ? Colors.orangeAccent.withValues(alpha: .2)
+                                  : Colors.transparent,
                               borderRadius: BorderRadius.circular(8),
                               border: Border.all(
-                                color: !isBuy ? Colors.orangeAccent : Colors.white12,
+                                color: !isBuy
+                                    ? Colors.orangeAccent
+                                    : Colors.white12,
                               ),
                             ),
                             child: Text(
@@ -836,7 +897,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 fontSize: 11,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.1,
-                                color: !isBuy ? Colors.orangeAccent : mutedColor,
+                                color:
+                                    !isBuy ? Colors.orangeAccent : mutedColor,
                               ),
                             ),
                           ),
@@ -852,7 +914,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                     children: [
                       Text(
                         isBuy ? 'AVAILABLE CREDITS' : 'AVAILABLE INVENTORY',
-                        style: const TextStyle(fontSize: 9, color: mutedColor, letterSpacing: .8),
+                        style: const TextStyle(
+                            fontSize: 9, color: mutedColor, letterSpacing: .8),
                       ),
                       Text(
                         isBuy
@@ -872,36 +935,49 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   TextField(
                     controller: _qtyController,
                     keyboardType: TextInputType.number,
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       labelText: 'ORDER QUANTITY (UNITS)',
-                      labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1.1),
+                      labelStyle:
+                          const TextStyle(fontSize: 10, letterSpacing: 1.1),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       suffixText: meta.symbol,
-                      suffixStyle: TextStyle(fontSize: 10, color: meta.color, fontWeight: FontWeight.w700),
+                      suffixStyle: TextStyle(
+                          fontSize: 10,
+                          color: meta.color,
+                          fontWeight: FontWeight.w700),
                     ),
                   ),
                   const SizedBox(height: 6),
                   Row(
                     children: [
                       _presetChip('25%', () {
-                        final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text = (maxU * 0.25).clamp(1, 99999).round().toString();
+                        final maxU =
+                            isBuy ? maxAffordableUnits : maxSellableUnits;
+                        _qtyController.text =
+                            (maxU * 0.25).clamp(1, 99999).round().toString();
                       }),
                       const SizedBox(width: 4),
                       _presetChip('50%', () {
-                        final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text = (maxU * 0.50).clamp(1, 99999).round().toString();
+                        final maxU =
+                            isBuy ? maxAffordableUnits : maxSellableUnits;
+                        _qtyController.text =
+                            (maxU * 0.50).clamp(1, 99999).round().toString();
                       }),
                       const SizedBox(width: 4),
                       _presetChip('75%', () {
-                        final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
-                        _qtyController.text = (maxU * 0.75).clamp(1, 99999).round().toString();
+                        final maxU =
+                            isBuy ? maxAffordableUnits : maxSellableUnits;
+                        _qtyController.text =
+                            (maxU * 0.75).clamp(1, 99999).round().toString();
                       }),
                       const SizedBox(width: 4),
                       _presetChip('MAX', () {
-                        final maxU = isBuy ? maxAffordableUnits : maxSellableUnits;
+                        final maxU =
+                            isBuy ? maxAffordableUnits : maxSellableUnits;
                         _qtyController.text = maxU.clamp(1, 99999).toString();
                       }),
                     ],
@@ -911,21 +987,27 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   // Limit Price Field + Prefill button
                   TextField(
                     controller: _priceController,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    style: const TextStyle(
+                        fontSize: 13, fontWeight: FontWeight.w600),
                     decoration: InputDecoration(
                       labelText: 'LIMIT PRICE (C / UNIT)',
-                      labelStyle: const TextStyle(fontSize: 10, letterSpacing: 1.1),
+                      labelStyle:
+                          const TextStyle(fontSize: 10, letterSpacing: 1.1),
                       isDense: true,
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 10),
                       suffixIcon: TextButton(
                         style: TextButton.styleFrom(
                           padding: const EdgeInsets.symmetric(horizontal: 8),
                           minimumSize: Size.zero,
                           tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                         ),
-                        onPressed: () => _priceController.text = currentPrice.toStringAsFixed(2),
-                        child: Text('SPOT', style: TextStyle(fontSize: 9.5, color: meta.color)),
+                        onPressed: () => _priceController.text =
+                            currentPrice.toStringAsFixed(2),
+                        child: Text('SPOT',
+                            style: TextStyle(fontSize: 9.5, color: meta.color)),
                       ),
                     ),
                   ),
@@ -945,8 +1027,13 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Text('Base value:', style: TextStyle(fontSize: 10, color: mutedColor)),
-                            Text('${baseTotal.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w600)),
+                            const Text('Base value:',
+                                style:
+                                    TextStyle(fontSize: 10, color: mutedColor)),
+                            Text('${baseTotal.toStringAsFixed(2)} C',
+                                style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w600)),
                           ],
                         ),
                         if (isBuy && widget.state.marketFeeRate > 0) ...[
@@ -954,8 +1041,13 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                           Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              Text('Exchange fee (${(widget.state.marketFeeRate * 100).toStringAsFixed(1)}%):', style: const TextStyle(fontSize: 10, color: mutedColor)),
-                              Text('${fee.toStringAsFixed(2)} C', style: const TextStyle(fontSize: 10, color: mutedColor)),
+                              Text(
+                                  'Exchange fee (${(widget.state.marketFeeRate * 100).toStringAsFixed(1)}%):',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: mutedColor)),
+                              Text('${fee.toStringAsFixed(2)} C',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: mutedColor)),
                             ],
                           ),
                         ],
@@ -965,7 +1057,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                           children: [
                             Text(
                               isBuy ? 'Escrow Hold:' : 'Gross Proceeds:',
-                              style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
+                              style: const TextStyle(
+                                  fontSize: 11, fontWeight: FontWeight.w700),
                             ),
                             Text(
                               '${totalEscrow.toStringAsFixed(2)} C',
@@ -989,18 +1082,20 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       onPressed: widget.busy || qty <= 0 || limitPrice <= 0
                           ? null
                           : () async {
-                              await widget.action(() => const EarthApi().submitOrder(
-                                    _selectedCommodity,
-                                    limitPrice,
-                                    side: _orderSide,
-                                    quantity: qty,
-                                  ));
+                              await widget
+                                  .action(() => const EarthApi().submitOrder(
+                                        _selectedCommodity,
+                                        limitPrice,
+                                        side: _orderSide,
+                                        quantity: qty,
+                                      ));
                             },
                       style: FilledButton.styleFrom(
                         backgroundColor: sideColor.withValues(alpha: .85),
                         foregroundColor: Colors.black,
                         padding: const EdgeInsets.symmetric(vertical: 12),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
                       ),
                       child: Text(
                         'PLACE ${_orderSide.toUpperCase()} ORDER',
@@ -1057,7 +1152,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             ),
             child: Text(
               label,
-              style: const TextStyle(fontSize: 9, fontWeight: FontWeight.w600, color: mutedColor),
+              style: const TextStyle(
+                  fontSize: 9, fontWeight: FontWeight.w600, color: mutedColor),
             ),
           ),
         ),
@@ -1078,7 +1174,8 @@ class _MiniTrendBadge extends StatelessWidget {
     if (points.length < 2) return const SizedBox.shrink();
     final latest = asDouble(points.first['price']);
     final oldest = asDouble(points.last['price']);
-    if (latest == null || oldest == null || oldest == 0) return const SizedBox.shrink();
+    if (latest == null || oldest == null || oldest == 0)
+      return const SizedBox.shrink();
     final change = latest - oldest;
     final pct = (change / oldest) * 100;
     final isPos = change >= 0;
@@ -1086,7 +1183,8 @@ class _MiniTrendBadge extends StatelessWidget {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
       decoration: BoxDecoration(
-        color: (isPos ? Colors.tealAccent : Colors.orangeAccent).withValues(alpha: .15),
+        color: (isPos ? Colors.tealAccent : Colors.orangeAccent)
+            .withValues(alpha: .15),
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
@@ -1210,14 +1308,24 @@ class MarketOrderBookPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'CENTRAL MARKET / ORDER BOOK',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• Aggregated Order Depth: Displays open buy bids and sell asks grouped by commodity and best price tiers, showing total volume waiting for batch execution.\n\n• Order Count & Liquidity: Number of discrete market participants contributing liquidity to each price tier.\n\n• Central Clearing Settlement: Orders do not execute via continuous match; all qualifying bids and asks cross simultaneously at the uniform clearing price when the batch clears.',
-      child: book.isEmpty
-          ? const Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _marketTopicHeading(context, 'CENTRAL MARKET / ORDER BOOK',
+              description:
+                  '• Review aggregated buy bids, sell asks, order counts, and available liquidity.'),
+          if (book.isEmpty)
+            const Text(
               'No open orders. The market is waiting for a new signal.',
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
-          : Wrap(
+          else
+            Wrap(
               spacing: 12,
               runSpacing: 10,
               children: book.map((raw) {
@@ -1229,7 +1337,8 @@ class MarketOrderBookPanel extends StatelessWidget {
                 final orderCount = asInt(row['order_count']) ?? 1;
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                   decoration: BoxDecoration(
                     color: surfaceColor.withValues(alpha: .6),
                     borderRadius: BorderRadius.circular(8),
@@ -1245,11 +1354,15 @@ class MarketOrderBookPanel extends StatelessWidget {
                         children: [
                           Text(
                             meta.name,
-                            style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700, color: inkColor),
+                            style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                color: inkColor),
                           ),
                           Text(
                             '$openQty units · ${bestPrice.toStringAsFixed(2)} C ($orderCount orders)',
-                            style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                            style: const TextStyle(
+                                fontSize: 9.5, color: mutedColor),
                           ),
                         ],
                       ),
@@ -1258,6 +1371,8 @@ class MarketOrderBookPanel extends StatelessWidget {
                 );
               }).toList(),
             ),
+        ],
+      ),
     );
   }
 }
@@ -1290,17 +1405,26 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
       final status = (raw['status']?.toString() ?? 'open').toLowerCase();
       if (_filter == 'active') return status == 'open' || status == 'partial';
       if (_filter == 'filled') return status == 'filled';
-      if (_filter == 'cancelled') return status == 'cancelled' || status == 'refunded' || status == 'rejected';
+      if (_filter == 'cancelled')
+        return status == 'cancelled' ||
+            status == 'refunded' ||
+            status == 'rejected';
       return true;
     }).toList();
 
     return EarthPanel(
       title: 'MY MARKET ORDERS / LIFECYCLE',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• Order Status Categorization: Filter across All, Active (Open / Partially Filled), Completed (Filled), and Cancelled limit orders.\n\n• Order Lifecycle Indicators: Tracks submitted quantity, filled volume progress, limit price per unit, and locked escrow reserves.\n\n• Escrow & Cancellation: Active limit buy orders securely lock credits in escrow; active sell orders lock inventory units. Cancelling an order instantly unlocks and restores escrowed assets.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _marketTopicHeading(context, 'MY MARKET ORDERS / LIFECYCLE',
+              description:
+                  '• Track active, filled, and cancelled orders, including escrow and execution progress.'),
           // Filter Tabs
           Row(
             children: [
@@ -1325,27 +1449,48 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
               final order = raw as Map<String, dynamic>;
               final id = order['id']?.toString() ?? '';
               final side = (order['side']?.toString() ?? 'buy').toUpperCase();
-              final product = (order['product']?.toString() ?? '').toUpperCase();
+              final product =
+                  (order['product']?.toString() ?? '').toUpperCase();
               final quantity = asInt(order['quantity']) ?? 1;
-              final filledQty = asInt(order['filled_quantity']) ?? asInt(order['filled']) ?? 0;
+              final filledQty = asInt(order['filled_quantity']) ??
+                  asInt(order['filled']) ??
+                  0;
               final remaining = (quantity - filledQty).clamp(0, quantity);
-              final limitPrice = asDouble(order['limit_price']) ?? asDouble(order['limitPrice']) ?? 0.0;
-              final settlementPrice = asDouble(order['settlement_price']) ?? asDouble(order['clearing_price']) ?? asDouble(order['price']);
-              final status = (order['status']?.toString() ?? 'open').toLowerCase();
-              final reservedCredits = asDouble(order['reserved_credits']) ?? asDouble(order['reservedCredits']) ?? (side == 'BUY' && (status == 'open' || status == 'partial') ? remaining * limitPrice : 0.0);
-              final releasedEscrow = asDouble(order['released_escrow']) ?? asDouble(order['releasedEscrow']) ?? (status == 'cancelled' || status == 'refunded' ? remaining * limitPrice : 0.0);
+              final limitPrice = asDouble(order['limit_price']) ??
+                  asDouble(order['limitPrice']) ??
+                  0.0;
+              final settlementPrice = asDouble(order['settlement_price']) ??
+                  asDouble(order['clearing_price']) ??
+                  asDouble(order['price']);
+              final status =
+                  (order['status']?.toString() ?? 'open').toLowerCase();
+              final reservedCredits = asDouble(order['reserved_credits']) ??
+                  asDouble(order['reservedCredits']) ??
+                  (side == 'BUY' && (status == 'open' || status == 'partial')
+                      ? remaining * limitPrice
+                      : 0.0);
+              final releasedEscrow = asDouble(order['released_escrow']) ??
+                  asDouble(order['releasedEscrow']) ??
+                  (status == 'cancelled' || status == 'refunded'
+                      ? remaining * limitPrice
+                      : 0.0);
               final fee = asDouble(order['fee']) ?? 0.0;
-              final totalValue = filledQty > 0 ? filledQty * (settlementPrice ?? limitPrice) : quantity * limitPrice;
+              final totalValue = filledQty > 0
+                  ? filledQty * (settlementPrice ?? limitPrice)
+                  : quantity * limitPrice;
 
               final isBuy = side == 'BUY';
-              final fillProgress = quantity > 0 ? (filledQty / quantity).clamp(0.0, 1.0) : 0.0;
-              final canCancel = (status == 'open' || status == 'partial') && !widget.busy;
+              final fillProgress =
+                  quantity > 0 ? (filledQty / quantity).clamp(0.0, 1.0) : 0.0;
+              final canCancel =
+                  (status == 'open' || status == 'partial') && !widget.busy;
 
               Color statusColor = mutedColor;
               if (status == 'open') statusColor = Colors.lightBlueAccent;
               if (status == 'partial') statusColor = Colors.orangeAccent;
               if (status == 'filled') statusColor = cyanAccentColor;
-              if (status == 'cancelled' || status == 'rejected') statusColor = Colors.redAccent;
+              if (status == 'cancelled' || status == 'rejected')
+                statusColor = Colors.redAccent;
               if (status == 'refunded') statusColor = Colors.tealAccent;
 
               return Container(
@@ -1363,9 +1508,12 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
-                            color: (isBuy ? cyanAccentColor : Colors.orangeAccent).withValues(alpha: .15),
+                            color:
+                                (isBuy ? cyanAccentColor : Colors.orangeAccent)
+                                    .withValues(alpha: .15),
                             borderRadius: BorderRadius.circular(4),
                           ),
                           child: Text(
@@ -1373,7 +1521,8 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                             style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w800,
-                              color: isBuy ? cyanAccentColor : Colors.orangeAccent,
+                              color:
+                                  isBuy ? cyanAccentColor : Colors.orangeAccent,
                             ),
                           ),
                         ),
@@ -1384,26 +1533,35 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                             children: [
                               Text(
                                 '$side $product · $quantity units @ ${limitPrice.toStringAsFixed(2)} C',
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12, color: inkColor),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    color: inkColor),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 'Filled: $filledQty / $quantity ($remaining remaining) · Total: ${totalValue.toStringAsFixed(2)} C',
-                                style: const TextStyle(fontSize: 10, color: mutedColor),
+                                style: const TextStyle(
+                                    fontSize: 10, color: mutedColor),
                               ),
                             ],
                           ),
                         ),
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
                           decoration: BoxDecoration(
                             color: statusColor.withValues(alpha: .12),
                             borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: statusColor.withValues(alpha: .3)),
+                            border: Border.all(
+                                color: statusColor.withValues(alpha: .3)),
                           ),
                           child: Text(
                             status.toUpperCase(),
-                            style: TextStyle(fontSize: 9, fontWeight: FontWeight.w800, color: statusColor),
+                            style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: statusColor),
                           ),
                         ),
                       ],
@@ -1432,17 +1590,20 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                         if (settlementPrice != null && filledQty > 0)
                           Text(
                             'Settlement price: ${settlementPrice.toStringAsFixed(2)} C · Fee paid: ${fee.toStringAsFixed(2)} C',
-                            style: const TextStyle(fontSize: 9.5, color: cyanAccentColor),
+                            style: const TextStyle(
+                                fontSize: 9.5, color: cyanAccentColor),
                           ),
                         if (reservedCredits > 0)
                           Text(
                             'Reserved Credits in escrow: ${reservedCredits.toStringAsFixed(2)} C',
-                            style: const TextStyle(fontSize: 9.5, color: Colors.lightBlueAccent),
+                            style: const TextStyle(
+                                fontSize: 9.5, color: Colors.lightBlueAccent),
                           ),
                         if (releasedEscrow > 0)
                           Text(
                             'Released escrow refund: ${releasedEscrow.toStringAsFixed(2)} C',
-                            style: const TextStyle(fontSize: 9.5, color: Colors.tealAccent),
+                            style: const TextStyle(
+                                fontSize: 9.5, color: Colors.tealAccent),
                           ),
                       ],
                     ),
@@ -1454,10 +1615,13 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                         child: OutlinedButton(
                           style: OutlinedButton.styleFrom(
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 2),
                           ),
-                          onPressed: () => widget.action(() => const EarthApi().cancelOrder(id)),
-                          child: const Text('CANCEL ORDER', style: TextStyle(fontSize: 9.5)),
+                          onPressed: () => widget
+                              .action(() => const EarthApi().cancelOrder(id)),
+                          child: const Text('CANCEL ORDER',
+                              style: TextStyle(fontSize: 9.5)),
                         ),
                       ),
                     ],
@@ -1478,7 +1642,9 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
-          color: isSel ? violetColor.withValues(alpha: .2) : Colors.white.withValues(alpha: .04),
+          color: isSel
+              ? violetColor.withValues(alpha: .2)
+              : Colors.white.withValues(alpha: .04),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(color: isSel ? violetColor : Colors.white10),
         ),

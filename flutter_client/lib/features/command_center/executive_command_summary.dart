@@ -26,7 +26,8 @@ class ExecutiveCommandSummary extends StatefulWidget {
   });
 
   @override
-  State<ExecutiveCommandSummary> createState() => _ExecutiveCommandSummaryState();
+  State<ExecutiveCommandSummary> createState() =>
+      _ExecutiveCommandSummaryState();
 }
 
 class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
@@ -57,7 +58,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         _buildSectionHeader(
           number: '1',
           question: 'WHAT IS MY CURRENT SITUATION?',
-          subtitle: 'Executive posture, capital reserves, fleet condition & production vitality',
+          subtitle:
+              'Executive posture, capital reserves, fleet condition & production vitality',
           accentColor: EarthColors.cyanAccent,
           icon: Icons.account_circle_outlined,
         ),
@@ -71,7 +73,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         _buildSectionHeader(
           number: '2',
           question: 'WHAT CHANGED SINCE MY LAST VISIT?',
-          subtitle: 'Nightly cycle intelligence, net worth deltas, market volatility & civic updates',
+          subtitle:
+              'Nightly cycle intelligence, net worth deltas, market volatility & civic updates',
           accentColor: EarthColors.goldMetallic,
           icon: Icons.history_toggle_off,
           trailingWidget: InkWell(
@@ -85,7 +88,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               decoration: BoxDecoration(
                 color: EarthColors.goldMetallic.withValues(alpha: 0.12),
                 borderRadius: BorderRadius.circular(4),
-                border: Border.all(color: EarthColors.goldMetallic.withValues(alpha: 0.4)),
+                border: Border.all(
+                    color: EarthColors.goldMetallic.withValues(alpha: 0.4)),
               ),
               child: Row(
                 mainAxisSize: MainAxisSize.min,
@@ -120,11 +124,14 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         _buildSectionHeader(
           number: '3',
           question: 'WHAT DECISION SHOULD I MAKE NEXT?',
-          subtitle: 'Prioritized decision queue & real-time market arbitrage opportunities',
-          accentColor: criticalCount > 0 ? Colors.orangeAccent : const Color(0xFF00E676),
+          subtitle:
+              'Prioritized decision queue & real-time market arbitrage opportunities',
+          accentColor:
+              criticalCount > 0 ? Colors.orangeAccent : const Color(0xFF00E676),
           icon: Icons.alt_route,
           badgeLabel: criticalCount > 0 ? '$criticalCount CRITICAL' : 'OPTIMAL',
-          badgeColor: criticalCount > 0 ? Colors.orangeAccent : const Color(0xFF00E676),
+          badgeColor:
+              criticalCount > 0 ? Colors.orangeAccent : const Color(0xFF00E676),
         ),
         const SizedBox(height: 10),
         _buildWhatDecisionNextCard(decisionItems, opportunities),
@@ -153,7 +160,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           decoration: BoxDecoration(
             color: accentColor.withValues(alpha: 0.15),
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: accentColor.withValues(alpha: 0.6), width: 1.2),
+            border: Border.all(
+                color: accentColor.withValues(alpha: 0.6), width: 1.2),
           ),
           child: Text(
             number,
@@ -188,11 +196,15 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   if (badgeLabel != null) ...[
                     const SizedBox(width: 8),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
-                        color: (badgeColor ?? accentColor).withValues(alpha: 0.15),
+                        color:
+                            (badgeColor ?? accentColor).withValues(alpha: 0.15),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: (badgeColor ?? accentColor).withValues(alpha: 0.5)),
+                        border: Border.all(
+                            color: (badgeColor ?? accentColor)
+                                .withValues(alpha: 0.5)),
                       ),
                       child: Text(
                         badgeLabel,
@@ -208,7 +220,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               ),
               Text(
                 subtitle,
-                style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),
+                style:
+                    const TextStyle(color: EarthColors.textMuted, fontSize: 10),
                 overflow: TextOverflow.ellipsis,
               ),
             ],
@@ -238,12 +251,15 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       decoration: BoxDecoration(
         color: EarthColors.panelSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.25)),
+        border:
+            Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.25)),
       ),
       child: LayoutBuilder(
         builder: (context, constraints) {
           final isNarrow = constraints.maxWidth < 650;
-          final itemWidth = isNarrow ? (constraints.maxWidth - 8) / 2 : (constraints.maxWidth - 24) / 4;
+          final itemWidth = isNarrow
+              ? (constraints.maxWidth - 8) / 2
+              : (constraints.maxWidth - 24) / 4;
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -265,9 +281,12 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     width: itemWidth,
                     label: 'ENTERPRISE HEALTH',
                     value: corpName.toUpperCase(),
-                    subvalue: isSolvent ? 'SOLVENT · 100% FLEET' : 'INSOLVENT RISK',
+                    subvalue:
+                        isSolvent ? 'SOLVENT · 100% FLEET' : 'INSOLVENT RISK',
                     icon: Icons.storefront_outlined,
-                    accent: isSolvent ? const Color(0xFF00E676) : Colors.orangeAccent,
+                    accent: isSolvent
+                        ? const Color(0xFF00E676)
+                        : Colors.orangeAccent,
                     onTap: () => widget.onNavigate?.call('business'),
                   ),
                   _situationPill(
@@ -282,7 +301,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   _situationPill(
                     width: itemWidth,
                     label: 'STRATEGIC AMBITION',
-                    value: primaryObjective != null ? primaryObjective.title : 'VALUABLE CORP',
+                    value: primaryObjective != null
+                        ? primaryObjective.title
+                        : 'VALUABLE CORP',
                     subvalue: primaryObjective != null
                         ? '${primaryObjective.progressPercentage.toStringAsFixed(0)}% Progress'
                         : 'Active',
@@ -386,7 +407,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       decoration: BoxDecoration(
         color: EarthColors.panelSurface,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.goldMetallic.withValues(alpha: 0.3)),
+        border: Border.all(color: EarthColors.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -400,9 +421,10 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 decoration: BoxDecoration(
                   color: EarthColors.goldMetallic.withValues(alpha: 0.12),
                   borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: EarthColors.goldMetallic.withValues(alpha: 0.4)),
+                  border: Border.all(color: EarthColors.borderSubtle),
                 ),
-                child: const Icon(Icons.newspaper_outlined, size: 20, color: EarthColors.goldMetallic),
+                child: const Icon(Icons.newspaper_outlined,
+                    size: 20, color: EarthColors.goldMetallic),
               ),
               const SizedBox(width: 10),
               Expanded(
@@ -411,9 +433,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   children: [
                     Row(
                       children: [
-                        Text(
-                          'DAY ${briefing.gameDay} CHRONICLE',
-                          style: const TextStyle(
+                        const Text(
+                          'RECENT SIMULATION CYCLE',
+                          style: TextStyle(
                             color: EarthColors.goldMetallic,
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -423,8 +445,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            '•  +${briefing.daysElapsed} day processed overnight',
-                            style: const TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
+                            '•  Summary since the previous cycle',
+                            style: TextStyle(
+                                color: EarthColors.textMuted, fontSize: 10.5),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -434,7 +457,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     Text(
                       'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR (${sign}${netDelta.deltaPct.toStringAsFixed(1)}%)  ·  Cashflow Net: +${formatWholeNumber(briefing.cashflow.netProfit)} CR/day',
                       style: TextStyle(
-                        color: isPositiveDelta ? const Color(0xFF00E676) : Colors.redAccent,
+                        color: isPositiveDelta
+                            ? const Color(0xFF00E676)
+                            : Colors.redAccent,
                         fontSize: 11,
                         fontWeight: FontWeight.w700,
                       ),
@@ -455,21 +480,27 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               ...briefing.marketMovements.take(3).map((m) {
                 final isUp = m.deltaPct >= 0;
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: EarthColors.cardSurface,
                     borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: isUp ? const Color(0xFF00E676).withValues(alpha: 0.3) : Colors.redAccent.withValues(alpha: 0.3)),
+                    border: Border.all(color: EarthColors.borderSubtle),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(isUp ? Icons.arrow_upward : Icons.arrow_downward, size: 10, color: isUp ? const Color(0xFF00E676) : Colors.redAccent),
+                      Icon(isUp ? Icons.arrow_upward : Icons.arrow_downward,
+                          size: 10,
+                          color: isUp
+                              ? const Color(0xFF00E676)
+                              : Colors.redAccent),
                       const SizedBox(width: 4),
                       Text(
                         '${m.commodity.toUpperCase()}: ${m.currentPrice.toStringAsFixed(1)} CR (${isUp ? '+' : ''}${m.deltaPct.toStringAsFixed(1)}%)',
                         style: TextStyle(
-                          color: isUp ? const Color(0xFF00E676) : Colors.redAccent,
+                          color:
+                              isUp ? const Color(0xFF00E676) : Colors.redAccent,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -480,7 +511,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               }),
               if (briefing.civicSummary.recentCivicEvents.isNotEmpty)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: EarthColors.cardSurface,
                     borderRadius: BorderRadius.circular(6),
@@ -489,11 +521,13 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(Icons.gavel, size: 10, color: EarthColors.goldMetallic),
+                      const Icon(Icons.gavel,
+                          size: 10, color: EarthColors.goldMetallic),
                       const SizedBox(width: 4),
                       Text(
                         briefing.civicSummary.recentCivicEvents.first,
-                        style: const TextStyle(color: Colors.white70, fontSize: 10),
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 10),
                       ),
                     ],
                   ),
@@ -552,11 +586,19 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: const TextStyle(color: EarthColors.textMuted, fontSize: 8.5, fontWeight: FontWeight.bold)),
+          Text(label,
+              style: const TextStyle(
+                  color: EarthColors.textMuted,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.bold)),
           const SizedBox(height: 2),
-          Text(value, style: TextStyle(color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(value,
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.bold)),
           const SizedBox(height: 1),
-          Text(sub, style: const TextStyle(color: Colors.white54, fontSize: 9), overflow: TextOverflow.ellipsis),
+          Text(sub,
+              style: const TextStyle(color: Colors.white54, fontSize: 9),
+              overflow: TextOverflow.ellipsis),
         ],
       ),
     );
@@ -592,11 +634,14 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   children: [
                     _filterChip('ALL', 'ALL (${decisionItems.length})'),
                     const SizedBox(width: 6),
-                    _filterChip('CRITICAL', 'CRITICAL', color: Colors.orangeAccent),
+                    _filterChip('CRITICAL', 'CRITICAL',
+                        color: Colors.orangeAccent),
                     const SizedBox(width: 6),
-                    _filterChip('CORPORATION', 'ENTERPRISE', color: EarthColors.cyanAccent),
+                    _filterChip('CORPORATION', 'ENTERPRISE',
+                        color: EarthColors.cyanAccent),
                     const SizedBox(width: 6),
-                    _filterChip('CIVIC', 'CIVIC & DYNASTY', color: EarthColors.goldMetallic),
+                    _filterChip('CIVIC', 'CIVIC & DYNASTY',
+                        color: EarthColors.goldMetallic),
                   ],
                 ),
               ),
@@ -616,7 +661,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               ),
             )
           else
-            ...filteredDecisions.take(4).map((item) => _buildUnifiedDecisionItem(item)),
+            ...filteredDecisions
+                .take(4)
+                .map((item) => _buildUnifiedDecisionItem(item)),
 
           // Merged Live Opportunity Signals
           if (opportunities.isNotEmpty) ...[
@@ -625,7 +672,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             const SizedBox(height: 10),
             const Row(
               children: [
-                Icon(Icons.trending_up, size: 13, color: EarthColors.cyanAccent),
+                Icon(Icons.trending_up,
+                    size: 13, color: EarthColors.cyanAccent),
                 SizedBox(width: 6),
                 Text(
                   'LIVE STRATEGIC OPPORTUNITIES',
@@ -693,7 +741,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected ? activeColor.withValues(alpha: 0.18) : EarthColors.cardSurface,
+          color: isSelected
+              ? activeColor.withValues(alpha: 0.18)
+              : EarthColors.cardSurface,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
             color: isSelected ? activeColor : EarthColors.borderSubtle,
@@ -713,7 +763,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   }
 
   Widget _buildUnifiedDecisionItem(DecisionQueueItem item) {
-    final isCritical = item.riskLevel.toLowerCase() == 'critical' || item.riskLevel.toLowerCase() == 'high';
+    final isCritical = item.riskLevel.toLowerCase() == 'critical' ||
+        item.riskLevel.toLowerCase() == 'high';
     final categoryColor = _getDecisionCategoryColor(item);
     final categoryIcon = _getDecisionCategoryIcon(item);
 
@@ -760,7 +811,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     ),
                     const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1),
                       decoration: BoxDecoration(
                         color: isCritical
                             ? Colors.orangeAccent.withValues(alpha: 0.15)
@@ -770,7 +822,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                       child: Text(
                         item.riskLevel.toUpperCase(),
                         style: TextStyle(
-                          color: isCritical ? Colors.orangeAccent : Colors.white60,
+                          color:
+                              isCritical ? Colors.orangeAccent : Colors.white60,
                           fontSize: 8.5,
                           fontWeight: FontWeight.bold,
                         ),
@@ -781,7 +834,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                 const SizedBox(height: 2),
                 Text(
                   item.whyItMatters,
-                  style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),
+                  style: const TextStyle(
+                      color: EarthColors.textMuted, fontSize: 10),
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
@@ -789,13 +843,17 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   children: [
                     Text(
                       'Deadline: ${item.deadline}',
-                      style: const TextStyle(color: Colors.white54, fontSize: 9),
+                      style:
+                          const TextStyle(color: Colors.white54, fontSize: 9),
                     ),
                     const SizedBox(width: 8),
                     Flexible(
                       child: Text(
                         '•  Impact: ${item.expectedImpact}',
-                        style: TextStyle(color: categoryColor, fontSize: 9, fontWeight: FontWeight.w600),
+                        style: TextStyle(
+                            color: categoryColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w600),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
@@ -815,7 +873,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               }
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: isCritical ? Colors.orangeAccent : EarthColors.cyanAccent,
+              backgroundColor:
+                  isCritical ? Colors.orangeAccent : EarthColors.cyanAccent,
               foregroundColor: Colors.black,
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
               visualDensity: VisualDensity.compact,
@@ -870,8 +929,10 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     final signal = opp['signal']?.toString() ?? 'market';
 
     String targetSection = 'market';
-    if (signal.contains('gov') || signal.contains('civic')) targetSection = 'civic';
-    if (signal.contains('tech') || signal.contains('research')) targetSection = 'technology';
+    if (signal.contains('gov') || signal.contains('civic'))
+      targetSection = 'civic';
+    if (signal.contains('tech') || signal.contains('research'))
+      targetSection = 'technology';
     if (signal.contains('business')) targetSection = 'business';
 
     return Container(
@@ -880,7 +941,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       decoration: BoxDecoration(
         color: EarthColors.cardSurface.withValues(alpha: 0.6),
         borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.2)),
+        border:
+            Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
@@ -892,12 +954,16 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               children: [
                 Text(
                   title,
-                  style: const TextStyle(color: Colors.white70, fontSize: 10.5, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                      color: Colors.white70,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   detail,
-                  style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5),
+                  style: const TextStyle(
+                      color: EarthColors.textMuted, fontSize: 9.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
@@ -918,7 +984,10 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               ),
               child: const Text(
                 'EXPLOIT',
-                style: TextStyle(color: EarthColors.cyanAccent, fontSize: 9, fontWeight: FontWeight.bold),
+                style: TextStyle(
+                    color: EarthColors.cyanAccent,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold),
               ),
             ),
           ),

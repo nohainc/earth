@@ -6,6 +6,7 @@ import { classifyBusinessFinancialStatus } from './business-finance.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
 import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { toNanoMarkup } from './nano-markup.ts';
+import { expireSocialInitiatives } from './social-gameplay-postgres.ts';
 
 const products = ['material', 'components', 'energy', 'compute'];
 
@@ -234,62 +235,6 @@ async function settleSupplyContracts(tx: PostgresRepository, day: number): Promi
   }
 }
 
-async function settlePlotLeasesAndYields(tx: PostgresRepository, day: number): Promise<void> {
-  const leasedPlots = await tx.query<{
-    id: string;
-    region_id: string;
-    plot_name: string;
-    primary_resource: string;
-    base_yield_rate: string;
-    development_level: number;
-    lease_holder_id: string;
-    daily_lease_fee: string;
-    lease_expires_game_day: number;
-    accumulated_yield: string;
-  }>(
-    `SELECT * FROM territory_plots 
-     WHERE lease_holder_id IS NOT NULL AND lease_expires_game_day >= $1
-     FOR UPDATE`,
-    [day],
-  );
-
-  for (const plot of leasedPlots.rows) {
-    const yieldAmount = Number(plot.base_yield_rate);
-    const newAccumulated = (Number(plot.accumulated_yield) + yieldAmount).toFixed(2);
-
-    await tx.query(
-      `UPDATE territory_plots
-       SET accumulated_yield = $1,
-           updated_at = CURRENT_TIMESTAMP
-       WHERE id = $2`,
-      [newAccumulated, plot.id],
-    );
-
-    await tx.query(
-      `INSERT INTO plot_yield_logs (id, plot_id, game_day, resource_type, amount_generated, fee_deducted)
-       VALUES ($1, $2, $3, $4, $5, $6)`,
-      [crypto.randomUUID(), plot.id, day, plot.primary_resource, yieldAmount, plot.daily_lease_fee],
-    );
-
-    if (plot.lease_expires_game_day <= day) {
-      await tx.query(
-        `UPDATE territory_plots 
-         SET lease_holder_id = NULL,
-             lease_expires_game_day = NULL,
-             updated_at = CURRENT_TIMESTAMP
-         WHERE id = $1`,
-        [plot.id],
-      );
-
-      await tx.query(
-        `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
-         VALUES ($1, $2, 'concession', 'Territory Lease Expired', 'Your concession lease on ' || $3 || ' has expired.', $4)`,
-        [crypto.randomUUID(), plot.lease_holder_id, plot.plot_name, plot.id],
-      );
-    }
-  }
-}
-
 async function completeContracts(tx: PostgresRepository, day: number): Promise<void> {
   const contracts = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; title: string }>("SELECT id, proposer_id, counterparty_id, title FROM negotiated_contracts WHERE status = 'accepted' AND ends_game_day <= $1 FOR UPDATE", [day]);
   for (const contract of contracts.rows) {
@@ -482,6 +427,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await tx.query("UPDATE machines SET condition = GREATEST(0, condition - GREATEST(0.05, utilization * 0.005 * CASE COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC LIMIT 1), 'efficiency') WHEN 'durability' THEN 0.7 WHEN 'safety' THEN 0.8 ELSE 1 END)), maintenance_due = maintenance_due + GREATEST(1, utilization * 0.25)");
     await tx.query("UPDATE market_prices SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)), game_day = $1", [day]);
     if (newDay) {
+      await expireSocialInitiatives(tx, day);
       await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
       await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
@@ -505,7 +451,6 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await settleTechnologyRoyalties(tx, day);
     await runAiMaintenance(tx, day);
     await settleSupplyContracts(tx, day);
-    await settlePlotLeasesAndYields(tx, day);
     await completeContracts(tx, day);
     if (idempotencyKey) {
       await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, toNanoMarkup({ day, minute, newDay, productionEvents })]);

@@ -6,7 +6,8 @@ export type DecisionCategory =
   | 'machines'
   | 'dynasty'
   | 'market'
-  | 'finance';
+  | 'finance'
+  | 'social';
 
 export type DecisionRiskLevel = 'critical' | 'high' | 'medium' | 'low';
 
@@ -32,6 +33,7 @@ export interface DecisionQueueInput {
   dynasty?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
   business?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
   finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
+  social?: Array<{ id: string; title?: string; status?: string; deadline_game_day?: unknown; member_status?: string }>;
   market?: Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>;
   gameDay?: number;
 }
@@ -45,6 +47,16 @@ const num = (v: unknown): number => Number(v ?? 0);
 export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueItem[] {
   const items: DecisionQueueItem[] = [];
   const gameDay = input.gameDay ?? 184;
+
+  const socialDecision = (input.social ?? []).find((initiative) => initiative.member_status === 'invited' || initiative.status === 'proposed');
+  if (socialDecision) items.push({
+    id: `decision-social-${socialDecision.id}`, category: 'social',
+    title: socialDecision.title ?? 'A social initiative needs your response',
+    whyItMatters: 'Accepting builds trust and unlocks shared civic, corporate, or diplomatic outcomes.',
+    deadline: socialDecision.deadline_game_day ? `By game day ${socialDecision.deadline_game_day}` : 'Before the initiative expires',
+    expectedImpact: 'Shape an alliance or shared project and improve relationship standing.', riskLevel: 'medium',
+    primaryActionLabel: 'Open Social Commons', targetSection: 'activity', urgencyScore: 58,
+  });
 
   // 1. Corporation Resource Deficit / Energy Drain
   const energy = num(input.resources?.energy ?? 100);

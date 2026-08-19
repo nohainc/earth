@@ -122,7 +122,7 @@ void main() {
       ),
     );
 
-    expect(find.text('WELCOME TO EARTH: UNITED CORPORATIONS'), findsOneWidget);
+    expect(find.text('ONBOARDING & OPERATIONS GUIDE'), findsOneWidget);
     expect(find.text('READ WORLD STATUS'), findsOneWidget);
     expect(find.text('REVIEW PERSONAL RESOURCES'), findsOneWidget);
     expect(find.text('JOIN OR INSPECT A COMMUNITY'), findsOneWidget);

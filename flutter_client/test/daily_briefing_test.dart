@@ -81,7 +81,9 @@ void main() {
     expect(report.recommendedDirectives.length, 1);
   });
 
-  testWidgets('DailyBriefingDialog renders tabs, directives, waterfall, and triggers action', (tester) async {
+  testWidgets(
+      'DailyBriefingDialog renders a unified briefing and triggers action',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -164,10 +166,12 @@ void main() {
         );
       }
 
-      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200, headers: {'content-type': 'application/x-nano-markup'});
+      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200,
+          headers: {'content-type': 'application/x-nano-markup'});
     });
 
-    final transport = EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
+    final transport =
+        EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
     final api = EarthApi(baseUrl: 'http://earth.test', transport: transport);
 
     await tester.pumpWidget(
@@ -186,8 +190,10 @@ void main() {
 
     expect(find.text('EXECUTIVE INTELLIGENCE BRIEFING'), findsOneWidget);
     expect(find.text('158000.00 CR'), findsOneWidget);
-    expect(find.text('+5600.00 CR (+3.67%)'), findsOneWidget);
-    expect(find.text('STRATEGIC DIRECTIVES REQUIRING ATTENTION'), findsOneWidget);
+    expect(find.text('+5600.00 CR'), findsOneWidget);
+    expect(find.text('+3.67%'), findsOneWidget);
+    expect(
+        find.text('STRATEGIC DIRECTIVES REQUIRING ATTENTION'), findsOneWidget);
     expect(find.text('Capitalize on Energy Rally'), findsOneWidget);
 
     // Click directive action button

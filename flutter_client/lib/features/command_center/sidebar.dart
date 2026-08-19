@@ -26,58 +26,46 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    String cityName = 'City';
-    final rawMembership = state.json['membership'];
-    if (rawMembership is Map && rawMembership['city_id'] != null) {
-      final rawInstitutions = state.json['institutions'];
-      if (rawInstitutions is Map) {
-        final city = rawInstitutions['city'];
-        if (city is Map && city['name'] != null) {
-          cityName = city['name'].toString();
-        }
-      }
-    }
-
     final groups = [
       (
         'OVERVIEW',
         [
-          ('command', 'Command', Icons.dashboard_outlined),
-          ('briefing', 'Daily Briefing', Icons.newspaper_outlined),
-          ('activity', 'Activity', Icons.notifications_none),
+          ('command', 'Command Center', Icons.dashboard_outlined),
+          ('briefing', 'Executive Briefing', Icons.newspaper_outlined),
+          ('messages', 'Messages', Icons.settings_input_antenna),
+          ('activity', 'Activity & Events', Icons.notifications_none),
         ]
       ),
       (
         'ECONOMY',
         [
           ('market', 'Market', Icons.swap_horiz),
-          ('derivatives', 'Futures & Charts', Icons.show_chart),
-          ('net_worth', 'Net Worth Analytics', Icons.pie_chart_outline),
           ('business', 'Business', Icons.storefront_outlined),
           ('finance', 'Finance', Icons.account_balance_wallet_outlined),
+          ('net_worth', 'Net Worth Analytics', Icons.pie_chart_outline),
+          ('derivatives', 'Futures & Derivatives', Icons.show_chart),
         ]
       ),
       (
         'CIVIC & LAW',
         [
-          ('civic', 'Civic', Icons.account_balance_outlined),
-          ('city', cityName, Icons.location_city_outlined),
+          ('civic', 'Governance', Icons.account_balance_outlined),
+          ('city', 'My City', Icons.location_city_outlined),
           ('contracts', 'Contracts', Icons.handshake_outlined),
         ]
       ),
       (
-        'DEVELOPMENT',
+        'DEVELOPMENT & LEGACY',
         [
-          ('map', 'Planetary Grid', Icons.public),
-          ('dynasty', 'Dynasty Tree', Icons.account_tree_outlined),
           ('technology', 'Technology', Icons.biotech_outlined),
+          ('dynasty', 'Dynasty Tree', Icons.account_tree_outlined),
           ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
         ]
       ),
     ];
 
     return Container(
-      width: 204,
+      width: 220,
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
       decoration: const BoxDecoration(
         border: Border(right: BorderSide(color: Colors.white12)),
@@ -102,12 +90,7 @@ class Sidebar extends StatelessWidget {
                       ),
                       child: Text(
                         groups[groupIdx].$1,
-                        style: const TextStyle(
-                          color: mutedColor,
-                          fontSize: 8.5,
-                          letterSpacing: 1.3,
-                          fontWeight: FontWeight.w700,
-                        ),
+                        style: EarthTypography.menuGroup,
                       ),
                     ),
                     for (final item in groups[groupIdx].$2)
@@ -121,10 +104,9 @@ class Sidebar extends StatelessWidget {
                               splashFactory: NoSplash.splashFactory,
                               enableFeedback: false,
                               foregroundColor: violetColor,
-                              backgroundColor:
-                                  item.$1 == selectedSection
-                                      ? violetColor.withValues(alpha: .16)
-                                      : Colors.transparent,
+                              backgroundColor: item.$1 == selectedSection
+                                  ? violetColor.withValues(alpha: .16)
+                                  : Colors.transparent,
                               shape: RoundedRectangleBorder(
                                 borderRadius: BorderRadius.circular(8),
                               ),
@@ -147,15 +129,13 @@ class Sidebar extends StatelessWidget {
                                     item.$2,
                                     overflow: TextOverflow.ellipsis,
                                     maxLines: 1,
-                                    style: TextStyle(
+                                    style: EarthTypography.menu.copyWith(
                                       color: item.$1 == selectedSection
                                           ? inkColor
                                           : mutedColor,
-                                      fontSize: 12,
-                                      letterSpacing: 1.3,
                                       fontWeight: item.$1 == selectedSection
                                           ? FontWeight.w700
-                                          : FontWeight.w400,
+                                          : FontWeight.w500,
                                     ),
                                   ),
                                 ),

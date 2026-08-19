@@ -7,14 +7,15 @@ void main() {
   test('dashboardSectionTitle maps keys to human-readable titles', () {
     expect(dashboardSectionTitle('market'), 'MARKET');
     expect(dashboardSectionTitle('business'), 'BUSINESS');
-    expect(dashboardSectionTitle('civic'), 'CIVIC');
-    expect(dashboardSectionTitle('city'), 'CITY');
+    expect(dashboardSectionTitle('civic'), 'GOVERNANCE');
+    expect(dashboardSectionTitle('city'), 'MY CITY');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
     expect(dashboardSectionTitle('life'), 'LEGACY');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
     expect(dashboardSectionTitle('finance'), 'FINANCE');
-    expect(dashboardSectionTitle('activity'), 'ACTIVITY');
-    expect(dashboardSectionTitle('other'), 'COMMAND');
+    expect(dashboardSectionTitle('activity'), 'ACTIVITY & EVENTS');
+    expect(dashboardSectionTitle('command'), 'COMMAND CENTER');
+    expect(dashboardSectionTitle('other'), 'COMMAND CENTER');
   });
 
   testWidgets('Dashboard renders sections in wide and compact layouts',
@@ -55,8 +56,17 @@ void main() {
         'research': {},
       },
       'institutions': {
-        'city': {'id': 'CITY-1', 'name': 'New Kyoto', 'residents': 100, 'fiscal_health': 82},
-        'corporation': {'id': 'CORP-1', 'name': 'Carthage Dynamics', 'member_count': 10},
+        'city': {
+          'id': 'CITY-1',
+          'name': 'New Kyoto',
+          'residents': 100,
+          'fiscal_health': 82
+        },
+        'corporation': {
+          'id': 'CORP-1',
+          'name': 'Carthage Dynamics',
+          'member_count': 10
+        },
       },
       'life': {
         'vitality': 90,
@@ -67,7 +77,9 @@ void main() {
         'proposals': [],
       },
       'market': {
-        'products': {'food': {'price': 10.0}},
+        'products': {
+          'food': {'price': 10.0}
+        },
         'book': [],
         'trades': [],
         'orders': [],

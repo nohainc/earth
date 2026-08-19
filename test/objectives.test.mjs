@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { evaluatePlayerObjectives } from '../cloudflare/src/objectives.ts';
 
 test('Player Strategic Objectives Engine', async (t) => {
-  await t.test('evaluates all 7 required long-term player objectives', () => {
+  await t.test('evaluates all long-term player objectives', () => {
     const objectives = evaluatePlayerObjectives({
       human: { credits: 12000, standing: 85, legacy: 300, voting_weight: 12.5 },
       business: { id: 'b-1', valuation: 45000, profit: 500 },
@@ -14,17 +14,15 @@ test('Player Strategic Objectives Engine', async (t) => {
       governance: { voting_weight: 12.5 },
       technology: { active_patents: 2, active_licenses: 3 },
       dynasty: { generation: 2, perks_count: 2, successor_id: 'H-0099' },
-      map: { plots_leased: 3 },
       resources: { material: 120 },
       netWorth: 28000,
     });
 
-    assert.equal(objectives.length, 7);
+    assert.equal(objectives.length, 6);
 
     const ids = objectives.map((o) => o.id);
     assert.ok(ids.includes('obj-valuable-corporation'));
     assert.ok(ids.includes('obj-civic-delegate'));
-    assert.ok(ids.includes('obj-regional-resource-control'));
     assert.ok(ids.includes('obj-dynasty-traits'));
     assert.ok(ids.includes('obj-technology-licensor'));
     assert.ok(ids.includes('obj-financial-independence'));
@@ -56,12 +54,11 @@ test('Player Strategic Objectives Engine', async (t) => {
       governance: { voting_weight: 30 },
       technology: { active_patents: 4, active_licenses: 4 },
       dynasty: { generation: 3, perks_count: 4, successor_id: 'H-0099' },
-      map: { plots_leased: 6 },
       resources: { material: 500 },
       netWorth: 80000,
     });
 
-    assert.equal(objectives.length, 7);
+    assert.equal(objectives.length, 6);
     assert.ok(objectives.some((o) => o.status === 'completed'));
 
     const corpObj = objectives.find((o) => o.id === 'obj-valuable-corporation');

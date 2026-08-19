@@ -24,9 +24,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
     switch (_selectedCategory) {
       case 'ENTERPRISE':
         return widget.objectives
-            .where((o) =>
-                o.category.toLowerCase() == 'enterprise' ||
-                o.category.toLowerCase() == 'territory')
+            .where((o) => o.category.toLowerCase() == 'enterprise')
             .toList();
       case 'CIVIC_DYNASTY':
         return widget.objectives
@@ -63,8 +61,12 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
 
     return EarthPanel(
       title: 'LONG-TERM STRATEGIC OBJECTIVES',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
-          '• Long-Term Ambition Codex: Optional, measurable strategic pathways designed for enduring planetary mastery.\n\n• Core Ambition Tracks:\n  - Enterprise Titan: Build the most valuable corporation & industrial infrastructure.\n  - Civic Tribune: Secure dominant voting delegation & direct municipal legislation.\n  - Resource Baron: Monopolize regional concession plots & supply channels.\n  - Sovereign Dynasty: Cultivate deep generational lineages & permanent perks.\n  - Tech Pioneer: License exclusive patents to global manufacturing firms.\n  - Sovereign Capital: Achieve complete personal financial independence.\n  - Public Benefactor: Maximize civic standing & municipal infrastructure.\n\n• Progression: All objectives track automatically against live world metrics and award permanent titles, tax benefits, and legacy points upon completion.',
+          '• Long-Term Ambition Codex: Optional, measurable strategic pathways designed for enduring planetary mastery.\n\n• Core Ambition Tracks:\n  - Enterprise Titan: Build the most valuable corporation & industrial infrastructure.\n  - Civic Tribune: Secure dominant voting delegation & direct municipal legislation.\n  - Sovereign Dynasty: Cultivate deep generational lineages & permanent perks.\n  - Tech Pioneer: License exclusive patents to global manufacturing firms.\n  - Sovereign Capital: Achieve complete personal financial independence.\n  - Public Benefactor: Maximize civic standing & municipal infrastructure.\n\n• Progression: All objectives track automatically against live world metrics and award permanent titles, tax benefits, and legacy points upon completion.',
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -128,7 +130,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
               children: [
                 _buildFilterPill('ALL', 'ALL ($totalCount)'),
                 const SizedBox(width: 6),
-                _buildFilterPill('ENTERPRISE', 'ENTERPRISE & SUPPLY'),
+                _buildFilterPill('ENTERPRISE', 'ENTERPRISE'),
                 const SizedBox(width: 6),
                 _buildFilterPill('CIVIC_DYNASTY', 'CIVIC & DYNASTY'),
                 const SizedBox(width: 6),

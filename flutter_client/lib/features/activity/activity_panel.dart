@@ -111,7 +111,8 @@ class _ActivityPanelState extends State<ActivityPanel>
   Color _getEventColor(String type) {
     if (type.contains('market')) return Colors.tealAccent;
     if (type.contains('world') || type.contains('tick')) return cyanAccentColor;
-    if (type.contains('governance') || type.contains('vote')) return violetColor;
+    if (type.contains('governance') || type.contains('vote'))
+      return violetColor;
     if (type.contains('research')) return Colors.lightGreenAccent;
     if (type.contains('business')) return Colors.amberAccent;
     if (type.contains('contract')) return cyanAccentColor;
@@ -130,119 +131,49 @@ class _ActivityPanelState extends State<ActivityPanel>
     return EarthPanel(
       key: widget.panelKey,
       title: 'ACTIVITY & NOTIFICATIONS CENTER',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• Real-Time Operations Telemetry: Unified stream of private executive alerts and macroscopic planetary simulation events.\n\n• Stream Channels:\n  - PERSONAL ALERTS: Directed high-priority notices including tax assessments, contract proposals, filled trade orders, and enterprise dividends.\n  - PUBLIC FEED: Live global ledger updates, market batch settlement cycles, research milestones, and governance ballots.\n\n• Connection Status: Real-time telemetry pulse displaying WebSocket / SSE streaming health with automatic reconnection and event replay.\n\n• Acknowledgment: Mark individual alerts or batch acknowledge all pending notifications.',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. LIVE CONNECTION & TELEMETRY HEADER
-          Builder(
-            builder: (context) {
-              final status = widget.connectionStatus ??
-                  (widget.isLiveConnected
-                      ? LiveConnectionStatus.live
-                      : (widget.isReconnecting
-                          ? LiveConnectionStatus.reconnecting
-                          : LiveConnectionStatus.offline));
-              final hasNotice = status == LiveConnectionStatus.polling ||
-                  status == LiveConnectionStatus.offline;
-
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: surfaceColor.withValues(alpha: .75),
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: status.color.withValues(alpha: 0.3)),
-                    ),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: status.color,
-                            boxShadow: status == LiveConnectionStatus.live
-                                ? [
-                                    BoxShadow(
-                                      color: status.color.withValues(alpha: .6),
-                                      blurRadius: 6,
-                                      spreadRadius: 1,
-                                    ),
-                                  ]
-                                : null,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            status.label,
-                            style: TextStyle(
-                              fontSize: 10.5,
-                              fontWeight: FontWeight.w700,
-                              color: status.color,
-                              letterSpacing: 0.8,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: .04),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(color: Colors.white10),
-                          ),
-                          child: Text(
-                            '${widget.events.length} EVENTS BUFFERED',
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w600,
-                              color: mutedColor,
-                              letterSpacing: .5,
-                            ),
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        IconButton(
-                          icon: const Icon(Icons.refresh_rounded, size: 16),
-                          tooltip: 'Refresh events & notifications',
-                          padding: EdgeInsets.zero,
-                          visualDensity: VisualDensity.compact,
-                          constraints: const BoxConstraints(),
-                          onPressed: widget.onRefresh,
-                        ),
-                      ],
+          _buildTopicHeading(context),
+          // 1. ACTIVITY TOOLBAR
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white12),
+            ),
+            child: Row(
+              children: [
+                const Icon(Icons.receipt_long_outlined,
+                    size: 16, color: mutedColor),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    '${widget.events.length} EVENTS BUFFERED',
+                    style: const TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: mutedColor,
+                      letterSpacing: .5,
                     ),
                   ),
-                  if (hasNotice) ...[
-                    const SizedBox(height: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                      decoration: BoxDecoration(
-                        color: status.color.withValues(alpha: 0.08),
-                        borderRadius: BorderRadius.circular(6),
-                        border: Border.all(color: status.color.withValues(alpha: 0.25)),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(status.icon, size: 13, color: status.color),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              status.description,
-                              style: TextStyle(color: status.color, fontSize: 9.5),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ],
-              );
-            },
+                ),
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  tooltip: 'Refresh events & notifications',
+                  padding: EdgeInsets.zero,
+                  visualDensity: VisualDensity.compact,
+                  constraints: const BoxConstraints(),
+                  onPressed: widget.onRefresh,
+                ),
+              ],
+            ),
           ),
 
           const SizedBox(height: 14),
@@ -365,7 +296,8 @@ class _ActivityPanelState extends State<ActivityPanel>
                               ),
                             )
                           : ListView.separated(
-                              itemCount: widget.notifications.length.clamp(0, 30),
+                              itemCount:
+                                  widget.notifications.length.clamp(0, 30),
                               separatorBuilder: (_, __) =>
                                   const SizedBox(height: 6),
                               itemBuilder: (ctx, i) {
@@ -373,8 +305,7 @@ class _ActivityPanelState extends State<ActivityPanel>
                                 if (n is! Map<String, dynamic>) {
                                   return const SizedBox.shrink();
                                 }
-                                final id =
-                                    n['id']?.toString() ?? 'NOTIF-$i';
+                                final id = n['id']?.toString() ?? 'NOTIF-$i';
                                 final title =
                                     n['title']?.toString() ?? 'Notification';
                                 final body = n['body']?.toString() ?? '';
@@ -391,8 +322,8 @@ class _ActivityPanelState extends State<ActivityPanel>
                                     border: Border.all(
                                       color: isRead
                                           ? Colors.white10
-                                          : cyanAccentColor
-                                              .withValues(alpha: .3),
+                                          : cyanAccentColor.withValues(
+                                              alpha: .3),
                                     ),
                                   ),
                                   child: Row(
@@ -405,8 +336,8 @@ class _ActivityPanelState extends State<ActivityPanel>
                                           color: isRead
                                               ? Colors.white
                                                   .withValues(alpha: .04)
-                                              : cyanAccentColor
-                                                  .withValues(alpha: .15),
+                                              : cyanAccentColor.withValues(
+                                                  alpha: .15),
                                           borderRadius:
                                               BorderRadius.circular(6),
                                         ),
@@ -446,10 +377,10 @@ class _ActivityPanelState extends State<ActivityPanel>
                                                 style: TextStyle(
                                                   fontSize: 10.5,
                                                   color: isRead
-                                                      ? mutedColor
-                                                          .withValues(alpha: .8)
-                                                      : inkColor
-                                                          .withValues(alpha: .9),
+                                                      ? mutedColor.withValues(
+                                                          alpha: .8)
+                                                      : inkColor.withValues(
+                                                          alpha: .9),
                                                   height: 1.35,
                                                 ),
                                               ),
@@ -461,7 +392,8 @@ class _ActivityPanelState extends State<ActivityPanel>
                                         const SizedBox(width: 8),
                                         IconButton(
                                           icon: const Icon(
-                                              Icons.check_circle_outline_rounded,
+                                              Icons
+                                                  .check_circle_outline_rounded,
                                               size: 16,
                                               color: cyanAccentColor),
                                           tooltip: 'Mark read',
@@ -469,8 +401,8 @@ class _ActivityPanelState extends State<ActivityPanel>
                                           visualDensity: VisualDensity.compact,
                                           constraints: const BoxConstraints(),
                                           onPressed: () async {
-                                            setState(() =>
-                                                _locallyReadIds.add(id));
+                                            setState(
+                                                () => _locallyReadIds.add(id));
                                             await widget.onMarkRead(id);
                                           },
                                         ),
@@ -495,8 +427,7 @@ class _ActivityPanelState extends State<ActivityPanel>
                             SizedBox(height: 8),
                             Text(
                               'No recent simulation activity recorded.',
-                              style: TextStyle(
-                                  fontSize: 11, color: mutedColor),
+                              style: TextStyle(fontSize: 11, color: mutedColor),
                             ),
                           ],
                         ),
@@ -550,6 +481,44 @@ class _ActivityPanelState extends State<ActivityPanel>
                         },
                       ),
               ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopicHeading(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.start,
+        children: [
+          const Flexible(
+            child: Text(
+              'ACTIVITY & NOTIFICATIONS CENTER',
+              style: TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1,
+              ),
+            ),
+          ),
+          const SizedBox(width: 5),
+          IconButton(
+            tooltip: 'About activity and notifications',
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+            icon: Icon(Icons.info_outline,
+                size: 14, color: mutedColor.withValues(alpha: .8)),
+            onPressed: () => showEarthInfoDialog(
+              context,
+              title: 'ACTIVITY & NOTIFICATIONS CENTER',
+              description:
+                  '• Real-Time Operations Telemetry: review personal alerts and public simulation activity.\n\n'
+                  '• Mark notifications as read and refresh the event stream.\n\n'
+                  '• Connection status is available from the Alerts menu.',
             ),
           ),
         ],

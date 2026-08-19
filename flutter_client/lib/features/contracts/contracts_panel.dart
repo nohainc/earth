@@ -147,6 +147,10 @@ class _ContractsPanelState extends State<ContractsPanel> {
     return EarthPanel(
       key: widget.panelKey,
       title: 'NEGOTIATED CONTRACTS & ARBITRATION',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Bilateral Agreements & Escrow: Legally enforceable contractual obligations entered into between citizens or corporations.\n\n• Lifecycle Stages:\n  - PROPOSED: Awaiting bilateral counterparty acceptance or cancellation by proposer.\n  - ACCEPTED / ACTIVE: Escrow funds locked and recurring service or commodity transfers active.\n  - DISPUTED: Contested obligations escalated to OUC judicial delegates for formal arbitration.\n  - COMPLETED: All delivery milestones fulfilled and retained escrows disbursed.\n\n• Judicial Arbitration: Authorized OUC delegates arbitrate active disputes, issuing legally binding award resolutions.',
       child: Column(

@@ -1,15 +1,13 @@
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
-import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/format_helpers.dart';
-import '../finance/net_worth_analytics_dialog.dart';
 import '../onboarding/onboarding_welcome_dialog.dart';
 import '../../core/onboarding_controller.dart';
 import 'theme_customizer_dialog.dart';
-import 'daily_briefing_dialog.dart';
 import '../../core/models/live_connection_status.dart';
 
 class YearAndDay {
@@ -17,6 +15,25 @@ class YearAndDay {
   final int dayOfYear;
   const YearAndDay(this.year, this.dayOfYear);
 }
+
+class _HudResource {
+  final String key;
+  final IconData icon;
+  final Color color;
+  final String value;
+  final double net;
+
+  const _HudResource(this.key, this.icon, this.color, this.value, this.net);
+}
+
+const _menuSurfaceColor = surfaceColor;
+const _menuElevation = 14.0;
+const _menuConstraints = BoxConstraints(minWidth: 210, maxWidth: 250);
+const _menuShape = RoundedRectangleBorder(
+  borderRadius: BorderRadius.all(Radius.circular(12)),
+  side: BorderSide(color: Colors.white12),
+);
+const _menuTextStyle = EarthTypography.menu;
 
 class TopFixedHudPanel extends StatefulWidget {
   final EarthState state;
@@ -31,7 +48,7 @@ class TopFixedHudPanel extends StatefulWidget {
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
   final VoidCallback? onCommLink;
-  final VoidCallback? onMapTap;
+  final VoidCallback? onReconnect;
 
   const TopFixedHudPanel({
     super.key,
@@ -47,7 +64,7 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onLogout,
     this.onSecurity,
     this.onCommLink,
-    this.onMapTap,
+    this.onReconnect,
   });
 
   @override
@@ -144,12 +161,44 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         '${(widget.state.institutions['city'] as Map<String, dynamic>?)?['name'] ?? 'Independent'}';
 
     final credits = formatWholeNumber(widget.state.human['credits']);
-    final food = formatWholeNumber(widget.state.resources['food']);
-    final mat = formatWholeNumber(widget.state.resources['material'] ?? widget.state.resources['materials']);
-    final comp = formatWholeNumber(widget.state.resources['components']);
-    final energy = formatWholeNumber(widget.state.resources['energy']);
-    final compute = formatWholeNumber(widget.state.resources['compute']);
+    final flowMap =
+        (widget.state.json['resourceFlows'] as Map<String, dynamic>?) ??
+            const {};
+    double netFor(String key) {
+      final raw =
+          flowMap[key] ?? (key == 'material' ? flowMap['materials'] : null);
+      return asDoubleOr((raw as Map<String, dynamic>?)?['net'], 0);
+    }
 
+    final resources = [
+      _HudResource('food', Icons.eco_outlined, EarthResourceColors.food,
+          formatWholeNumber(widget.state.resources['food']), netFor('food')),
+      _HudResource(
+          'energy',
+          Icons.bolt_outlined,
+          EarthResourceColors.energy,
+          formatWholeNumber(widget.state.resources['energy']),
+          netFor('energy')),
+      _HudResource(
+          'material',
+          Icons.view_in_ar_outlined,
+          EarthResourceColors.materials,
+          formatWholeNumber(widget.state.resources['material'] ??
+              widget.state.resources['materials']),
+          netFor('material')),
+      _HudResource(
+          'components',
+          Icons.settings_outlined,
+          EarthResourceColors.components,
+          formatWholeNumber(widget.state.resources['components']),
+          netFor('components')),
+      _HudResource(
+          'compute',
+          Icons.memory_rounded,
+          EarthResourceColors.compute,
+          formatWholeNumber(widget.state.resources['compute']),
+          netFor('compute')),
+    ];
     final status = widget.connectionStatus ??
         (widget.isLiveConnected
             ? LiveConnectionStatus.live
@@ -157,17 +206,25 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                 ? LiveConnectionStatus.reconnecting
                 : LiveConnectionStatus.offline));
 
-    final connectionColor = status.color;
-
     final (clockRes, timeStr) = _getLiveClockData();
 
     return LayoutBuilder(
       builder: (context, rootConstraints) {
         final totalWidth = rootConstraints.maxWidth;
-        // Switch to 2 rows when width < 1050px
-        final isSingleRow = totalWidth >= 1050;
-        // Hide app name text when width < 880px
-        final showBrandText = totalWidth >= 880;
+        final resourceWidth = _measureResourceRowWidth(credits, resources);
+        final dateWidth = _measureText(
+          'YEAR ${clockRes.year}   DAY ${clockRes.dayOfYear}   $timeStr',
+          const TextStyle(
+            fontSize: 10,
+            fontWeight: FontWeight.w600,
+            letterSpacing: 1.3,
+          ),
+        );
+        final brandWidth = _measureBrandWidth();
+        final centerWidth = math.max(resourceWidth, dateWidth);
+        final rightActionsWidth = 112 + (widget.showDrawerButton ? 32 : 0);
+        final showBrandText = totalWidth - 28 >=
+            brandWidth + 10 + centerWidth + rightActionsWidth + 16;
         const showBrand = true;
 
         return Container(
@@ -235,54 +292,26 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                     ],
                   ],
                 ),
-                _verticalSeparator(),
+                _hudSpacer(),
               ],
 
-              // 2. CURRENT YEAR & DATE TIME (1-ROW OR 2-ROWS)
-              if (isSingleRow)
-                Text(
-                  'YEAR ${clockRes.year} · DAY ${clockRes.dayOfYear} · $timeStr',
-                  style: const TextStyle(
-                    fontSize: 10.5,
-                    fontWeight: FontWeight.w500,
-                    letterSpacing: 1.3,
-                    color: mutedColor,
-                  ),
-                )
-              else
-                Column(
+              Expanded(
+                child: Column(
                   mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
                     Text(
-                      'YEAR ${clockRes.year}',
+                      'YEAR ${clockRes.year}   DAY ${clockRes.dayOfYear}   $timeStr',
                       style: const TextStyle(
-                        fontSize: 9.5,
+                        fontSize: 10,
                         fontWeight: FontWeight.w600,
-                        letterSpacing: 1.1,
+                        letterSpacing: 1.3,
                         color: mutedColor,
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      'DAY ${clockRes.dayOfYear} · $timeStr',
-                      style: const TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.1,
-                        color: mutedColor,
-                      ),
-                    ),
-                  ],
-                ),
-
-              // VERTICAL SEPARATOR
-              _verticalSeparator(),
-
-              // 3. 6-RESOURCE SECTION
-              Expanded(
-                child: isSingleRow
-                    ? SingleChildScrollView(
+                    const SizedBox(height: 5),
+                    Center(
+                      child: SingleChildScrollView(
                         scrollDirection: Axis.horizontal,
                         child: Row(
                           mainAxisSize: MainAxisSize.min,
@@ -290,340 +319,62 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                             _hudResourceItem(
                               Icons.account_balance_wallet_outlined,
                               credits,
-                              violetColor,
+                              EarthResourceColors.credits,
                               isCompact: false,
-                              tooltip: 'Liquid Credits & Net-Worth Analytics',
-                              onTap: () {
-                                EarthAudioEngine.instance.playClick();
-                                showNetWorthAnalyticsDialog(context, api: const EarthApi());
-                              },
                             ),
-                            _dotSeparator(),
-                            _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: false),
-                            _dotSeparator(),
-                            _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: false),
-                            _dotSeparator(),
-                            _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: false),
-                            _dotSeparator(),
-                            _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: false),
-                            _dotSeparator(),
-                            _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: false),
+                            for (final resource in resources) ...[
+                              _hudSpacer(),
+                              _hudResourceItem(
+                                resource.icon,
+                                resource.value,
+                                resource.color,
+                                isCompact: false,
+                              ),
+                            ],
                           ],
                         ),
-                      )
-                    : Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _hudResourceItem(
-                                  Icons.account_balance_wallet_outlined,
-                                  credits,
-                                  violetColor,
-                                  isCompact: true,
-                                  tooltip: 'Liquid Credits & Net-Worth Analytics',
-                                  onTap: () {
-                                    EarthAudioEngine.instance.playClick();
-                                    showNetWorthAnalyticsDialog(context, api: const EarthApi());
-                                  },
-                                ),
-                              ),
-                              Expanded(child: _hudResourceItem(Icons.eco_outlined, food, Colors.lightGreenAccent, isCompact: true)),
-                              Expanded(child: _hudResourceItem(Icons.view_in_ar_outlined, mat, Colors.tealAccent, isCompact: true)),
-                            ],
-                          ),
-                          const SizedBox(height: 3),
-                          Row(
-                            children: [
-                              Expanded(child: _hudResourceItem(Icons.settings_outlined, comp, cyanAccentColor, isCompact: true)),
-                              Expanded(child: _hudResourceItem(Icons.bolt_outlined, energy, Colors.amberAccent, isCompact: true)),
-                              Expanded(child: _hudResourceItem(Icons.memory_rounded, compute, violetColor, isCompact: true)),
-                            ],
-                          ),
-                        ],
                       ),
+                    ),
+                  ],
+                ),
               ),
 
               const SizedBox(width: 8),
 
-              // 4. TELEMETRY STATUS PILL
-              Tooltip(
-                message: '${status.label}\n${status.description}',
-                child: InkWell(
-                  onTap: () => widget.onNavigate?.call('activity'),
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2.5),
-                    decoration: BoxDecoration(
-                      color: status.color.withValues(alpha: 0.12),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: status.color.withValues(alpha: 0.45)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(status.icon, size: 10, color: status.color),
-                        const SizedBox(width: 3.5),
-                        Text(
-                          status.shortLabel,
-                          style: TextStyle(
-                            color: status.color,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.5,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-
+              // Connection status now lives inside the Alerts menu.
               const SizedBox(width: 4),
 
-              // 5. ALARM / NOTIFICATIONS ICON WITH CONNECTION STATE COLOR INDICATOR
-              InkWell(
-                onTap: () => widget.onNavigate?.call('activity'),
-                borderRadius: BorderRadius.circular(16),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(Icons.notifications_none_outlined, size: 20, color: mutedColor),
-                      if (widget.unreadNotifications > 0)
-                        Positioned(
-                          top: -3,
-                          right: -5,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: connectionColor,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                            alignment: Alignment.center,
-                            child: Text(
-                              '${widget.unreadNotifications}',
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        )
-                      else
-                        Positioned(
-                          top: 0,
-                          right: 0,
-                          child: Container(
-                            width: 6,
-                            height: 6,
-                            decoration: BoxDecoration(
-                              color: connectionColor,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: connectionColor.withValues(alpha: 0.6),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
+              // Alerts stay as a single quiet icon with one combined badge.
+              _buildAlertsMenu(context, status),
 
-              const SizedBox(width: 4),
+              const SizedBox(width: 6),
 
-              // COMM-LINK SUB-SPACE RELAY BUTTON WITH UNREAD BADGE
-              InkWell(
-                onTap: widget.onCommLink,
-                borderRadius: BorderRadius.circular(8),
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                  child: Stack(
-                    clipBehavior: Clip.none,
-                    children: [
-                      const Icon(
-                        Icons.settings_input_antenna,
-                        size: 21,
-                        color: EarthColors.cyanAccent,
-                      ),
-                      if (widget.unreadCommMessages > 0)
-                        Positioned(
-                          top: -3,
-                          right: -5,
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                            decoration: BoxDecoration(
-                              color: EarthColors.cyanAccent,
-                              borderRadius: BorderRadius.circular(8),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: EarthColors.cyanAccent.withValues(alpha: 0.6),
-                                  blurRadius: 4,
-                                  spreadRadius: 1,
-                                ),
-                              ],
-                            ),
-                            constraints: const BoxConstraints(minWidth: 14, minHeight: 14),
-                            alignment: Alignment.center,
-                            child: Text(
-                              '${widget.unreadCommMessages}',
-                              style: const TextStyle(
-                                color: Colors.black,
-                                fontSize: 8.5,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 4),
-
-              // PLANETARY MAP TACTICAL GRID BUTTON
-              Tooltip(
-                message: 'Planetary Tactical Grid & Concession Leases',
-                child: InkWell(
-                  onTap: widget.onMapTap,
-                  borderRadius: BorderRadius.circular(8),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: Icon(
-                      Icons.public,
-                      size: 21,
-                      color: EarthColors.cyanAccent,
-                    ),
-                  ),
-                ),
-              ),
-
-              // AUDIO / SOUND ENGINE CONTROLLER
-              Tooltip(
-                message: EarthAudioEngine.instance.isMuted ? 'Unmute Audio & SFX' : 'Audio Atmosphere & SFX Settings',
-                child: InkWell(
-                  key: const Key('btn-audio-toggle'),
-                  onTap: () {
+              // 5. USER ACCOUNT MENU (ICON INSTEAD OF AVATAR CIRCLE)
+              PopupMenuButton<String>(
+                position: PopupMenuPosition.under,
+                offset: const Offset(0, 8),
+                constraints: _menuConstraints,
+                color: _menuSurfaceColor,
+                elevation: _menuElevation,
+                shape: _menuShape,
+                onSelected: (value) {
+                  if (value == 'security') {
+                    widget.onSecurity?.call();
+                  } else if (value == 'theme') {
+                    showThemeCustomizerDialog(context);
+                  } else if (value == 'audio') {
                     setState(() {
                       EarthAudioEngine.instance.toggleMute();
                       if (!EarthAudioEngine.instance.isMuted) {
                         EarthAudioEngine.instance.playClick();
                       }
                     });
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: Icon(
-                      EarthAudioEngine.instance.isMuted ? Icons.volume_off : Icons.volume_up,
-                      size: 21,
-                      color: EarthAudioEngine.instance.isMuted ? EarthColors.textMuted : EarthColors.cyanAccent,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 4),
-
-              // THEME & AESTHETICS CONTROLLER
-              Tooltip(
-                message: 'Command Center Themes & Palettes',
-                child: InkWell(
-                  key: const Key('btn-theme-customizer'),
-                  onTap: () {
-                    EarthAudioEngine.instance.playClick();
-                    showThemeCustomizerDialog(context);
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: Icon(
-                      Icons.palette_outlined,
-                      size: 21,
-                      color: EarthColors.cyanAccent,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 4),
-
-              // ORIENTATION & FIRST-SESSION GUIDE
-              Tooltip(
-                message: 'First-Session Orientation Guide',
-                child: InkWell(
-                  key: const Key('btn-orientation-guide'),
-                  onTap: () {
-                    EarthAudioEngine.instance.playClick();
+                  } else if (value == 'onboarding') {
                     OnboardingController.instance.setDismissed(false);
-                    showOnboardingWelcomeDialog(context);
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: Icon(
-                      Icons.help_outline,
-                      size: 21,
-                      color: EarthColors.cyanAccent,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 4),
-
-              // EXECUTIVE DAILY BRIEFING TERMINAL
-              Tooltip(
-                message: 'Executive Daily Briefing (What Changed?)',
-                child: InkWell(
-                  key: const Key('btn-daily-briefing'),
-                  onTap: () {
-                    EarthAudioEngine.instance.playClick();
-                    showDailyBriefingDialog(
+                    showOnboardingWelcomeDialog(
                       context,
-                      api: const EarthApi(),
-                      onNavigate: (section) => widget.onNavigate?.call(section),
+                      onNavigate: widget.onNavigate,
                     );
-                  },
-                  borderRadius: BorderRadius.circular(8),
-                  child: const Padding(
-                    padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
-                    child: Icon(
-                      Icons.newspaper_outlined,
-                      size: 21,
-                      color: EarthColors.cyanAccent,
-                    ),
-                  ),
-                ),
-              ),
-
-              const SizedBox(width: 4),
-
-              // 5. USER ACCOUNT MENU (ICON INSTEAD OF AVATAR CIRCLE)
-              PopupMenuButton<String>(
-                position: PopupMenuPosition.under,
-                offset: const Offset(0, 8),
-                color: surfaceColor,
-                elevation: 14,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: const BorderSide(color: Colors.white12),
-                ),
-                tooltip: '',
-                onSelected: (value) {
-                  if (value == 'security') {
-                    widget.onSecurity?.call();
                   } else if (value == 'logout') {
                     widget.onLogout?.call();
                   }
@@ -636,16 +387,15 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                       children: [
                         Text(
                           name,
-                          style: const TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w800,
+                          style: _menuTextStyle.copyWith(
                             color: inkColor,
+                            fontWeight: FontWeight.w700,
                           ),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           'Citizen of $city · Standing ${widget.state.human['standing'] ?? 0}',
-                          style: const TextStyle(
+                          style: _menuTextStyle.copyWith(
                             fontSize: 10,
                             color: mutedColor,
                           ),
@@ -654,27 +404,22 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                     ),
                   ),
                   const PopupMenuDivider(),
-                  const PopupMenuItem(
-                    value: 'security',
-                    child: Row(
-                      children: [
-                        Icon(Icons.shield_outlined, size: 16, color: mutedColor),
-                        SizedBox(width: 10),
-                        Text('Security & MFA', style: TextStyle(fontSize: 12)),
-                      ],
-                    ),
+                  _menuItem(
+                      'security', Icons.shield_outlined, 'Security & MFA'),
+                  _menuItem('theme', Icons.palette_outlined, 'Theme'),
+                  _menuItem(
+                    'audio',
+                    EarthAudioEngine.instance.isMuted
+                        ? Icons.volume_off
+                        : Icons.volume_up,
+                    EarthAudioEngine.instance.isMuted
+                        ? 'Enable Audio'
+                        : 'Mute Audio',
                   ),
-                  const PopupMenuItem(
-                    value: 'logout',
-                    child: Row(
-                      children: [
-                        Icon(Icons.logout, size: 16, color: Colors.redAccent),
-                        SizedBox(width: 10),
-                        Text('Sign Out',
-                            style: TextStyle(fontSize: 12, color: Colors.redAccent)),
-                      ],
-                    ),
-                  ),
+                  _menuItem('onboarding', Icons.school_outlined, 'Onboarding'),
+                  const PopupMenuDivider(),
+                  _menuItem('logout', Icons.logout, 'Sign Out',
+                      color: Colors.redAccent),
                 ],
                 child: const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 4, vertical: 4),
@@ -705,24 +450,203 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     );
   }
 
-  Widget _verticalSeparator() => Container(
-        height: 24,
-        width: 1,
-        color: Colors.white12,
-        margin: const EdgeInsets.symmetric(horizontal: 10),
-      );
-
-  Widget _dotSeparator() => Container(
-        margin: const EdgeInsets.symmetric(horizontal: 6),
-        width: 3,
-        height: 3,
-        decoration: const BoxDecoration(
-          color: Colors.white24,
-          shape: BoxShape.circle,
+  Widget _buildAlertsMenu(BuildContext context, LiveConnectionStatus status) {
+    final connectionColor = status.color;
+    final unreadTotal = widget.unreadNotifications + widget.unreadCommMessages;
+    return PopupMenuButton<String>(
+      position: PopupMenuPosition.under,
+      offset: const Offset(0, 8),
+      constraints: _menuConstraints,
+      color: _menuSurfaceColor,
+      elevation: _menuElevation,
+      shape: _menuShape,
+      onSelected: (value) {
+        if (value == 'messages') {
+          widget.onCommLink?.call();
+        } else if (value == 'reconnect') {
+          widget.onReconnect?.call();
+        } else {
+          widget.onNavigate?.call('activity');
+        }
+      },
+      itemBuilder: (context) => [
+        _menuItem(
+            'notifications', Icons.notifications_none_outlined, 'Notifications',
+            trailing: widget.unreadNotifications > 0
+                ? '${widget.unreadNotifications}'
+                : null),
+        _menuItem('messages', Icons.settings_input_antenna, 'Messages',
+            trailing: widget.unreadCommMessages > 0
+                ? '${widget.unreadCommMessages}'
+                : null),
+        _menuItem('social', Icons.hub_outlined, 'Invitations'),
+        const PopupMenuDivider(),
+        PopupMenuItem<String>(
+          value:
+              status == LiveConnectionStatus.live ? 'connection' : 'reconnect',
+          enabled: status != LiveConnectionStatus.live,
+          height: 54,
+          child: Row(
+            children: [
+              Icon(status.icon, size: 16, color: mutedColor),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Connection', style: _menuTextStyle),
+                    const SizedBox(height: 2),
+                    Text(status.label,
+                        style: const TextStyle(
+                            fontSize: 10,
+                            letterSpacing: 1.3,
+                            color: mutedColor)),
+                  ],
+                ),
+              ),
+              if (status != LiveConnectionStatus.live)
+                const Text(
+                  'RECONNECT',
+                  style: TextStyle(
+                    color: mutedColor,
+                    fontSize: 9,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+            ],
+          ),
         ),
-      );
+      ],
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(Icons.notifications_none_outlined,
+                size: 20, color: connectionColor),
+            Positioned(
+              top: -3,
+              right: -5,
+              child: unreadTotal > 0
+                  ? Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 4, vertical: 1),
+                      constraints:
+                          const BoxConstraints(minWidth: 14, minHeight: 14),
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                          color: connectionColor,
+                          borderRadius: BorderRadius.circular(8)),
+                      child: Text('$unreadTotal',
+                          style: const TextStyle(
+                              color: Colors.black,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w900)),
+                    )
+                  : Container(
+                      width: 6,
+                      height: 6,
+                      decoration: BoxDecoration(
+                        color: connectionColor,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                              color: connectionColor.withValues(alpha: .6),
+                              blurRadius: 4,
+                              spreadRadius: 1),
+                        ],
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
-  Widget _hudResourceItem(IconData icon, String value, Color color, {required bool isCompact, VoidCallback? onTap, String? tooltip}) {
+  PopupMenuItem<String> _menuItem(
+    String value,
+    IconData icon,
+    String label, {
+    Color color = mutedColor,
+    String? trailing,
+  }) {
+    return PopupMenuItem<String>(
+      value: value,
+      height: 40,
+      child: Row(
+        children: [
+          Icon(icon, size: 16, color: color),
+          const SizedBox(width: 10),
+          Expanded(child: Text(label, style: _menuTextStyle)),
+          if (trailing != null)
+            Text(
+              trailing,
+              style: TextStyle(
+                fontSize: 11,
+                letterSpacing: 1.3,
+                fontWeight: FontWeight.w400,
+                color: mutedColor,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _hudSpacer() => const SizedBox(width: 10);
+
+  double _measureText(String text, TextStyle style) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: TextDirection.ltr,
+      maxLines: 1,
+    )..layout();
+    return painter.width;
+  }
+
+  double _measureResourceRowWidth(
+      String credits, List<_HudResource> resources) {
+    const valueStyle = TextStyle(
+      fontSize: 11,
+      fontWeight: FontWeight.w700,
+      letterSpacing: 1.3,
+    );
+
+    double itemWidth(String value, {bool padded = false}) {
+      return 13 + 3.5 + _measureText(value, valueStyle) + (padded ? 6 : 0);
+    }
+
+    var width = itemWidth(credits, padded: true);
+    for (final resource in resources) {
+      width += 10 + itemWidth(resource.value);
+    }
+    return width;
+  }
+
+  double _measureBrandWidth() {
+    const titleStyle = TextStyle(
+      fontSize: 18,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 4,
+    );
+    const subtitleStyle = TextStyle(
+      fontSize: 8.5,
+      fontWeight: FontWeight.w600,
+      letterSpacing: 1.3,
+    );
+    return 24 +
+        10 +
+        math.max(
+          _measureText('EARTH', titleStyle),
+          _measureText('UNITED CORPORATIONS', subtitleStyle),
+        );
+  }
+
+  Widget _hudResourceItem(IconData icon, String value, Color color,
+      {required bool isCompact, VoidCallback? onTap}) {
     final row = Row(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -734,8 +658,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
             style: TextStyle(
               fontSize: isCompact ? 9.5 : 11,
               fontWeight: FontWeight.w700,
-              color: color,
-              letterSpacing: -.2,
+              color: mutedColor,
+              letterSpacing: 1.3,
             ),
             overflow: TextOverflow.ellipsis,
           ),
@@ -744,16 +668,13 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     );
 
     if (onTap != null) {
-      return Tooltip(
-        message: tooltip ?? '',
-        child: InkWell(
-          key: const Key('btn-hud-credits-analytics'),
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(4),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
-            child: row,
-          ),
+      return InkWell(
+        key: const Key('btn-hud-credits-analytics'),
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 3, vertical: 1),
+          child: row,
         ),
       );
     }

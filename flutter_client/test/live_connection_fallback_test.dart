@@ -10,10 +10,20 @@ void main() {
   final testState = EarthState(
     {
       'human': {'name': 'Commander Kira', 'credits': 150000},
-      'resources': {'food': 500, 'materials': 300, 'components': 120, 'energy': 400, 'compute': 80},
-      'institutions': {'city': {'name': 'Neo-Veridia'}},
+      'resources': {
+        'food': 500,
+        'materials': 300,
+        'components': 120,
+        'energy': 400,
+        'compute': 80
+      },
+      'institutions': {
+        'city': {'name': 'Neo-Veridia'}
+      },
       'business': {'id': 'biz-1', 'name': 'Kira Dynamics'},
-      'clock': {'serverCurrentTime': DateTime.utc(2026, 8, 18).millisecondsSinceEpoch},
+      'clock': {
+        'serverCurrentTime': DateTime.utc(2026, 8, 18).millisecondsSinceEpoch
+      },
     },
   );
 
@@ -39,26 +49,24 @@ void main() {
 
   group('TopFixedHudPanel live connection status indicator', () {
     testWidgets('renders LIVE status pill and responds to tap', (tester) async {
-      String? navigatedTo;
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
             body: TopFixedHudPanel(
               state: testState,
               connectionStatus: LiveConnectionStatus.live,
-              onNavigate: (section) => navigatedTo = section,
             ),
           ),
         ),
       );
 
-      expect(find.text('LIVE'), findsOneWidget);
-      await tester.tap(find.text('LIVE'));
-      expect(navigatedTo, 'activity');
+      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text(LiveConnectionStatus.live.label), findsOneWidget);
     });
 
-    testWidgets('renders POLLING status pill when in fallback mode', (tester) async {
+    testWidgets('renders POLLING status pill when in fallback mode',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -70,10 +78,13 @@ void main() {
         ),
       );
 
-      expect(find.text('POLLING'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text(LiveConnectionStatus.polling.label), findsOneWidget);
     });
 
-    testWidgets('renders OFFLINE status pill when disconnected', (tester) async {
+    testWidgets('renders OFFLINE status pill when disconnected',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -85,12 +96,15 @@ void main() {
         ),
       );
 
-      expect(find.text('OFFLINE'), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text(LiveConnectionStatus.offline.label), findsOneWidget);
     });
   });
 
-  group('ActivityPanel connection telemetry fallback banner', () {
-    testWidgets('displays polling notice and delay warning', (tester) async {
+  group('ActivityPanel keeps connection status out of the workspace', () {
+    testWidgets('shows the activity toolbar and refresh action',
+        (tester) async {
       var refreshed = false;
 
       await tester.pumpWidget(
@@ -110,14 +124,15 @@ void main() {
         ),
       );
 
-      expect(find.text('POLLING MODE (PERIODIC SYNC)'), findsOneWidget);
-      expect(find.textContaining('delayed'), findsOneWidget);
+      expect(find.text('0 EVENTS BUFFERED'), findsOneWidget);
+      expect(find.text('POLLING MODE (PERIODIC SYNC)'), findsNothing);
 
       await tester.tap(find.byIcon(Icons.refresh_rounded));
       expect(refreshed, isTrue);
     });
 
-    testWidgets('displays offline notice and cached snapshot warning', (tester) async {
+    testWidgets('does not show an offline banner inside Activity',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -135,13 +150,14 @@ void main() {
         ),
       );
 
-      expect(find.text('OFFLINE / STALE DATA'), findsOneWidget);
-      expect(find.textContaining('cached simulation snapshot'), findsOneWidget);
+      expect(find.text('OFFLINE / STALE DATA'), findsNothing);
+      expect(find.textContaining('cached simulation snapshot'), findsNothing);
     });
   });
 
   group('CommandCenter handleLiveMessage and connection states', () {
-    testWidgets('handleLiveMessage ignores malformed and duplicate messages', (tester) async {
+    testWidgets('handleLiveMessage ignores malformed and duplicate messages',
+        (tester) async {
       await tester.pumpWidget(
         MaterialApp(
           home: CommandCenter(onLogout: () {}),
@@ -150,9 +166,13 @@ void main() {
 
       final state = tester.state(find.byType(CommandCenter)) as dynamic;
       expect(state.handleLiveMessage(null), isFalse);
-      expect(state.handleLiveMessage('{"eventKey":"evt-1","type":"world_tick"}'), isTrue);
+      expect(
+          state.handleLiveMessage('{"eventKey":"evt-1","type":"world_tick"}'),
+          isTrue);
       // Duplicate should return false
-      expect(state.handleLiveMessage('{"eventKey":"evt-1","type":"world_tick"}'), isFalse);
+      expect(
+          state.handleLiveMessage('{"eventKey":"evt-1","type":"world_tick"}'),
+          isFalse);
     });
   });
 }

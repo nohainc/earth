@@ -232,9 +232,11 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
       width: widget.isPageMode ? double.infinity : dialogWidth,
       height: widget.isPageMode ? 740 : dialogHeight,
       decoration: BoxDecoration(
-        color: canvasColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: EarthColors.cyanAccent.withAlpha(140)),
+        color: widget.isPageMode ? Colors.transparent : canvasColor,
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+        border: widget.isPageMode
+            ? null
+            : Border.all(color: EarthColors.cyanAccent.withAlpha(140)),
         boxShadow: widget.isPageMode
             ? null
             : [
@@ -246,7 +248,7 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
               ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
         child: Column(
           children: [
             _buildTopHeader(),
@@ -256,7 +258,9 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
               child: _loading && _ohlc.isEmpty
                   ? const Center(child: CircularProgressIndicator(color: EarthColors.cyanAccent))
                   : SingleChildScrollView(
-                      padding: const EdgeInsets.all(16),
+                      padding: widget.isPageMode
+                          ? EdgeInsets.zero
+                          : const EdgeInsets.all(16),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -325,10 +329,14 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
 
   Widget _buildTopHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: EarthColors.cardSurface,
-        border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+      padding: widget.isPageMode
+          ? const EdgeInsets.only(bottom: 10)
+          : const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: widget.isPageMode ? Colors.transparent : EarthColors.cardSurface,
+        border: widget.isPageMode
+            ? null
+            : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -336,16 +344,24 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
           Expanded(
             child: Row(
               children: [
-                const Icon(Icons.show_chart, color: EarthColors.cyanAccent, size: 22),
+                Icon(
+                  Icons.show_chart,
+                  color: widget.isPageMode
+                      ? EarthColors.textMuted
+                      : EarthColors.cyanAccent,
+                  size: 22,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    children: const [
+                    children: [
                       Text(
                         'FINANCIAL DERIVATIVES & FUTURES TERMINAL',
                         style: TextStyle(
-                          color: EarthColors.cyanAccent,
+                          color: widget.isPageMode
+                              ? EarthColors.textMuted
+                              : EarthColors.cyanAccent,
                           fontWeight: FontWeight.bold,
                           fontSize: 13,
                           letterSpacing: 1.1,

@@ -88,9 +88,14 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
       width: widget.isPageMode ? double.infinity : 1000,
       constraints: BoxConstraints(maxHeight: widget.isPageMode ? 740 : 780),
       decoration: BoxDecoration(
-        color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: EarthThemeController.instance.primaryAccent.withAlpha(120), width: 1.5),
+        color: widget.isPageMode ? Colors.transparent : EarthColors.panelSurface,
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(12),
+        border: widget.isPageMode
+            ? null
+            : Border.all(
+                color: EarthThemeController.instance.primaryAccent.withAlpha(120),
+                width: 1.5,
+              ),
         boxShadow: widget.isPageMode
             ? null
             : [
@@ -134,7 +139,9 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                         ),
                       )
                     : SingleChildScrollView(
-                        padding: const EdgeInsets.all(16),
+                        padding: widget.isPageMode
+                            ? EdgeInsets.zero
+                            : const EdgeInsets.all(16),
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
@@ -164,11 +171,17 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
 
   Widget _buildTopHeader() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
+      padding: widget.isPageMode
+          ? const EdgeInsets.only(bottom: 10)
+          : const EdgeInsets.symmetric(horizontal: 18, vertical: 12),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-        border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+        color: widget.isPageMode ? Colors.transparent : EarthColors.cardSurface,
+        borderRadius: widget.isPageMode
+            ? BorderRadius.zero
+            : const BorderRadius.vertical(top: Radius.circular(11)),
+        border: widget.isPageMode
+            ? null
+            : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -176,7 +189,13 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
           Expanded(
             child: Row(
               children: [
-                Icon(Icons.account_balance_wallet_outlined, color: EarthThemeController.instance.primaryAccent, size: 22),
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: widget.isPageMode
+                      ? EarthColors.textMuted
+                      : EarthThemeController.instance.primaryAccent,
+                  size: 22,
+                ),
                 const SizedBox(width: 10),
                 Expanded(
                   child: Column(
@@ -185,7 +204,9 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                       Text(
                         'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
                         style: TextStyle(
-                          color: EarthThemeController.instance.primaryAccent,
+                          color: widget.isPageMode
+                              ? EarthColors.textMuted
+                              : EarthThemeController.instance.primaryAccent,
                           fontWeight: FontWeight.bold,
                           fontSize: 12.5,
                           letterSpacing: 1.1,
@@ -193,7 +214,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                         overflow: TextOverflow.ellipsis,
                       ),
                       const Text(
-                        '4-Pillar portfolio tracking: Liquid Cash, Commodities, Equity & Concessions.',
+                        '4-Pillar portfolio tracking: Liquid Cash, Commodities, Equity & Other Assets.',
                         style: TextStyle(color: EarthColors.textMuted, fontSize: 10),
                         overflow: TextOverflow.ellipsis,
                       ),
@@ -311,7 +332,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
             ),
             _kpiCard(
               cardW,
-              'EQUITY & CONCESSIONS',
+              'EQUITY & OTHER ASSETS',
               '${(_parseNum(_summary['assetAllocation']?['equityPct']) + _parseNum(_summary['assetAllocation']?['realEstatePct'])).toStringAsFixed(1)}%',
               'Productive Capital Assets',
               EarthColors.textMuted,
@@ -456,7 +477,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                   _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'LIQUID CREDITS', '${cashVal.toStringAsFixed(0)} CR', '$cashPct%', EarthThemeController.instance.goldMetallic),
                   _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'COMMODITIES', '${commVal.toStringAsFixed(0)} CR', '$commPct%', EarthThemeController.instance.primaryAccent),
                   _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'CORPORATE EQUITY', '${eqVal.toStringAsFixed(0)} CR', '$eqPct%', const Color(0xFFC084FC)),
-                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'CONCESSIONS', '${reVal.toStringAsFixed(0)} CR', '$rePct%', const Color(0xFFFB923C)),
+                  _assetPillarCard(cardW > 160 ? cardW : w / 2 - 8, 'OTHER ASSETS', '${reVal.toStringAsFixed(0)} CR', '$rePct%', const Color(0xFFFB923C)),
                 ],
               );
             },

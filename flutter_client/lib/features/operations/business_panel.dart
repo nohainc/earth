@@ -81,6 +81,10 @@ class BusinessPanel extends StatelessWidget {
     return EarthPanel(
       key: panelKey,
       title: 'ENTERPRISE OPERATIONS / $businessName',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.\n\n• Unit Economics & Financial Statement:\n  - OPERATING REVENUE: Gross product sales from market batches and executed contracts.\n  - OPERATING COSTS: Combined raw inputs, power, maintenance reserves, and civic taxes.\n  - NET PROFIT / CYCLE: Net operating income with margin % and cost structure ratio breakdown.\n  - TAX ASSESSMENT BASE: Audited canonical taxable turnover.\n\n• Cap Table & Governance: Share distribution across equity holders, controller designation, and constitutional thresholds (Shareholder vote %, Board approval %, Dilution notice days).\n\n• Corporate Action Hub: Execute dividend distributions, equity transfers, share issuance, mergers, managerial appointments, and enterprise liquidation.',
       child: LayoutBuilder(
@@ -149,8 +153,8 @@ class BusinessPanel extends StatelessWidget {
                                       color: statusColor.withValues(alpha: .15),
                                       borderRadius: BorderRadius.circular(5),
                                       border: Border.all(
-                                          color: statusColor
-                                              .withValues(alpha: .4)),
+                                          color: statusColor.withValues(
+                                              alpha: .4)),
                                     ),
                                     child: Row(
                                       mainAxisSize: MainAxisSize.min,
@@ -272,8 +276,8 @@ class BusinessPanel extends StatelessWidget {
                               InkWell(
                                 onTap: busy || isDissolved
                                     ? null
-                                    : () => action(() => const EarthApi()
-                                        .setPolicy(policy)),
+                                    : () => action(() =>
+                                        const EarthApi().setPolicy(policy)),
                                 borderRadius: BorderRadius.circular(6),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(
@@ -710,8 +714,8 @@ class BusinessPanel extends StatelessWidget {
                           icon: Icons.handshake_outlined,
                           onPressed: busy || isDissolved
                               ? null
-                              : () => showMergerDialog(
-                                  context, action, businessId),
+                              : () =>
+                                  showMergerDialog(context, action, businessId),
                         ),
                         _actionButton(
                           label: 'SHAREHOLDER RESOLUTION (>66.7%)',
@@ -848,8 +852,7 @@ class BusinessPanel extends StatelessWidget {
                 label,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight:
-                      isController ? FontWeight.w700 : FontWeight.w500,
+                  fontWeight: isController ? FontWeight.w700 : FontWeight.w500,
                   color: inkColor,
                 ),
                 overflow: TextOverflow.ellipsis,
@@ -863,8 +866,7 @@ class BusinessPanel extends StatelessWidget {
                 decoration: BoxDecoration(
                   color: violetColor.withValues(alpha: .2),
                   borderRadius: BorderRadius.circular(4),
-                  border:
-                      Border.all(color: violetColor.withValues(alpha: .4)),
+                  border: Border.all(color: violetColor.withValues(alpha: .4)),
                 ),
                 child: const Text(
                   'CONTROLLER',

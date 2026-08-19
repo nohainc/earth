@@ -101,6 +101,7 @@ export async function getDailyBriefing(
     { commodity: 'ENERGY', currentPrice: 108.5, previousPrice: 102.0, deltaPct: 6.37, trend: 'up' as const, volume24h: 14200 },
     { commodity: 'MATERIAL', currentPrice: 42.1, previousPrice: 44.8, deltaPct: -6.03, trend: 'down' as const, volume24h: 9800 },
     { commodity: 'COMPUTE', currentPrice: 285.0, previousPrice: 270.0, deltaPct: 5.56, trend: 'up' as const, volume24h: 6300 },
+    { commodity: 'COMPONENTS', currentPrice: 86.0, previousPrice: 83.2, deltaPct: 3.37, trend: 'up' as const, volume24h: 5400 },
     { commodity: 'FOOD', currentPrice: 19.8, previousPrice: 19.5, deltaPct: 1.54, trend: 'up' as const, volume24h: 18900 },
   ];
 

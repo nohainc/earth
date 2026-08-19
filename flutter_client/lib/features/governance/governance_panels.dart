@@ -85,6 +85,10 @@ class ProposalPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'UC PROPOSAL ${hasProposal ? proposal['id'] : ''}',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.\n\n• Quorum & Approval Thresholds:\n  - Quorum: Minimum citizen participation required for ballot validity ($quorumPercent%).\n  - Approval: Majority threshold needed among cast ballots for proposal enactment ($approvalPercent%).\n\n• Mandatory Implementation Delay (Cooling-Off Period):\n  - Spec §1.8.2: All passed legislation enters a mandatory 3-day cooling-off window prior to execution, allowing affected entities to prepare or file constitutional challenges with the UC High Court.\n\n• Legislative Stages:\n  - ACTIVE: Open for citizen voting (support, oppose, abstain).\n  - COOLING-OFF: Approved ballot undergoing mandatory judicial review window.\n  - READY: Cooling-off complete; authorized for ledger enactment.\n  - CHALLENGED: Under injunction awaiting Supreme Court ruling.\n  - EXECUTED: Enacted into statutory planetary law.',
       child: Column(
@@ -411,6 +415,10 @@ class RolesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'AUTHORITY / ACTIVE TERMS & DELEGATION',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Institutional Offices & Public Governance: Constitutional offices designated to oversee planetary infrastructure, municipal finance, and civil administration.\n\n• Constitutional Separation of Powers:\n  - ROLE-OUC-DELEGATE: Legislative and arbitral delegate with voting authority on public referendums.\n  - ROLE-CITY-MAYOR / PLANNER: Municipal executive authority allocating public finance into civic services.\n  - ROLE-JUSTICE: Supreme court jurist hearing constitutional challenges and appeals.\n\n• Action Protocols: Open roles may be claimed by qualifying citizens; active incumbents may resign or designate surrogates via delegation.',
       child: state.roles.isEmpty
@@ -615,6 +623,10 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'PUBLIC FINANCE / GOVERNANCE',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Public Finance & Municipal Treasury: Statutory fiscal rules and public expenditure budgets funding planetary health, universal basic services, and municipal infrastructure.\n\n• Tax Rule System: Universal citizen tax rates evaluated across personal income, corporate surplus, asset transfers, and resource extraction.\n\n• Public Fund Routing: Citizens serving as City Mayors or City Planners possess authority to deploy UC municipal funds directly into public service operations.',
       child: Column(

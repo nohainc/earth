@@ -24,6 +24,10 @@ class MachinesPanel extends StatelessWidget {
     final machines = state.machines;
     return EarthPanel(
       title: 'AUTOMATION / MACHINE INVENTORY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Fleet Inventory: Total count of active, idle, and decommissioned machines.\n\n• Machine Telemetry Indicators:\n  - Physical Condition: Structural wear percentage. Below 35% risks critical failure; below 75% increases power draw.\n  - Utilization Rate: Current workload percentage relative to maximum operational speed.\n  - Productive Capacity: Output scaling multiplier.\n  - Conversion Rates: Required input raw materials consumed per cycle to synthesize output products.\n  - Maintenance Due: Countdown of operational cycles until compulsory preventative overhaul.\n\n• Fleet Actions: Dispatch maintenance, acquire new machinery from catalog, or sell idle units.',
       child: Column(
@@ -58,16 +62,28 @@ class MachinesPanel extends StatelessWidget {
               final machine = raw as Map<String, dynamic>;
               final id = machine['id']?.toString() ?? '';
               final name = machine['name']?.toString() ?? 'Machine';
-              final machineType = (machine['machine_type']?.toString() ?? 'fabrication-rig').toUpperCase();
+              final machineType =
+                  (machine['machine_type']?.toString() ?? 'fabrication-rig')
+                      .toUpperCase();
               final condition = (machine['condition'] as num?)?.toInt() ?? 100;
-              final utilization = (machine['utilization'] as num?)?.toInt() ?? 25;
-              final capacity = (machine['productive_capacity'] as num?)?.toDouble() ?? 1.0;
-              final maintenanceDue = (machine['maintenance_due'] as num?)?.toInt() ?? 0;
-              final inputResource = (machine['input_resource']?.toString() ?? 'material').toUpperCase();
-              final outputResource = (machine['output_resource']?.toString() ?? 'components').toUpperCase();
-              final status = (machine['status']?.toString() ?? 'active').toLowerCase();
+              final utilization =
+                  (machine['utilization'] as num?)?.toInt() ?? 25;
+              final capacity =
+                  (machine['productive_capacity'] as num?)?.toDouble() ?? 1.0;
+              final maintenanceDue =
+                  (machine['maintenance_due'] as num?)?.toInt() ?? 0;
+              final inputResource =
+                  (machine['input_resource']?.toString() ?? 'material')
+                      .toUpperCase();
+              final outputResource =
+                  (machine['output_resource']?.toString() ?? 'components')
+                      .toUpperCase();
+              final status =
+                  (machine['status']?.toString() ?? 'active').toLowerCase();
 
-              final isInactive = status == 'sold' || status == 'recycled' || status == 'decommissioned';
+              final isInactive = status == 'sold' ||
+                  status == 'recycled' ||
+                  status == 'decommissioned';
 
               Color conditionColor = cyanAccentColor;
               if (condition < 35) {
@@ -96,12 +112,14 @@ class MachinesPanel extends StatelessWidget {
                             children: [
                               Text(
                                 '$name ($machineType)',
-                                style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 12),
+                                style: const TextStyle(
+                                    fontWeight: FontWeight.w700, fontSize: 12),
                               ),
                               const SizedBox(height: 2),
                               Text(
                                 'Flow: $inputResource → $outputResource · Capacity: ${capacity.toStringAsFixed(1)}x',
-                                style: const TextStyle(fontSize: 10, color: mutedColor),
+                                style: const TextStyle(
+                                    fontSize: 10, color: mutedColor),
                               ),
                             ],
                           ),
@@ -122,7 +140,8 @@ class MachinesPanel extends StatelessWidget {
                               status.toUpperCase(),
                               style: TextStyle(
                                 fontSize: 9,
-                                color: isInactive ? Colors.redAccent : mutedColor,
+                                color:
+                                    isInactive ? Colors.redAccent : mutedColor,
                               ),
                             ),
                           ],
@@ -141,19 +160,26 @@ class MachinesPanel extends StatelessWidget {
                         runSpacing: 6,
                         children: [
                           const Text('UTILIZATION:',
-                              style: TextStyle(color: mutedColor, fontSize: 10, height: 2.2)),
+                              style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: 10,
+                                  height: 2.2)),
                           for (final level in [0, 25, 50, 75, 100])
                             OutlinedButton(
                               style: OutlinedButton.styleFrom(
                                 visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                backgroundColor: utilization == level ? Colors.white12 : null,
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 8, vertical: 2),
+                                backgroundColor: utilization == level
+                                    ? Colors.white12
+                                    : null,
                               ),
                               onPressed: busy
                                   ? null
                                   : () => action(() => const EarthApi()
                                       .setMachineUtilization(id, level)),
-                              child: Text('$level%', style: const TextStyle(fontSize: 10)),
+                              child: Text('$level%',
+                                  style: const TextStyle(fontSize: 10)),
                             ),
                         ],
                       ),
@@ -165,42 +191,54 @@ class MachinesPanel extends StatelessWidget {
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
                             ),
                             onPressed: busy
                                 ? null
-                                : () => action(() => const EarthApi().maintainMachine(id)),
-                            child: const Text('MAINTAIN (10 COMP)', style: TextStyle(fontSize: 10)),
+                                : () => action(
+                                    () => const EarthApi().maintainMachine(id)),
+                            child: const Text('MAINTAIN (10 COMP)',
+                                style: TextStyle(fontSize: 10)),
                           ),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
                             ),
                             onPressed: busy
                                 ? null
-                                : () => showMachineUpgradeDialog(context, action, id),
-                            child: const Text('UPGRADE (+0.2x)', style: TextStyle(fontSize: 10)),
+                                : () => showMachineUpgradeDialog(
+                                    context, action, id),
+                            child: const Text('UPGRADE (+0.2x)',
+                                style: TextStyle(fontSize: 10)),
                           ),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
                             ),
                             onPressed: busy
                                 ? null
-                                : () => showMachineSaleDialog(context, action, id),
-                            child: const Text('SELL MACHINE', style: TextStyle(fontSize: 10)),
+                                : () =>
+                                    showMachineSaleDialog(context, action, id),
+                            child: const Text('SELL MACHINE',
+                                style: TextStyle(fontSize: 10)),
                           ),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 4),
                             ),
                             onPressed: busy
                                 ? null
-                                : () => showDecommissionDialog(context, action, id),
-                            child: const Text('RECYCLE', style: TextStyle(fontSize: 10)),
+                                : () =>
+                                    showDecommissionDialog(context, action, id),
+                            child: const Text('RECYCLE',
+                                style: TextStyle(fontSize: 10)),
                           ),
                         ],
                       ),
@@ -225,6 +263,10 @@ class ProductionEventsPanel extends StatelessWidget {
     final events = state.productionEvents;
     return EarthPanel(
       title: 'INDUSTRIAL PRODUCTION / EVENT STREAM',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Production Audit Stream: Immutable chronological record of manufacturing, fabrication, and chemical synthesis runs executed across your automated machine fleet.\n\n• Event Indicators:\n  - Cycle Day: Canonical game day when the production run settled.\n  - Machine Class: Model of fabrication rig or synthesis reactor.\n  - Yield & Resource: Net units produced and specific commodity type (Food, Materials, Energy, Components, Compute).',
       child: events.isEmpty
@@ -245,10 +287,13 @@ class ProductionEventsPanel extends StatelessWidget {
                     (event['machine_type']?.toString() ?? 'RIG').toUpperCase();
 
                 Color resColor = cyanAccentColor;
-                if (outputResource.contains('ENERGY')) resColor = Colors.amberAccent;
-                if (outputResource.contains('FOOD')) resColor = Colors.lightGreenAccent;
+                if (outputResource.contains('ENERGY'))
+                  resColor = Colors.amberAccent;
+                if (outputResource.contains('FOOD'))
+                  resColor = Colors.lightGreenAccent;
                 if (outputResource.contains('COMPUTE')) resColor = violetColor;
-                if (outputResource.contains('COMPONENT')) resColor = Colors.tealAccent;
+                if (outputResource.contains('COMPONENT'))
+                  resColor = Colors.tealAccent;
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -296,8 +341,8 @@ class ProductionEventsPanel extends StatelessWidget {
                         decoration: BoxDecoration(
                           color: resColor.withValues(alpha: .15),
                           borderRadius: BorderRadius.circular(4),
-                          border:
-                              Border.all(color: resColor.withValues(alpha: .35)),
+                          border: Border.all(
+                              color: resColor.withValues(alpha: .35)),
                         ),
                         child: Text(
                           '+$outputAmount $outputResource',

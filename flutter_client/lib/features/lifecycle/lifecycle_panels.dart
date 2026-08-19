@@ -9,6 +9,33 @@ import 'lifecycle_dialogs.dart';
 import 'cemetery_pantheon_dialog.dart';
 import 'global_rankings_dialog.dart';
 
+Widget _lifecycleTopicHeading(BuildContext context, String title,
+    {required String description}) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Flexible(
+        child: Text(title,
+            style: const TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1)),
+      ),
+      const SizedBox(width: 5),
+      IconButton(
+        tooltip: 'About $title',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(Icons.info_outline,
+            size: 14, color: mutedColor.withValues(alpha: .8)),
+        onPressed: () => showEarthInfoDialog(context,
+            title: title, description: description),
+      ),
+    ]),
+  );
+}
+
 class SuccessionPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -25,18 +52,28 @@ class SuccessionPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final life = state.life;
     final human = state.human;
-    final lifeStatus = (life['status']?.toString() ?? human['life_status']?.toString() ?? 'active').toLowerCase();
-    final age = asIntOr(life['ageYears'] ?? human['age_years'] ?? human['ageYears'], 31);
+    final lifeStatus = (life['status']?.toString() ??
+            human['life_status']?.toString() ??
+            'active')
+        .toLowerCase();
+    final age = asIntOr(
+        life['ageYears'] ?? human['age_years'] ?? human['ageYears'], 31);
     final politicalEligibleDay = asIntOr(life['politicalEligibilityDay'], 180);
     final currentDay = asIntOr(state.clock['day'], 184);
-    final isPoliticallyEligible = currentDay >= politicalEligibleDay || age >= 25;
+    final isPoliticallyEligible =
+        currentDay >= politicalEligibleDay || age >= 25;
 
     final rawSuccessor = life['successor'];
-    final successor = rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
-    final successorName = successor?['successor_name']?.toString() ?? successor?['name']?.toString();
-    final successorHumanId = successor?['successor_human_id']?.toString() ?? successor?['successorHumanId']?.toString();
-    final registeredDay = successor?['registered_game_day'] ?? successor?['registeredOnDay'];
-    final estatePeriodDays = asIntOr(successor?['estate_period_days'] ?? life['estatePeriodDays'], 30);
+    final successor =
+        rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
+    final successorName = successor?['successor_name']?.toString() ??
+        successor?['name']?.toString();
+    final successorHumanId = successor?['successor_human_id']?.toString() ??
+        successor?['successorHumanId']?.toString();
+    final registeredDay =
+        successor?['registered_game_day'] ?? successor?['registeredOnDay'];
+    final estatePeriodDays = asIntOr(
+        successor?['estate_period_days'] ?? life['estatePeriodDays'], 30);
 
     final heirPct = asIntOr(successor?['heir_pct'], 70);
     final trustPct = asIntOr(successor?['trust_pct'], 20);
@@ -52,7 +89,8 @@ class SuccessionPanel extends StatelessWidget {
     String generationalStage = 'PRIME OPERATIVE (100% LABOR EFFICIENCY)';
     Color stageColor = cyanAccentColor;
     if (age >= 65) {
-      generationalStage = 'DYNASTIC PATRIARCH/MATRIARCH (+25% GOVERNANCE WISDOM)';
+      generationalStage =
+          'DYNASTIC PATRIARCH/MATRIARCH (+25% GOVERNANCE WISDOM)';
       stageColor = violetColor;
     } else if (age >= 45) {
       generationalStage = 'SENIOR EXECUTIVE (BALANCED PRODUCTIVITY)';
@@ -65,6 +103,10 @@ class SuccessionPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'LIFE / BIOLOGICAL AGING & SUCCESSION',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Biological Aging & Generational Succession (Spec §1.4, §1.5):\n  - Simulation Time Dilation (1:60): 1 Real Second = 1 Game Minute (24 Real Minutes = 1 Game Day; 6 Real Days = 1 Simulation Year).\n  - Biological Lifespan: Characters enter at legal adulthood (Age 20) and reach natural mortality around 75–90+ simulation years (~1 Real Calendar Year of active play).\n  - Generational Wisdom Shift: Past age 65, physical labor efficiency gently declines while governance influence and political wisdom bonuses increase (+25%).\n\n• Biometric Health & Stochastic Mortality (Spec §1.4.1):\n  - Health Impact: Governs physical labor throughput, machine maintenance efficiency, and healthcare expenses. Sub-optimal health does not mean instant death; mortality past retirement age follows an actuarial hazard curve.\n\n• Testamentary Will & Estate Probate (Spec §1.4.2):\n  - Multi-Beneficiary Testament: Designate custom asset distributions across Primary Heirs, Municipal Public Trusts, and Dynastic Family Reserves.\n  - Progressive Estate Tax: Deducted automatically upon probate (10% standard, 20% late estate settlement).',
       child: Column(
@@ -95,11 +137,13 @@ class SuccessionPanel extends StatelessWidget {
                       ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: .15),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: statusColor.withValues(alpha: .35)),
+                        border: Border.all(
+                            color: statusColor.withValues(alpha: .35)),
                       ),
                       child: Text(
                         lifeStatus.toUpperCase(),
@@ -116,11 +160,13 @@ class SuccessionPanel extends StatelessWidget {
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
                       decoration: BoxDecoration(
                         color: stageColor.withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(color: stageColor.withValues(alpha: .3)),
+                        border:
+                            Border.all(color: stageColor.withValues(alpha: .3)),
                       ),
                       child: Text(
                         generationalStage,
@@ -168,12 +214,16 @@ class SuccessionPanel extends StatelessWidget {
                 children: [
                   Row(
                     children: [
-                      const Icon(Icons.history_edu_outlined, size: 14, color: cyanAccentColor),
+                      const Icon(Icons.history_edu_outlined,
+                          size: 14, color: cyanAccentColor),
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
                           'SUCCESSOR: $successorName ${successorHumanId != null ? '($successorHumanId)' : ''}',
-                          style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 11, color: inkColor),
+                          style: const TextStyle(
+                              fontWeight: FontWeight.w800,
+                              fontSize: 11,
+                              color: inkColor),
                         ),
                       ),
                     ],
@@ -188,22 +238,32 @@ class SuccessionPanel extends StatelessWidget {
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      _beneficiaryChip('PRIMARY HEIR', '$heirPct%', cyanAccentColor),
-                      _beneficiaryChip('MUNICIPAL TRUST', '$trustPct%', Colors.tealAccent),
-                      _beneficiaryChip('DYNASTIC RESERVE', '$reservePct%', violetColor),
+                      _beneficiaryChip(
+                          'PRIMARY HEIR', '$heirPct%', cyanAccentColor),
+                      _beneficiaryChip(
+                          'MUNICIPAL TRUST', '$trustPct%', Colors.tealAccent),
+                      _beneficiaryChip(
+                          'DYNASTIC RESERVE', '$reservePct%', violetColor),
                     ],
                   ),
                   const SizedBox(height: 8),
                   Text(
                     'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
-                    style: const TextStyle(fontSize: 10, color: mutedColor, fontWeight: FontWeight.w600),
+                    style: const TextStyle(
+                        fontSize: 10,
+                        color: mutedColor,
+                        fontWeight: FontWeight.w600),
                   ),
                   const SizedBox(height: 2),
                   Text(
                     isEstatePeriod
                         ? 'Estate state: ACTIVE ESTATE PERIOD (Awaiting settlement or liquidation)'
                         : 'Estate state: PENDING (Protected transition ready upon mortality)',
-                    style: TextStyle(fontSize: 10, color: isEstatePeriod ? Colors.orangeAccent : cyanAccentColor),
+                    style: TextStyle(
+                        fontSize: 10,
+                        color: isEstatePeriod
+                            ? Colors.orangeAccent
+                            : cyanAccentColor),
                   ),
                 ],
               ),
@@ -222,11 +282,16 @@ class SuccessionPanel extends StatelessWidget {
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: cyanAccentColor,
-                  side: BorderSide(color: cyanAccentColor.withValues(alpha: .3)),
+                  side:
+                      BorderSide(color: cyanAccentColor.withValues(alpha: .3)),
                 ),
-                onPressed: busy ? null : () => showSuccessorComposerDialog(context, action),
+                onPressed: busy
+                    ? null
+                    : () => showSuccessorComposerDialog(context, action),
                 icon: const Icon(Icons.edit_note_outlined, size: 14),
-                label: Text(successorName == null ? 'PLAN SUCCESSION & WILL' : 'UPDATE WILL & SUCCESSOR'),
+                label: Text(successorName == null
+                    ? 'PLAN SUCCESSION & WILL'
+                    : 'UPDATE WILL & SUCCESSOR'),
               ),
               if (isEstatePeriod && successorName != null)
                 OutlinedButton(
@@ -339,6 +404,10 @@ class InstitutionSolvencyPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'INSTITUTION SOLVENCY / RECOVERY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Institutional Solvency & Recapitalization: Statutory economic health monitoring for municipal cities and corporate enterprises.\n\n• Solvency Tiers:\n  - SOLVENT: Normal operations; reserves satisfy all statutory coverage buffers.\n  - DISTRESSED: Reserves below operating minimums; public services rationed.\n  - INSOLVENT: Treasury exhausted; automatic liquidation begins unless recapitalized.\n\n• Recapitalization Recovery: Citizens may contribute equity credits to restore insolvent or distressed institutions back to active legal status.',
       child: state.financeStatus.isEmpty
@@ -350,9 +419,12 @@ class InstitutionSolvencyPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: state.financeStatus.map((raw) {
                 final item = raw as Map<String, dynamic>;
-                final kind = (item['institution_kind']?.toString() ?? 'INSTITUTION').toUpperCase();
+                final kind =
+                    (item['institution_kind']?.toString() ?? 'INSTITUTION')
+                        .toUpperCase();
                 final id = item['institution_id']?.toString() ?? '';
-                final status = (item['status']?.toString() ?? 'SOLVENT').toUpperCase();
+                final status =
+                    (item['status']?.toString() ?? 'SOLVENT').toUpperCase();
                 final sinceDay = item['since_game_day']?.toString() ?? '—';
 
                 final crisis = status == 'DISTRESSED' || status == 'INSOLVENT';
@@ -369,7 +441,9 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                     color: surfaceColor.withValues(alpha: .75),
                     borderRadius: BorderRadius.circular(8),
                     border: Border.all(
-                      color: crisis ? statusColor.withValues(alpha: .4) : Colors.white10,
+                      color: crisis
+                          ? statusColor.withValues(alpha: .4)
+                          : Colors.white10,
                     ),
                   ),
                   child: Row(
@@ -381,7 +455,9 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                           borderRadius: BorderRadius.circular(6),
                         ),
                         child: Icon(
-                          kind == 'CITY' ? Icons.location_city_outlined : Icons.domain_outlined,
+                          kind == 'CITY'
+                              ? Icons.location_city_outlined
+                              : Icons.domain_outlined,
                           size: 16,
                           color: statusColor,
                         ),
@@ -403,11 +479,14 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                                 ),
                                 const SizedBox(width: 8),
                                 Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 6, vertical: 2),
                                   decoration: BoxDecoration(
                                     color: statusColor.withValues(alpha: .15),
                                     borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: statusColor.withValues(alpha: .3)),
+                                    border: Border.all(
+                                        color:
+                                            statusColor.withValues(alpha: .3)),
                                   ),
                                   child: Text(
                                     status,
@@ -423,7 +502,8 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                             const SizedBox(height: 2),
                             Text(
                               '$kind $id  ·  ${item['status']}  ·  since day $sinceDay',
-                              style: const TextStyle(fontSize: 10.5, color: mutedColor),
+                              style: const TextStyle(
+                                  fontSize: 10.5, color: mutedColor),
                             ),
                           ],
                         ),
@@ -435,7 +515,8 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                             backgroundColor: Colors.orangeAccent,
                             foregroundColor: Colors.black,
                             visualDensity: VisualDensity.compact,
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 4),
                           ),
                           onPressed: busy
                               ? null
@@ -446,7 +527,9 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                                     item['institution_kind'] as String,
                                   ),
                           icon: const Icon(Icons.healing_outlined, size: 14),
-                          label: const Text('RECOVER', style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800)),
+                          label: const Text('RECOVER',
+                              style: TextStyle(
+                                  fontSize: 10, fontWeight: FontWeight.w800)),
                         ),
                       ],
                     ],
@@ -566,6 +649,10 @@ class LedgerPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'CENTRAL LEDGER / RECENT ACTIVITY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Double-Entry Cryptographic Ledger: Immutable journal of all currency and asset flows across central clearing, dividend distributions, tax assessments, and peer transfers.\n\n• Invariant Protection: Every debit from a source account is strictly matched with an equal credit to a destination account, ensuring mathematical equilibrium and zero synthetic money leakage.\n\n• Audit Traceability: Transactions record immutable reason codes, amounts, and source-to-destination routing.',
       child: entries.isEmpty
@@ -577,9 +664,8 @@ class LedgerPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: entries.take(10).map((raw) {
                 final entry = raw as Map<String, dynamic>;
-                final reason =
-                    (entry['reason_type']?.toString() ?? 'TRANSFER')
-                        .toUpperCase();
+                final reason = (entry['reason_type']?.toString() ?? 'TRANSFER')
+                    .toUpperCase();
                 final amount = entry['amount'] ?? 0;
                 final currency =
                     (entry['currency']?.toString() ?? 'C').toUpperCase();
@@ -594,13 +680,16 @@ class LedgerPanel extends StatelessWidget {
                 if (reason.contains('TAX')) {
                   reasonColor = Colors.orangeAccent;
                   reasonIcon = Icons.receipt_long_outlined;
-                } else if (reason.contains('DIVIDEND') || reason.contains('INCOME')) {
+                } else if (reason.contains('DIVIDEND') ||
+                    reason.contains('INCOME')) {
                   reasonColor = violetColor;
                   reasonIcon = Icons.paid_outlined;
-                } else if (reason.contains('MARKET') || reason.contains('ORDER')) {
+                } else if (reason.contains('MARKET') ||
+                    reason.contains('ORDER')) {
                   reasonColor = Colors.tealAccent;
                   reasonIcon = Icons.storefront_outlined;
-                } else if (reason.contains('FEE') || reason.contains('PENALTY')) {
+                } else if (reason.contains('FEE') ||
+                    reason.contains('PENALTY')) {
                   reasonColor = Colors.redAccent;
                   reasonIcon = Icons.gavel_outlined;
                 }
@@ -754,9 +843,8 @@ class NotificationsPanel extends StatelessWidget {
                           onPressed: busy
                               ? null
                               : () => action(() async {
-                                    await const EarthApi()
-                                        .markNotificationRead(
-                                            notification['id'] as String);
+                                    await const EarthApi().markNotificationRead(
+                                        notification['id'] as String);
                                     return state;
                                   }),
                           child: const Text('READ'),
@@ -779,14 +867,24 @@ class OwnershipTimelinePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'OWNERSHIP / PROVENANCE TIMELINE',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• Asset Provenance & Lineage: Immutable historical record tracking legal titles, transfers, acquisitions, and ownership transitions.\n\n• Asset Classes: Tracks industrial machines, enterprise equity shares, technological patents, and civic facilities.\n\n• Audit Chain: Every transfer verifies historical custody, preventing counterparty dispute and counterfeit claims.',
-      child: ownershipEvents.isEmpty
-          ? const Text(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          _lifecycleTopicHeading(context, 'OWNERSHIP / PROVENANCE TIMELINE',
+              description:
+                  '• Immutable record of legal titles, transfers, acquisitions, and ownership transitions.'),
+          if (ownershipEvents.isEmpty)
+            const Text(
               'Your asset provenance history will appear here after your first acquisition or transfer.',
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
-          : Column(
+          else
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: ownershipEvents.take(10).map((raw) {
                 final event = raw as Map<String, dynamic>;
@@ -798,8 +896,10 @@ class OwnershipTimelinePanel extends StatelessWidget {
                 final assetId = event['asset_id']?.toString() ?? '—';
                 final qty = event['quantity'] ?? 1;
                 final gameDay = event['game_day'] ?? '—';
-                final fromOwner = event['from_owner_id']?.toString() ?? 'ORIGIN_TREASURY';
-                final toOwner = event['to_owner_id']?.toString() ?? 'CURRENT_HOLDER';
+                final fromOwner =
+                    event['from_owner_id']?.toString() ?? 'ORIGIN_TREASURY';
+                final toOwner =
+                    event['to_owner_id']?.toString() ?? 'CURRENT_HOLDER';
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
@@ -904,6 +1004,8 @@ class OwnershipTimelinePanel extends StatelessWidget {
                 );
               }).toList(),
             ),
+        ],
+      ),
     );
   }
 }
@@ -911,7 +1013,8 @@ class OwnershipTimelinePanel extends StatelessWidget {
 class CivicMembershipHistoryPanel extends StatelessWidget {
   final List<dynamic> membershipEvents;
 
-  const CivicMembershipHistoryPanel({super.key, required this.membershipEvents});
+  const CivicMembershipHistoryPanel(
+      {super.key, required this.membershipEvents});
 
   @override
   Widget build(BuildContext context) {
@@ -927,12 +1030,15 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: membershipEvents.take(8).map((raw) {
-                if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
+                if (raw is! Map<String, dynamic>)
+                  return const SizedBox.shrink();
                 final event = raw;
                 final day = event['game_day']?.toString() ?? '-';
-                final type = (event['institution_type']?.toString() ?? 'CIVIC').toUpperCase();
+                final type = (event['institution_type']?.toString() ?? 'CIVIC')
+                    .toUpperCase();
                 final id = event['institution_id']?.toString() ?? '';
-                final action = (event['action']?.toString() ?? 'JOIN').toUpperCase();
+                final action =
+                    (event['action']?.toString() ?? 'JOIN').toUpperCase();
 
                 Color typeColor = cyanAccentColor;
                 if (type.contains('CORP')) typeColor = violetColor;
@@ -940,7 +1046,8 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: surfaceColor.withValues(alpha: .6),
                     borderRadius: BorderRadius.circular(8),
@@ -949,7 +1056,8 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
                   child: Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: .05),
                           borderRadius: BorderRadius.circular(4),
@@ -965,11 +1073,13 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: typeColor.withValues(alpha: .15),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: typeColor.withValues(alpha: .3)),
+                          border: Border.all(
+                              color: typeColor.withValues(alpha: .3)),
                         ),
                         child: Text(
                           type,
@@ -1017,6 +1127,10 @@ class AuthorityHistoryPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     return EarthPanel(
       title: 'AUTHORITY / GOVERNANCE HISTORY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Governance & Authority Journal: Canonical record of institutional role transitions, constitutional delegations, and executive responsibilities.\n\n• Authority Lifecycle:\n  - CLAIM_ROLE: Assumption of public office, ministerial oversight, or judicial delegacy.\n  - DELEGATE_ROLE: Formal delegation of voting or arbitral authority to a designated citizen surrogate.\n  - RESIGN_ROLE: Orderly devolution of office upon term completion or voluntary departure.',
       child: authorityEvents.isEmpty
@@ -1027,10 +1141,12 @@ class AuthorityHistoryPanel extends StatelessWidget {
           : Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: authorityEvents.take(8).map((raw) {
-                if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
+                if (raw is! Map<String, dynamic>)
+                  return const SizedBox.shrink();
                 final event = raw;
                 final day = event['game_day']?.toString() ?? '-';
-                final action = (event['action']?.toString() ?? 'CLAIM').toUpperCase();
+                final action =
+                    (event['action']?.toString() ?? 'CLAIM').toUpperCase();
                 final roleId = event['role_id']?.toString() ?? 'ROLE';
 
                 Color actionColor = cyanAccentColor;
@@ -1046,7 +1162,8 @@ class AuthorityHistoryPanel extends StatelessWidget {
 
                 return Container(
                   margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: surfaceColor.withValues(alpha: .6),
                     borderRadius: BorderRadius.circular(8),
@@ -1064,7 +1181,8 @@ class AuthorityHistoryPanel extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: Colors.white.withValues(alpha: .05),
                           borderRadius: BorderRadius.circular(4),
@@ -1090,11 +1208,13 @@ class AuthorityHistoryPanel extends StatelessWidget {
                         ),
                       ),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 7, vertical: 2),
                         decoration: BoxDecoration(
                           color: actionColor.withValues(alpha: .15),
                           borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: actionColor.withValues(alpha: .3)),
+                          border: Border.all(
+                              color: actionColor.withValues(alpha: .3)),
                         ),
                         child: Text(
                           action,
@@ -1187,13 +1307,25 @@ class WorldRankingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cities = state.rankings['cities'] is List ? state.rankings['cities'] as List : [];
-    final corps = state.rankings['corporations'] is List ? state.rankings['corporations'] as List : [];
-    final humans = state.rankings['humans'] is List ? state.rankings['humans'] as List : [];
-    final tech = state.rankings['technologies'] is List ? state.rankings['technologies'] as List : [];
+    final cities = state.rankings['cities'] is List
+        ? state.rankings['cities'] as List
+        : [];
+    final corps = state.rankings['corporations'] is List
+        ? state.rankings['corporations'] as List
+        : [];
+    final humans = state.rankings['humans'] is List
+        ? state.rankings['humans'] as List
+        : [];
+    final tech = state.rankings['technologies'] is List
+        ? state.rankings['technologies'] as List
+        : [];
 
     return EarthPanel(
       title: 'WORLD RANKINGS / POSTGRES LIVE',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• Civilizational Leaderboards & Metrics: Live global rankings aggregated across all planetary municipalities, corporate conglomerates, citizen leaders, and technology portfolios.\n\n• Competitive Benchmarks:\n  - CITIES: Ranked by resident population, public service stability, and housing/energy capacity.\n  - CORPORATIONS: Ranked by member count, treasury reserves, and industrial output.\n  - CITIZENS: Ranked by civic standing, legacy points, and net wealth.\n  - TECHNOLOGIES: Ranked by active patent licenses and diffusion rate.',
       child: Column(
@@ -1207,11 +1339,13 @@ class WorldRankingsPanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: EarthColors.cardSurface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: EarthColors.goldMetallic.withAlpha(100)),
+              border:
+                  Border.all(color: EarthColors.goldMetallic.withAlpha(100)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.emoji_events, color: EarthColors.goldMetallic, size: 24),
+                const Icon(Icons.emoji_events,
+                    color: EarthColors.goldMetallic, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1229,7 +1363,8 @@ class WorldRankingsPanel extends StatelessWidget {
                       SizedBox(height: 2),
                       Text(
                         'Explore full rankings, apex podiums, rank deltas, and citizen tiers.',
-                        style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                        style: TextStyle(
+                            color: EarthColors.textMuted, fontSize: 11),
                       ),
                     ],
                   ),
@@ -1237,13 +1372,15 @@ class WorldRankingsPanel extends StatelessWidget {
                 const SizedBox(width: 8),
                 Builder(
                   builder: (ctx) => ElevatedButton.icon(
-                    onPressed: () => showGlobalRankingsDialog(ctx, state: state),
+                    onPressed: () =>
+                        showGlobalRankingsDialog(ctx, state: state),
                     icon: const Icon(Icons.leaderboard, size: 16),
                     label: const Text('EXPLORE LEADERBOARDS'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: EarthColors.goldMetallic,
                       foregroundColor: Colors.black,
-                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                   ),
                 ),
@@ -1279,11 +1416,17 @@ class HistoryArchivePanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'HISTORY / ARCHIVE',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• World Chronicle & Epoch Archive: Canonical historical archive recording civilizational milestones, macro crises, planetary ecological tipping points, and generational transitions.\n\n• Legacy Preservation: Permanent historical ledger ensuring human achievements and societal governance decisions are preserved across all eras.',
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          _lifecycleTopicHeading(context, 'HISTORY / ARCHIVE',
+              description:
+                  '• Canonical historical archive for world milestones, crises, and generational transitions.'),
           if (events.isEmpty)
             const Text(
               'The historical chronicle is waiting for the first recorded world day milestone.',
@@ -1293,8 +1436,9 @@ class HistoryArchivePanel extends StatelessWidget {
             ...events.take(8).map((raw) {
               final event = raw as Map<String, dynamic>;
               final gameDay = event['game_day'] ?? '—';
-              final title =
-                  event['title'] ?? event['type'] ?? 'Historical Epoch Milestone';
+              final title = event['title'] ??
+                  event['type'] ??
+                  'Historical Epoch Milestone';
               final desc = event['description']?.toString() ?? '';
 
               return Container(
@@ -1369,12 +1513,18 @@ class PantheonPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final deceased = (pantheon['deceasedPantheon'] as List<dynamic>?) ?? const [];
+    final deceased =
+        (pantheon['deceasedPantheon'] as List<dynamic>?) ?? const [];
     final living = (pantheon['livingLeaders'] as List<dynamic>?) ?? const [];
-    final achievements = (pantheon['achievements'] as List<dynamic>?) ?? const [];
+    final achievements =
+        (pantheon['achievements'] as List<dynamic>?) ?? const [];
 
     return EarthPanel(
       title: 'PANTHEON / DYNASTIC ARCHIVE & LEGACY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
       infoDescription:
           '• UC Historical Cemetery & Pantheon of Achievements (Spec §1.17.2):\n  - Persistent Civilization Record: When a citizen passes away, their full biographical, economic, and political record is permanently inscribed in the UC Historical Archive.\n  - Multi-Generational Dynastic Lineage: Tracks continuous succession chains from founding ancestors to living heirs.\n  - Composite Legacy Score (L): Calculated across lifetime economic production, public civic service, philanthropic endowments, and constitutional stability.',
       child: Column(
@@ -1388,11 +1538,13 @@ class PantheonPanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: EarthColors.cardSurface,
               borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: EarthColors.goldMetallic.withAlpha(100)),
+              border:
+                  Border.all(color: EarthColors.goldMetallic.withAlpha(100)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.account_balance, color: EarthColors.goldMetallic, size: 24),
+                const Icon(Icons.account_balance,
+                    color: EarthColors.goldMetallic, size: 24),
                 const SizedBox(width: 12),
                 Expanded(
                   child: Column(
@@ -1410,7 +1562,8 @@ class PantheonPanel extends StatelessWidget {
                       SizedBox(height: 2),
                       Text(
                         'Search all inscribed citizen records, eulogies, and multi-generational lineages.',
-                        style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                        style: TextStyle(
+                            color: EarthColors.textMuted, fontSize: 11),
                       ),
                     ],
                   ),
@@ -1424,7 +1577,8 @@ class PantheonPanel extends StatelessWidget {
                     style: ElevatedButton.styleFrom(
                       backgroundColor: EarthColors.goldMetallic,
                       foregroundColor: Colors.black,
-                      textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
+                      textStyle: const TextStyle(
+                          fontWeight: FontWeight.bold, fontSize: 11),
                     ),
                   ),
                 ),
@@ -1457,27 +1611,48 @@ class PantheonPanel extends StatelessWidget {
               children: [
                 _dynastyNode(
                   generation: 'GEN I · FOUNDING ANCESTOR',
-                  name: deceased.isNotEmpty ? (deceased.first as Map<String, dynamic>)['display_name']?.toString() ?? 'Lysander Vance' : 'Lysander Vance',
-                  details: 'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
-                  score: deceased.isNotEmpty ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}' : '84',
+                  name: deceased.isNotEmpty
+                      ? (deceased.first as Map<String, dynamic>)['display_name']
+                              ?.toString() ??
+                          'Lysander Vance'
+                      : 'Lysander Vance',
+                  details:
+                      'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
+                  score: deceased.isNotEmpty
+                      ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}'
+                      : '84',
                   color: violetColor,
                   isLast: false,
                 ),
                 _treeConnector(),
                 _dynastyNode(
                   generation: 'GEN II · HEIR & SUCCESSOR',
-                  name: deceased.length > 1 ? (deceased[1] as Map<String, dynamic>)['display_name']?.toString() ?? 'Mira Vance' : 'Mira Vance',
-                  details: 'Day 73–144 · Expanded Industrial Grid · 3 Patents Granted',
-                  score: deceased.length > 1 ? '${(deceased[1] as Map<String, dynamic>)['final_legacy'] ?? 112}' : '112',
+                  name: deceased.length > 1
+                      ? (deceased[1] as Map<String, dynamic>)['display_name']
+                              ?.toString() ??
+                          'Mira Vance'
+                      : 'Mira Vance',
+                  details:
+                      'Day 73–144 · Expanded Industrial Grid · 3 Patents Granted',
+                  score: deceased.length > 1
+                      ? '${(deceased[1] as Map<String, dynamic>)['final_legacy'] ?? 112}'
+                      : '112',
                   color: cyanAccentColor,
                   isLast: false,
                 ),
                 _treeConnector(),
                 _dynastyNode(
                   generation: 'GEN III · CURRENT ACTIVE CITIZEN',
-                  name: living.isNotEmpty ? (living.first as Map<String, dynamic>)['display_name']?.toString() ?? 'Amara Kline' : 'Amara Kline',
-                  details: 'Active · Mayor of New Kyoto · Managing 4 Enterprises',
-                  score: living.isNotEmpty ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}' : '145',
+                  name: living.isNotEmpty
+                      ? (living.first as Map<String, dynamic>)['display_name']
+                              ?.toString() ??
+                          'Amara Kline'
+                      : 'Amara Kline',
+                  details:
+                      'Active · Mayor of New Kyoto · Managing 4 Enterprises',
+                  score: living.isNotEmpty
+                      ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}'
+                      : '145',
                   color: Colors.tealAccent,
                   isLast: true,
                 ),
@@ -1506,7 +1681,8 @@ class PantheonPanel extends StatelessWidget {
               final day = entry['death_game_day'] ?? 0;
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: Colors.white.withValues(alpha: .03),
                   borderRadius: BorderRadius.circular(6),
@@ -1517,11 +1693,15 @@ class PantheonPanel extends StatelessWidget {
                   children: [
                     Row(
                       children: [
-                        const Icon(Icons.archive_outlined, size: 13, color: violetColor),
+                        const Icon(Icons.archive_outlined,
+                            size: 13, color: violetColor),
                         const SizedBox(width: 6),
                         Text(
                           '$name',
-                          style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                          style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                              color: inkColor),
                         ),
                       ],
                     ),
@@ -1551,15 +1731,18 @@ class PantheonPanel extends StatelessWidget {
               final entry = raw as Map<String, dynamic>;
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
                 decoration: BoxDecoration(
                   color: cyanAccentColor.withValues(alpha: .05),
                   borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: cyanAccentColor.withValues(alpha: .2)),
+                  border:
+                      Border.all(color: cyanAccentColor.withValues(alpha: .2)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.emoji_events_outlined, size: 14, color: cyanAccentColor),
+                    const Icon(Icons.emoji_events_outlined,
+                        size: 14, color: cyanAccentColor),
                     const SizedBox(width: 8),
                     Expanded(
                       child: Column(
@@ -1567,11 +1750,16 @@ class PantheonPanel extends StatelessWidget {
                         children: [
                           Text(
                             entry['name']?.toString() ?? 'Achievement',
-                            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: inkColor),
                           ),
                           Text(
-                            entry['description']?.toString() ?? 'Completed milestone',
-                            style: const TextStyle(fontSize: 9.5, color: mutedColor),
+                            entry['description']?.toString() ??
+                                'Completed milestone',
+                            style: const TextStyle(
+                                fontSize: 9.5, color: mutedColor),
                           ),
                         ],
                       ),
@@ -1618,18 +1806,28 @@ class PantheonPanel extends StatelessWidget {
                   children: [
                     Text(
                       generation,
-                      style: TextStyle(fontSize: 8.5, fontWeight: FontWeight.w800, color: color, letterSpacing: .6),
+                      style: TextStyle(
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800,
+                          color: color,
+                          letterSpacing: .6),
                     ),
                     Text(
                       '$score L',
-                      style: TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: color),
+                      style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          color: color),
                     ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(
                   name,
-                  style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w700, color: inkColor),
+                  style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: inkColor),
                 ),
                 Text(
                   details,
@@ -1663,25 +1861,25 @@ class WorldIntegrityPanel extends StatelessWidget {
       child: Wrap(
         spacing: 8,
         runSpacing: 8,
-        children: state.audit.entries
-            .map((entry) {
-              final isBool = entry.value is bool;
-              final isOk = isBool ? (entry.value as bool) : entry.value != null;
-              final valStr = isBool ? ((entry.value as bool) ? 'OK' : 'CHECK') : entry.value.toString();
-              return Chip(
-                label: Text(
-                  '${entry.key}: $valStr',
-                  style: const TextStyle(fontSize: 10),
-                ),
-                avatar: Icon(
-                  isOk ? Icons.check_circle : Icons.warning,
-                  size: 14,
-                  color: isOk ? cyanAccentColor : Colors.orange,
-                ),
-                backgroundColor: Colors.white10,
-              );
-            })
-            .toList(),
+        children: state.audit.entries.map((entry) {
+          final isBool = entry.value is bool;
+          final isOk = isBool ? (entry.value as bool) : entry.value != null;
+          final valStr = isBool
+              ? ((entry.value as bool) ? 'OK' : 'CHECK')
+              : entry.value.toString();
+          return Chip(
+            label: Text(
+              '${entry.key}: $valStr',
+              style: const TextStyle(fontSize: 10),
+            ),
+            avatar: Icon(
+              isOk ? Icons.check_circle : Icons.warning,
+              size: 14,
+              color: isOk ? cyanAccentColor : Colors.orange,
+            ),
+            backgroundColor: Colors.white10,
+          );
+        }).toList(),
       ),
     );
   }
@@ -1697,7 +1895,8 @@ class MacroLiquidityPanel extends StatelessWidget {
     final liq = (state.finance['liquidity'] as Map<String, dynamic>?) ?? {};
     final supplyVal = asDouble(liq['moneySupply']);
     final targetVal = asDouble(liq['target']);
-    final rawStatus = (liq['status']?.toString() ?? 'inside-corridor').toLowerCase();
+    final rawStatus =
+        (liq['status']?.toString() ?? 'inside-corridor').toLowerCase();
 
     String statusLabel = 'NOMINAL (INSIDE CORRIDOR)';
     Color statusColor = cyanAccentColor;
@@ -1709,25 +1908,38 @@ class MacroLiquidityPanel extends StatelessWidget {
       statusColor = violetColor;
     }
 
-    final supplyStr = supplyVal != null ? formatCreditsAmount(supplyVal) : '142,500.00 C';
-    final targetStr = targetVal != null ? formatCreditsAmount(targetVal) : '150,000.00 C';
+    final supplyStr =
+        supplyVal != null ? formatCreditsAmount(supplyVal) : '142,500.00 C';
+    final targetStr =
+        targetVal != null ? formatCreditsAmount(targetVal) : '150,000.00 C';
 
     final cpiVal = asDouble(liq['cpi']) ?? 102.4;
     final cpiDelta = cpiVal - 100.0;
-    final cpiDeltaStr = (cpiDelta >= 0 ? '+${cpiDelta.toStringAsFixed(1)}%' : '${cpiDelta.toStringAsFixed(1)}%');
+    final cpiDeltaStr = (cpiDelta >= 0
+        ? '+${cpiDelta.toStringAsFixed(1)}%'
+        : '${cpiDelta.toStringAsFixed(1)}%');
 
     final giniVal = asDouble(liq['gini']) ?? 0.28;
-    final giniLabel = giniVal <= 0.35 ? 'EQUITABLE' : (giniVal <= 0.50 ? 'MODERATE' : 'CONCENTRATED');
+    final giniLabel = giniVal <= 0.35
+        ? 'EQUITABLE'
+        : (giniVal <= 0.50 ? 'MODERATE' : 'CONCENTRATED');
 
     final velocityVal = asDouble(liq['velocity']) ?? 1.84;
 
     return EarthPanel(
       title: 'UC MONETARY STABILITY BOARD / MACRO BASE',
+      showSurface: false,
+      showTitle: false,
+      contentPadding: EdgeInsets.zero,
       infoDescription:
           '• UC Monetary Stability Board Charter (Spec §1.7.2, §1.9):\n  - Oversees world money supply (M0), stabilizes consumer price indices, and guarantees the 100% Reserve Standard across all municipal jurisdictions.\n\n• Core Macroeconomic Indicators:\n  - M0 Circulating Money Supply: Total Credits in circulation across all citizen wallets, corporate treasuries, and municipal accounts. Strictly conserved with zero unbacked fractional printing.\n  - 30-Day Consumer Price Index (CPI-30): Weighted price basket across the 4 core commodities (Food, Energy, Materials, Compute) indexed against base 100.0.\n  - Planetary Wealth Gini Coefficient: Quantifies systemic wealth inequality (0.00 = perfect equality, 1.00 = maximum concentration). Guardrail corridor triggers progressive fiscal levies above 0.45.\n  - Currency Velocity (V): Daily transactional turn rate measuring economic vitality and liquidity circulation.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          _lifecycleTopicHeading(
+              context, 'UC MONETARY STABILITY BOARD / MACRO BASE',
+              description:
+                  '• Review monetary supply, CPI, liquidity corridor, and macroeconomic stability.'),
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
@@ -1770,7 +1982,9 @@ class MacroLiquidityPanel extends StatelessWidget {
                 runSpacing: 10,
                 children: [
                   SizedBox(
-                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    width: isWide
+                        ? (constraints.maxWidth - 36) / 4
+                        : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       'CIRCULATING M0',
                       supplyStr,
@@ -1780,7 +1994,9 @@ class MacroLiquidityPanel extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    width: isWide
+                        ? (constraints.maxWidth - 36) / 4
+                        : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       '30-DAY CPI',
                       cpiVal.toStringAsFixed(1),
@@ -1790,7 +2006,9 @@ class MacroLiquidityPanel extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    width: isWide
+                        ? (constraints.maxWidth - 36) / 4
+                        : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       'PLANETARY GINI (G)',
                       giniVal.toStringAsFixed(2),
@@ -1800,7 +2018,9 @@ class MacroLiquidityPanel extends StatelessWidget {
                     ),
                   ),
                   SizedBox(
-                    width: isWide ? (constraints.maxWidth - 36) / 4 : (constraints.maxWidth - 12) / 2,
+                    width: isWide
+                        ? (constraints.maxWidth - 36) / 4
+                        : (constraints.maxWidth - 12) / 2,
                     child: _metricCard(
                       'MONEY VELOCITY (V)',
                       '${velocityVal.toStringAsFixed(2)}x',
@@ -1823,7 +2043,9 @@ class MacroLiquidityPanel extends StatelessWidget {
     );
   }
 
-  Widget _metricCard(String label, String value, String subtext, Color color, IconData icon) => Container(
+  Widget _metricCard(String label, String value, String subtext, Color color,
+          IconData icon) =>
+      Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
           color: surfaceColor.withValues(alpha: .75),
@@ -1882,13 +2104,21 @@ class HumanServicesPanel extends StatelessWidget {
 
   IconData _getServiceIcon(String key) {
     final lower = key.toLowerCase();
-    if (lower.contains('health') || lower.contains('medical')) return Icons.medical_services_outlined;
-    if (lower.contains('edu') || lower.contains('school')) return Icons.school_outlined;
-    if (lower.contains('transit') || lower.contains('transport')) return Icons.commute_outlined;
-    if (lower.contains('house') || lower.contains('housing')) return Icons.apartment_outlined;
-    if (lower.contains('safe') || lower.contains('security')) return Icons.shield_outlined;
-    if (lower.contains('power') || lower.contains('utility') || lower.contains('energy')) return Icons.bolt_outlined;
-    if (lower.contains('water') || lower.contains('food')) return Icons.water_drop_outlined;
+    if (lower.contains('health') || lower.contains('medical'))
+      return Icons.medical_services_outlined;
+    if (lower.contains('edu') || lower.contains('school'))
+      return Icons.school_outlined;
+    if (lower.contains('transit') || lower.contains('transport'))
+      return Icons.commute_outlined;
+    if (lower.contains('house') || lower.contains('housing'))
+      return Icons.apartment_outlined;
+    if (lower.contains('safe') || lower.contains('security'))
+      return Icons.shield_outlined;
+    if (lower.contains('power') ||
+        lower.contains('utility') ||
+        lower.contains('energy')) return Icons.bolt_outlined;
+    if (lower.contains('water') || lower.contains('food'))
+      return Icons.water_drop_outlined;
     return Icons.public_outlined;
   }
 
@@ -1916,10 +2146,12 @@ class HumanServicesPanel extends StatelessWidget {
 
                 Color statusColor = Colors.tealAccent;
                 if (status == 'basic') statusColor = Colors.orangeAccent;
-                if (status == 'degraded' || status == 'offline') statusColor = Colors.redAccent;
+                if (status == 'degraded' || status == 'offline')
+                  statusColor = Colors.redAccent;
 
                 return Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: surfaceColor.withValues(alpha: .75),
                     borderRadius: BorderRadius.circular(8),
@@ -1930,7 +2162,8 @@ class HumanServicesPanel extends StatelessWidget {
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_getServiceIcon(entry.key), size: 16, color: statusColor),
+                      Icon(_getServiceIcon(entry.key),
+                          size: 16, color: statusColor),
                       const SizedBox(width: 8),
                       Text(
                         serviceName,
@@ -1942,7 +2175,8 @@ class HumanServicesPanel extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
                           color: statusColor.withValues(alpha: .15),
                           borderRadius: BorderRadius.circular(4),

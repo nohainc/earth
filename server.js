@@ -241,6 +241,16 @@ const state = {
   ],
 };
 
+// Local reference-simulator state for the Social Commons. The production
+// Worker persists the same feature in PostgreSQL; these routes keep local UI
+// testing functional when running `npm start`.
+const socialInitiatives = [];
+const socialDirectory = [
+  { id: 'H-0012', display_name: 'Dmitri Rostov', standing: 720, dynasty_name: 'House of Rostov', city_name: 'London' },
+  { id: 'H-0088', display_name: 'Kaelen Thorne', standing: 680, dynasty_name: 'Thorne Syndicate', city_name: 'Geneva' },
+  { id: 'H-0105', display_name: 'Sariyah Chen', standing: 510, dynasty_name: 'Chen Holdings', city_name: 'Singapore' },
+];
+
 const commState = {
   channels: [
     {
@@ -474,47 +484,6 @@ const supplyTicksState = {
   ],
 };
 
-const planetaryRegionsState = [
-  { id: 'REG-PACIFIC-RIM', name: 'Pacific Rim Sprawl', biome_type: 'coastal_megalopolis', description: 'Dense cybernetic coastal zones and high-throughput trade networks.', climate_status: 'temperate', base_solar_index: '1.15', base_geothermal_index: '1.30' },
-  { id: 'REG-SAHARAN-BASIN', name: 'Saharan Solar Basin', biome_type: 'hyper_arid_desert', description: 'Massive photovoltaic and concentrated solar fields across the equator.', climate_status: 'arid', base_solar_index: '2.40', base_geothermal_index: '0.85' },
-  { id: 'REG-NORDIC-CRYO', name: 'Nordic Cryo Hub', biome_type: 'sub_polar_tundra', description: 'Supercooled data clusters and geothermal power reservoirs in Scandinavian fjords.', climate_status: 'frigid', base_solar_index: '0.65', base_geothermal_index: '1.80' },
-  { id: 'REG-ATACAMA-CORRIDOR', name: 'Atacama Mineral Basin', biome_type: 'high_altitude_plateau', description: 'Vast lithium salt flats and rare earth mineral extraction corridors.', climate_status: 'arid', base_solar_index: '1.85', base_geothermal_index: '1.10' },
-  { id: 'REG-EURO-ALPINE', name: 'Euro-Alpine Hydro Grid', biome_type: 'alpine_montane', description: 'Hydroelectric cascade networks and high-precision quantum research labs.', climate_status: 'temperate', base_solar_index: '1.00', base_geothermal_index: '1.05' },
-  { id: 'REG-ORBITAL-RING', name: 'Low Orbit Tether Array', biome_type: 'orbital_exosphere', description: 'Space elevator tether nodes and zero-gravity micro-fabrication platforms.', climate_status: 'vacuum', base_solar_index: '2.80', base_geothermal_index: '0.00' },
-];
-
-const territoryPlotsState = [
-  { id: 'PLOT-PAC-01', region_id: 'REG-PACIFIC-RIM', plot_name: 'Neo-Tokyo High-Bay Terminal', coord_x: 139.69, coord_y: 35.68, terrain_type: 'coastal', primary_resource: 'compute', base_yield_rate: '25.00', development_level: 2, max_level: 5, infrastructure_name: 'Quantum Relay Server Bank', lease_holder_id: 'H-0044', lease_holder_name: 'Amara Vance', daily_lease_fee: '75.00', lease_expires_game_day: 214, accumulated_yield: '125.00', last_harvested_game_day: 179 },
-  { id: 'PLOT-PAC-02', region_id: 'REG-PACIFIC-RIM', plot_name: 'Yokohama Deepwater Dock', coord_x: 139.63, coord_y: 35.44, terrain_type: 'marine', primary_resource: 'energy', base_yield_rate: '30.00', development_level: 1, max_level: 5, infrastructure_name: 'Tidal Surge Generator', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '60.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-PAC-03', region_id: 'REG-PACIFIC-RIM', plot_name: 'Kanto Inland Fabrication Dome', coord_x: 139.50, coord_y: 35.90, terrain_type: 'urban', primary_resource: 'material', base_yield_rate: '20.00', development_level: 1, max_level: 5, infrastructure_name: 'Automated Component Foundry', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '50.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-PAC-04', region_id: 'REG-PACIFIC-RIM', plot_name: 'Fuji Geothermal Vent', coord_x: 138.72, coord_y: 35.36, terrain_type: 'volcanic', primary_resource: 'energy', base_yield_rate: '45.00', development_level: 3, max_level: 5, infrastructure_name: 'Magma Tap Turbine', lease_holder_id: 'H-0012', lease_holder_name: 'Dmitri Rostov', daily_lease_fee: '120.00', lease_expires_game_day: 200, accumulated_yield: '90.00', last_harvested_game_day: 182 },
-
-  { id: 'PLOT-SAH-01', region_id: 'REG-SAHARAN-BASIN', plot_name: 'Ksar Ghilane Mirror Array', coord_x: 9.63, coord_y: 32.98, terrain_type: 'dunes', primary_resource: 'energy', base_yield_rate: '60.00', development_level: 2, max_level: 5, infrastructure_name: 'Concentrated Solar Tower', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '90.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-SAH-02', region_id: 'REG-SAHARAN-BASIN', plot_name: 'Ahaggar High-Altitude Collector', coord_x: 5.52, coord_y: 23.28, terrain_type: 'rocky_desert', primary_resource: 'energy', base_yield_rate: '75.00', development_level: 3, max_level: 5, infrastructure_name: 'Photovoltaic Glassfield', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '140.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-SAH-03', region_id: 'REG-SAHARAN-BASIN', plot_name: 'Oasis Aeroponic Farm Ring', coord_x: 8.12, coord_y: 28.50, terrain_type: 'oasis', primary_resource: 'food', base_yield_rate: '35.00', development_level: 1, max_level: 5, infrastructure_name: 'Deep Aquifer Biome Dome', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '70.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-SAH-04', region_id: 'REG-SAHARAN-BASIN', plot_name: 'Reggane Silicon Quarry', coord_x: 0.17, coord_y: 26.71, terrain_type: 'gravel_desert', primary_resource: 'material', base_yield_rate: '30.00', development_level: 1, max_level: 5, infrastructure_name: 'Silica Harvester Array', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '65.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-
-  { id: 'PLOT-NOR-01', region_id: 'REG-NORDIC-CRYO', plot_name: 'Svalbard Deep Glacial Vault', coord_x: 15.46, coord_y: 78.22, terrain_type: 'permafrost', primary_resource: 'compute', base_yield_rate: '50.00', development_level: 2, max_level: 5, infrastructure_name: 'Sub-Zero Server Vault', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '85.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-NOR-02', region_id: 'REG-NORDIC-CRYO', plot_name: 'Bergen Fjord Hydro Station', coord_x: 5.32, coord_y: 60.39, terrain_type: 'fjord', primary_resource: 'energy', base_yield_rate: '40.00', development_level: 2, max_level: 5, infrastructure_name: 'Cascading Hydro Generator', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '80.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-NOR-03', region_id: 'REG-NORDIC-CRYO', plot_name: 'Kiruna Sub-Crust Magnetite Mine', coord_x: 20.22, coord_y: 67.85, terrain_type: 'mountain', primary_resource: 'material', base_yield_rate: '55.00', development_level: 3, max_level: 5, infrastructure_name: 'Heavy Bore Excavator', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '110.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-NOR-04', region_id: 'REG-NORDIC-CRYO', plot_name: 'Tromsø Magnetic Observatory', coord_x: 18.95, coord_y: 69.64, terrain_type: 'arctic', primary_resource: 'compute', base_yield_rate: '30.00', development_level: 1, max_level: 5, infrastructure_name: 'Aurora Sensor Cluster', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '60.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-
-  { id: 'PLOT-ATA-01', region_id: 'REG-ATACAMA-CORRIDOR', plot_name: 'Salar de Atacama Brine Fields', coord_x: -68.25, coord_y: -23.50, terrain_type: 'salt_flat', primary_resource: 'material', base_yield_rate: '70.00', development_level: 3, max_level: 5, infrastructure_name: 'Lithium Evaporation Pan Array', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '130.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-ATA-02', region_id: 'REG-ATACAMA-CORRIDOR', plot_name: 'Chajnantor High Sensor Array', coord_x: -67.75, coord_y: -23.02, terrain_type: 'high_altitude', primary_resource: 'compute', base_yield_rate: '40.00', development_level: 2, max_level: 5, infrastructure_name: 'Sub-Millimeter Array Terminal', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '90.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-ATA-03', region_id: 'REG-ATACAMA-CORRIDOR', plot_name: 'Antofagasta Coastal Smelter', coord_x: -70.40, coord_y: -23.65, terrain_type: 'coastal', primary_resource: 'material', base_yield_rate: '35.00', development_level: 1, max_level: 5, infrastructure_name: 'Plasma Smelting Complex', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '75.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-ATA-04', region_id: 'REG-ATACAMA-CORRIDOR', plot_name: 'Domeykos Solar Corridor', coord_x: -69.10, coord_y: -24.80, terrain_type: 'rocky_desert', primary_resource: 'energy', base_yield_rate: '50.00', development_level: 2, max_level: 5, infrastructure_name: 'High-Irradiance PV Array', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '95.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-
-  { id: 'PLOT-EUR-01', region_id: 'REG-EURO-ALPINE', plot_name: 'Geneva Quantum Collider Hub', coord_x: 6.14, coord_y: 46.20, terrain_type: 'urban', primary_resource: 'compute', base_yield_rate: '45.00', development_level: 2, max_level: 5, infrastructure_name: 'Sub-Atomic Accelerator Tap', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '100.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-EUR-02', region_id: 'REG-EURO-ALPINE', plot_name: 'Rhone Valley Hydro Cascade', coord_x: 7.36, coord_y: 46.23, terrain_type: 'valley', primary_resource: 'energy', base_yield_rate: '35.00', development_level: 1, max_level: 5, infrastructure_name: 'Alpine Reservoir Dam', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '70.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-EUR-03', region_id: 'REG-EURO-ALPINE', plot_name: 'Bavarian Synthetic Food Silos', coord_x: 11.58, coord_y: 48.13, terrain_type: 'plains', primary_resource: 'food', base_yield_rate: '40.00', development_level: 2, max_level: 5, infrastructure_name: 'Cellular Agriculture Facility', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '80.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-EUR-04', region_id: 'REG-EURO-ALPINE', plot_name: 'Ruhr Automated Metal Foundry', coord_x: 7.01, coord_y: 51.45, terrain_type: 'industrial', primary_resource: 'material', base_yield_rate: '45.00', development_level: 2, max_level: 5, infrastructure_name: 'Recycled Alloy Forge', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '90.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-
-  { id: 'PLOT-ORB-01', region_id: 'REG-ORBITAL-RING', plot_name: 'Quito Space Elevator Anchor', coord_x: -78.46, coord_y: -0.18, terrain_type: 'equatorial_peak', primary_resource: 'energy', base_yield_rate: '80.00', development_level: 3, max_level: 5, infrastructure_name: 'Carbon Nanotube Power Link', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '180.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-ORB-02', region_id: 'REG-ORBITAL-RING', plot_name: 'Kilimanjaro Sky Hook Station', coord_x: 37.35, coord_y: -3.06, terrain_type: 'equatorial_peak', primary_resource: 'material', base_yield_rate: '65.00', development_level: 2, max_level: 5, infrastructure_name: 'Orbital Freight Launcher', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '150.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-ORB-03', region_id: 'REG-ORBITAL-RING', plot_name: 'Zenith Zero-G Fabrication Ring', coord_x: 0.00, coord_y: 0.00, terrain_type: 'orbital', primary_resource: 'material', base_yield_rate: '90.00', development_level: 4, max_level: 5, infrastructure_name: 'Microgravity Crucible', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '220.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-  { id: 'PLOT-ORB-04', region_id: 'REG-ORBITAL-RING', plot_name: 'Solar Lagrange Concentrator', coord_x: 0.00, coord_y: 0.00, terrain_type: 'orbital', primary_resource: 'energy', base_yield_rate: '100.00', development_level: 4, max_level: 5, infrastructure_name: 'Orbital Microwave Emitter', lease_holder_id: null, lease_holder_name: null, daily_lease_fee: '250.00', lease_expires_game_day: null, accumulated_yield: '0.00', last_harvested_game_day: null },
-];
-
 const dynastyState = {
   dynasty: {
     id: 'DYN-H0044',
@@ -606,7 +575,7 @@ const dynastyState = {
     { key: 'diplomatic_dynasty', name: 'Diplomatic Dynasty', category: 'Governance', cost: 100, description: '+15% Senate & City Council Voting Influence' },
     { key: 'financial_magnate', name: 'Financial Magnate', category: 'Finance', cost: 120, description: '+8% Corporate Dividend Yields & -20% Loan Margins' },
     { key: 'technological_pioneers', name: 'Technological Pioneers', category: 'Research', cost: 150, description: '+15% Compute Research Efficiency & +25% Patent Royalties' },
-    { key: 'planetary_agronomists', name: 'Planetary Agronomists', category: 'Resources', cost: 120, description: '+20% Regional Bio-Harvest Rate & Concession Yields' },
+    { key: 'planetary_agronomists', name: 'Planetary Agronomists', category: 'Resources', cost: 120, description: '+20% Food Production Efficiency' },
   ],
 };
 
@@ -788,6 +757,44 @@ function settleMarket() {
 }
 
 function command(path, body, req = null) {
+  // Social Commons local compatibility routes.
+  if (path.startsWith('/api/social/')) {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const viewerId = session.humanId;
+    const requestUrl = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    if (path === '/api/social/directory' && body.method === 'GET') {
+      const query = (requestUrl?.searchParams.get('q') || '').trim().toLowerCase();
+      const humans = socialDirectory.filter((person) => !query || [person.display_name, person.dynasty_name, person.city_name].some((value) => value.toLowerCase().includes(query)));
+      return { ok: true, humans };
+    }
+    if (path === '/api/social/initiatives' && body.method === 'GET') {
+      return { ok: true, initiatives: socialInitiatives.filter((item) => item.creator_id === viewerId || item.target_id === viewerId).map((item) => ({ ...item, member_status: item.target_id === viewerId ? item.member_status : 'accepted' })) };
+    }
+    if (path === '/api/social/initiatives' && body.method === 'POST') {
+      if (!body.targetId || !body.kind || !String(body.title || '').trim() || !String(body.body || '').trim()) throw new ApiError('targetId, kind, title, and body are required');
+      const initiative = { id: `SOC-${randomUUID()}`, creator_id: viewerId, target_id: body.targetId, kind: body.kind, title: String(body.title).trim(), body: String(body.body).trim(), terms: body.terms || {}, escrow_amount: Number(body.terms?.creditAmount || 0), deadline_game_day: Number(body.terms?.deadlineGameDay || state.clock.day + 7), progress: 0, status: 'proposed', member_status: 'accepted' };
+      socialInitiatives.unshift(initiative);
+      return { ok: true, initiative };
+    }
+    const action = path.match(/^\/api\/social\/initiatives\/([^/]+)\/(accept|decline|contribute)$/);
+    if (action && body.method === 'POST') {
+      const initiative = socialInitiatives.find((item) => item.id === action[1]);
+      if (!initiative) throw new ApiError('Social initiative not found', 404, 'NOT_FOUND');
+      if (action[2] === 'contribute') {
+        const contribution = Number(body.contribution || 0);
+        if (!Number.isInteger(contribution) || contribution < 1 || contribution > 100) throw new ApiError('Contribution must be an integer from 1 to 100');
+        initiative.progress = Math.min(100, initiative.progress + contribution);
+        initiative.status = initiative.progress >= 100 ? 'completed' : 'active';
+      } else {
+        initiative.member_status = action[2] === 'accept' ? 'accepted' : 'declined';
+        initiative.status = action[2] === 'accept' ? 'active' : 'declined';
+      }
+      return { ok: true, initiative };
+    }
+    if (path === '/api/social/relationships' && body.method === 'GET') return { ok: true, relationships: [] };
+    if (path === '/api/social/timeline' && body.method === 'GET') return { ok: true, timeline: [] };
+  }
   // Public inspection routes
   if (path === '/api/world' && body.method === 'GET') return snapshot();
   if (path === '/api/storage' && body.method === 'GET') return { configured: Boolean(database), mode: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
@@ -1387,81 +1394,6 @@ function command(path, body, req = null) {
     return { ok: true, ticks, persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
 
-  // Planetary Map & Territory Concessions
-  if (path === '/api/map/regions' && body.method === 'GET') {
-    return {
-      ok: true,
-      regions: planetaryRegionsState,
-      plots: territoryPlotsState,
-      persistence: database ? 'postgres-reference' : 'reference-simulator',
-    };
-  }
-
-  const plotLeaseMatch = path.match(/^\/api\/map\/plots\/([^/]+)\/lease$/);
-  if (plotLeaseMatch && body.method === 'POST') {
-    const player = human('amara', req);
-    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const plotId = plotLeaseMatch[1];
-    const plot = territoryPlotsState.find((p) => p.id === plotId);
-    if (!plot) throw new ApiError('Territory plot not found', 404, 'NOT_FOUND');
-    const duration = Math.max(7, Math.min(180, Number(body.durationDays || 30)));
-    const totalCost = Number(plot.daily_lease_fee) * duration;
-    if (player.credits < totalCost) throw new ApiError('Insufficient credits for concession lease', 409, 'CONFLICT');
-    player.credits -= totalCost;
-    plot.lease_holder_id = player.id;
-    plot.lease_holder_name = player.name;
-    plot.lease_expires_game_day = state.clock.day + duration;
-    publish('plot.leased', { plotId, humanId: player.id, duration, totalCost });
-    const result = { ok: true, plot, totalPaid: totalCost.toFixed(2), expiresGameDay: plot.lease_expires_game_day, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
-  }
-
-  const plotUpgradeMatch = path.match(/^\/api\/map\/plots\/([^/]+)\/upgrade$/);
-  if (plotUpgradeMatch && body.method === 'POST') {
-    const player = human('amara', req);
-    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const plotId = plotUpgradeMatch[1];
-    const plot = territoryPlotsState.find((p) => p.id === plotId);
-    if (!plot) throw new ApiError('Territory plot not found', 404, 'NOT_FOUND');
-    if (plot.lease_holder_id !== player.id) throw new ApiError('Only concession leaseholder may upgrade', 403, 'FORBIDDEN');
-    if (plot.development_level >= plot.max_level) throw new ApiError('Plot already at maximum level', 409, 'CONFLICT');
-    const nextLvl = plot.development_level + 1;
-    const costCredits = nextLvl * 500;
-    const costMat = nextLvl * 25;
-    if (player.credits < costCredits) throw new ApiError('Insufficient credits for upgrade', 409, 'CONFLICT');
-    if ((state.resources.material || 0) < costMat) throw new ApiError('Insufficient material for upgrade', 409, 'CONFLICT');
-    player.credits -= costCredits;
-    state.resources.material -= costMat;
-    plot.development_level = nextLvl;
-    plot.base_yield_rate = (Number(plot.base_yield_rate) * 1.35).toFixed(2);
-    plot.infrastructure_name = `${plot.infrastructure_name.replace(/\s*\[Mark\s*\d+\]/i, '')} [Mark ${nextLvl}]`;
-    publish('plot.upgraded', { plotId, newLevel: nextLvl });
-    const result = { ok: true, plot, newLevel: nextLvl, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
-  }
-
-  const plotHarvestMatch = path.match(/^\/api\/map\/plots\/([^/]+)\/harvest$/);
-  if (plotHarvestMatch && body.method === 'POST') {
-    const player = human('amara', req);
-    if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const plotId = plotHarvestMatch[1];
-    const plot = territoryPlotsState.find((p) => p.id === plotId);
-    if (!plot) throw new ApiError('Territory plot not found', 404, 'NOT_FOUND');
-    if (plot.lease_holder_id !== player.id) throw new ApiError('Only concession leaseholder may harvest', 403, 'FORBIDDEN');
-    const harvestAmount = Number(plot.accumulated_yield || 0);
-    if (harvestAmount <= 0) throw new ApiError('No accumulated resources to harvest', 409, 'CONFLICT');
-    const resource = plot.primary_resource || 'energy';
-    state.resources[resource] = (state.resources[resource] || 0) + harvestAmount;
-    plot.accumulated_yield = '0.00';
-    plot.last_harvested_game_day = state.clock.day;
-    publish('plot.harvested', { plotId, resource, harvestAmount });
-    const result = { ok: true, plot, harvestedAmount: harvestAmount, resourceType: resource, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
-  }
-
   // Dynastic Lineage & Genealogical Archive
   if (path === '/api/dynasty' && body.method === 'GET') {
     return {
@@ -1739,6 +1671,7 @@ function command(path, body, req = null) {
         { commodity: 'ENERGY', currentPrice: 108.5, previousPrice: 102.0, deltaPct: 6.37, trend: 'up', volume24h: 14200 },
         { commodity: 'MATERIAL', currentPrice: 42.1, previousPrice: 44.8, deltaPct: -6.03, trend: 'down', volume24h: 9800 },
         { commodity: 'COMPUTE', currentPrice: 285.0, previousPrice: 270.0, deltaPct: 5.56, trend: 'up', volume24h: 6300 },
+        { commodity: 'COMPONENTS', currentPrice: 86.0, previousPrice: 83.2, deltaPct: 3.37, trend: 'up', volume24h: 5400 },
         { commodity: 'FOOD', currentPrice: 19.8, previousPrice: 19.5, deltaPct: 1.54, trend: 'up', volume24h: 18900 },
       ],
       businessSummary: {
@@ -2770,20 +2703,6 @@ function snapshot() {
         rewardDescription: 'Title: "Grand Tribune" · Veto Injunction Power on City Budgets · +350 Standing',
         targetSection: 'civic',
         iconName: 'how_to_vote',
-      },
-      {
-        id: 'obj-regional-resource-control',
-        category: 'territory',
-        title: 'Control a Regional Resource',
-        description: 'Secure and operate at least 5 regional concession plots to control the supply chain for planetary manufacturing.',
-        currentValue: 2,
-        targetValue: 5,
-        progressPercentage: 40,
-        metricLabel: '2 / 5 Concession Plots Leased',
-        status: 'in_progress',
-        rewardDescription: 'Title: "Planetary Baron" · 50% Reduction in Plot Upgrade Fees · Commodity Monopoly Dividend',
-        targetSection: 'market',
-        iconName: 'landscape',
       },
       {
         id: 'obj-dynasty-traits',

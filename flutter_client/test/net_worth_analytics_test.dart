@@ -133,6 +133,6 @@ void main() {
     expect(find.text('LIQUID CREDITS'), findsOneWidget);
     expect(find.text('COMMODITIES'), findsOneWidget);
     expect(find.text('CORPORATE EQUITY'), findsOneWidget);
-    expect(find.text('CONCESSIONS'), findsOneWidget);
+    expect(find.text('OTHER ASSETS'), findsOneWidget);
   });
 }

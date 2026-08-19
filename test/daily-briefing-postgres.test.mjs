@@ -53,7 +53,7 @@ test('getDailyBriefing calculates net wealth delta, cashflow, and recommendation
 
   assert.equal(res.cashflow.totalIncome, 14250);
   assert.equal(res.cashflow.netProfit, 9430);
-  assert.equal(res.marketMovements.length, 4);
+  assert.equal(res.marketMovements.length, 5);
   assert.equal(res.businessSummary.activeBusinesses, 2);
   assert.equal(res.civicSummary.cityResidency, 'New Geneva');
   assert.ok(res.recommendedDirectives.length >= 3);

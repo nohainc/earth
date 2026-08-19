@@ -99,7 +99,11 @@ void showEarthInfoDialog(
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: const Text('CLOSE', style: TextStyle(color: cyanAccentColor, fontWeight: FontWeight.w700, fontSize: 11)),
+          child: const Text('CLOSE',
+              style: TextStyle(
+                  color: cyanAccentColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 11)),
         ),
       ],
     ),
@@ -111,78 +115,103 @@ class EarthPanel extends StatelessWidget {
   final String title;
   final Widget child;
   final double? width;
+  final double? height;
   final VoidCallback? onInfoTap;
   final String? infoTooltip;
   final String? infoDescription;
+  final bool showSurface;
+  final bool showTitle;
+  final EdgeInsetsGeometry contentPadding;
+  final bool helpAfterTitle;
+  final Color? titleColor;
 
   const EarthPanel({
     super.key,
     required this.title,
     required this.child,
     this.width,
+    this.height,
     this.onInfoTap,
     this.infoTooltip,
     this.infoDescription,
+    this.showSurface = true,
+    this.showTitle = true,
+    this.contentPadding = const EdgeInsets.all(20),
+    this.helpAfterTitle = false,
+    this.titleColor,
   });
 
   @override
   Widget build(BuildContext context) {
     final muted = Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurfaceVariant;
-    final hasInfo = onInfoTap != null || infoTooltip != null || infoDescription != null;
+    final hasInfo =
+        onInfoTap != null || infoTooltip != null || infoDescription != null;
 
+    final content = Padding(
+      padding: contentPadding,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (showTitle) ...[
+            Row(
+              mainAxisAlignment: helpAfterTitle
+                  ? MainAxisAlignment.start
+                  : MainAxisAlignment.spaceBetween,
+              children: [
+                Flexible(
+                  child: Text(title,
+                      style: TextStyle(
+                        color: titleColor ?? muted,
+                        fontSize: 10,
+                        letterSpacing: 1.1,
+                        fontWeight: FontWeight.w700,
+                      ),
+                      overflow: TextOverflow.ellipsis),
+                ),
+                if (hasInfo) ...[
+                  const SizedBox(width: 5),
+                  IconButton(
+                    icon: Icon(
+                      Icons.info_outline,
+                      size: 14,
+                      color: mutedColor.withValues(alpha: .8),
+                    ),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: onInfoTap ??
+                        (infoDescription != null
+                            ? () => showEarthInfoDialog(context,
+                                title: title, description: infoDescription!)
+                            : null),
+                  ),
+                ],
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
+          child,
+        ],
+      ),
+    );
     return Semantics(
       container: true,
       label: title,
       child: SizedBox(
         width: width ?? double.infinity,
-        child: Card(
-          color: surfaceColor.withValues(alpha: .72),
-          surfaceTintColor: Colors.transparent,
-          elevation: 0,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(14),
-            side: const BorderSide(color: Colors.white12),
-          ),
-          child: Padding(
-            padding: const EdgeInsets.all(20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Expanded(
-                      child: Text(
-                        title,
-                        style: TextStyle(
-                          color: muted,
-                          fontSize: 10,
-                          letterSpacing: 1.1,
-                          fontWeight: FontWeight.w700,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    if (hasInfo)
-                      IconButton(
-                        icon: Icon(
-                          Icons.info_outline,
-                          size: 14,
-                          color: mutedColor.withValues(alpha: .8),
-                        ),
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                        onPressed: onInfoTap ?? (infoDescription != null ? () => showEarthInfoDialog(context, title: title, description: infoDescription!) : null),
-                      ),
-                  ],
+        height: height,
+        child: showSurface
+            ? Card(
+                color: surfaceColor.withValues(alpha: .72),
+                surfaceTintColor: Colors.transparent,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  side: const BorderSide(color: Colors.white12),
                 ),
-                const SizedBox(height: 14),
-                child,
-              ],
-            ),
-          ),
-        ),
+                child: content,
+              )
+            : content,
       ),
     );
   }
@@ -272,8 +301,10 @@ class EarthMetric extends StatelessWidget {
               const SizedBox(height: 12),
               Text(
                 value,
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.w700, letterSpacing: -.5),
+                style: Theme.of(context)
+                    .textTheme
+                    .titleLarge
+                    ?.copyWith(fontWeight: FontWeight.w700, letterSpacing: -.5),
               ),
             ],
           ),

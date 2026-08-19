@@ -60,7 +60,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         schedulerFresh: schedulerAgeSeconds <= 900,
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
-        migrationManifest: Number(migrations.rows[0]?.version ?? 0) === 17,
+        migrationManifest: Number(migrations.rows[0]?.version ?? 0) >= 33,
       },
       readiness: {
         schedulerAgeSeconds: Number.isFinite(schedulerAgeSeconds) ? schedulerAgeSeconds : null,

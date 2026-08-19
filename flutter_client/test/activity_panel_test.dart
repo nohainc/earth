@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/features/activity/activity_panel.dart';
 
 void main() {
-  testWidgets('ActivityPanel renders notifications, unread count, mark read, and live status',
+  testWidgets('ActivityPanel renders notifications, unread count, and actions',
       (tester) async {
     final notifications = [
       {
@@ -59,7 +59,7 @@ void main() {
     );
 
     expect(find.text('ACTIVITY & NOTIFICATIONS CENTER'), findsOneWidget);
-    expect(find.text('LIVE STREAM ACTIVE'), findsOneWidget);
+    expect(find.text('LIVE STREAM ACTIVE'), findsNothing);
     expect(find.text('ALERTS (2)'), findsOneWidget);
     expect(find.text('Tax Assessment Cleared'), findsOneWidget);
     expect(find.text('Contract Proposed'), findsOneWidget);

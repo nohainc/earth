@@ -71,7 +71,7 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
       configured: true,
       reachable: true,
       serverVersion: probe?.serverVersion,
-      schemaReady: featureTableCount === 14,
+      schemaReady: featureTableCount >= 17,
       featureTableCount,
       dataReady: probe?.dataReady ?? false,
     };

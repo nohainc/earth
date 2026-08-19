@@ -1,26 +1,22 @@
 import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:web_socket_channel/web_socket_channel.dart';
+import 'package:http/http.dart' as http;
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
-import '../communications/comm_link_dialog.dart';
-import '../map/planetary_map_dialog.dart';
-import '../dynasty/dynasty_tree_dialog.dart';
-import '../market/derivatives_dialog.dart';
-import '../finance/net_worth_analytics_dialog.dart';
 import '../onboarding/onboarding_guidance_bar.dart';
-import 'daily_briefing_dialog.dart';
 import '../../core/onboarding_controller.dart';
 import '../../core/navigation_deep_link.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
 import '../../core/models/live_connection_status.dart';
+import '../../core/auth_storage.dart';
+import '../../earth_http_client.dart';
 
 Uri? liveEventsUri({required String configuredBase, required Uri pageUri}) {
   final base = configuredBase.isNotEmpty
@@ -71,6 +67,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> pantheon = const {};
   Map<String, dynamic> personalFinanceData = const {};
   List<dynamic> contractsList = const [];
+  List<dynamic> socialInitiatives = const [];
   int unreadNotifications = 0;
   int unreadCommMessages = 0;
   String selectedSection = 'command';
@@ -78,10 +75,15 @@ class _CommandCenterState extends State<CommandCenter> {
   Timer? eventTimer;
   Timer? liveReconnectTimer;
   Timer? pollingFallbackTimer;
-  WebSocketChannel? liveChannel;
+  http.Client? liveClient;
+  StreamSubscription<String>? liveSubscription;
+  bool _liveConnecting = false;
   int _wsFailCount = 0;
   final Set<String> _seenEventKeys = <String>{};
   int _requestGeneration = 0;
+  final Set<String> _loadingPanels = <String>{};
+  final Map<String, Future<dynamic>> _historyRequests =
+      <String, Future<dynamic>>{};
 
   @override
   void initState() {
@@ -141,33 +143,82 @@ class _CommandCenterState extends State<CommandCenter> {
     return true;
   }
 
-  void _connectLiveChannel() {
+  Future<void> _connectLiveChannel() async {
+    if (_liveConnecting || liveClient != null) return;
     final uri = liveEventsUri(configuredBase: api.baseUrl, pageUri: Uri.base);
     if (uri == null) {
       _startPollingFallback();
       return;
     }
+    _liveConnecting = true;
+    final client = createEarthHttpClient();
+    liveClient = client;
     try {
-      liveChannel = WebSocketChannel.connect(uri);
-      _refreshEvents();
-      liveChannel!.stream.listen((message) {
-        _wsFailCount = 0;
-        _stopPollingFallback();
-        if (mounted && connectionStatus != LiveConnectionStatus.live) {
-          setState(() => connectionStatus = LiveConnectionStatus.live);
+      final token = await AuthStorage.getToken();
+      final sseUri =
+          uri.replace(scheme: uri.scheme == 'wss' ? 'https' : 'http');
+      final request = http.Request('GET', sseUri)
+        ..headers['accept'] = 'text/event-stream'
+        ..headers['cache-control'] = 'no-cache';
+      if (token != null && token.isNotEmpty) {
+        request.headers['authorization'] = 'Bearer $token';
+      }
+      final response = await client.send(request);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw StateError('SSE connection failed (${response.statusCode})');
+      }
+      _wsFailCount = 0;
+      _stopPollingFallback();
+      if (mounted && connectionStatus != LiveConnectionStatus.live) {
+        setState(() => connectionStatus = LiveConnectionStatus.live);
+      }
+      liveSubscription = response.stream
+          .transform(utf8.decoder)
+          .transform(const LineSplitter())
+          .listen((line) {
+        if (!line.startsWith('data:')) return;
+        final payload = line.substring(5).trim();
+        if (payload.isEmpty) return;
+        try {
+          handleLiveMessage(jsonDecode(payload));
+        } catch (_) {
+          // Ignore malformed SSE frames and keep the stream alive.
         }
-        handleLiveMessage(message);
       }, onError: (_) {
-        liveChannel = null;
+        _closeLiveConnection();
         _onWebSocketDisconnected();
       }, onDone: () {
-        liveChannel = null;
+        if (liveClient == null) return;
+        _closeLiveConnection();
         _onWebSocketDisconnected();
       });
     } catch (_) {
-      liveChannel = null;
+      _closeLiveConnection();
       _onWebSocketDisconnected();
+    } finally {
+      _liveConnecting = false;
     }
+  }
+
+  void _closeLiveConnection() {
+    liveSubscription?.cancel();
+    liveSubscription = null;
+    liveClient?.close();
+    liveClient = null;
+  }
+
+  void _manualReconnect() {
+    liveReconnectTimer?.cancel();
+    liveReconnectTimer = null;
+    pollingFallbackTimer?.cancel();
+    pollingFallbackTimer = null;
+    _closeLiveConnection();
+    _wsFailCount = 0;
+    if (mounted) {
+      setState(() => connectionStatus = LiveConnectionStatus.reconnecting);
+    }
+    unawaited(_connectLiveChannel());
+    unawaited(_refreshEvents());
   }
 
   void _onWebSocketDisconnected() {
@@ -217,30 +268,36 @@ class _CommandCenterState extends State<CommandCenter> {
     if (!mounted || liveReconnectTimer?.isActive == true) return;
     liveReconnectTimer = Timer(delay, () {
       liveReconnectTimer = null;
-      if (mounted && liveChannel == null) _connectLiveChannel();
+      if (mounted && liveClient == null && !_liveConnecting) {
+        unawaited(_connectLiveChannel());
+      }
     });
   }
 
   Future<void> _refreshEvents() async {
     try {
-      final latest = await api.events();
-      final notificationData = await api.notifications();
-      final ownership = await api.ownershipEvents();
-      final memberships = await api.membershipEvents();
-      final authority = await api.authorityEvents();
-      Map<String, dynamic> finData = personalFinanceData;
-      List<dynamic> cList = contractsList;
-      int commUnread = unreadCommMessages;
-      try {
-        finData = await api.personalFinance();
-      } catch (_) {}
-      try {
-        cList = await api.contracts();
-      } catch (_) {}
-      try {
-        final commMetricsData = await api.commMetrics();
-        commUnread = asInt(commMetricsData['unreadDispatches']) ?? 0;
-      } catch (_) {}
+      final results = await Future.wait<dynamic>([
+        api.events(),
+        api.notifications(),
+        api.ownershipEvents(),
+        api.membershipEvents(),
+        api.authorityEvents(),
+        api.personalFinance().catchError((_) => personalFinanceData),
+        api.contracts().catchError((_) => contractsList),
+        api.commMetrics().catchError((_) => <String, dynamic>{}),
+        api.socialInitiatives().catchError((_) => socialInitiatives),
+      ]);
+      final latest = results[0] as List<dynamic>;
+      final notificationData = results[1] as Map<String, dynamic>;
+      final ownership = results[2] as List<dynamic>;
+      final memberships = results[3] as List<dynamic>;
+      final authority = results[4] as List<dynamic>;
+      final finData = results[5] as Map<String, dynamic>;
+      final cList = results[6] as List<dynamic>;
+      final commUnread =
+          asInt((results[7] as Map<String, dynamic>)['unreadDispatches']) ??
+              unreadCommMessages;
+      final social = results[8] as List<dynamic>;
       if (mounted) {
         setState(() {
           events = latest;
@@ -255,8 +312,9 @@ class _CommandCenterState extends State<CommandCenter> {
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;
+          socialInitiatives = social;
           if (connectionStatus == LiveConnectionStatus.offline) {
-            connectionStatus = liveChannel != null
+            connectionStatus = liveClient != null
                 ? LiveConnectionStatus.live
                 : LiveConnectionStatus.polling;
           }
@@ -278,51 +336,19 @@ class _CommandCenterState extends State<CommandCenter> {
     });
     try {
       final value = await action();
-      Map<String, dynamic> ownership = const {};
-      Map<String, dynamic> financials = const {};
-      Map<String, dynamic> profile = const {};
-      final history = <String, dynamic>{};
-      Map<String, dynamic> achievementData = const {};
-      final businessId = value.business['id'] as String?;
-      if (businessId != null && businessId.isNotEmpty) {
-        try {
-          profile = await api.businessProfile(businessId);
-        } catch (_) {/* Keep the canonical world snapshot usable. */}
-        try {
-          ownership = await api.businessOwnership(businessId);
-        } catch (_) {/* Keep the canonical world snapshot usable. */}
-        try {
-          financials = await api.businessFinancials(businessId);
-        } catch (_) {/* Keep the canonical world snapshot usable. */}
-      }
-      await Future.wait(value.market.keys.map((product) async {
-        try {
-          history[product] = await api.marketPriceHistory(product);
-        } catch (_) {
-          // Analytics are optional; live market data remains authoritative.
-        }
-      }));
-      try {
-        achievementData = await api.pantheon();
-      } catch (_) {
-        // Historical achievements are optional and must not block the world snapshot.
-      }
       if (mounted && requestGeneration == _requestGeneration) {
         setState(() {
           state = value;
-          businessProfile = profile;
-          businessOwnership = ownership;
-          businessFinancials = financials;
-          marketHistory = history;
-          pantheon = achievementData;
           if (connectionStatus == LiveConnectionStatus.offline) {
-            connectionStatus = liveChannel != null
+            connectionStatus = liveClient != null
                 ? LiveConnectionStatus.live
                 : LiveConnectionStatus.polling;
           }
         });
       }
-      await _refreshEvents();
+      // The world snapshot is the critical path. Everything else is panel data.
+      unawaited(_loadSecondaryPanels(value));
+      unawaited(_refreshEvents());
     } catch (exception) {
       if (mounted && requestGeneration == _requestGeneration) {
         setState(() {
@@ -337,12 +363,57 @@ class _CommandCenterState extends State<CommandCenter> {
     }
   }
 
+  Future<void> _loadSecondaryPanels(EarthState value) async {
+    final businessId = value.business['id'] as String?;
+    if (businessId != null && businessId.isNotEmpty) {
+      _loadPanel('business', () async {
+        final results = await Future.wait<dynamic>([
+          api.businessProfile(businessId),
+          api.businessOwnership(businessId),
+          api.businessFinancials(businessId),
+        ]);
+        if (mounted) {
+          setState(() {
+            businessProfile = results[0];
+            businessOwnership = results[1];
+            businessFinancials = results[2];
+          });
+        }
+      });
+    }
+    for (final product in value.market.keys) {
+      if (marketHistory.containsKey(product)) continue;
+      final request = _historyRequests.putIfAbsent(
+          product, () => api.marketPriceHistory(product));
+      request.then((history) {
+        if (mounted) setState(() => marketHistory[product] = history);
+      }).catchError((_) => null);
+    }
+    if (selectedSection == 'life' || selectedSection == 'command') {
+      _loadPanel('pantheon', () async {
+        final data = await api.pantheon();
+        if (mounted) setState(() => pantheon = data);
+      });
+    }
+  }
+
+  Future<void> _loadPanel(String panel, Future<void> Function() action) async {
+    if (_loadingPanels.contains(panel)) return;
+    setState(() => _loadingPanels.add(panel));
+    try {
+      await action();
+    } catch (_) {
+    } finally {
+      if (mounted) setState(() => _loadingPanels.remove(panel));
+    }
+  }
+
   @override
   void dispose() {
     eventTimer?.cancel();
     liveReconnectTimer?.cancel();
     pollingFallbackTimer?.cancel();
-    liveChannel?.sink.close();
+    _closeLiveConnection();
     super.dispose();
   }
 
@@ -366,20 +437,16 @@ class _CommandCenterState extends State<CommandCenter> {
       OnboardingController.instance.completeStep('receive_consequence');
     }
 
-    if (section == 'briefing') {
-      showDailyBriefingDialog(
-        context,
-        api: api,
-        onNavigate: (sec) => _navigateToSection(context, sec, closeDrawer: false),
-      );
-      return;
-    }
-
     if (updateUrl) {
       NavigationDeepLink.updateSection(section);
     }
     if (mounted) {
       setState(() => selectedSection = section);
+      final current = state;
+      if (current != null &&
+          (section == 'business' || section == 'market' || section == 'life')) {
+        unawaited(_loadSecondaryPanels(current));
+      }
     }
   }
 
@@ -442,11 +509,12 @@ class _CommandCenterState extends State<CommandCenter> {
                         state: current,
                         unreadNotifications: unreadNotifications,
                         unreadCommMessages: unreadCommMessages,
-                        isLiveConnected: liveChannel != null,
+                        isLiveConnected: liveClient != null,
                         isReconnecting: liveReconnectTimer?.isActive == true,
                         connectionStatus: connectionStatus,
                         showDrawerButton: compact,
-                        onOpenDrawer: () => _scaffoldKey.currentState?.openDrawer(),
+                        onOpenDrawer: () =>
+                            _scaffoldKey.currentState?.openDrawer(),
                         onNavigate: (section) => _navigateToSection(
                           context,
                           section,
@@ -458,10 +526,10 @@ class _CommandCenterState extends State<CommandCenter> {
                         },
                         onSecurity: () =>
                             showSecurityDialog(context, api, widget.onLogout),
-                        onCommLink: () => showCommLinkDialog(context,
-                            api: api, state: current),
-                        onMapTap: () => _navigateToSection(context, 'map',
+                        onCommLink: () => _navigateToSection(
+                            context, 'messages',
                             closeDrawer: false),
+                        onReconnect: _manualReconnect,
                       ),
                       Expanded(
                         child: Row(
@@ -477,8 +545,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                   await api.logout();
                                   if (mounted) widget.onLogout();
                                 },
-                                onSecurity: () =>
-                                    showSecurityDialog(context, api, widget.onLogout),
+                                onSecurity: () => showSecurityDialog(
+                                    context, api, widget.onLogout),
                                 onNavigate: (section) => _navigateToSection(
                                   context,
                                   section,
@@ -496,119 +564,41 @@ class _CommandCenterState extends State<CommandCenter> {
                                 children: [
                                   if (error != null)
                                     Padding(
-                                      padding: const EdgeInsets.only(bottom: 16),
+                                      padding:
+                                          const EdgeInsets.only(bottom: 16),
                                       child: MaterialBanner(
                                         content: Text(error!),
-                                        leading: const Icon(Icons.warning_amber),
+                                        leading:
+                                            const Icon(Icons.warning_amber),
                                         actions: [
                                           TextButton(
-                                            onPressed:
-                                                busy ? null : () => _run(api.world),
+                                            onPressed: busy
+                                                ? null
+                                                : () => _run(api.world),
                                             child: const Text('RETRY'),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  if (connectionStatus == LiveConnectionStatus.polling)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFFD600).withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: const Color(0xFFFFD600).withValues(alpha: 0.3)),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.timer_outlined, size: 16, color: Color(0xFFFFD600)),
-                                          const SizedBox(width: 10),
-                                          const Expanded(
-                                            child: Text(
-                                              'WebSocket telemetry unavailable — polling mode active (updates every 8s). Simulation data may be slightly delayed.',
-                                              style: TextStyle(
-                                                color: Color(0xFFFFD600),
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          TextButton(
-                                            onPressed: () {
-                                              _connectLiveChannel();
-                                              _run(api.world);
-                                            },
-                                            style: TextButton.styleFrom(
-                                              foregroundColor: const Color(0xFFFFD600),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              visualDensity: VisualDensity.compact,
-                                            ),
-                                            child: const Text(
-                                              'RETRY LIVE STREAM',
-                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                                            ),
-                                          ),
-                                        ],
+                                  if (selectedSection == 'command')
+                                    OnboardingGuidanceBar(
+                                      onNavigate: (section) =>
+                                          _navigateToSection(
+                                        context,
+                                        section,
+                                        closeDrawer: false,
                                       ),
                                     ),
-                                  if (connectionStatus == LiveConnectionStatus.offline)
-                                    Container(
-                                      margin: const EdgeInsets.only(bottom: 12),
-                                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFFFF5252).withValues(alpha: 0.08),
-                                        borderRadius: BorderRadius.circular(8),
-                                        border: Border.all(color: const Color(0xFFFF5252).withValues(alpha: 0.3)),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          const Icon(Icons.cloud_off_outlined, size: 16, color: Color(0xFFFF5252)),
-                                          const SizedBox(width: 10),
-                                          const Expanded(
-                                            child: Text(
-                                              'Network offline — displaying cached simulation state. Reconnecting automatically...',
-                                              style: TextStyle(
-                                                color: Color(0xFFFF5252),
-                                                fontSize: 11,
-                                                fontWeight: FontWeight.w600,
-                                              ),
-                                            ),
-                                          ),
-                                          const SizedBox(width: 8),
-                                          TextButton(
-                                            onPressed: () {
-                                              _connectLiveChannel();
-                                              _run(api.world);
-                                            },
-                                            style: TextButton.styleFrom(
-                                              foregroundColor: const Color(0xFFFF5252),
-                                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                              visualDensity: VisualDensity.compact,
-                                            ),
-                                            child: const Text(
-                                              'RECONNECT NOW',
-                                              style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                   OnboardingGuidanceBar(
-                                     onNavigate: (section) => _navigateToSection(
-                                       context,
-                                       section,
-                                       closeDrawer: false,
-                                     ),
-                                   ),
-                                   const SizedBox(height: 8),
-                                   ConstrainedBox(
+                                  const SizedBox(height: 8),
+                                  ConstrainedBox(
                                     constraints: BoxConstraints(
                                       minWidth: compact ? 320 : 860,
                                     ),
                                     child: Dashboard(
                                       state: current,
                                       selectedSection: selectedSection,
-                                      onNavigate: (section) => _navigateToSection(
+                                      onNavigate: (section) =>
+                                          _navigateToSection(
                                         context,
                                         section,
                                         closeDrawer: false,
@@ -627,7 +617,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                       pantheon: pantheon,
                                       personalFinanceData: personalFinanceData,
                                       contracts: contractsList,
-                                      isLiveConnected: liveChannel != null,
+                                      socialInitiatives: socialInitiatives,
+                                      isLiveConnected: liveClient != null,
                                       isReconnecting:
                                           liveReconnectTimer?.isActive == true,
                                       connectionStatus: connectionStatus,

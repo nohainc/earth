@@ -258,9 +258,11 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
       width: widget.isPageMode ? double.infinity : dialogWidth,
       height: widget.isPageMode ? 740 : dialogHeight,
       decoration: BoxDecoration(
-        color: canvasColor,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: EarthColors.goldMetallic.withAlpha(140)),
+        color: widget.isPageMode ? Colors.transparent : canvasColor,
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+        border: widget.isPageMode
+            ? null
+            : Border.all(color: EarthColors.goldMetallic.withAlpha(140)),
         boxShadow: widget.isPageMode
             ? null
             : [
@@ -272,7 +274,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
               ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
         child: Column(
           children: [
             _buildTopHeader(dynastyName, motto, legacyPoints, totalWealth),
@@ -308,10 +310,14 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
 
   Widget _buildTopHeader(String dynastyName, String motto, dynamic legacyPoints, double totalWealth) {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      decoration: const BoxDecoration(
-        color: EarthColors.cardSurface,
-        border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+      padding: widget.isPageMode
+          ? const EdgeInsets.only(bottom: 10)
+          : const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      decoration: BoxDecoration(
+        color: widget.isPageMode ? Colors.transparent : EarthColors.cardSurface,
+        border: widget.isPageMode
+            ? null
+            : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -322,7 +328,13 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
               Expanded(
                 child: Row(
                   children: [
-                    const Icon(Icons.shield_outlined, color: EarthColors.goldMetallic, size: 22),
+                    Icon(
+                      Icons.shield_outlined,
+                      color: widget.isPageMode
+                          ? EarthColors.textMuted
+                          : EarthColors.goldMetallic,
+                      size: 22,
+                    ),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
@@ -333,8 +345,10 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                               Flexible(
                                 child: Text(
                                   dynastyName.toUpperCase(),
-                                  style: const TextStyle(
-                                    color: EarthColors.goldMetallic,
+                                  style: TextStyle(
+                                    color: widget.isPageMode
+                                        ? EarthColors.textMuted
+                                        : EarthColors.goldMetallic,
                                     fontWeight: FontWeight.bold,
                                     fontSize: 14,
                                     letterSpacing: 1.1,

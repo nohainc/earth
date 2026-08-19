@@ -1,7 +1,6 @@
 export type ObjectiveCategory =
   | 'enterprise'
   | 'civic'
-  | 'territory'
   | 'dynasty'
   | 'technology'
   | 'finance'
@@ -34,7 +33,6 @@ export interface ObjectivesEvaluationInput {
   governance?: { proposals_voted?: unknown; voting_weight?: unknown };
   technology?: { research_progress?: unknown; active_patents?: unknown; active_licenses?: unknown };
   dynasty?: { generation?: unknown; perks_count?: unknown; heirlooms_count?: unknown; successor_id?: string | null };
-  map?: { plots_leased?: unknown; regional_production?: unknown };
   resources?: Record<string, unknown>;
   netWorth?: number;
 }
@@ -45,7 +43,7 @@ const num = (v: unknown, fallback = 0): number => {
 };
 
 /**
- * Evaluates the 7 primary long-term strategic objectives for the player.
+ * Evaluates the primary long-term strategic objectives for the player.
  * Objectives are optional, measurable, and tied to existing planetary systems.
  */
 export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): PlayerObjective[] {
@@ -96,29 +94,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     iconName: 'how_to_vote',
   });
 
-  // 3. Control a regional resource
-  const plotsLeased = Math.max(
-    num(input.map?.plots_leased, 0),
-    num(input.resources?.material, 0) >= 100 ? 3 : 1
-  );
-  const targetPlots = 5;
-  const territoryProgress = Math.min(100, Math.round((plotsLeased / targetPlots) * 100));
-  objectives.push({
-    id: 'obj-regional-resource-control',
-    category: 'territory',
-    title: 'Control a Regional Resource',
-    description: 'Secure and operate at least 5 regional concession plots to control the supply chain for planetary manufacturing.',
-    currentValue: plotsLeased,
-    targetValue: targetPlots,
-    progressPercentage: territoryProgress,
-    metricLabel: `${plotsLeased} / ${targetPlots} Concession Plots Leased`,
-    status: territoryProgress >= 100 ? 'completed' : 'in_progress',
-    rewardDescription: 'Title: "Planetary Baron" · 50% Reduction in Plot Upgrade Fees · Commodity Monopoly Dividend',
-    targetSection: 'market',
-    iconName: 'landscape',
-  });
-
-  // 4. Create a dynasty with specific traits
+  // 3. Create a dynasty with specific traits
   const dynastyGen = num(input.dynasty?.generation, 1);
   const perksCount = num(input.dynasty?.perks_count, 0) + (input.dynasty?.successor_id ? 1 : 0);
   const targetDynastyPerks = 3;

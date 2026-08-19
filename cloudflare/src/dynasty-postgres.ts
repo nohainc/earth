@@ -85,7 +85,7 @@ export const DYNASTY_PERK_CATALOG = [
     name: 'Planetary Agronomists',
     category: 'Resources',
     cost: 120,
-    description: '+20% Regional Bio-Harvest Rate & Concession Yields',
+    description: '+20% Food Production Efficiency',
   },
 ];
 

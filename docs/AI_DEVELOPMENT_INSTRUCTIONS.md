@@ -137,6 +137,55 @@ lib/
 - Financial and voting actions show loading until server confirmation;
   optimistic updates are for local visual state only.
 
+### 5.1 EARTH typography system
+
+Use the shared Flutter typography tokens in `lib/app/theme.dart` instead of
+creating one-off menu text styles.
+
+- Primary UI font: `Manrope` through `createEarthTheme`.
+- Menu/navigation text: `13px`, weight `500`, letter spacing `0.7px`,
+  color `mutedColor` (`#9698B5`).
+- Active menu text: the same token with weight `700` and `inkColor`
+  (`#F1F0FF`).
+- Menu group labels: `8.5px`, weight `700`, letter spacing `1.3px`,
+  uppercase, `mutedColor`.
+- Keep menu icons aligned with their text and use the same normal/active color
+  rules. Reserve red for destructive actions such as Sign out.
+- Avoid using wide tracking such as `1.3px` for normal sentence-case menu
+  items; it makes labels unnecessarily wide. Use `1.3px` primarily for compact
+  uppercase labels and telemetry/technical readouts.
+- Do not introduce another font or local font size without a UI/UX reason;
+  update the shared token when the system changes.
+
+### Page layout standards
+
+- Use a two-column content layout when the available page content width is
+  greater than `1000px`; keep the same content in one vertical column below
+  that breakpoint.
+- Use one shared topic-heading style throughout a page. The page title and
+  section titles must use the same font family, size, weight, color, and
+  letter spacing.
+- Place a topic help icon immediately after its title, not at the far edge of
+  the header. The icon opens the topic-specific explanation.
+- Use a horizontal separator only when it communicates a real boundary between
+  control groups. Do not add separators when spacing and heading hierarchy are
+  sufficient.
+- Prefer the shared page shell and spacing tokens. Remove an outer shell only
+  when the page content itself already provides clear grouping and the extra
+  border reduces usable space.
+- Treat the first visible topic as the page identity; do not add a second,
+  competing page-title bar above it.
+- Use a consistent topic rhythm: `34px` before subsequent topic headings and
+  `10px` between a heading and its controls. The first topic in a column may
+  use zero top offset when it aligns with the first topic in another column.
+- Topic content should stretch to the column width and align to the left edge;
+  do not rely on Flutter's default centered `Column` alignment.
+- Keep the first topic focused on its primary controls. Avoid wrapping it in a
+  redundant parent card when the controls already provide visual grouping.
+- For wide pages, align the first topic heading and first control in both
+  columns on the same baseline; for narrow pages, restore the normal topic
+  spacing in the single vertical flow.
+
 ## 6. Database and migration rules
 
 - Add every schema change as a forward-only, human-reviewed SQL migration.
