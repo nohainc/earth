@@ -613,8 +613,10 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
   Widget _buildSegmentedNavHeader() {
     return Container(
       height: 48,
-      decoration: const BoxDecoration(
-        border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+      decoration: BoxDecoration(
+        color: _groupSurface,
+        border:
+            const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
       child: Row(
         children: [
