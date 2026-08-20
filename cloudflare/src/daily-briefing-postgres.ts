@@ -61,7 +61,7 @@ export async function getDailyBriefing(
 ): Promise<DailyBriefingData> {
   // 1. Get current world game day
   const worldRes = await client.query<{ game_day: number }>(
-    `select game_day from world_ticks order by id desc limit 1`
+    `select game_day from world_state where id = 'WORLD'`
   );
   const currentDay = worldRes.rows[0]?.game_day ?? 185;
   const previousDay = Math.max(1, currentDay - 1);
