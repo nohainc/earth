@@ -270,6 +270,31 @@ async function authorityHistoryFromPostgres(request: Request, env: Env): Promise
 
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
+    const origin = request.headers.get('Origin') ?? '*';
+    const corsHeaders = {
+      'Access-Control-Allow-Origin': origin,
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With',
+      'Access-Control-Allow-Credentials': 'true',
+    };
+
+    if (request.method === 'OPTIONS') {
+      return new Response(null, { status: 204, headers: corsHeaders });
+    }
+
+    const response = await this.handleRequest(request, env);
+    const newHeaders = new Headers(response.headers);
+    for (const [key, value] of Object.entries(corsHeaders)) {
+      newHeaders.set(key, value);
+    }
+    return new Response(response.body, {
+      status: response.status,
+      statusText: response.statusText,
+      headers: newHeaders,
+    });
+  },
+
+  async handleRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
     if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
     if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);

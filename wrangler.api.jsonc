@@ -8,7 +8,7 @@
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres", "EMAIL_FROM": "earth@auth.earthuc.com", "EMAIL_REPLY_TO": "earth@nohainc.com" },
   "send_email": [{ "name": "EMAIL" }],
-  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642", "localConnectionString": "postgres://earth:earth_dev_only@localhost:5432/earth" }],
+  "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
   "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],
   "triggers": { "crons": ["*/5 * * * *"] },
