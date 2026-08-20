@@ -5,7 +5,7 @@ import { getDailyBriefing } from '../cloudflare/src/daily-briefing-postgres.ts';
 test('getDailyBriefing calculates net wealth delta, cashflow, and recommendations', async () => {
   const mockClient = {
     async query(sql, params) {
-      if (sql.includes('from world_ticks')) {
+      if (sql.includes('from world_state')) {
         return { rows: [{ game_day: 185 }] };
       }
       if (sql.includes('from net_worth_snapshots')) {
