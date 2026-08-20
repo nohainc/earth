@@ -107,14 +107,14 @@ export async function getDailyBriefing(
 
   // 5. Business & Machines
   const busRes = await client.query<{ count: string }>(
-    `select count(*) from businesses where owner_id = $1 or controller_id = $1`,
+    `select count(*) from businesses b left join business_management bm on bm.business_id = b.id where b.owner_id = $1 or bm.manager_id = $1`,
     [humanId]
   );
   const activeBusinesses = parseInt(busRes.rows[0]?.count ?? '2', 10);
 
   // 6. Civic & Governance
   const civicRes = await client.query<{ count: string }>(
-    `select count(*) from governance_proposals where status = 'ACTIVE'`,
+    `select count(*) from proposals where status = 'open' or status = 'active'`,
   );
   const activeProposals = parseInt(civicRes.rows[0]?.count ?? '3', 10);
 
