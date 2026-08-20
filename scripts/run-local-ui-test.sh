@@ -58,10 +58,10 @@ fi
 
 # Automatically release stale local port listeners before starting
 for port in "${API_PORT}" "${WEB_PORT}"; do
-  pids=$(lsof -t -i :"${port}" 2>/dev/null || true)
+  pids=$(lsof -ti :"${port}" || true)
   if [[ -n "${pids}" ]]; then
-    print "Releasing stale listener process on port ${port} (PID: ${pids})..."
-    kill -9 ${pids} >/dev/null 2>&1 || true
+    print "Releasing stale listener process on port ${port}..."
+    echo "${pids}" | xargs kill -9 >/dev/null 2>&1 || true
   fi
 done
 
