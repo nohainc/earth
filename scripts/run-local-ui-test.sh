@@ -61,7 +61,7 @@ if ! command -v osascript >/dev/null 2>&1; then
   exit 1
 fi
 
-api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CORS_ORIGIN=${(q)API_ORIGIN} npx wrangler dev --config wrangler.api.jsonc --port ${API_PORT}"
+api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=${(q)DATABASE_URL} CORS_ORIGIN=${(q)API_ORIGIN} npx wrangler dev --config wrangler.api.jsonc --port ${API_PORT}"
 web_command="cd ${(q)ROOT_DIR}/flutter_client && flutter run -d chrome --web-port ${WEB_PORT} --dart-define=EARTH_API_URL=http://localhost:${API_PORT}"
 
 osascript - "$api_command" "$web_command" <<'APPLESCRIPT'
