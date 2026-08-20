@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 35,
+  "migrationVersion": 36,
   "requiredTables": {
     "account_balances": [
       "account_id",
