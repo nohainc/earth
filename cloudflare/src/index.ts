@@ -274,7 +274,8 @@ const worker = {
     const corsHeaders = {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With, X-Request-ID, X-Earth-API-Version',
+      'Access-Control-Expose-Headers': 'X-Earth-API-Version, X-Request-ID',
       'Access-Control-Allow-Credentials': 'true',
     };
 
