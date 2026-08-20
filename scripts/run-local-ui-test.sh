@@ -56,6 +56,15 @@ if [[ "${IS_LOCAL}" == "true" ]]; then
   print "Local database is up to date and ready."
 fi
 
+# Automatically release stale local port listeners before starting
+for port in "${API_PORT}" "${WEB_PORT}"; do
+  pids=$(lsof -t -i :"${port}" 2>/dev/null || true)
+  if [[ -n "${pids}" ]]; then
+    print "Releasing stale listener process on port ${port} (PID: ${pids})..."
+    kill -9 ${pids} >/dev/null 2>&1 || true
+  fi
+done
+
 if ! command -v osascript >/dev/null 2>&1; then
   print -u2 "This launcher requires macOS Terminal.app."
   exit 1
