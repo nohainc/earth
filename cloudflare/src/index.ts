@@ -288,6 +288,7 @@ const worker = {
     for (const [key, value] of Object.entries(corsHeaders)) {
       newHeaders.set(key, value);
     }
+    newHeaders.set('X-Earth-API-Version', '2026-08');
     return new Response(response.body, {
       status: response.status,
       statusText: response.statusText,
