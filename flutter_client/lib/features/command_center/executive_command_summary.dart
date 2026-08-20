@@ -55,85 +55,42 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         // ====================================================================
         // QUESTION 1: WHAT IS MY CURRENT SITUATION?
         // ====================================================================
-        _buildSectionHeader(
-          number: '1',
-          question: 'WHAT IS MY CURRENT SITUATION?',
-          subtitle:
-              'Executive posture, capital reserves, fleet condition & production vitality',
-          accentColor: EarthColors.cyanAccent,
-          icon: Icons.account_circle_outlined,
+        _buildCleanTopicHeader(
+          context,
+          title: 'WHAT IS MY CURRENT SITUATION?',
+          infoTitle: 'WHAT IS MY CURRENT SITUATION?',
+          infoText:
+              '• Situation Matrix & Core Metrics: Real-time overview of spendable capital reserves, enterprise solvency & fleet condition, biological energy & vitality status, and active strategic ambition progress.\n\n• Actionable Drill-Down: Select any matrix item to jump directly to its management interface.',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildSituationMatrix(primaryObjective),
-        const SizedBox(height: 24),
+        const SizedBox(height: 34),
 
         // ====================================================================
         // QUESTION 2: WHAT CHANGED SINCE MY LAST VISIT?
         // ====================================================================
-        _buildSectionHeader(
-          number: '2',
-          question: 'WHAT CHANGED SINCE MY LAST VISIT?',
-          subtitle:
-              'Nightly cycle intelligence, net worth deltas, market volatility & civic updates',
-          accentColor: EarthColors.goldMetallic,
-          icon: Icons.history_toggle_off,
-          trailingWidget: InkWell(
-            onTap: () {
-              EarthAudioEngine.instance.playClick();
-              setState(() => _briefingExpanded = !_briefingExpanded);
-            },
-            borderRadius: BorderRadius.circular(4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: EarthColors.goldMetallic.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
-                border: Border.all(
-                    color: EarthColors.goldMetallic.withValues(alpha: 0.4)),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    _briefingExpanded ? Icons.unfold_less : Icons.unfold_more,
-                    size: 13,
-                    color: EarthColors.goldMetallic,
-                  ),
-                  const SizedBox(width: 4),
-                  Text(
-                    _briefingExpanded ? 'COLLAPSE' : 'EXPAND INTEL',
-                    style: const TextStyle(
-                      color: EarthColors.goldMetallic,
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: 0.6,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
+        _buildCleanTopicHeader(
+          context,
+          title: 'WHAT CHANGED SINCE MY LAST VISIT?',
+          infoTitle: 'WHAT CHANGED SINCE MY LAST VISIT?',
+          infoText:
+              '• Nightly Cycle & Overnight Intelligence: Summary of net worth changes, overnight revenue & operating expenses, commodity market price swings, and passed civic referendums since your previous login session.',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildWhatChangedCard(briefing),
-        const SizedBox(height: 24),
+        const SizedBox(height: 34),
 
         // ====================================================================
         // QUESTION 3: WHAT DECISION SHOULD I MAKE NEXT?
         // ====================================================================
-        _buildSectionHeader(
-          number: '3',
-          question: 'WHAT DECISION SHOULD I MAKE NEXT?',
-          subtitle:
-              'Prioritized decision queue & real-time market arbitrage opportunities',
-          accentColor:
-              criticalCount > 0 ? Colors.orangeAccent : const Color(0xFF00E676),
-          icon: Icons.alt_route,
-          badgeLabel: criticalCount > 0 ? '$criticalCount CRITICAL' : 'OPTIMAL',
-          badgeColor:
-              criticalCount > 0 ? Colors.orangeAccent : const Color(0xFF00E676),
+        _buildCleanTopicHeader(
+          context,
+          title: 'WHAT DECISION SHOULD I MAKE NEXT?',
+          infoTitle: 'WHAT DECISION SHOULD I MAKE NEXT?',
+          infoText:
+              '• Prioritized Decision Queue & Opportunities: Actionable operational alerts, critical risk warnings, pending contract obligations, and live market arbitrage opportunities requiring your executive decision.',
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
         _buildWhatDecisionNextCard(decisionItems, opportunities),
       ],
     );
@@ -142,92 +99,56 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // ==========================================================================
   // SECTION HEADERS
   // ==========================================================================
-  Widget _buildSectionHeader({
-    required String number,
-    required String question,
-    required String subtitle,
-    required Color accentColor,
-    required IconData icon,
-    String? badgeLabel,
-    Color? badgeColor,
-    Widget? trailingWidget,
+  Widget _buildCleanTopicHeader(
+    BuildContext context, {
+    required String title,
+    required String infoTitle,
+    required String infoText,
   }) {
     return Row(
-      crossAxisAlignment: CrossAxisAlignment.center,
       children: [
-        Container(
-          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-          decoration: BoxDecoration(
-            color: accentColor.withValues(alpha: 0.15),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-                color: accentColor.withValues(alpha: 0.6), width: 1.2),
-          ),
-          child: Text(
-            number,
-            style: TextStyle(
-              color: accentColor,
-              fontSize: 11,
-              fontWeight: FontWeight.w900,
-            ),
+        Text(
+          title,
+          style: const TextStyle(
+            color: EarthColors.textMuted,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
           ),
         ),
-        const SizedBox(width: 8),
-        Icon(icon, size: 16, color: accentColor),
         const SizedBox(width: 6),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Flexible(
-                    child: Text(
-                      question,
-                      style: TextStyle(
-                        color: accentColor,
-                        fontSize: 12.5,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 1.0,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
+        IconButton(
+          icon: const Icon(Icons.info_outline, size: 14, color: EarthColors.textMuted),
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          tooltip: 'Info',
+          onPressed: () {
+            showDialog(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                backgroundColor: EarthColors.cardSurface,
+                title: Text(
+                  infoTitle,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.bold,
+                    color: EarthColors.cyanAccent,
                   ),
-                  if (badgeLabel != null) ...[
-                    const SizedBox(width: 8),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color:
-                            (badgeColor ?? accentColor).withValues(alpha: 0.15),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                            color: (badgeColor ?? accentColor)
-                                .withValues(alpha: 0.5)),
-                      ),
-                      child: Text(
-                        badgeLabel,
-                        style: TextStyle(
-                          color: badgeColor ?? accentColor,
-                          fontSize: 9,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
+                ),
+                content: Text(
+                  infoText,
+                  style: const TextStyle(fontSize: 11, color: Colors.white70),
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(),
+                    child: const Text('CLOSE'),
+                  ),
                 ],
               ),
-              Text(
-                subtitle,
-                style:
-                    const TextStyle(color: EarthColors.textMuted, fontSize: 10),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+            );
+          },
         ),
-        if (trailingWidget != null) trailingWidget,
       ],
     );
   }
@@ -245,78 +166,63 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     final corpName = business['name']?.toString() ?? 'Vance Logistics';
     final isSolvent = business['solvent'] ?? true;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(10),
-        border:
-            Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.25)),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final isNarrow = constraints.maxWidth < 650;
-          final itemWidth = isNarrow
-              ? (constraints.maxWidth - 8) / 2
-              : (constraints.maxWidth - 24) / 4;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isNarrow = constraints.maxWidth < 650;
+        final itemWidth = isNarrow
+            ? (constraints.maxWidth - 8) / 2
+            : (constraints.maxWidth - 24) / 4;
 
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  _situationPill(
-                    width: itemWidth,
-                    label: 'LIQUID CAPITAL',
-                    value: '${formatWholeNumber(credits)} CR',
-                    subvalue: '+930 CR/day net',
-                    icon: Icons.account_balance_wallet_outlined,
-                    accent: EarthColors.cyanAccent,
-                    onTap: () => widget.onNavigate?.call('finance'),
-                  ),
-                  _situationPill(
-                    width: itemWidth,
-                    label: 'ENTERPRISE HEALTH',
-                    value: corpName.toUpperCase(),
-                    subvalue:
-                        isSolvent ? 'SOLVENT · 100% FLEET' : 'INSOLVENT RISK',
-                    icon: Icons.storefront_outlined,
-                    accent: isSolvent
-                        ? const Color(0xFF00E676)
-                        : Colors.orangeAccent,
-                    onTap: () => widget.onNavigate?.call('business'),
-                  ),
-                  _situationPill(
-                    width: itemWidth,
-                    label: 'ENERGY & VITALITY',
-                    value: '${energy.toStringAsFixed(0)}% ENERGY',
-                    subvalue: '${health.toStringAsFixed(0)}% Vitality · Stable',
-                    icon: Icons.bolt_outlined,
-                    accent: energy < 20 ? Colors.redAccent : Colors.amberAccent,
-                    onTap: () => widget.onNavigate?.call('technology'),
-                  ),
-                  _situationPill(
-                    width: itemWidth,
-                    label: 'STRATEGIC AMBITION',
-                    value: primaryObjective != null
-                        ? primaryObjective.title
-                        : 'VALUABLE CORP',
-                    subvalue: primaryObjective != null
-                        ? '${primaryObjective.progressPercentage.toStringAsFixed(0)}% Progress'
-                        : 'Active',
-                    icon: Icons.flag_outlined,
-                    accent: EarthColors.goldMetallic,
-                    onTap: () => widget.onNavigate?.call('command'),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
+        return Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            _situationPill(
+              width: itemWidth,
+              label: 'LIQUID CAPITAL',
+              value: '${formatWholeNumber(credits)} CR',
+              subvalue: '+930 CR/day net',
+              icon: Icons.account_balance_wallet_outlined,
+              accent: EarthColors.cyanAccent,
+              onTap: () => widget.onNavigate?.call('finance'),
+            ),
+            _situationPill(
+              width: itemWidth,
+              label: 'ENTERPRISE HEALTH',
+              value: corpName.toUpperCase(),
+              subvalue:
+                  isSolvent ? 'SOLVENT · 100% FLEET' : 'INSOLVENT RISK',
+              icon: Icons.storefront_outlined,
+              accent: isSolvent
+                  ? const Color(0xFF00E676)
+                  : Colors.orangeAccent,
+              onTap: () => widget.onNavigate?.call('business'),
+            ),
+            _situationPill(
+              width: itemWidth,
+              label: 'BIOMETRIC VITALITY',
+              value: '${health.toStringAsFixed(0)}% VITALITY',
+              subvalue: '${energy.toStringAsFixed(0)}% Stamina · Healthy',
+              icon: Icons.favorite_outline,
+              accent: health < 30 ? Colors.redAccent : Colors.tealAccent,
+              onTap: () => widget.onNavigate?.call('technology'),
+            ),
+            _situationPill(
+              width: itemWidth,
+              label: 'STRATEGIC AMBITION',
+              value: primaryObjective != null
+                  ? primaryObjective.title
+                  : 'VALUABLE CORP',
+              subvalue: primaryObjective != null
+                  ? '${primaryObjective.progressPercentage.toStringAsFixed(0)}% Progress'
+                  : 'Active',
+              icon: Icons.flag_outlined,
+              accent: EarthColors.goldMetallic,
+              onTap: () => widget.onNavigate?.call('command'),
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -535,42 +441,39 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             ],
           ),
 
-          // Expandable Detailed Breakdown
-          if (_briefingExpanded) ...[
-            const SizedBox(height: 12),
-            const Divider(color: EarthColors.borderSubtle, height: 1),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Expanded(
-                  child: _microStat(
-                    'OVERNIGHT REVENUE',
-                    '+${formatWholeNumber(briefing.cashflow.totalIncome)} CR',
-                    'Dividends & Market Sales',
-                    const Color(0xFF00E676),
-                  ),
+          const SizedBox(height: 12),
+          const Divider(color: EarthColors.borderSubtle, height: 1),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: _microStat(
+                  'OVERNIGHT REVENUE',
+                  '+${formatWholeNumber(briefing.cashflow.totalIncome)} CR',
+                  'Dividends & Market Sales',
+                  const Color(0xFF00E676),
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _microStat(
-                    'OVERNIGHT EXPENSES',
-                    '-${formatWholeNumber(briefing.cashflow.totalExpenses)} CR',
-                    'Maintenance & Taxes',
-                    Colors.orangeAccent,
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _microStat(
+                  'OVERNIGHT EXPENSES',
+                  '-${formatWholeNumber(briefing.cashflow.totalExpenses)} CR',
+                  'Maintenance & Taxes',
+                  Colors.orangeAccent,
                 ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _microStat(
-                    'ACTIVE CITIZEN RESIDENCY',
-                    briefing.civicSummary.cityResidency,
-                    'Tax Rate: ${briefing.civicSummary.cityTaxRatePct.toStringAsFixed(1)}%',
-                    EarthColors.cyanAccent,
-                  ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: _microStat(
+                  'ACTIVE CITIZEN RESIDENCY',
+                  briefing.civicSummary.cityResidency,
+                  'Tax Rate: ${briefing.civicSummary.cityTaxRatePct.toStringAsFixed(1)}%',
+                  EarthColors.cyanAccent,
                 ),
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -613,87 +516,92 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   ) {
     final filteredDecisions = _filterDecisionItems(decisionItems);
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Filter Tabs Row
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Filter Tabs Row
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  _filterChip('ALL', 'ALL (${decisionItems.length})'),
+                  const SizedBox(width: 6),
+                  _filterChip('CRITICAL', 'CRITICAL',
+                      color: Colors.orangeAccent),
+                  const SizedBox(width: 6),
+                  _filterChip('CORPORATION', 'ENTERPRISE',
+                      color: EarthColors.cyanAccent),
+                  const SizedBox(width: 6),
+                  _filterChip('CIVIC', 'CIVIC & DYNASTY',
+                      color: EarthColors.goldMetallic),
+                ],
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+
+        // Render Decision Items
+        if (filteredDecisions.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 20),
+            child: Center(
+              child: Text(
+                'No pending critical obligations. Your enterprise and civic standing are fully optimized.',
+                style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+              ),
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: EarthColors.panelSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: EarthColors.borderSubtle),
+            ),
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8),
+              child: Column(
+                children: List.generate(filteredDecisions.length, (index) {
+                  final item = filteredDecisions[index];
+                  final isLast = index == filteredDecisions.length - 1;
+                  return _buildUnifiedDecisionItem(item, isLast: isLast);
+                }),
+              ),
+            ),
+          ),
+
+        // Merged Live Opportunity Signals
+        if (opportunities.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          const Divider(color: EarthColors.borderSubtle, height: 1),
+          const SizedBox(height: 10),
+          const Row(
             children: [
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  children: [
-                    _filterChip('ALL', 'ALL (${decisionItems.length})'),
-                    const SizedBox(width: 6),
-                    _filterChip('CRITICAL', 'CRITICAL',
-                        color: Colors.orangeAccent),
-                    const SizedBox(width: 6),
-                    _filterChip('CORPORATION', 'ENTERPRISE',
-                        color: EarthColors.cyanAccent),
-                    const SizedBox(width: 6),
-                    _filterChip('CIVIC', 'CIVIC & DYNASTY',
-                        color: EarthColors.goldMetallic),
-                  ],
+              Icon(Icons.trending_up,
+                  size: 13, color: EarthColors.cyanAccent),
+              SizedBox(width: 6),
+              Text(
+                'LIVE STRATEGIC OPPORTUNITIES',
+                style: TextStyle(
+                  color: EarthColors.cyanAccent,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                  letterSpacing: 0.8,
                 ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Render Decision Items
-          if (filteredDecisions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 20),
-              child: Center(
-                child: Text(
-                  'No pending critical obligations. Your enterprise and civic standing are fully optimized.',
-                  style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
-                ),
-              ),
-            )
-          else
-            ...filteredDecisions
-                .take(4)
-                .map((item) => _buildUnifiedDecisionItem(item)),
-
-          // Merged Live Opportunity Signals
-          if (opportunities.isNotEmpty) ...[
-            const SizedBox(height: 10),
-            const Divider(color: EarthColors.borderSubtle, height: 1),
-            const SizedBox(height: 10),
-            const Row(
-              children: [
-                Icon(Icons.trending_up,
-                    size: 13, color: EarthColors.cyanAccent),
-                SizedBox(width: 6),
-                Text(
-                  'LIVE STRATEGIC OPPORTUNITIES',
-                  style: TextStyle(
-                    color: EarthColors.cyanAccent,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.8,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            ...opportunities.take(2).map((opp) {
-              final mapOpp = Map<String, dynamic>.from(opp as Map);
-              return _buildOpportunityStrip(mapOpp);
-            }),
-          ],
+          const SizedBox(height: 8),
+          ...opportunities.take(2).map((opp) {
+            final mapOpp = Map<String, dynamic>.from(opp as Map);
+            return _buildOpportunityStrip(mapOpp);
+          }),
         ],
-      ),
+      ],
     );
   }
 
@@ -762,22 +670,20 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     );
   }
 
-  Widget _buildUnifiedDecisionItem(DecisionQueueItem item) {
+  Widget _buildUnifiedDecisionItem(DecisionQueueItem item, {bool isLast = false}) {
     final isCritical = item.riskLevel.toLowerCase() == 'critical' ||
         item.riskLevel.toLowerCase() == 'high';
     final categoryColor = _getDecisionCategoryColor(item);
     final categoryIcon = _getDecisionCategoryIcon(item);
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(10),
+      padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: EarthColors.cardSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isCritical
-              ? Colors.orangeAccent.withValues(alpha: 0.35)
-              : EarthColors.borderSubtle,
+        border: Border(
+          bottom: isLast
+              ? BorderSide.none
+              : const BorderSide(color: EarthColors.borderSubtle),
         ),
       ),
       child: Row(

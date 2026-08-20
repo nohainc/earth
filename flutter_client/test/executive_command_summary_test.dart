@@ -94,11 +94,7 @@ void main() {
       expect(find.text('LIVE STRATEGIC OPPORTUNITIES'), findsOneWidget);
       expect(find.text('High Energy Arbitrage Margin'), findsOneWidget);
 
-      // Test Briefing Expand Toggle
-      expect(find.text('EXPAND INTEL'), findsOneWidget);
-      await tester.tap(find.text('EXPAND INTEL'));
-      await tester.pump();
-      expect(find.text('COLLAPSE'), findsOneWidget);
+      // Verify Briefing Breakdown is always visible
       expect(find.text('OVERNIGHT REVENUE'), findsOneWidget);
 
       // Test Opportunity Exploit navigation

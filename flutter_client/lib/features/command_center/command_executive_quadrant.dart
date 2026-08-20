@@ -320,10 +320,16 @@ class _ExecutiveCard extends StatelessWidget {
                       constraints: const BoxConstraints(),
                       onPressed: () => showEarthInfoDialog(
                         context,
-                        title: title,
+                        title: '$title OVERVIEW',
                         description: infoDescription!,
                       ),
                     ),
+                  const SizedBox(width: 6),
+                  Icon(
+                    Icons.arrow_forward_ios,
+                    size: 10,
+                    color: mutedColor.withValues(alpha: .7),
+                  ),
                 ],
               ),
               const SizedBox(height: 14),

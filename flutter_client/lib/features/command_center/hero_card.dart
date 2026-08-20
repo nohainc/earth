@@ -57,11 +57,11 @@ class HeroCard extends StatelessWidget {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
-                      '●  CITIZEN COCKPIT · $statusText',
+                      'CITIZEN COCKPIT · $statusText',
                       style: TextStyle(
                         color: statusColor,
                         fontSize: 10,
-                        letterSpacing: 1.2,
+                        letterSpacing: 1.1,
                         fontWeight: FontWeight.w700,
                       ),
                     ),
@@ -69,11 +69,12 @@ class HeroCard extends StatelessWidget {
                     IconButton(
                       icon: Icon(
                         Icons.info_outline,
-                        size: 13,
+                        size: 14,
                         color: mutedColor.withValues(alpha: .8),
                       ),
                       padding: EdgeInsets.zero,
                       constraints: const BoxConstraints(),
+                      tooltip: 'Info',
                       onPressed: () => showEarthInfoDialog(
                         context,
                         title: 'CITIZEN COCKPIT & STATUS',
@@ -130,6 +131,10 @@ class HeroCard extends StatelessWidget {
                       '$healthScore/100',
                       statusColor,
                     ),
+                    if (asDoubleOr(state.human['credits'], 0) < 500)
+                      _quickAlertBadge('LOW LIQUIDITY', Colors.orangeAccent),
+                    if (healthScore < 50)
+                      _quickAlertBadge('PLANETARY DECAY', Colors.redAccent),
                   ],
                 ),
               ],
@@ -165,6 +170,23 @@ class HeroCard extends StatelessWidget {
               ),
             ),
           ],
+        ),
+      );
+
+  Widget _quickAlertBadge(String label, Color color) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+        decoration: BoxDecoration(
+          color: color.withAlpha(25),
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(color: color.withAlpha(100)),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 9.5,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
         ),
       );
 

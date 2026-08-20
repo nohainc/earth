@@ -115,7 +115,7 @@ class Dashboard extends StatelessWidget {
       children: [
         if (selectedSection == 'command') ...[
           HeroCard(key: sectionKeys['command'], state: state),
-          const SizedBox(height: 18),
+          const SizedBox(height: 34),
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
@@ -155,6 +155,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(creditsFlow['inflow'], 1250),
                     outflow: asDoubleOr(creditsFlow['outflow'], 320),
                     net: asDoubleOr(creditsFlow['net'], 930),
+                    onTap: () => onNavigate?.call('finance'),
                   ),
                   EarthFlowMetric(
                     width: itemWidth,
@@ -164,6 +165,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(foodFlow['inflow'], 16),
                     outflow: asDoubleOr(foodFlow['outflow'], 4),
                     net: asDoubleOr(foodFlow['net'], 12),
+                    onTap: () => onNavigate?.call('market'),
                   ),
                   EarthFlowMetric(
                     width: itemWidth,
@@ -173,6 +175,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(matFlow['inflow'], 24),
                     outflow: asDoubleOr(matFlow['outflow'], 8),
                     net: asDoubleOr(matFlow['net'], 16),
+                    onTap: () => onNavigate?.call('market'),
                   ),
                   EarthFlowMetric(
                     width: itemWidth,
@@ -182,6 +185,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(compFlow['inflow'], 10),
                     outflow: asDoubleOr(compFlow['outflow'], 12),
                     net: asDoubleOr(compFlow['net'], -2),
+                    onTap: () => onNavigate?.call('business'),
                   ),
                   EarthFlowMetric(
                     width: itemWidth,
@@ -191,6 +195,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(energyFlow['inflow'], 30),
                     outflow: asDoubleOr(energyFlow['outflow'], 18),
                     net: asDoubleOr(energyFlow['net'], 12),
+                    onTap: () => onNavigate?.call('business'),
                   ),
                   EarthFlowMetric(
                     width: itemWidth,
@@ -200,6 +205,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(computeFlow['inflow'], 12),
                     outflow: asDoubleOr(computeFlow['outflow'], 4),
                     net: asDoubleOr(computeFlow['net'], 8),
+                    onTap: () => onNavigate?.call('technology'),
                   ),
                 ],
               );
@@ -217,7 +223,7 @@ class Dashboard extends StatelessWidget {
                 ),
               ),
             ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 34),
         ],
         ..._selectedPanels(),
       ],
@@ -882,21 +888,28 @@ class Dashboard extends StatelessWidget {
                 onNavigate: onNavigate,
               );
               if (constraints.maxWidth > 1000) {
-                return Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    summary,
-                    const SizedBox(height: 34),
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(child: objectives),
-                        const SizedBox(width: 56),
-                        Expanded(child: social),
-                      ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          summary,
+                          const SizedBox(height: 34),
+                          quadrant,
+                        ],
+                      ),
                     ),
-                    const SizedBox(height: 34),
-                    quadrant,
+                    const SizedBox(width: 56),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          objectives,
+                        ],
+                      ),
+                    ),
                   ],
                 );
               }
@@ -905,11 +918,9 @@ class Dashboard extends StatelessWidget {
                 children: [
                   summary,
                   const SizedBox(height: 34),
-                  objectives,
-                  const SizedBox(height: 34),
-                  social,
-                  const SizedBox(height: 34),
                   quadrant,
+                  const SizedBox(height: 34),
+                  objectives,
                 ],
               );
             },
@@ -927,6 +938,7 @@ class EarthFlowMetric extends StatelessWidget {
   final double inflow;
   final double outflow;
   final double net;
+  final VoidCallback? onTap;
 
   const EarthFlowMetric({
     super.key,
@@ -937,6 +949,7 @@ class EarthFlowMetric extends StatelessWidget {
     required this.inflow,
     required this.outflow,
     required this.net,
+    this.onTap,
   });
 
   @override
@@ -971,8 +984,11 @@ class EarthFlowMetric extends StatelessWidget {
 
     return SizedBox(
       width: width,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         decoration: BoxDecoration(
           color: surfaceColor.withValues(alpha: .85),
           borderRadius: BorderRadius.circular(12),
@@ -1064,6 +1080,7 @@ class EarthFlowMetric extends StatelessWidget {
           ],
         ),
       ),
-    );
+    ),
+  );
   }
 }

@@ -494,7 +494,6 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 34),
         Row(
           children: [
             const Text(

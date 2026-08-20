@@ -168,13 +168,29 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
               ),
             )
           else
-            ListView.separated(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _filteredObjectives.length,
-              separatorBuilder: (_, __) => const SizedBox(height: 10),
-              itemBuilder: (context, index) =>
-                  _buildObjectiveCard(_filteredObjectives[index]),
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: _filteredObjectives.indexed.map((indexed) {
+                  final item = indexed.$2;
+                  final isLast = indexed.$1 == _filteredObjectives.length - 1;
+                  return Container(
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: Colors.white10),
+                      ),
+                    ),
+                    child: _buildObjectiveCardContent(item),
+                  );
+                }).toList(),
+              ),
             ),
         ],
       ),
@@ -210,22 +226,12 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
     );
   }
 
-  Widget _buildObjectiveCard(PlayerObjective objective) {
+  Widget _buildObjectiveCardContent(PlayerObjective objective) {
     final catColor = objective.categoryColor;
     final isDone = objective.isCompleted;
 
-    return Container(
+    return Padding(
       padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: 0.65),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: isDone
-              ? const Color(0xFF00E676).withValues(alpha: 0.6)
-              : Colors.white12,
-          width: isDone ? 1.5 : 1,
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

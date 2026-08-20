@@ -322,7 +322,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                               isCompact: false,
                             ),
                             for (final resource in resources) ...[
-                              _hudSpacer(),
+                              _hudSpacer(isMobile: totalWidth < 600),
                               _hudResourceItem(
                                 resource.icon,
                                 resource.value,
@@ -595,7 +595,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     );
   }
 
-  Widget _hudSpacer() => const SizedBox(width: 10);
+  Widget _hudSpacer({bool isMobile = false}) =>
+      SizedBox(width: isMobile ? 6 : 10);
 
   double _measureText(String text, TextStyle style) {
     final painter = TextPainter(
