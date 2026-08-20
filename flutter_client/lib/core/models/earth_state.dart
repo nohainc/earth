@@ -4,71 +4,56 @@ class EarthState {
   final Map<String, dynamic> json;
   const EarthState(this.json);
 
-  Map<String, dynamic> get clock => json['clock'] as Map<String, dynamic>;
-  Map<String, dynamic> get human => json['human'] as Map<String, dynamic>;
-  Map<String, dynamic> get world => json['world'] as Map<String, dynamic>;
-  Map<String, dynamic> get resources =>
-      json['resources'] as Map<String, dynamic>;
-  Map<String, dynamic> get business => json['business'] as Map<String, dynamic>;
+  static Map<String, dynamic> _toMap(dynamic val) {
+    if (val is Map<String, dynamic>) return val;
+    if (val is Map) return Map<String, dynamic>.from(val);
+    return const {};
+  }
+
+  static List<dynamic> _toList(dynamic val) {
+    if (val is List) return val;
+    return const [];
+  }
+
+  Map<String, dynamic> get clock => _toMap(json['clock']);
+  Map<String, dynamic> get human => _toMap(json['human']);
+  Map<String, dynamic> get world => _toMap(json['world']);
+  Map<String, dynamic> get resources => _toMap(json['resources']);
+  Map<String, dynamic> get business => _toMap(json['business']);
   Map<String, dynamic> get technology =>
-      (json['technology'] as Map<String, dynamic>)['research']
-          as Map<String, dynamic>;
-  Map<String, dynamic> get technologyRegistry =>
-      (json['technology'] as Map<String, dynamic>);
-  Map<String, dynamic> get governance =>
-      json['governance'] as Map<String, dynamic>;
-  Map<String, dynamic> get institutions =>
-      json['institutions'] as Map<String, dynamic>;
-  Map<String, dynamic> get life => json['life'] as Map<String, dynamic>;
-  List<dynamic> get machines =>
-      (json['machines'] as List<dynamic>?) ?? const [];
-  List<dynamic> get productionEvents =>
-      (json['productionEvents'] as List<dynamic>?) ?? const [];
-  List<dynamic> get aiAssistants =>
-      (json['aiAssistants'] as List<dynamic>?) ?? const [];
-  List<dynamic> get aiRecommendations =>
-      (json['aiRecommendations'] as List<dynamic>?) ?? const [];
+      _toMap(json['technology'] is Map ? (json['technology'] as Map)['research'] : null);
+  Map<String, dynamic> get technologyRegistry => _toMap(json['technology']);
+  Map<String, dynamic> get governance => _toMap(json['governance']);
+  Map<String, dynamic> get institutions => _toMap(json['institutions']);
+  Map<String, dynamic> get life => _toMap(json['life']);
+  List<dynamic> get machines => _toList(json['machines']);
+  List<dynamic> get productionEvents => _toList(json['productionEvents']);
+  List<dynamic> get aiAssistants => _toList(json['aiAssistants']);
+  List<dynamic> get aiRecommendations => _toList(json['aiRecommendations']);
   Map<String, dynamic> get market =>
-      (json['market'] as Map<String, dynamic>)['products']
-          as Map<String, dynamic>;
+      _toMap(json['market'] is Map ? (json['market'] as Map)['products'] : null);
   List<dynamic> get marketBook =>
-      ((json['market'] as Map<String, dynamic>)['book'] as List<dynamic>?) ??
-      const [];
+      _toList(json['market'] is Map ? (json['market'] as Map)['book'] : null);
   List<dynamic> get marketTrades =>
-      ((json['market'] as Map<String, dynamic>)['trades'] as List<dynamic>?) ??
-      const [];
+      _toList(json['market'] is Map ? (json['market'] as Map)['trades'] : null);
   List<dynamic> get marketOrders =>
-      ((json['market'] as Map<String, dynamic>)['orders'] as List<dynamic>?) ??
-      const [];
+      _toList(json['market'] is Map ? (json['market'] as Map)['orders'] : null);
   double get marketFeeRate =>
-      asDouble((json['market'] as Map<String, dynamic>)['feeRate']) ?? 0;
-  List<dynamic> get communities =>
-      (json['communities'] as List<dynamic>?) ?? const [];
-  Map<String, dynamic> get audit =>
-      (json['audit'] as Map<String, dynamic>?) ?? const {};
-  Map<String, dynamic> get finance =>
-      (json['finance'] as Map<String, dynamic>?) ?? const {};
-  List<dynamic> get ledgerEntries =>
-      (json['ledgerEntries'] as List<dynamic>?) ?? const [];
-  List<dynamic> get publicActivity =>
-      (json['publicActivity'] as List<dynamic>?) ?? const [];
-  List<dynamic> get opportunities =>
-      (json['opportunities'] as List<dynamic>?) ?? const [];
-  List<dynamic> get decisionQueue =>
-      (json['decisionQueue'] as List<dynamic>?) ?? const [];
-  List<dynamic> get objectives =>
-      (json['objectives'] as List<dynamic>?) ?? const [];
-  Map<String, dynamic> get rankings =>
-      (json['rankings'] as Map<String, dynamic>?) ?? const {};
-  Map<String, dynamic> get history =>
-      (json['history'] as Map<String, dynamic>?) ?? const {};
-  List<dynamic> get financeStatus =>
-      (json['financeStatus'] as List<dynamic>?) ?? const [];
-  Map<String, dynamic> get personalFinance =>
-      (json['personalFinance'] as Map<String, dynamic>?) ?? const {};
-  List<dynamic> get contracts =>
-      (json['contracts'] as List<dynamic>?) ?? const [];
-  List<dynamic> get roles => (json['roles'] as List<dynamic>?) ?? const [];
+      asDouble(json['market'] is Map ? (json['market'] as Map)['feeRate'] : null) ?? 0;
+  List<dynamic> get communities => _toList(json['communities']);
+  Map<String, dynamic> get audit => _toMap(json['audit']);
+  Map<String, dynamic> get finance => _toMap(json['finance']);
+  List<dynamic> get ledgerEntries => _toList(json['ledgerEntries']);
+  List<dynamic> get publicActivity => _toList(json['publicActivity']);
+  List<dynamic> get opportunities => _toList(json['opportunities']);
+  List<dynamic> get decisionQueue => _toList(json['decisionQueue']);
+  List<dynamic> get objectives => _toList(json['objectives']);
+  Map<String, dynamic> get rankings => _toMap(json['rankings']);
+  Map<String, dynamic> get history => _toMap(json['history']);
+  List<dynamic> get financeStatus => _toList(json['financeStatus']);
+  Map<String, dynamic> get personalFinance => _toMap(json['personalFinance']);
+  List<dynamic> get contracts => _toList(json['contracts']);
+  List<dynamic> get roles => _toList(json['roles']);
   Map<String, dynamic>? get membership =>
-      json['membership'] as Map<String, dynamic>?;
+      json['membership'] is Map ? Map<String, dynamic>.from(json['membership'] as Map) : null;
 }

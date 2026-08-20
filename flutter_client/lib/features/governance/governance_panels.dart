@@ -59,9 +59,9 @@ class ProposalPanel extends StatelessWidget {
     final uncastCount = asIntOr(votes['uncast'], 0);
     final totalVotes = supportCount + opposeCount + uncastCount;
 
-    final quorumNum = (proposal['quorum'] as num?)?.toDouble() ?? .25;
+    final quorumNum = asDoubleOr(proposal['quorum'], .25);
     final approvalThresholdNum =
-        (proposal['approval_threshold'] as num?)?.toDouble() ?? .50;
+        asDoubleOr(proposal['approval_threshold'], .50);
     final quorumPercent = (quorumNum * 100).round();
     final approvalPercent = (approvalThresholdNum * 100).round();
 

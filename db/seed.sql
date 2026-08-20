@@ -25,3 +25,20 @@ insert into resource_balances (owner_id, resource, amount) values
   ('H-0044', 'material', 420), ('H-0044', 'components', 86),
   ('H-0044', 'energy', 92), ('H-0044', 'compute', 64)
 on conflict (owner_id, resource) do nothing;
+
+insert into business_financials (business_id, revenue, operating_costs, profit, taxed_revenue, last_game_day)
+values ('B-1048', 1240, 820, 420, 0, 184)
+on conflict (business_id) do nothing;
+
+insert into business_shares (business_id, holder_id, shares)
+values ('B-1048', 'H-0044', 100)
+on conflict (business_id, holder_id) do nothing;
+
+insert into business_management (business_id, manager_id, appointed_by, appointed_game_day)
+values ('B-1048', 'H-0044', 'H-0044', 184)
+on conflict (business_id) do nothing;
+
+insert into business_constitutions (business_id, updated_by, updated_game_day)
+values ('B-1048', 'H-0044', 184)
+on conflict (business_id) do nothing;
+

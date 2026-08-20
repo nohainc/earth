@@ -141,10 +141,11 @@ export async function listDiplomaticDispatches(
            d.status, d.game_day, d.game_minute, d.dispatch_type, d.action_payload,
            d.created_at, d.read_at,
            sh.display_name AS sender_display_name,
-           sh.dynasty_name AS sender_dynasty_name,
+           sd.dynasty_name AS sender_dynasty_name,
            rh.display_name AS recipient_display_name
     FROM diplomatic_dispatches d
     LEFT JOIN humans sh ON sh.id = d.sender_human_id
+    LEFT JOIN dynasties sd ON sd.founder_human_id = sh.id
     LEFT JOIN humans rh ON rh.id = d.recipient_human_id
     WHERE ${filterClause}
     ORDER BY d.game_day DESC, d.created_at DESC

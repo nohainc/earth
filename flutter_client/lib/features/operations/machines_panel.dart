@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/widgets/format_helpers.dart';
 import 'machines_dialogs.dart';
 
 class MachinesPanel extends StatelessWidget {
@@ -65,13 +66,11 @@ class MachinesPanel extends StatelessWidget {
               final machineType =
                   (machine['machine_type']?.toString() ?? 'fabrication-rig')
                       .toUpperCase();
-              final condition = (machine['condition'] as num?)?.toInt() ?? 100;
-              final utilization =
-                  (machine['utilization'] as num?)?.toInt() ?? 25;
+              final condition = asIntOr(machine['condition'], 100);
+              final utilization = asIntOr(machine['utilization'], 25);
               final capacity =
-                  (machine['productive_capacity'] as num?)?.toDouble() ?? 1.0;
-              final maintenanceDue =
-                  (machine['maintenance_due'] as num?)?.toInt() ?? 0;
+                  asDoubleOr(machine['productive_capacity'], 1.0);
+              final maintenanceDue = asIntOr(machine['maintenance_due'], 0);
               final inputResource =
                   (machine['input_resource']?.toString() ?? 'material')
                       .toUpperCase();

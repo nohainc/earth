@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../earth_http_client.dart';
@@ -13,9 +14,23 @@ class EarthApiTransport {
   http.Client get client => _clientOverride ?? _sharedClient;
 
   EarthApiTransport({String? baseUrl, http.Client? client})
-      : baseUrl = baseUrl ??
-            const String.fromEnvironment('EARTH_API_URL', defaultValue: ''),
+      : baseUrl = baseUrl ?? _resolveDefaultBaseUrl(),
         _clientOverride = client;
+
+  static String _resolveDefaultBaseUrl() {
+    const envUrl = String.fromEnvironment('EARTH_API_URL', defaultValue: '');
+    if (envUrl.isNotEmpty) return envUrl;
+    if (kIsWeb) {
+      final host = Uri.base.host;
+      if (host == 'localhost' || host == '127.0.0.1') {
+        final port = Uri.base.port;
+        if (port != 8788 && port != 8787) {
+          return 'http://$host:8788';
+        }
+      }
+    }
+    return '';
+  }
 
   Future<dynamic> request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {

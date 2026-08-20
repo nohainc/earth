@@ -28,11 +28,12 @@ class HeroCard extends StatelessWidget {
     }
 
     final citizenName =
-        (state.human['name'] as String?)?.toUpperCase() ?? 'ALEXANDER VANE';
-    final citizenAge = state.human['age'] ?? '34';
+        (state.human['display_name'] ?? state.human['name'])?.toString().toUpperCase() ?? 'AMARA KLINE';
+    final citizenAge = state.human['age_years'] ?? state.human['age'] ?? '31';
     final citizenGen = state.human['generation'] ?? '1';
+    final cityRaw = state.institutions['city'];
     final cityName =
-        (state.institutions['city']?['name'] as String?)?.toUpperCase() ??
+        (cityRaw is Map ? cityRaw['name'] : null)?.toString().toUpperCase() ??
             'NEW CARTHAGE';
 
     return Container(

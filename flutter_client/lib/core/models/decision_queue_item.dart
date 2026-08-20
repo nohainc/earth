@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../shared/widgets/format_helpers.dart';
 import 'earth_state.dart';
 
 class DecisionQueueItem {
@@ -109,8 +110,7 @@ class DecisionQueueItem {
         primaryActionLabel:
             json['primaryActionLabel']?.toString() ?? 'Take Action',
         targetSection: json['targetSection']?.toString() ?? 'command',
-        urgencyScore:
-            (json['urgencyScore'] as num?)?.toDouble() ?? 50.0,
+        urgencyScore: asDoubleOr(json['urgencyScore'], 50.0),
         metadata: (json['metadata'] as Map<String, dynamic>?) ?? const {},
       );
 
@@ -131,13 +131,12 @@ class DecisionQueueItem {
     // 1. Corporation energy & resource deficit
     final rawResources = state.json['resources'];
     final resources = rawResources is Map ? rawResources : const {};
-    final energy = (resources['energy'] as num?)?.toDouble() ?? 100.0;
-    final materials = (resources['material'] as num?)?.toDouble() ??
-        (resources['materials'] as num?)?.toDouble() ??
-        100.0;
+    final energy = asDoubleOr(resources['energy'], 100.0);
+    final materials = asDoubleOr(
+        resources['material'] ?? resources['materials'], 100.0);
     final rawBusiness = state.json['business'];
     final business = rawBusiness is Map ? rawBusiness : const {};
-    final profit = (business['profit'] as num?)?.toDouble() ?? 0.0;
+    final profit = asDoubleOr(business['profit'], 0.0);
 
     if (energy <= 50) {
       items.add(DecisionQueueItem(
@@ -246,12 +245,12 @@ class DecisionQueueItem {
     final machines = rawMachines is List ? rawMachines : const [];
     final degraded = machines.where((m) {
       if (m is! Map) return false;
-      final c = (m['condition'] as num?)?.toDouble() ?? 100.0;
+      final c = asDoubleOr(m['condition'], 100.0);
       return c < 60.0;
     }).toList();
     if (degraded.isNotEmpty) {
       final m = Map<String, dynamic>.from(degraded.first as Map);
-      final cond = (m['condition'] as num?)?.toDouble() ?? 45.0;
+      final cond = asDoubleOr(m['condition'], 45.0);
       items.add(DecisionQueueItem(
         id: 'decision-machine-maintenance-${m['id'] ?? 'm1'}',
         category: 'machines',
@@ -279,7 +278,7 @@ class DecisionQueueItem {
         researchMap = rawTech;
       }
     }
-    final progress = (researchMap?['progress'] as num?)?.toDouble() ?? 45.0;
+    final progress = asDoubleOr(researchMap?['progress'], 45.0);
     if (progress < 100.0) {
       items.add(const DecisionQueueItem(
         id: 'decision-tech-funding-available',

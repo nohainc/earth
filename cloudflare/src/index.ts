@@ -274,7 +274,7 @@ const worker = {
     const corsHeaders = {
       'Access-Control-Allow-Origin': origin,
       'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
-      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With, X-Request-ID, X-Earth-API-Version',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With, X-Request-ID, X-Earth-API-Version, Accept',
       'Access-Control-Expose-Headers': 'X-Earth-API-Version, X-Request-ID',
       'Access-Control-Allow-Credentials': 'true',
     };
@@ -1931,15 +1931,21 @@ const worker = {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = request.headers.get('X-Request-ID') || crypto.randomUUID();
+    const origin = request.headers.get('Origin');
     if (request.method === 'OPTIONS') {
-      return new Response(null, { status: 204, headers: {
-        'Access-Control-Allow-Origin': request.headers.get('Origin') ?? '*',
-        'Access-Control-Allow-Methods': 'GET,POST,DELETE,OPTIONS',
-        'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Request-ID',
-        'Access-Control-Expose-Headers': 'X-Request-ID',
-        'Access-Control-Max-Age': '86400',
-        'X-Request-ID': requestId,
-      } });
+      return new Response(null, {
+        status: 204,
+        headers: {
+          'Access-Control-Allow-Origin': origin ?? '*',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, X-Requested-With, X-Earth-API-Version, Accept',
+          'Access-Control-Expose-Headers': 'X-Request-ID, X-EARTH-API-Version',
+          'Access-Control-Allow-Credentials': 'true',
+          'Access-Control-Max-Age': '86400',
+          'Vary': 'Origin',
+          'X-Request-ID': requestId,
+        },
+      });
     }
     const url = new URL(request.url);
     const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health' || url.pathname === '/ready' || url.pathname === '/api/ready';
@@ -1985,13 +1991,15 @@ export default {
         : Response.json({ ok: false, error: 'EARTH service is temporarily unavailable', code: 'SERVICE_UNAVAILABLE', correlationId: requestId }, { status: 503 });
     }
     const headers = new Headers(response.headers);
-    const origin = request.headers.get('Origin');
-    if (origin === 'https://earth-client.pages.dev' || origin?.endsWith('.earth-client.pages.dev')) {
+    if (origin) {
       headers.set('Access-Control-Allow-Origin', origin);
+      headers.set('Access-Control-Allow-Credentials', 'true');
       headers.set('Vary', 'Origin');
+    } else {
+      headers.set('Access-Control-Allow-Origin', '*');
     }
-    headers.set('Access-Control-Allow-Methods', 'GET,POST,OPTIONS');
-    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, Accept');
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, X-Requested-With, X-Earth-API-Version, Accept');
     headers.set('Access-Control-Expose-Headers', 'X-Request-ID, X-EARTH-API-Version');
     headers.set('X-Request-ID', requestId);
     headers.set('X-EARTH-API-Version', '2026-08');

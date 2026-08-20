@@ -30,7 +30,8 @@ class EarthApi {
         _customTransport = transport;
 
   EarthApiTransport get _transport =>
-      _customTransport ?? EarthApiTransport(baseUrl: baseUrl);
+      _customTransport ??
+      EarthApiTransport(baseUrl: baseUrl.isNotEmpty ? baseUrl : null);
 
   Future<dynamic> _request(String path,
       {String method = 'GET', Map<String, dynamic>? body}) async {

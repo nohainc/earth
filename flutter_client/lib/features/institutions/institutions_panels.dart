@@ -521,8 +521,7 @@ class CommunitiesPanel extends StatelessWidget {
               final name = community['name']?.toString() ?? 'Community';
               final status =
                   (community['status']?.toString() ?? 'active').toUpperCase();
-              final members =
-                  (community['member_count'] as num?)?.toInt() ?? 12;
+              final members = asIntOr(community['member_count'], 12);
 
               return Container(
                 margin: const EdgeInsets.only(bottom: 10),

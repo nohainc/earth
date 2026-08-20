@@ -91,10 +91,12 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       balance: string;
     }>(`
       SELECT h.id, h.display_name, h.age_years, h.standing, h.legacy, h.life_status,
-             h.city_id, h.dynasty_name,
+             m.city_id, d.dynasty_name,
              COALESCE(ab.balance, '0') AS balance
       FROM humans h
       LEFT JOIN account_balances ab ON ab.account_id = h.account_id AND ab.currency = 'CREDIT'
+      LEFT JOIN memberships m ON m.human_id = h.id
+      LEFT JOIN dynasties d ON d.founder_human_id = h.id
       WHERE h.life_status = 'active'
       ORDER BY (h.legacy * 3 + h.standing * 2 + FLOOR(COALESCE(ab.balance::numeric, 0) / 100)) DESC, h.legacy DESC
       LIMIT $1
@@ -255,7 +257,7 @@ export async function listProductionEvents(repository: PostgresRepository, human
 }
 
 export async function readBusiness(repository: PostgresRepository, businessId: string, viewerId: string): Promise<Record<string, unknown>> {
-  const business = await repository.query("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, business_financials.revenue, business_financials.operating_costs, business_financials.profit, business_financials.taxed_revenue, business_financials.last_game_day, business_financials.updated_at FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))", [businessId, viewerId]);
+  const business = await repository.query("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, COALESCE(business_financials.revenue, 0) AS revenue, COALESCE(business_financials.operating_costs, 0) AS operating_costs, COALESCE(business_financials.profit, 0) AS profit, COALESCE(business_financials.taxed_revenue, 0) AS taxed_revenue, COALESCE(business_financials.last_game_day, 1) AS last_game_day, business_financials.updated_at FROM businesses LEFT JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))", [businessId, viewerId]);
   return business.rows[0] ? { business: business.rows[0] } : { error: 'Business financial statement is not available to this Human' };
 }
 

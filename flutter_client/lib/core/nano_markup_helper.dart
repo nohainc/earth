@@ -4,6 +4,7 @@ import 'package:nanomarkup/nanomarkup.dart' as nm;
 /// Utility for serializing and deserializing payloads using Nano Markup.
 class NanoMarkupHelper {
   static dynamic _normalize(dynamic val) {
+    if (val == null || val == 'null') return null;
     if (val is Map) {
       final map = <String, dynamic>{};
       for (final entry in val.entries) {

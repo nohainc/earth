@@ -158,16 +158,15 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   Widget build(BuildContext context) {
     final name = '${widget.state.human['name'] ?? 'Human'}';
     final city =
-        '${(widget.state.institutions['city'] as Map<String, dynamic>?)?['name'] ?? 'Independent'}';
+        '${(widget.state.institutions['city'] is Map ? widget.state.institutions['city']['name'] : null) ?? 'Independent'}';
 
     final credits = formatWholeNumber(widget.state.human['credits']);
     final flowMap =
-        (widget.state.json['resourceFlows'] as Map<String, dynamic>?) ??
-            const {};
+        (widget.state.json['resourceFlows'] is Map ? widget.state.json['resourceFlows'] as Map : const {});
     double netFor(String key) {
       final raw =
           flowMap[key] ?? (key == 'material' ? flowMap['materials'] : null);
-      return asDoubleOr((raw as Map<String, dynamic>?)?['net'], 0);
+      return asDoubleOr(raw is Map ? raw['net'] : null, 0);
     }
 
     final resources = [
