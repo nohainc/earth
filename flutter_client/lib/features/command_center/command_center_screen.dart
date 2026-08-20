@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../app/theme.dart';
@@ -453,7 +454,7 @@ class _CommandCenterState extends State<CommandCenter> {
   @override
   Widget build(BuildContext context) {
     final current = state;
-    final canAdvanceDay = current != null;
+    final canAdvanceDay = kDebugMode && current != null;
 
     return LayoutBuilder(builder: (context, viewport) {
       final compact = viewport.maxWidth < 800;

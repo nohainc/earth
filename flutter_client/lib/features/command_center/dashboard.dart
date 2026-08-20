@@ -369,26 +369,23 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'civic':
+      case 'governance':
         return [
           LayoutBuilder(
             builder: (context, constraints) {
-              final humanServices = HumanServicesPanel(
-                  panelKey: sectionKeys['civic'], state: state);
               final proposal =
                   ProposalPanel(state: state, busy: busy, action: action);
               final roles =
                   RolesPanel(state: state, busy: busy, action: action);
-              final communities =
-                  CommunitiesPanel(state: state, busy: busy, action: action);
-              final membership = CivicMembershipHistoryPanel(
-                  membershipEvents: membershipEvents);
-              final authority =
-                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               final publicFinance = PublicFinanceGovernancePanel(
                 state: state,
                 busy: busy,
                 action: action,
               );
+              final membership = CivicMembershipHistoryPanel(
+                  membershipEvents: membershipEvents);
+              final authority =
+                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -397,8 +394,6 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          humanServices,
-                          const SizedBox(height: 34),
                           proposal,
                           const SizedBox(height: 34),
                           roles,
@@ -412,11 +407,9 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          communities,
+                          publicFinance,
                           const SizedBox(height: 34),
                           authority,
-                          const SizedBox(height: 34),
-                          publicFinance,
                         ],
                       ),
                     ),
@@ -426,19 +419,15 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  humanServices,
-                  const SizedBox(height: 34),
                   proposal,
                   const SizedBox(height: 34),
                   roles,
                   const SizedBox(height: 34),
-                  communities,
+                  publicFinance,
                   const SizedBox(height: 34),
                   membership,
                   const SizedBox(height: 34),
                   authority,
-                  const SizedBox(height: 34),
-                  publicFinance,
                 ],
               );
             },
@@ -448,8 +437,9 @@ class Dashboard extends StatelessWidget {
         return [
           LayoutBuilder(
             builder: (context, constraints) {
+              final humanServices = HumanServicesPanel(
+                  panelKey: sectionKeys['city'], state: state);
               final institutions = InstitutionsCapacityPanel(
-                panelKey: sectionKeys['city'],
                 state: state,
                 busy: busy,
                 action: action,
@@ -467,6 +457,8 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          humanServices,
+                          const SizedBox(height: 34),
                           institutions,
                           const SizedBox(height: 34),
                           communities,
@@ -490,6 +482,8 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  humanServices,
+                  const SizedBox(height: 34),
                   institutions,
                   const SizedBox(height: 34),
                   communities,

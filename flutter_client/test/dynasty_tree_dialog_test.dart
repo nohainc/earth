@@ -212,11 +212,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Switch to Perks tab
-    await tester.tap(find.text('HEREDITARY TRAITS MATRIX'));
-    await tester.pumpAndSettle();
-
+    // Scroll until unlock perk button is visible
     final unlockBtn = find.byKey(const Key('btn-unlock-perk-diplomatic_dynasty'));
+    await tester.scrollUntilVisible(unlockBtn, 200);
     expect(unlockBtn, findsOneWidget);
 
     await tester.tap(unlockBtn);
@@ -297,11 +295,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    // Switch to Heirlooms tab
-    await tester.tap(find.text('HEIRLOOMS & RELICS VAULT'));
-    await tester.pumpAndSettle();
-
+    // Scroll until equip heirloom button is visible
     final equipBtn = find.byKey(const Key('btn-equip-heirloom-HLM-001'));
+    await tester.scrollUntilVisible(equipBtn, 200);
     expect(equipBtn, findsOneWidget);
 
     await tester.tap(equipBtn);

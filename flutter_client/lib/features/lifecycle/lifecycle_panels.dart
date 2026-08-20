@@ -660,109 +660,118 @@ class LedgerPanel extends StatelessWidget {
               'No ledger activity recorded yet.',
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: entries.take(10).map((raw) {
-                final entry = raw as Map<String, dynamic>;
-                final reason = (entry['reason_type']?.toString() ?? 'TRANSFER')
-                    .toUpperCase();
-                final amount = entry['amount'] ?? 0;
-                final currency =
-                    (entry['currency']?.toString() ?? 'C').toUpperCase();
-                final debit =
-                    entry['debit_account']?.toString() ?? 'SYSTEM_ESCROW';
-                final credit =
-                    entry['credit_account']?.toString() ?? 'CITIZEN_WALLET';
+          : Container(
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: entries.take(10).indexed.map((indexed) {
+                  final entry = indexed.$2 as Map<String, dynamic>;
+                  final isLast = indexed.$1 == entries.take(10).length - 1;
+                  final reason = (entry['reason_type']?.toString() ?? 'TRANSFER')
+                      .toUpperCase();
+                  final amount = entry['amount'] ?? 0;
+                  final currency =
+                      (entry['currency']?.toString() ?? 'C').toUpperCase();
+                  final debit =
+                      entry['debit_account']?.toString() ?? 'SYSTEM_ESCROW';
+                  final credit =
+                      entry['credit_account']?.toString() ?? 'CITIZEN_WALLET';
 
-                Color reasonColor = cyanAccentColor;
-                IconData reasonIcon = Icons.swap_horiz_rounded;
+                  Color reasonColor = cyanAccentColor;
+                  IconData reasonIcon = Icons.swap_horiz_rounded;
 
-                if (reason.contains('TAX')) {
-                  reasonColor = Colors.orangeAccent;
-                  reasonIcon = Icons.receipt_long_outlined;
-                } else if (reason.contains('DIVIDEND') ||
-                    reason.contains('INCOME')) {
-                  reasonColor = violetColor;
-                  reasonIcon = Icons.paid_outlined;
-                } else if (reason.contains('MARKET') ||
-                    reason.contains('ORDER')) {
-                  reasonColor = Colors.tealAccent;
-                  reasonIcon = Icons.storefront_outlined;
-                } else if (reason.contains('FEE') ||
-                    reason.contains('PENALTY')) {
-                  reasonColor = Colors.redAccent;
-                  reasonIcon = Icons.gavel_outlined;
-                }
+                  if (reason.contains('TAX')) {
+                    reasonColor = Colors.orangeAccent;
+                    reasonIcon = Icons.receipt_long_outlined;
+                  } else if (reason.contains('DIVIDEND') ||
+                      reason.contains('INCOME')) {
+                    reasonColor = violetColor;
+                    reasonIcon = Icons.paid_outlined;
+                  } else if (reason.contains('MARKET') ||
+                      reason.contains('ORDER')) {
+                    reasonColor = Colors.tealAccent;
+                    reasonIcon = Icons.storefront_outlined;
+                  } else if (reason.contains('FEE') ||
+                      reason.contains('PENALTY')) {
+                    reasonColor = Colors.redAccent;
+                    reasonIcon = Icons.gavel_outlined;
+                  }
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: surfaceColor.withValues(alpha: .6),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: reasonColor.withValues(alpha: .15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Icon(reasonIcon, size: 14, color: reasonColor),
+                  return Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: Colors.white10),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              reason,
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                color: reasonColor,
-                                letterSpacing: .6,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '$debit → $credit',
-                              style: const TextStyle(
-                                fontSize: 9.5,
-                                color: mutedColor,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: reasonColor.withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Icon(reasonIcon, size: 14, color: reasonColor),
                         ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .06),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(color: Colors.white12),
-                        ),
-                        child: Text(
-                          '$amount $currency',
-                          style: const TextStyle(
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w800,
-                            color: inkColor,
-                            letterSpacing: -.2,
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                reason,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: reasonColor,
+                                  letterSpacing: .6,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$debit → $credit',
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  color: mutedColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: .06),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Text(
+                            '$amount $currency',
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w800,
+                              color: inkColor,
+                              letterSpacing: -.2,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
     );
   }
@@ -884,125 +893,137 @@ class OwnershipTimelinePanel extends StatelessWidget {
               style: TextStyle(color: mutedColor, fontSize: 11),
             )
           else
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: ownershipEvents.take(10).map((raw) {
-                final event = raw as Map<String, dynamic>;
-                final direction =
-                    event['from_owner_id'] == null ? 'ACQUIRED' : 'TRANSFERRED';
-                final isAcquired = direction == 'ACQUIRED';
-                final assetType =
-                    (event['asset_type']?.toString() ?? 'ASSET').toUpperCase();
-                final assetId = event['asset_id']?.toString() ?? '—';
-                final qty = event['quantity'] ?? 1;
-                final gameDay = event['game_day'] ?? '—';
-                final fromOwner =
-                    event['from_owner_id']?.toString() ?? 'ORIGIN_TREASURY';
-                final toOwner =
-                    event['to_owner_id']?.toString() ?? 'CURRENT_HOLDER';
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: ownershipEvents.take(10).indexed.map((indexed) {
+                  final event = indexed.$2 as Map<String, dynamic>;
+                  final isLast =
+                      indexed.$1 == ownershipEvents.take(10).length - 1;
+                  final direction = event['from_owner_id'] == null
+                      ? 'ACQUIRED'
+                      : 'TRANSFERRED';
+                  final isAcquired = direction == 'ACQUIRED';
+                  final assetType =
+                      (event['asset_type']?.toString() ?? 'ASSET')
+                          .toUpperCase();
+                  final assetId = event['asset_id']?.toString() ?? '—';
+                  final qty = event['quantity'] ?? 1;
+                  final gameDay = event['game_day'] ?? '—';
+                  final fromOwner = event['from_owner_id']?.toString() ??
+                      'ORIGIN_TREASURY';
+                  final toOwner =
+                      event['to_owner_id']?.toString() ?? 'CURRENT_HOLDER';
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: surfaceColor.withValues(alpha: .6),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: isAcquired
-                              ? cyanAccentColor.withValues(alpha: .15)
-                              : violetColor.withValues(alpha: .15),
-                          borderRadius: BorderRadius.circular(6),
-                        ),
-                        child: Icon(
-                          isAcquired
-                              ? Icons.add_circle_outline_rounded
-                              : Icons.swap_horiz_rounded,
-                          size: 14,
-                          color: isAcquired ? cyanAccentColor : violetColor,
-                        ),
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: Colors.white10),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 5, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: .06),
-                                    borderRadius: BorderRadius.circular(3),
-                                  ),
-                                  child: Text(
-                                    'DAY $gameDay',
-                                    style: const TextStyle(
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.w700,
-                                      color: mutedColor,
-                                      letterSpacing: .5,
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  '$assetType · $assetId ($qty units)',
-                                  style: const TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    color: inkColor,
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              '$fromOwner → $toOwner',
-                              style: const TextStyle(
-                                fontSize: 9.5,
-                                color: mutedColor,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ],
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 7, vertical: 3),
-                        decoration: BoxDecoration(
-                          color: (isAcquired ? cyanAccentColor : violetColor)
-                              .withValues(alpha: .12),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: (isAcquired ? cyanAccentColor : violetColor)
-                                .withValues(alpha: .3),
+                    ),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(6),
+                          decoration: BoxDecoration(
+                            color: isAcquired
+                                ? cyanAccentColor.withValues(alpha: .15)
+                                : violetColor.withValues(alpha: .15),
+                            borderRadius: BorderRadius.circular(6),
                           ),
-                        ),
-                        child: Text(
-                          direction,
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: .6,
+                          child: Icon(
+                            isAcquired
+                                ? Icons.add_circle_outline_rounded
+                                : Icons.swap_horiz_rounded,
+                            size: 14,
                             color: isAcquired ? cyanAccentColor : violetColor,
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                        horizontal: 5, vertical: 1.5),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white.withValues(alpha: .06),
+                                      borderRadius: BorderRadius.circular(3),
+                                    ),
+                                    child: Text(
+                                      'DAY $gameDay',
+                                      style: const TextStyle(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: mutedColor,
+                                        letterSpacing: .5,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    '$assetType · $assetId ($qty units)',
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: inkColor,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '$fromOwner → $toOwner',
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  color: mutedColor,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 7, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: (isAcquired ? cyanAccentColor : violetColor)
+                                .withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(4),
+                            border: Border.all(
+                              color: (isAcquired ? cyanAccentColor : violetColor)
+                                  .withValues(alpha: .3),
+                            ),
+                          ),
+                          child: Text(
+                            direction,
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .6,
+                              color: isAcquired ? cyanAccentColor : violetColor,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
         ],
       ),
@@ -1018,102 +1039,169 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EarthPanel(
-      title: 'CIVIC STATUS / MEMBERSHIP HISTORY',
-      infoDescription:
-          '• Civic & Corporate Affiliation Journal: Chronological record of citizenship declarations, municipal registrations, and corporate charters.\n\n• Affiliation Records:\n  - JOIN_CITY / RESIDE: Residential affiliation establishing eligibility for municipal services and local voting.\n  - FOUND_ENTERPRISE / INCORPORATE: Corporate legal registration establishing commercial limited liability.\n  - JOIN_COMMUNITY: Collective civic association membership.',
-      child: membershipEvents.isEmpty
-          ? const Text(
-              'Your civic and corporate history will appear here after joining an institution.',
-              style: TextStyle(color: mutedColor, fontSize: 11),
-            )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: membershipEvents.take(8).map((raw) {
-                if (raw is! Map<String, dynamic>)
-                  return const SizedBox.shrink();
-                final event = raw;
-                final day = event['game_day']?.toString() ?? '-';
-                final type = (event['institution_type']?.toString() ?? 'CIVIC')
-                    .toUpperCase();
-                final id = event['institution_id']?.toString() ?? '';
-                final action =
-                    (event['action']?.toString() ?? 'JOIN').toUpperCase();
+    const infoText =
+        '• Civic & Corporate Affiliation Journal: Chronological record of citizenship declarations, municipal registrations, and corporate charters.\n\n• Affiliation Records:\n  - JOIN_CITY / RESIDE: Residential affiliation establishing eligibility for municipal services and local voting.\n  - FOUND_ENTERPRISE / INCORPORATE: Corporate legal registration establishing commercial limited liability.\n  - JOIN_COMMUNITY: Collective civic association membership.';
 
-                Color typeColor = cyanAccentColor;
-                if (type.contains('CORP')) typeColor = violetColor;
-                if (type.contains('COMMUNITY')) typeColor = Colors.tealAccent;
+    final eventsToDisplay = membershipEvents.take(8).whereType<Map<String, dynamic>>().toList();
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: surfaceColor.withValues(alpha: .6),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .05),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'DAY $day',
-                          style: const TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: mutedColor,
-                          ),
-                        ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            const Text(
+              'CIVIC STATUS / MEMBERSHIP HISTORY',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.1,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
+            const SizedBox(width: 6),
+            IconButton(
+              icon: const Icon(Icons.info_outline, size: 14, color: mutedColor),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              tooltip: 'Info',
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (ctx) => AlertDialog(
+                    backgroundColor: EarthColors.cardSurface,
+                    title: const Text(
+                      'CIVIC STATUS / MEMBERSHIP HISTORY',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: cyanAccentColor,
                       ),
-                      const SizedBox(width: 10),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: typeColor.withValues(alpha: .15),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                              color: typeColor.withValues(alpha: .3)),
-                        ),
-                        child: Text(
-                          type,
-                          style: TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: typeColor,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          id,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w700,
-                            color: inkColor,
-                          ),
-                        ),
-                      ),
-                      Text(
-                        action,
-                        style: const TextStyle(
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          color: inkColor,
-                        ),
+                    ),
+                    content: const Text(
+                      infoText,
+                      style: TextStyle(fontSize: 11, color: inkColor),
+                    ),
+                    actions: [
+                      TextButton(
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: const Text('CLOSE'),
                       ),
                     ],
                   ),
                 );
-              }).toList(),
+              },
             ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        eventsToDisplay.isEmpty
+            ? Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: surfaceColor.withValues(alpha: .6),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: const Text(
+                  'Your civic and corporate history will appear here after joining an institution.',
+                  style: TextStyle(color: mutedColor, fontSize: 11),
+                ),
+              )
+            : Container(
+                decoration: BoxDecoration(
+                  color: surfaceColor.withValues(alpha: .6),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: Colors.white10),
+                ),
+                clipBehavior: Clip.antiAlias,
+                child: Column(
+                  children: eventsToDisplay.indexed.map((indexed) {
+                    final event = indexed.$2;
+                    final isLast = indexed.$1 == eventsToDisplay.length - 1;
+                    final day = event['game_day']?.toString() ?? '-';
+                    final type = (event['institution_type']?.toString() ?? 'CIVIC')
+                        .toUpperCase();
+                    final id = event['institution_id']?.toString() ?? '';
+                    final action =
+                        (event['action']?.toString() ?? 'JOIN').toUpperCase();
+
+                    Color typeColor = cyanAccentColor;
+                    if (type.contains('CORP')) typeColor = violetColor;
+                    if (type.contains('COMMUNITY')) typeColor = Colors.tealAccent;
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: isLast
+                              ? BorderSide.none
+                              : const BorderSide(color: Colors.white10),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .05),
+                              borderRadius: BorderRadius.circular(4),
+                            ),
+                            child: Text(
+                              'DAY $day',
+                              style: const TextStyle(
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w700,
+                                color: mutedColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 6, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: typeColor.withValues(alpha: .15),
+                              borderRadius: BorderRadius.circular(4),
+                              border: Border.all(
+                                  color: typeColor.withValues(alpha: .3)),
+                            ),
+                            child: Text(
+                              type,
+                              style: TextStyle(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w800,
+                                color: typeColor,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              id,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: inkColor,
+                              ),
+                            ),
+                          ),
+                          Text(
+                            action,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: inkColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+      ],
     );
   }
 }
@@ -1598,66 +1686,57 @@ class PantheonPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .75),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                _dynastyNode(
-                  generation: 'GEN I · FOUNDING ANCESTOR',
-                  name: deceased.isNotEmpty
-                      ? (deceased.first as Map<String, dynamic>)['display_name']
-                              ?.toString() ??
-                          'Lysander Vance'
-                      : 'Lysander Vance',
-                  details:
-                      'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
-                  score: deceased.isNotEmpty
-                      ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}'
-                      : '84',
-                  color: violetColor,
-                  isLast: false,
-                ),
-                _treeConnector(),
-                _dynastyNode(
-                  generation: 'GEN II · HEIR & SUCCESSOR',
-                  name: deceased.length > 1
-                      ? (deceased[1] as Map<String, dynamic>)['display_name']
-                              ?.toString() ??
-                          'Mira Vance'
-                      : 'Mira Vance',
-                  details:
-                      'Day 73–144 · Expanded Industrial Grid · 3 Patents Granted',
-                  score: deceased.length > 1
-                      ? '${(deceased[1] as Map<String, dynamic>)['final_legacy'] ?? 112}'
-                      : '112',
-                  color: cyanAccentColor,
-                  isLast: false,
-                ),
-                _treeConnector(),
-                _dynastyNode(
-                  generation: 'GEN III · CURRENT ACTIVE CITIZEN',
-                  name: living.isNotEmpty
-                      ? (living.first as Map<String, dynamic>)['display_name']
-                              ?.toString() ??
-                          'Amara Kline'
-                      : 'Amara Kline',
-                  details:
-                      'Active · Mayor of New Kyoto · Managing 4 Enterprises',
-                  score: living.isNotEmpty
-                      ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}'
-                      : '145',
-                  color: Colors.tealAccent,
-                  isLast: true,
-                ),
-              ],
-            ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _dynastyNode(
+                generation: 'GEN I · FOUNDING ANCESTOR',
+                name: deceased.isNotEmpty
+                    ? (deceased.first as Map<String, dynamic>)['display_name']
+                            ?.toString() ??
+                        'Lysander Vance'
+                    : 'Lysander Vance',
+                details:
+                    'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
+                score: deceased.isNotEmpty
+                    ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}'
+                    : '84',
+                color: violetColor,
+                isLast: false,
+              ),
+              _treeConnector(),
+              _dynastyNode(
+                generation: 'GEN II · HEIR & SUCCESSOR',
+                name: deceased.length > 1
+                    ? (deceased[1] as Map<String, dynamic>)['display_name']
+                            ?.toString() ??
+                        'Mira Vance'
+                    : 'Mira Vance',
+                details:
+                    'Day 73–144 · Expanded Industrial Grid · 3 Patents Granted',
+                score: deceased.length > 1
+                    ? '${(deceased[1] as Map<String, dynamic>)['final_legacy'] ?? 112}'
+                    : '112',
+                color: cyanAccentColor,
+                isLast: false,
+              ),
+              _treeConnector(),
+              _dynastyNode(
+                generation: 'GEN III · CURRENT ACTIVE CITIZEN',
+                name: living.isNotEmpty
+                    ? (living.first as Map<String, dynamic>)['display_name']
+                            ?.toString() ??
+                        'Amara Kline'
+                    : 'Amara Kline',
+                details:
+                    'Active · Mayor of New Kyoto · Managing 4 Enterprises',
+                score: living.isNotEmpty
+                    ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}'
+                    : '145',
+                color: Colors.tealAccent,
+                isLast: true,
+              ),
+            ],
           ),
 
           const SizedBox(height: 16),
@@ -1674,45 +1753,59 @@ class PantheonPanel extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 8),
-            ...deceased.take(3).map((raw) {
-              final entry = raw as Map<String, dynamic>;
-              final name = entry['display_name'] ?? 'Unknown';
-              final legacy = entry['final_legacy'] ?? 0;
-              final day = entry['death_game_day'] ?? 0;
-              return Container(
-                margin: const EdgeInsets.only(bottom: 6),
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: .03),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: deceased.take(3).indexed.map((indexed) {
+                  final raw = indexed.$2;
+                  final isLast = indexed.$1 == deceased.take(3).length - 1;
+                  final entry = raw as Map<String, dynamic>;
+                  final name = entry['display_name'] ?? 'Unknown';
+                  final legacy = entry['final_legacy'] ?? 0;
+                  final day = entry['death_game_day'] ?? 0;
+                  return Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: Colors.white10),
+                      ),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(Icons.archive_outlined,
-                            size: 13, color: violetColor),
-                        const SizedBox(width: 6),
+                        Row(
+                          children: [
+                            const Icon(Icons.archive_outlined,
+                                size: 13, color: violetColor),
+                            const SizedBox(width: 6),
+                            Text(
+                              '$name',
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: inkColor),
+                            ),
+                          ],
+                        ),
                         Text(
-                          '$name',
-                          style: const TextStyle(
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                              color: inkColor),
+                          'Deceased Day $day · Legacy: $legacy L',
+                          style:
+                              const TextStyle(fontSize: 10, color: mutedColor),
                         ),
                       ],
                     ),
-                    Text(
-                      'Deceased Day $day · Legacy: $legacy L',
-                      style: const TextStyle(fontSize: 10, color: mutedColor),
-                    ),
-                  ],
-                ),
-              );
-            }),
+                  );
+                }).toList(),
+              ),
+            ),
           ],
 
           if (achievements.isNotEmpty) ...[

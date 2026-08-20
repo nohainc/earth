@@ -6,6 +6,33 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'business_dialogs.dart';
 
+Widget _businessTopicHeading(BuildContext context, String title,
+    {required String description}) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Flexible(
+        child: Text(title,
+            style: const TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1)),
+      ),
+      const SizedBox(width: 5),
+      IconButton(
+        tooltip: 'About $title',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(Icons.info_outline,
+            size: 14, color: mutedColor.withValues(alpha: .8)),
+        onPressed: () => showEarthInfoDialog(context,
+            title: title, description: description),
+      ),
+    ]),
+  );
+}
+
 class BusinessPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -82,9 +109,8 @@ class BusinessPanel extends StatelessWidget {
       key: panelKey,
       title: 'ENTERPRISE OPERATIONS / $businessName',
       showSurface: false,
+      showTitle: false,
       contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
       infoDescription:
           '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.\n\n• Unit Economics & Financial Statement:\n  - OPERATING REVENUE: Gross product sales from market batches and executed contracts.\n  - OPERATING COSTS: Combined raw inputs, power, maintenance reserves, and civic taxes.\n  - NET PROFIT / CYCLE: Net operating income with margin % and cost structure ratio breakdown.\n  - TAX ASSESSMENT BASE: Audited canonical taxable turnover.\n\n• Cap Table & Governance: Share distribution across equity holders, controller designation, and constitutional thresholds (Shareholder vote %, Board approval %, Dilution notice days).\n\n• Corporate Action Hub: Execute dividend distributions, equity transfers, share issuance, mergers, managerial appointments, and enterprise liquidation.',
       child: LayoutBuilder(
@@ -95,6 +121,12 @@ class BusinessPanel extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _businessTopicHeading(
+                context,
+                'ENTERPRISE OPERATIONS / $businessName',
+                description:
+                    '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.',
+              ),
               // 1. EXECUTIVE ENTERPRISE HEADER CARD
               Container(
                 width: double.infinity,
@@ -378,74 +410,68 @@ class BusinessPanel extends StatelessWidget {
                 ),
               ],
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 34),
 
               // 2. FINANCIAL STATEMENT & UNIT ECONOMICS
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  'PERIOD FINANCIAL STATEMENT & UNIT ECONOMICS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: mutedColor,
-                  ),
-                ),
+              _businessTopicHeading(
+                context,
+                'PERIOD FINANCIAL STATEMENT & UNIT ECONOMICS',
+                description:
+                    '• OPERATING REVENUE: Gross product sales from market batches and executed contracts.\n• OPERATING COSTS: Combined raw inputs, power, maintenance reserves, and civic taxes.\n• NET PROFIT / CYCLE: Net operating income with margin % and cost structure ratio breakdown.\n• TAX ASSESSMENT BASE: Audited canonical taxable turnover.',
               ),
-              const SizedBox(height: 8),
 
               LayoutBuilder(
                 builder: (context, finConstraints) {
                   final finWidth = finConstraints.maxWidth;
-                  final numCols = finWidth >= 900
-                      ? 4
-                      : finWidth >= 500
-                          ? 2
-                          : 1;
-                  final itemWidth = numCols == 1
-                      ? finWidth
-                      : (finWidth - (numCols - 1) * 12) / numCols;
+                  final is4Col = finWidth >= 900;
+                  final is2Col = finWidth >= 500;
+                  final itemWidth = is4Col
+                      ? (finWidth - 36) / 4
+                      : is2Col
+                          ? (finWidth - 12) / 2
+                          : finWidth;
+
+                  final metrics = [
+                    _metricBox(
+                      width: itemWidth,
+                      title: 'OPERATING REVENUE',
+                      value: formatCreditsAmount(revenue),
+                      subtext: 'Market sales & contracts',
+                      accent: Colors.tealAccent,
+                      icon: Icons.trending_up_rounded,
+                    ),
+                    _metricBox(
+                      width: itemWidth,
+                      title: 'OPERATING COSTS',
+                      value: formatCreditsAmount(operatingCosts),
+                      subtext: 'Inputs, maint & taxes',
+                      accent: Colors.orangeAccent,
+                      icon: Icons.trending_down_rounded,
+                    ),
+                    _metricBox(
+                      width: itemWidth,
+                      title: 'NET PROFIT / CYCLE',
+                      value:
+                          '${profit >= 0 ? '+' : ''}${formatCreditsAmount(profit)}',
+                      subtext: 'Margin: ${profitMargin.toStringAsFixed(1)}%',
+                      accent:
+                          profit >= 0 ? cyanAccentColor : Colors.redAccent,
+                      icon: Icons.account_balance_wallet_outlined,
+                    ),
+                    _metricBox(
+                      width: itemWidth,
+                      title: 'TAX ASSESSMENT BASE',
+                      value: formatCreditsAmount(taxedRevenue),
+                      subtext: 'Audited canonical base',
+                      accent: violetColor,
+                      icon: Icons.receipt_long_outlined,
+                    ),
+                  ];
 
                   return Wrap(
                     spacing: 12,
                     runSpacing: 12,
-                    children: [
-                      _metricBox(
-                        width: itemWidth,
-                        title: 'OPERATING REVENUE',
-                        value: formatCreditsAmount(revenue),
-                        subtext: 'Market sales & contracts',
-                        accent: Colors.tealAccent,
-                        icon: Icons.trending_up_rounded,
-                      ),
-                      _metricBox(
-                        width: itemWidth,
-                        title: 'OPERATING COSTS',
-                        value: formatCreditsAmount(operatingCosts),
-                        subtext: 'Inputs, maint & taxes',
-                        accent: Colors.orangeAccent,
-                        icon: Icons.trending_down_rounded,
-                      ),
-                      _metricBox(
-                        width: itemWidth,
-                        title: 'NET PROFIT / CYCLE',
-                        value:
-                            '${profit >= 0 ? '+' : ''}${formatCreditsAmount(profit)}',
-                        subtext: 'Margin: ${profitMargin.toStringAsFixed(1)}%',
-                        accent:
-                            profit >= 0 ? cyanAccentColor : Colors.redAccent,
-                        icon: Icons.account_balance_wallet_outlined,
-                      ),
-                      _metricBox(
-                        width: itemWidth,
-                        title: 'TAX ASSESSMENT BASE',
-                        value: formatCreditsAmount(taxedRevenue),
-                        subtext: 'Audited canonical base',
-                        accent: violetColor,
-                        icon: Icons.receipt_long_outlined,
-                      ),
-                    ],
+                    children: metrics,
                   );
                 },
               ),
@@ -454,8 +480,7 @@ class BusinessPanel extends StatelessWidget {
 
               // Visual Profit vs Cost Ratio Bar
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: surfaceColor.withValues(alpha: .7),
                   borderRadius: BorderRadius.circular(10),
@@ -467,21 +492,22 @@ class BusinessPanel extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'COST STRUCTURE VS PROFIT MARGIN',
+                        const Text(
+                          'MARGIN VS COST STRUCTURE',
                           style: TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w700,
                             letterSpacing: .8,
-                            color: mutedColor.withValues(alpha: .9),
+                            color: mutedColor,
                           ),
                         ),
                         Text(
-                          '${(costRatio * 100).toStringAsFixed(0)}% Costs  ·  ${(profitRatio * 100).toStringAsFixed(0)}% Retained Profit',
-                          style: const TextStyle(
+                          'OPERATING MARGIN: ${profitMargin.toStringAsFixed(1)}%',
+                          style: TextStyle(
                             fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: inkColor,
+                            fontWeight: FontWeight.w800,
+                            color:
+                                profit >= 0 ? cyanAccentColor : Colors.redAccent,
                           ),
                         ),
                       ],
@@ -517,29 +543,22 @@ class BusinessPanel extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 34),
 
               // 3. CAP TABLE & GOVERNANCE
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  'CAP TABLE & CORPORATE GOVERNANCE',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: mutedColor,
-                  ),
-                ),
+              _businessTopicHeading(
+                context,
+                'CAP TABLE & CORPORATE GOVERNANCE',
+                description:
+                    '• Share distribution across equity holders, controller designation, and constitutional thresholds (Shareholder vote %, Board approval %, Dilution notice days).',
               ),
-              const SizedBox(height: 8),
 
               Container(
                 width: double.infinity,
-                padding: const EdgeInsets.all(16),
+                padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: .8),
-                  borderRadius: BorderRadius.circular(12),
+                  color: surfaceColor.withValues(alpha: .85),
+                  borderRadius: BorderRadius.circular(14),
                   border: Border.all(color: Colors.white12),
                 ),
                 child: Column(
@@ -548,32 +567,49 @@ class BusinessPanel extends StatelessWidget {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          'SHARE DISTRIBUTION ($totalShares TOTAL SHARES)',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: .8,
-                            color: mutedColor,
-                          ),
+                        Row(
+                          children: [
+                            const Icon(Icons.pie_chart_outline,
+                                size: 16, color: violetColor),
+                            const SizedBox(width: 8),
+                            Text(
+                              'EQUITY DISTRIBUTION ($totalShares TOTAL SHARES)',
+                              style: const TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: .8,
+                                color: inkColor,
+                              ),
+                            ),
+                          ],
                         ),
-                        Text(
-                          'CONTROLLER: $controllingId',
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: .8,
-                            color: cyanAccentColor,
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: cyanAccentColor.withValues(alpha: .12),
+                            borderRadius: BorderRadius.circular(5),
+                            border: Border.all(
+                                color: cyanAccentColor.withValues(alpha: .3)),
+                          ),
+                          child: Text(
+                            'CONTROLLER: $controllingId',
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: .8,
+                              color: cyanAccentColor,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: 12),
 
                     // Multi-Shareholder Proportional Bar
                     if (holders.isNotEmpty) ...[
                       ClipRRect(
-                        borderRadius: BorderRadius.circular(4),
+                        borderRadius: BorderRadius.circular(5),
                         child: SizedBox(
                           height: 10,
                           child: Row(
@@ -600,7 +636,7 @@ class BusinessPanel extends StatelessWidget {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 14),
+                      const SizedBox(height: 16),
                     ],
 
                     // Shareholders List & Governance Thresholds side by side or stacked
@@ -619,8 +655,8 @@ class BusinessPanel extends StatelessWidget {
                           const SizedBox(width: 20),
                           Container(
                             width: 1,
-                            height: 80,
-                            color: Colors.white10,
+                            height: 100,
+                            color: Colors.white12,
                           ),
                           const SizedBox(width: 20),
                           Expanded(
@@ -638,7 +674,7 @@ class BusinessPanel extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           ..._buildShareholderItems(holders, controllingId),
-                          const SizedBox(height: 14),
+                          const SizedBox(height: 16),
                           _buildGovernanceRulesCard(
                             shareholderThreshold,
                             boardThreshold,
@@ -650,22 +686,15 @@ class BusinessPanel extends StatelessWidget {
                 ),
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 34),
 
               // 4. ACTION TOOLBAR HUB
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  'EXECUTIVE CORPORATE ACTIONS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: mutedColor,
-                  ),
-                ),
+              _businessTopicHeading(
+                context,
+                'EXECUTIVE CORPORATE ACTIONS',
+                description:
+                    '• Execute dividend distributions, equity transfers, share issuance, mergers, managerial appointments, and enterprise liquidation.',
               ),
-              const SizedBox(height: 8),
 
               // Categorized Action Groups
               Container(

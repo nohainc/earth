@@ -375,9 +375,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
   }
 
   void _refreshOrderTotalsOnFocusLoss() {
-    _capBuyQuantityToBudget();
-    if (!_qtyFocusNode.hasFocus && !_priceFocusNode.hasFocus && mounted) {
-      setState(() {});
+    if (!_qtyFocusNode.hasFocus || !_priceFocusNode.hasFocus) {
+      _capBuyQuantityToBudget();
+      if (mounted) setState(() {});
     }
   }
 
@@ -894,14 +894,14 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontSize: 16,
+                  fontSize: 9.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: .7,
                   color: mutedColor)),
           const SizedBox(height: 2),
           Text(value,
               style: const TextStyle(
-                  fontSize: 10, fontWeight: FontWeight.w800, color: inkColor)),
+                  fontSize: 9.5, fontWeight: FontWeight.w800, color: inkColor)),
         ],
       );
 
@@ -910,8 +910,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           Text(label,
               style: const TextStyle(
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w400,
                   letterSpacing: .7,
                   color: mutedColor)),
           const SizedBox(height: 3),

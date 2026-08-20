@@ -5,6 +5,33 @@ import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
+Widget _financeTopicHeading(BuildContext context, String title,
+    {required String description}) {
+  return Padding(
+    padding: const EdgeInsets.only(bottom: 10),
+    child: Row(children: [
+      Flexible(
+        child: Text(title,
+            style: const TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.bold,
+                letterSpacing: 1.1)),
+      ),
+      const SizedBox(width: 5),
+      IconButton(
+        tooltip: 'About $title',
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(),
+        icon: Icon(Icons.info_outline,
+            size: 14, color: mutedColor.withValues(alpha: .8)),
+        onPressed: () => showEarthInfoDialog(context,
+            title: title, description: description),
+      ),
+    ]),
+  );
+}
+
 class PersonalFinancePanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
@@ -290,9 +317,8 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
       key: widget.panelKey,
       title: 'PERSONAL FINANCE & TAXATION',
       showSurface: false,
+      showTitle: false,
       contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
       infoDescription:
           '• Personal Wealth & Solvency Cockpit: Real-time liquid credit balance, solvency classification, and immutable statutory asset protection guarantees.\n\n• Unit Economics & Cash Flow:\n  - DAILY RECURRING INFLOW: Aggregate income from enterprise dividends, market sales, and contract payouts.\n  - DAILY BASELINE OUTFLOW: Mandatory living expenditures, residential rent, and machine maintenance.\n  - NET DAILY ACCUMULATION: Daily surplus or deficit with retained savings margin percentage.\n  - ASSESSED TAX OBLIGATIONS: Canonical municipal assessment base due for settlement.\n\n• Statutory Protection Shield: 100 C reserve floor and basic service robot are legally immune from forfeiture or insolvency seizure.\n\n• Financial Actions: Settle tax dues immediately to preserve civic standing, or invoke sovereign restructuring when facing severe deficits.',
       child: LayoutBuilder(
@@ -300,169 +326,160 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              _financeTopicHeading(
+                context,
+                'PERSONAL FINANCE & TAXATION',
+                description:
+                    '• Personal Wealth & Solvency Cockpit: Real-time liquid credit balance, solvency classification, and immutable statutory asset protection guarantees.',
+              ),
               // 1. EXECUTIVE WEALTH & SOLVENCY HEADER
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(18),
-                decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: .85),
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: Colors.white12),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: violetColor.withValues(alpha: .2),
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(
-                                color: violetColor.withValues(alpha: .4)),
-                          ),
-                          alignment: Alignment.center,
-                          child: const Icon(
-                            Icons.account_balance_wallet_rounded,
-                            size: 22,
-                            color: cyanAccentColor,
-                          ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 44,
+                        height: 44,
+                        decoration: BoxDecoration(
+                          color: EarthResourceColors.credits.withValues(alpha: .2),
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(
+                              color: EarthResourceColors.credits.withValues(alpha: .4)),
                         ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: Row(
-                                      children: [
-                                        Text(
-                                          formatWholeNumber(balance),
-                                          style: const TextStyle(
-                                            fontSize: 24,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: -0.5,
-                                            color: inkColor,
-                                          ),
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.account_balance_wallet_rounded,
+                          size: 22,
+                          color: EarthResourceColors.credits,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Row(
+                                    children: [
+                                      Text(
+                                        formatWholeNumber(balance),
+                                        style: const TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.5,
+                                          color: inkColor,
                                         ),
-                                        const SizedBox(width: 6),
-                                        const Text(
-                                          'C',
-                                          style: TextStyle(
-                                            fontSize: 14,
-                                            fontWeight: FontWeight.w800,
-                                            color: cyanAccentColor,
-                                            letterSpacing: .5,
-                                          ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      const Text(
+                                        'C',
+                                        style: TextStyle(
+                                          fontSize: 24,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: -0.5,
+                                          color: inkColor,
                                         ),
-                                      ],
-                                    ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        horizontal: 8, vertical: 3.5),
-                                    decoration: BoxDecoration(
-                                      color: statusColor.withValues(alpha: .15),
-                                      borderRadius: BorderRadius.circular(5),
-                                      border: Border.all(
-                                          color: statusColor
-                                              .withValues(alpha: .4)),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Container(
-                                          width: 6,
-                                          height: 6,
-                                          decoration: BoxDecoration(
-                                            color: statusColor,
-                                            shape: BoxShape.circle,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 5),
-                                        Text(
-                                          statusText,
-                                          style: TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w800,
-                                            letterSpacing: .8,
-                                            color: statusColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'ACCOUNT: ${widget.state.human['id'] ?? 'H-0044'}  ·  AUDIT STATUS: AUDITED DOUBLE-ENTRY  ·  SOLVENCY: $insolvencyStatus',
-                                style: const TextStyle(
-                                  fontSize: 10,
-                                  color: mutedColor,
-                                  letterSpacing: .6,
-                                  fontWeight: FontWeight.w600,
                                 ),
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 3.5),
+                                  decoration: BoxDecoration(
+                                    color: statusColor.withValues(alpha: .15),
+                                    borderRadius: BorderRadius.circular(5),
+                                    border: Border.all(
+                                        color: statusColor
+                                            .withValues(alpha: .4)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Container(
+                                        width: 6,
+                                        height: 6,
+                                        decoration: BoxDecoration(
+                                          color: statusColor,
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 5),
+                                      Text(
+                                        statusText,
+                                        style: TextStyle(
+                                          fontSize: 9.5,
+                                          fontWeight: FontWeight.w800,
+                                          letterSpacing: .8,
+                                          color: statusColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              'ACCOUNT: ${widget.state.human['id'] ?? 'H-0044'}  ·  AUDIT STATUS: AUDITED DOUBLE-ENTRY  ·  SOLVENCY: $insolvencyStatus',
+                              style: const TextStyle(
+                                fontSize: 10,
+                                color: mutedColor,
+                                letterSpacing: .6,
+                                fontWeight: FontWeight.w600,
                               ),
-                            ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+
+                  // Statutory Asset Protection Shield
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 14, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: .04),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.shield_outlined,
+                            size: 16, color: violetColor),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'STATUTORY PROTECTION SHIELD · Guaranteed minimum reserve: $protectedCredits C (Basic Service Robot protected from forfeiture)',
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: inkColor,
+                              letterSpacing: .4,
+                            ),
                           ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-
-                    // Statutory Asset Protection Shield
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withValues(alpha: .04),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white10),
-                      ),
-                      child: Row(
-                        children: [
-                          const Icon(Icons.shield_outlined,
-                              size: 16, color: violetColor),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Text(
-                              'STATUTORY PROTECTION SHIELD · Guaranteed minimum reserve: $protectedCredits C (Basic Service Robot protected from forfeiture)',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: inkColor,
-                                letterSpacing: .4,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
+                  ),
+                ],
               ),
 
-              const SizedBox(height: 18),
+              const SizedBox(height: 34),
 
               // 2. CASH FLOW & PERSONAL UNIT ECONOMICS
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  'DAILY CASH FLOW & PERSONAL UNIT ECONOMICS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: mutedColor,
-                  ),
-                ),
+              _financeTopicHeading(
+                context,
+                'DAILY CASH FLOW & PERSONAL UNIT ECONOMICS',
+                description:
+                    '• DAILY RECURRING INFLOW: Aggregate income from enterprise dividends, market sales, and contract payouts.\n• DAILY BASELINE OUTFLOW: Mandatory living expenditures, residential rent, and machine maintenance.\n• NET DAILY ACCUMULATION: Daily surplus or deficit with retained savings margin percentage.\n• ASSESSED TAX OBLIGATIONS: Canonical municipal assessment base due for settlement.',
               ),
               const SizedBox(height: 8),
 
@@ -632,78 +649,62 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
                 ),
               ],
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 34),
 
               // 3. COMPLIANCE & LEGAL ACTION HUB
-              const Padding(
-                padding: EdgeInsets.symmetric(vertical: 4),
-                child: Text(
-                  'COMPLIANCE & SOVEREIGN ACTIONS',
-                  style: TextStyle(
-                    fontSize: 10,
-                    letterSpacing: 1.2,
-                    fontWeight: FontWeight.w700,
-                    color: mutedColor,
-                  ),
-                ),
+              _financeTopicHeading(
+                context,
+                'COMPLIANCE & SOVEREIGN ACTIONS',
+                description:
+                    '• Settle tax dues immediately to preserve civic standing, or invoke sovereign restructuring when facing severe deficits.',
               ),
-              const SizedBox(height: 8),
 
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: .75),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
-                  children: [
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: cyanAccentColor,
-                        side: BorderSide(
-                            color: cyanAccentColor.withValues(alpha: .3)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed: isBusy ? null : () => _settleTax(context),
-                      icon: const Icon(Icons.receipt_long_outlined, size: 15),
-                      label: const Text(
-                        'SETTLE TAXES',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .6,
-                        ),
+              Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: cyanAccentColor,
+                      side: BorderSide(
+                          color: cyanAccentColor.withValues(alpha: .3)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed: isBusy ? null : () => _settleTax(context),
+                    icon: const Icon(Icons.receipt_long_outlined, size: 15),
+                    label: const Text(
+                      'SETTLE TAXES',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .6,
                       ),
                     ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.redAccent,
-                        side: BorderSide(
-                            color: Colors.redAccent.withValues(alpha: .3)),
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 14, vertical: 9),
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      onPressed:
-                          isBusy ? null : () => _declareInsolvency(context),
-                      icon: const Icon(Icons.warning_amber_rounded, size: 15),
-                      label: const Text(
-                        'INSOLVENCY RESTRUCTURING',
-                        style: TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: .6,
-                        ),
+                  ),
+                  OutlinedButton.icon(
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.redAccent,
+                      side: BorderSide(
+                          color: Colors.redAccent.withValues(alpha: .3)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 9),
+                      visualDensity: VisualDensity.compact,
+                    ),
+                    onPressed:
+                        isBusy ? null : () => _declareInsolvency(context),
+                    icon: const Icon(Icons.warning_amber_rounded, size: 15),
+                    label: const Text(
+                      'INSOLVENCY RESTRUCTURING',
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .6,
                       ),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ],
           );

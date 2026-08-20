@@ -33,12 +33,11 @@ void main() {
   });
 
   group('Complex Systems Page Mode & Dashboard Full Pages', () {
-    testWidgets('DynastyTreeDialog renders in page mode and triggers return to command', (tester) async {
+    testWidgets('DynastyTreeDialog renders in page mode', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      String? navigatedTo;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -47,7 +46,6 @@ void main() {
                 api: const EarthApi(),
                 state: sampleState,
                 isPageMode: true,
-                onNavigate: (sec) => navigatedTo = sec,
               ),
             ),
           ),
@@ -55,18 +53,14 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.text('RETURN TO COMMAND'), findsOneWidget);
-      await tester.tap(find.text('RETURN TO COMMAND'));
-      await tester.pump();
-      expect(navigatedTo, equals('command'));
+      expect(find.byType(DynastyTreeDialog), findsOneWidget);
     });
 
-    testWidgets('SupplyContractsDialog renders in page mode and triggers return to command', (tester) async {
+    testWidgets('SupplyContractsDialog renders in page mode', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      String? navigatedTo;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -75,7 +69,6 @@ void main() {
                 api: const EarthApi(),
                 state: sampleState,
                 isPageMode: true,
-                onNavigate: (sec) => navigatedTo = sec,
               ),
             ),
           ),
@@ -84,18 +77,13 @@ void main() {
       await tester.pump();
 
       expect(find.text('AUTOMATED SUPPLY CONTRACTS & ESCROW VAULT'), findsOneWidget);
-      expect(find.text('RETURN TO COMMAND'), findsOneWidget);
-      await tester.tap(find.text('RETURN TO COMMAND'));
-      await tester.pump();
-      expect(navigatedTo, equals('command'));
     });
 
-    testWidgets('DerivativesDialog renders in page mode and triggers return to command', (tester) async {
+    testWidgets('DerivativesDialog renders in page mode', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      String? navigatedTo;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -104,7 +92,6 @@ void main() {
                 api: const EarthApi(),
                 state: sampleState,
                 isPageMode: true,
-                onNavigate: (sec) => navigatedTo = sec,
               ),
             ),
           ),
@@ -113,18 +100,13 @@ void main() {
       await tester.pump();
 
       expect(find.text('FINANCIAL DERIVATIVES & FUTURES TERMINAL'), findsOneWidget);
-      expect(find.text('RETURN TO COMMAND'), findsOneWidget);
-      await tester.tap(find.text('RETURN TO COMMAND'));
-      await tester.pump();
-      expect(navigatedTo, equals('command'));
     });
 
-    testWidgets('NetWorthAnalyticsDialog renders in page mode and triggers return to command', (tester) async {
+    testWidgets('NetWorthAnalyticsDialog renders in page mode', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
 
-      String? navigatedTo;
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -132,7 +114,6 @@ void main() {
               child: NetWorthAnalyticsDialog(
                 api: const EarthApi(),
                 isPageMode: true,
-                onNavigate: (sec) => navigatedTo = sec,
               ),
             ),
           ),
@@ -141,10 +122,6 @@ void main() {
       await tester.pump();
 
       expect(find.text('PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS'), findsOneWidget);
-      expect(find.text('RETURN TO COMMAND'), findsOneWidget);
-      await tester.tap(find.text('RETURN TO COMMAND'));
-      await tester.pump();
-      expect(navigatedTo, equals('command'));
     });
 
     testWidgets('Dashboard renders derivatives section as full page', (tester) async {

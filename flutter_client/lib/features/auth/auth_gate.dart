@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
+import '../../core/auth_storage.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../command_center/command_center_screen.dart';
 import 'auth_screen.dart';
@@ -45,9 +46,13 @@ class _AuthGateState extends State<AuthGate> {
         });
       }
     } catch (exception) {
+      final errStr = exception.toString().replaceFirst('Exception: ', '');
+      if (errStr.contains('401') || errStr.toLowerCase().contains('unauthorized')) {
+        await AuthStorage.clearToken();
+      }
       if (mounted) {
         setState(() {
-          error = exception.toString().replaceFirst('Exception: ', '');
+          error = errStr;
           loadingSession = false;
         });
       }

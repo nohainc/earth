@@ -223,9 +223,10 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         final brandWidth = _measureBrandWidth();
         final centerWidth = math.max(resourceWidth, dateWidth);
         final rightActionsWidth = 112 + (widget.showDrawerButton ? 32 : 0);
-        final showBrandText = totalWidth - 28 >=
-            brandWidth + 10 + centerWidth + rightActionsWidth + 16;
-        const showBrand = true;
+        final showBrand = totalWidth - 28 >=
+            brandWidth + 10 + centerWidth + rightActionsWidth + 16 &&
+            totalWidth >= 600;
+        final showBrandText = showBrand;
 
         return Container(
           decoration: const BoxDecoration(
@@ -238,7 +239,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 1. BRAND HEADER (RESPONSIVELY COLLAPSIBLE)
+              // 1. BRAND HEADER (BOTH LOGO AND APP NAME HIDE TOGETHER)
               if (showBrand) ...[
                 Row(
                   mainAxisSize: MainAxisSize.min,
@@ -262,34 +263,32 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                         ],
                       ),
                     ),
-                    if (showBrandText) ...[
-                      const SizedBox(width: 10),
-                      const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Text(
-                            'EARTH',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 4.0,
-                              color: violetColor,
-                            ),
+                    const SizedBox(width: 10),
+                    const Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'EARTH',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: 4.0,
+                            color: violetColor,
                           ),
-                          SizedBox(height: 1),
-                          Text(
-                            'UNITED CORPORATIONS',
-                            style: TextStyle(
-                              fontSize: 8.5,
-                              fontWeight: FontWeight.w600,
-                              color: mutedColor,
-                              letterSpacing: 1.3,
-                            ),
+                        ),
+                        SizedBox(height: 1),
+                        Text(
+                          'UNITED CORPORATIONS',
+                          style: TextStyle(
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w600,
+                            color: mutedColor,
+                            letterSpacing: 1.3,
                           ),
-                        ],
-                      ),
-                    ],
+                        ),
+                      ],
+                    ),
                   ],
                 ),
                 _hudSpacer(),

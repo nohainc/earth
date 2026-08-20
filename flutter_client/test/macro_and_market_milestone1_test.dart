@@ -38,7 +38,6 @@ void main() {
     );
 
     expect(find.text('UC MONETARY STABILITY BOARD / MACRO BASE'), findsOneWidget);
-    expect(find.text('UC PLANETARY MONETARY & STABILITY METRICS'), findsOneWidget);
     expect(find.text('CIRCULATING M0'), findsOneWidget);
     expect(find.text('155000 C'), findsOneWidget);
     expect(find.text('30-DAY CPI'), findsOneWidget);
@@ -92,8 +91,7 @@ void main() {
     );
 
     expect(find.text('PERIODIC BATCH AUCTION'), findsOneWidget);
-    expect(find.text('EPOCH #12'), findsOneWidget);
-    expect(find.textContaining('Next batch clearing in 02:00'), findsOneWidget);
-    expect(find.text('POOLING ORDERS'), findsOneWidget);
+    expect(find.text('#12'), findsOneWidget);
+    expect(find.text('02:00'), findsOneWidget);
   });
 }

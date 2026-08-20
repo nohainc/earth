@@ -19,7 +19,7 @@ void updateDeepLinkSection(String section) {
   try {
     final currentHash = html.window.location.hash.replaceAll('#', '').trim();
     if (currentHash != section) {
-      html.window.location.hash = section;
+      html.window.history.pushState(null, '', '#$section');
     }
   } catch (_) {}
 }

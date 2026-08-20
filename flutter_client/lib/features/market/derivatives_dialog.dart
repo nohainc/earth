@@ -4,6 +4,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/widgets/earth_primitives.dart';
 import 'candlestick_chart_widget.dart';
 
 void showDerivativesDialog(
@@ -264,44 +265,113 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // 1. Candlestick Chart
-                          CandlestickChartWidget(
-                            ohlc: _ohlc,
-                            ma7: _ma7,
-                            ma25: _ma25,
-                            commodity: _selectedCommodity,
-                            height: 250,
-                          ),
-                          const SizedBox(height: 16),
+                          // 1. Candlestick Chart & Trading Orderbook Grid Frame
+                          Container(
+                            decoration: BoxDecoration(
+                              color: EarthColors.panelSurface,
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(color: EarthColors.borderSubtle),
+                            ),
+                            clipBehavior: Clip.antiAlias,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                // Attached Commodity Selector Bar
+                                Container(
+                                  padding: const EdgeInsets.all(6),
+                                  decoration: const BoxDecoration(
+                                    color: EarthColors.cardSurface,
+                                    border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                                  ),
+                                  child: Row(
+                                    children: _commodities.map((c) {
+                                      final isSelected = _selectedCommodity == c;
+                                      return Expanded(
+                                        child: Padding(
+                                          padding: const EdgeInsets.symmetric(horizontal: 2),
+                                          child: Material(
+                                            color: isSelected
+                                                ? EarthColors.cyanAccent
+                                                : Colors.transparent,
+                                            borderRadius: BorderRadius.circular(6),
+                                            child: InkWell(
+                                              borderRadius: BorderRadius.circular(6),
+                                              onTap: () {
+                                                if (_selectedCommodity != c) {
+                                                  EarthAudioEngine.instance.playClick();
+                                                  setState(() => _selectedCommodity = c);
+                                                  _loadData();
+                                                }
+                                              },
+                                              child: Padding(
+                                                padding: const EdgeInsets.symmetric(vertical: 7),
+                                                child: Center(
+                                                  child: Text(
+                                                    c.toUpperCase(),
+                                                    style: TextStyle(
+                                                      color: isSelected ? Colors.black : EarthColors.textMuted,
+                                                      fontWeight: FontWeight.w800,
+                                                      fontSize: 10.5,
+                                                      letterSpacing: .5,
+                                                    ),
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
+                                ),
 
-                          // 2. Orderbook & Issue Futures Form Grid
-                          LayoutBuilder(
-                            builder: (context, constraints) {
-                              final isNarrow = constraints.maxWidth < 650;
-                              if (isNarrow) {
-                                return Column(
-                                  children: [
-                                    _buildOrderbookPanel(),
-                                    const SizedBox(height: 16),
-                                    _buildIssueFuturesPanel(),
-                                  ],
-                                );
-                              }
-                              return Row(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Expanded(
-                                    flex: 6,
-                                    child: _buildOrderbookPanel(),
+                                // Chart
+                                CandlestickChartWidget(
+                                  ohlc: _ohlc,
+                                  ma7: _ma7,
+                                  ma25: _ma25,
+                                  commodity: _selectedCommodity,
+                                  height: 250,
+                                ),
+
+                                // Attached Orderbook & Issue Grid Section
+                                Container(
+                                  decoration: const BoxDecoration(
+                                    border: Border(top: BorderSide(color: EarthColors.borderSubtle)),
                                   ),
-                                  const SizedBox(width: 16),
-                                  Expanded(
-                                    flex: 4,
-                                    child: _buildIssueFuturesPanel(),
+                                  child: LayoutBuilder(
+                                    builder: (context, constraints) {
+                                      final isNarrow = constraints.maxWidth < 650;
+                                      if (isNarrow) {
+                                        return Column(
+                                          children: [
+                                            _buildOrderbookPanel(isEmbedded: true),
+                                            const Divider(height: 1, color: EarthColors.borderSubtle),
+                                            _buildIssueFuturesPanel(isEmbedded: true),
+                                          ],
+                                        );
+                                      }
+                                      return IntrinsicHeight(
+                                        child: Row(
+                                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                                          children: [
+                                            Expanded(
+                                              flex: 6,
+                                              child: _buildOrderbookPanel(isEmbedded: true),
+                                            ),
+                                            const VerticalDivider(width: 1, thickness: 1, color: EarthColors.borderSubtle),
+                                            Expanded(
+                                              flex: 4,
+                                              child: _buildIssueFuturesPanel(isEmbedded: true),
+                                            ),
+                                          ],
+                                        ),
+                                      );
+                                    },
                                   ),
-                                ],
-                              );
-                            },
+                                ),
+                              ],
+                            ),
                           ),
                           const SizedBox(height: 16),
 
@@ -344,117 +414,50 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
           Expanded(
             child: Row(
               children: [
-                Icon(
-                  Icons.show_chart,
-                  color: widget.isPageMode
-                      ? EarthColors.textMuted
-                      : EarthColors.cyanAccent,
-                  size: 22,
+                Flexible(
+                  child: Text(
+                    'FINANCIAL DERIVATIVES & FUTURES TERMINAL',
+                    style: TextStyle(
+                      color: widget.isPageMode
+                          ? EarthColors.textMuted
+                          : EarthColors.cyanAccent,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      letterSpacing: 1.1,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'FINANCIAL DERIVATIVES & FUTURES TERMINAL',
-                        style: TextStyle(
-                          color: widget.isPageMode
-                              ? EarthColors.textMuted
-                              : EarthColors.cyanAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 13,
-                          letterSpacing: 1.1,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      Text(
-                        'Commodity forward contracts, locked collateral hedging & 30-day candlestick history.',
-                        style: TextStyle(color: EarthColors.textMuted, fontSize: 10),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                const SizedBox(width: 5),
+                IconButton(
+                  tooltip: 'About FINANCIAL DERIVATIVES & FUTURES TERMINAL',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(
+                    Icons.info_outline,
+                    size: 14,
+                    color: EarthColors.textMuted.withValues(alpha: .8),
+                  ),
+                  onPressed: () => showEarthInfoDialog(
+                    context,
+                    title: 'FINANCIAL DERIVATIVES & FUTURES TERMINAL',
+                    description:
+                        '• Financial Derivatives & Forward Contracts:\n  - Lock commodity prices against future delivery to hedge against market volatility.\n  - Orderbook matching and collateral verification.\n  - 30-day candlestick performance and historical technical averages (MA7 / MA25).',
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Commodity selector pills
-              ..._commodities.map((c) {
-                final isSelected = _selectedCommodity == c;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 6),
-                  child: ChoiceChip(
-                    label: Text(c.toUpperCase()),
-                    selected: isSelected,
-                    selectedColor: EarthColors.cyanAccent,
-                    backgroundColor: EarthColors.panelSurface,
-                    labelStyle: TextStyle(
-                      color: isSelected ? Colors.black : Colors.white70,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 10,
-                    ),
-                    visualDensity: VisualDensity.compact,
-                    onSelected: (selected) {
-                      if (selected && _selectedCommodity != c) {
-                        EarthAudioEngine.instance.playClick();
-                        setState(() => _selectedCommodity = c);
-                        _loadData();
-                      }
-                    },
-                  ),
-                );
-              }),
-              const SizedBox(width: 8),
-              if (widget.isPageMode)
-                InkWell(
-                  onTap: () {
-                    EarthAudioEngine.instance.playClick();
-                    if (widget.onNavigate != null) {
-                      widget.onNavigate!('command');
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: EarthColors.cyanAccent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.5)),
-                    ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.arrow_back, size: 11, color: EarthColors.cyanAccent),
-                        SizedBox(width: 4),
-                        Text(
-                          'RETURN TO COMMAND',
-                          style: TextStyle(
-                            color: EarthColors.cyanAccent,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
-                IconButton(
-                  icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    EarthAudioEngine.instance.playClick();
-                    Navigator.of(context).pop();
-                  },
-                ),
-            ],
-          ),
+          if (!widget.isPageMode)
+            IconButton(
+              icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              onPressed: () {
+                EarthAudioEngine.instance.playClick();
+                Navigator.of(context).pop();
+              },
+            ),
         ],
       ),
     );
@@ -490,13 +493,13 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
     );
   }
 
-  Widget _buildOrderbookPanel() {
+  Widget _buildOrderbookPanel({bool isEmbedded = false}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
+        borderRadius: isEmbedded ? BorderRadius.zero : BorderRadius.circular(8),
+        border: isEmbedded ? null : Border.all(color: EarthColors.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -507,14 +510,19 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
               Flexible(
                 child: Text(
                   'OPEN FORWARD CONTRACTS (${_selectedCommodity.toUpperCase()})',
-                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: EarthColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
                 '${_orderbook.length} Available',
-                style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),
+                style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5),
               ),
             ],
           ),
@@ -531,88 +539,100 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
               ),
             )
           else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _orderbook.length,
-              itemBuilder: (context, index) {
-                final contract = _orderbook[index];
-                final id = contract['id']?.toString() ?? '';
-                final size = _parseNum(contract['contract_size']);
-                final strike = _parseNum(contract['strike_price']);
-                final expiry = contract['expiry_game_day'] ?? 200;
-                final total = size * strike;
+            Container(
+              decoration: BoxDecoration(
+                color: EarthColors.cardSurface,
+                borderRadius: BorderRadius.circular(6),
+                border: Border.all(color: EarthColors.borderSubtle),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: _orderbook.indexed.map((indexed) {
+                  final contract = indexed.$2;
+                  final isLast = indexed.$1 == _orderbook.length - 1;
+                  final id = contract['id']?.toString() ?? '';
+                  final size = _parseNum(contract['contract_size']);
+                  final strike = _parseNum(contract['strike_price']);
+                  final expiry = contract['expiry_game_day'] ?? 200;
+                  final total = size * strike;
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: EarthColors.cardSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: EarthColors.borderSubtle),
-                  ),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Text(
-                                  '${size.toStringAsFixed(0)} ${_selectedCommodity.toUpperCase()}',
-                                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
-                                ),
-                                const SizedBox(width: 8),
-                                Text(
-                                  '@ ${strike.toStringAsFixed(2)} CR',
-                                  style: const TextStyle(color: EarthColors.goldMetallic, fontWeight: FontWeight.bold, fontSize: 11.5),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Settles Day $expiry • Total Cost: ${total.toStringAsFixed(2)} CR',
-                              style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5),
-                            ),
-                          ],
-                        ),
+                  return Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: EarthColors.borderSubtle),
                       ),
-                      ElevatedButton(
-                        key: Key('btn-buy-futures-$id'),
-                        onPressed: _isActionInProgress ? null : () => _buyContract(id, total),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: EarthColors.cyanAccent,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Text(
+                                    '${size.toStringAsFixed(0)} ${_selectedCommodity.toUpperCase()}',
+                                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 12),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Text(
+                                    '@ ${strike.toStringAsFixed(2)} CR',
+                                    style: const TextStyle(color: EarthColors.goldMetallic, fontWeight: FontWeight.bold, fontSize: 11.5),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                'Settles Day $expiry • Total Cost: ${total.toStringAsFixed(2)} CR',
+                                style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5),
+                              ),
+                            ],
+                          ),
                         ),
-                        child: const Text('MATCH / BUY'),
-                      ),
-                    ],
-                  ),
-                );
-              },
+                        ElevatedButton(
+                          key: Key('btn-buy-futures-$id'),
+                          onPressed: _isActionInProgress ? null : () => _buyContract(id, total),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: EarthColors.cyanAccent,
+                            foregroundColor: Colors.black,
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5),
+                          ),
+                          child: const Text('MATCH / BUY'),
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
         ],
       ),
     );
   }
 
-  Widget _buildIssueFuturesPanel() {
+  Widget _buildIssueFuturesPanel({bool isEmbedded = false}) {
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
+        borderRadius: isEmbedded ? BorderRadius.zero : BorderRadius.circular(8),
+        border: isEmbedded ? null : Border.all(color: EarthColors.borderSubtle),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'ISSUE FORWARD CONTRACT',
-            style: TextStyle(color: EarthColors.cyanAccent, fontSize: 11, fontWeight: FontWeight.bold),
+            style: TextStyle(
+              color: EarthColors.textMuted,
+              fontSize: 10,
+              fontWeight: FontWeight.bold,
+              letterSpacing: 1.1,
+            ),
           ),
           const SizedBox(height: 4),
           const Text(
@@ -626,9 +646,9 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
             keyboardType: TextInputType.number,
             decoration: InputDecoration(
               labelText: 'Contract Size (${_selectedCommodity.toUpperCase()})',
-              labelStyle: const TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
+              labelStyle: const TextStyle(color: EarthColors.textMuted, fontSize: 11.5),
             ),
-            style: const TextStyle(color: Colors.white, fontSize: 11.5),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
           ),
           const SizedBox(height: 8),
 
@@ -637,9 +657,9 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               labelText: 'Strike Price per Unit (CR)',
-              labelStyle: TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
+              labelStyle: TextStyle(color: EarthColors.textMuted, fontSize: 11.5),
             ),
-            style: const TextStyle(color: Colors.white, fontSize: 11.5),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
           ),
           const SizedBox(height: 8),
 
@@ -648,9 +668,9 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
             keyboardType: TextInputType.number,
             decoration: const InputDecoration(
               labelText: 'Settlement Day (e.g. Day 220)',
-              labelStyle: TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
+              labelStyle: TextStyle(color: EarthColors.textMuted, fontSize: 11.5),
             ),
-            style: const TextStyle(color: Colors.white, fontSize: 11.5),
+            style: const TextStyle(color: Colors.white, fontSize: 13),
           ),
           const SizedBox(height: 12),
 
@@ -660,7 +680,7 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
               key: const Key('btn-create-futures-listing'),
               onPressed: _isActionInProgress ? null : _createListing,
               style: ElevatedButton.styleFrom(
-                backgroundColor: EarthColors.goldMetallic,
+                backgroundColor: EarthColors.cyanAccent,
                 foregroundColor: Colors.black,
                 padding: const EdgeInsets.symmetric(vertical: 10),
                 textStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 11),
@@ -674,52 +694,56 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
   }
 
   Widget _buildUserPositionsPanel() {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Flexible(
                 child: Text(
                   'MY DERIVATIVES & FUTURES PORTFOLIO',
-                  style: const TextStyle(color: Colors.white70, fontSize: 11, fontWeight: FontWeight.bold),
+                  style: const TextStyle(
+                    color: EarthColors.textMuted,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: 1.1,
+                  ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
               const SizedBox(width: 8),
               Text(
-                '${_userPositions.length} Positions Active',
-                style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),
+                '${_userPositions.length} Active Positions',
+                style: const TextStyle(color: EarthColors.textMuted, fontSize: 9.5),
               ),
             ],
           ),
-          const SizedBox(height: 10),
-          if (_userPositions.isEmpty)
-            const Padding(
-              padding: EdgeInsets.symmetric(vertical: 16),
-              child: Center(
-                child: Text(
-                  'No active forward positions held. Buy contracts from the orderbook or issue listings above.',
-                  style: TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
-                ),
+        ),
+        if (_userPositions.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 16),
+            child: Center(
+              child: Text(
+                'No active forward positions held. Buy contracts from the orderbook or issue listings above.',
+                style: TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
               ),
-            )
-          else
-            ListView.builder(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              itemCount: _userPositions.length,
-              itemBuilder: (context, index) {
-                final pos = _userPositions[index];
+            ),
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: EarthColors.panelSurface,
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: EarthColors.borderSubtle),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: Column(
+              children: _userPositions.indexed.map((indexed) {
+                final pos = indexed.$2;
+                final isLast = indexed.$1 == _userPositions.length - 1;
                 final id = pos['id']?.toString() ?? '';
                 final c = (pos['commodity']?.toString() ?? 'energy').toUpperCase();
                 final size = _parseNum(pos['contract_size']);
@@ -733,12 +757,13 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
                     : (status == 'settled' ? const Color(0xFF00E676) : EarthColors.goldMetallic);
 
                 return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                   decoration: BoxDecoration(
-                    color: EarthColors.cardSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: EarthColors.borderSubtle),
+                    border: Border(
+                      bottom: isLast
+                          ? BorderSide.none
+                          : const BorderSide(color: EarthColors.borderSubtle),
+                    ),
                   ),
                   child: Row(
                     children: [
@@ -801,10 +826,10 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
                     ],
                   ),
                 );
-              },
+              }).toList(),
             ),
-        ],
-      ),
+          ),
+      ],
     );
   }
 

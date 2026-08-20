@@ -237,7 +237,7 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
 
     Widget content = Container(
       width: widget.isPageMode ? double.infinity : 1040,
-      height: widget.isPageMode ? 740 : 720,
+      height: widget.isPageMode ? null : 720,
       decoration: BoxDecoration(
         color: widget.isPageMode ? Colors.transparent : canvasColor,
         borderRadius:
@@ -259,19 +259,36 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
         borderRadius:
             widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
         child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: widget.isPageMode ? MainAxisSize.min : MainAxisSize.max,
           children: [
             _buildTopBar(activeContracts.length, proposedContracts.length),
             if (_error != null) _buildAlertBanner(_error!, isError: true),
             if (_successMessage != null)
               _buildAlertBanner(_successMessage!, isError: false),
-            Expanded(
-              child: _loading && _contracts.isEmpty
-                  ? const Center(
-                      child: CircularProgressIndicator(
-                          color: EarthColors.cyanAccent))
-                  : _buildTabBody(
-                      activeContracts, proposedContracts, historyContracts),
-            ),
+            widget.isPageMode
+                ? LayoutBuilder(
+                    builder: (context, constraints) {
+                      final isStacked = constraints.maxWidth < 750;
+                      return SizedBox(
+                        height: isStacked ? 980 : 580,
+                        child: _loading && _contracts.isEmpty
+                            ? const Center(
+                                child: CircularProgressIndicator(
+                                    color: EarthColors.cyanAccent))
+                            : _buildTabBody(
+                                activeContracts, proposedContracts, historyContracts),
+                      );
+                    },
+                  )
+                : Expanded(
+                    child: _loading && _contracts.isEmpty
+                        ? const Center(
+                            child: CircularProgressIndicator(
+                                color: EarthColors.cyanAccent))
+                        : _buildTabBody(
+                            activeContracts, proposedContracts, historyContracts),
+                  ),
           ],
         ),
       ),
@@ -291,7 +308,7 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
   Widget _buildTopBar(int activeCount, int proposedCount) {
     return Container(
       padding: widget.isPageMode
-          ? const EdgeInsets.only(bottom: 10)
+          ? const EdgeInsets.only(bottom: 12)
           : const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
       decoration: BoxDecoration(
         color: widget.isPageMode ? Colors.transparent : EarthColors.cardSurface,
@@ -299,38 +316,64 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
             ? null
             : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.handshake_outlined,
-            color: widget.isPageMode
-                ? EarthColors.textMuted
-                : EarthColors.goldMetallic,
-            size: 22,
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'AUTOMATED SUPPLY CONTRACTS & ESCROW VAULT',
-                  style: TextStyle(
-                    color: widget.isPageMode
-                        ? EarthColors.textMuted
-                        : EarthColors.goldMetallic,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 13,
-                    letterSpacing: 1.1,
-                  ),
+          Row(
+            children: [
+              const Text(
+                'AUTOMATED SUPPLY CONTRACTS & ESCROW VAULT',
+                style: TextStyle(
+                  color: EarthColors.textMuted,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 10,
+                  letterSpacing: 1.1,
                 ),
-                Text(
-                  'B2B commodity flow agreements, automated daily settlements & guaranteed escrow reserves.',
-                  style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
+              ),
+              const SizedBox(width: 6),
+              IconButton(
+                icon: const Icon(Icons.info_outline, size: 14, color: EarthColors.textMuted),
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                tooltip: 'Info',
+                onPressed: () {
+                  showDialog(
+                    context: context,
+                    builder: (ctx) => AlertDialog(
+                      backgroundColor: EarthColors.cardSurface,
+                      title: const Text(
+                        'AUTOMATED SUPPLY CONTRACTS & ESCROW VAULT',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: EarthColors.goldMetallic,
+                        ),
+                      ),
+                      content: const Text(
+                        '• Bilateral Supply Agreements: B2B commodity flow agreements, automated daily settlements & guaranteed escrow reserves.\n\n• Automated Daily Settlement:\n  - Automated execution at daily game clock ticks.\n  - Retained escrow balances guarantee counterparty default protection.',
+                        style: TextStyle(fontSize: 11, color: Colors.white70),
+                      ),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: const Text('CLOSE'),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+              if (!widget.isPageMode) ...[
+                const Spacer(),
+                IconButton(
+                  icon: const Icon(Icons.close,
+                      color: EarthColors.textMuted, size: 20),
+                  onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
-            ),
+            ],
           ),
+          const SizedBox(height: 10),
           Container(
             padding: const EdgeInsets.all(2),
             decoration: BoxDecoration(
@@ -338,61 +381,19 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
               borderRadius: BorderRadius.circular(6),
               border: Border.all(color: EarthColors.borderSubtle),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+            child: Wrap(
+              spacing: 2,
+              runSpacing: 2,
               children: [
                 _topTabButton(
                     0, 'ACTIVE ($activeCount)', Icons.check_circle_outline),
-                const SizedBox(width: 2),
                 _topTabButton(
                     1, 'PROPOSALS ($proposedCount)', Icons.inbox_outlined,
                     badge: proposedCount),
-                const SizedBox(width: 2),
                 _topTabButton(2, 'NEW TENDER', Icons.add_circle_outline),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          if (widget.isPageMode)
-            InkWell(
-              onTap: () {
-                if (widget.onNavigate != null) {
-                  widget.onNavigate!('command');
-                }
-              },
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                decoration: BoxDecoration(
-                  color: EarthColors.goldMetallic.withValues(alpha: 0.15),
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                      color: EarthColors.goldMetallic.withValues(alpha: 0.5)),
-                ),
-                child: const Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.arrow_back,
-                        size: 11, color: EarthColors.goldMetallic),
-                    SizedBox(width: 4),
-                    Text(
-                      'RETURN TO COMMAND',
-                      style: TextStyle(
-                        color: EarthColors.goldMetallic,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          else
-            IconButton(
-              icon: const Icon(Icons.close,
-                  color: EarthColors.textMuted, size: 20),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
         ],
       ),
     );
@@ -540,14 +541,18 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
       );
     }
 
-    return Row(
-      children: [
-        // Left Column: Contract List
-        Container(
-          width: 380,
-          decoration: const BoxDecoration(
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final isWide = constraints.maxWidth >= 750;
+
+        final listWidget = Container(
+          width: isWide ? 360 : double.infinity,
+          height: isWide ? null : 380,
+          decoration: BoxDecoration(
             color: EarthColors.cardSurface,
-            border: Border(right: BorderSide(color: EarthColors.borderSubtle)),
+            border: isWide
+                ? const Border(right: BorderSide(color: EarthColors.borderSubtle))
+                : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
           ),
           child: ListView.builder(
             itemCount: targetList.length,
@@ -558,19 +563,39 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
               return _buildContractListCard(item, isSelected);
             },
           ),
-        ),
+        );
 
-        // Right Column: Detail & Escrow Vault Inspector
-        Expanded(
-          child: _selectedContract != null
-              ? _buildContractInspector(_selectedContract!)
-              : const Center(
+        final detailWidget = _selectedContract != null
+            ? _buildContractInspector(_selectedContract!)
+            : const Center(
+                child: Padding(
+                  padding: EdgeInsets.all(24),
                   child: Text(
-                      'Select an agreement to view details & escrow vault.',
-                      style: TextStyle(color: EarthColors.textMuted)),
+                    'Select an agreement to view details & escrow vault.',
+                    style: TextStyle(color: EarthColors.textMuted),
+                  ),
                 ),
-        ),
-      ],
+              );
+
+        if (isWide) {
+          return Row(
+            children: [
+              listWidget,
+              Expanded(child: detailWidget),
+            ],
+          );
+        } else {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              listWidget,
+              Expanded(
+                child: detailWidget,
+              ),
+            ],
+          );
+        }
+      },
     );
   }
 

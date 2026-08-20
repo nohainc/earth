@@ -424,181 +424,187 @@ class RolesPanel extends StatelessWidget {
       child: state.roles.isEmpty
           ? const Text('No institutional terms are active yet.',
               style: TextStyle(color: mutedColor, fontSize: 11))
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: state.roles.map((raw) {
-                final role = raw as Map<String, dynamic>;
-                final roleId = role['id']?.toString() ?? 'ROLE';
-                final name = role['name']?.toString() ?? roleId;
-                final holder = role['human_id'] as String?;
-                final myId = state.human['id']?.toString() ?? 'H-0044';
-                final isMine = holder == myId;
-                final endsDay = role['ends_game_day'] ?? '—';
+          : Container(
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: state.roles.indexed.map((indexed) {
+                  final raw = indexed.$2;
+                  final isLast = indexed.$1 == state.roles.length - 1;
+                  final role = raw as Map<String, dynamic>;
+                  final roleId = role['id']?.toString() ?? 'ROLE';
+                  final name = role['name']?.toString() ?? roleId;
+                  final holder = role['human_id'] as String?;
+                  final myId = state.human['id']?.toString() ?? 'H-0044';
+                  final isMine = holder == myId;
+                  final endsDay = role['ends_game_day'] ?? '—';
 
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 10),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: surfaceColor.withValues(alpha: .75),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(
-                      color: isMine
-                          ? cyanAccentColor.withValues(alpha: .3)
-                          : Colors.white10,
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: Colors.white10),
+                      ),
                     ),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            padding: const EdgeInsets.all(5),
-                            decoration: BoxDecoration(
-                              color: (isMine
-                                      ? cyanAccentColor
-                                      : (holder == null
-                                          ? Colors.orangeAccent
-                                          : violetColor))
-                                  .withValues(alpha: .15),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Icon(
-                              isMine
-                                  ? Icons.account_circle_outlined
-                                  : (holder == null
-                                      ? Icons.help_outline
-                                      : Icons.badge_outlined),
-                              size: 15,
-                              color: isMine
-                                  ? cyanAccentColor
-                                  : (holder == null
-                                      ? Colors.orangeAccent
-                                      : violetColor),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: Text(
-                              '$name · Holder: ${holder ?? 'OPEN'} · Until day $endsDay',
-                              style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: inkColor,
-                              ),
-                            ),
-                          ),
-                          if (isMine)
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 6, vertical: 2),
+                              padding: const EdgeInsets.all(5),
                               decoration: BoxDecoration(
-                                color: cyanAccentColor.withValues(alpha: .15),
+                                color: (isMine
+                                        ? cyanAccentColor
+                                        : (holder == null
+                                            ? Colors.orangeAccent
+                                            : violetColor))
+                                    .withValues(alpha: .15),
                                 borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color:
-                                        cyanAccentColor.withValues(alpha: .3)),
                               ),
-                              child: const Text(
-                                'ASSIGNED TO YOU',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800,
-                                  color: cyanAccentColor,
+                              child: Icon(
+                                isMine
+                                    ? Icons.account_circle_outlined
+                                    : (holder == null
+                                        ? Icons.help_outline
+                                        : Icons.badge_outlined),
+                                size: 15,
+                                color: isMine
+                                    ? cyanAccentColor
+                                    : (holder == null
+                                        ? Colors.orangeAccent
+                                        : violetColor),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '$name · Holder: ${holder ?? 'OPEN'} · Until day $endsDay',
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: inkColor,
                                 ),
                               ),
                             ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          if (isMine) ...[
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: Colors.orangeAccent,
-                                side: BorderSide(
-                                    color: Colors.orangeAccent
-                                        .withValues(alpha: .3)),
+                            if (isMine)
+                              Container(
                                 padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                              ),
-                              onPressed: busy
-                                  ? null
-                                  : () => action(() => const EarthApi()
-                                      .resignRole(role['id'] as String)),
-                              child: const Text('RESIGN',
+                                    horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: cyanAccentColor.withValues(alpha: .15),
+                                  borderRadius: BorderRadius.circular(4),
+                                  border: Border.all(
+                                      color:
+                                          cyanAccentColor.withValues(alpha: .3)),
+                                ),
+                                child: const Text(
+                                  'ASSIGNED TO YOU',
                                   style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: violetColor,
-                                side: BorderSide(
-                                    color:
-                                        violetColor.withValues(alpha: .3)),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
+                                    fontSize: 9,
+                                    fontWeight: FontWeight.w800,
+                                    color: cyanAccentColor,
+                                  ),
+                                ),
                               ),
-                              onPressed: busy
-                                  ? null
-                                  : () => showDelegateDialog(
-                                      context, action, role['id'] as String),
-                              child: const Text('DELEGATE',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700)),
-                            ),
-                          ] else if (holder == null) ...[
-                            FilledButton(
-                              style: FilledButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                backgroundColor: cyanAccentColor,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 10, vertical: 2),
-                              ),
-                              onPressed: busy
-                                  ? null
-                                  : () => action(() => const EarthApi()
-                                      .claimRole(role['id'] as String)),
-                              child: const Text('CLAIM',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w800)),
-                            ),
-                          ] else ...[
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                foregroundColor: Colors.redAccent,
-                                side: BorderSide(
-                                    color: Colors.redAccent
-                                        .withValues(alpha: .3)),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                              ),
-                              onPressed: busy
-                                  ? null
-                                  : () => action(() => const EarthApi()
-                                      .recallRole(role['id'] as String)),
-                              child: const Text('RECALL',
-                                  style: TextStyle(
-                                      fontSize: 10,
-                                      fontWeight: FontWeight.w700)),
-                            ),
                           ],
-                        ],
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            if (isMine) ...[
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: Colors.orangeAccent,
+                                  side: BorderSide(
+                                      color: Colors.orangeAccent
+                                          .withValues(alpha: .3)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                ),
+                                onPressed: busy
+                                    ? null
+                                    : () => action(() => const EarthApi()
+                                        .resignRole(role['id'] as String)),
+                                child: const Text('RESIGN',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: violetColor,
+                                  side: BorderSide(
+                                      color:
+                                          violetColor.withValues(alpha: .3)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                ),
+                                onPressed: busy
+                                    ? null
+                                    : () => showDelegateDialog(
+                                        context, action, role['id'] as String),
+                                child: const Text('DELEGATE',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            ] else if (holder == null) ...[
+                              FilledButton(
+                                style: FilledButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  backgroundColor: cyanAccentColor,
+                                  foregroundColor: Colors.black,
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 2),
+                                ),
+                                onPressed: busy
+                                    ? null
+                                    : () => action(() => const EarthApi()
+                                        .claimRole(role['id'] as String)),
+                                child: const Text('CLAIM',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w800)),
+                              ),
+                            ] else ...[
+                              OutlinedButton(
+                                style: OutlinedButton.styleFrom(
+                                  visualDensity: VisualDensity.compact,
+                                  foregroundColor: Colors.redAccent,
+                                  side: BorderSide(
+                                      color: Colors.redAccent
+                                          .withValues(alpha: .3)),
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 8, vertical: 2),
+                                ),
+                                onPressed: busy
+                                    ? null
+                                    : () => action(() => const EarthApi()
+                                        .recallRole(role['id'] as String)),
+                                child: const Text('RECALL',
+                                    style: TextStyle(
+                                        fontSize: 10,
+                                        fontWeight: FontWeight.w700)),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                }).toList(),
+              ),
             ),
     );
   }
@@ -635,37 +641,64 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
           if (taxRules.isNotEmpty) ...[
             Container(
               width: double.infinity,
-              padding: const EdgeInsets.all(12),
               margin: const EdgeInsets.only(bottom: 10),
               decoration: BoxDecoration(
                 color: surfaceColor.withValues(alpha: .7),
                 borderRadius: BorderRadius.circular(8),
                 border: Border.all(color: Colors.white10),
               ),
+              clipBehavior: Clip.antiAlias,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text(
-                    'STATUTORY TAX RULES',
-                    style: TextStyle(
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .8,
-                      color: mutedColor,
+                  const Padding(
+                    padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
+                    child: Text(
+                      'STATUTORY TAX RULES',
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: .8,
+                        color: mutedColor,
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 6),
-                  ...taxRules.map((raw) {
+                  const Divider(height: 1, color: Colors.white10),
+                  ...taxRules.indexed.map((indexed) {
+                    final raw = indexed.$2;
+                    final isLast = indexed.$1 == taxRules.length - 1;
                     final rule = raw as Map<String, dynamic>;
-                    return Padding(
-                      padding: const EdgeInsets.only(bottom: 4),
-                      child: Text(
-                        '${rule['scope']} / ${rule['category']}  ·  ${(NumberFormatHelper.percent(rule['rate']))}  ·  v${rule['version']}',
-                        style: const TextStyle(
-                          color: inkColor,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w500,
+
+                    return Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
+                      decoration: BoxDecoration(
+                        border: Border(
+                          bottom: isLast
+                              ? BorderSide.none
+                              : const BorderSide(color: Colors.white10),
                         ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            '${rule['scope']} / ${rule['category']}',
+                            style: const TextStyle(
+                              color: inkColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          Text(
+                            '${(NumberFormatHelper.percent(rule['rate']))}  ·  v${rule['version']}',
+                            style: const TextStyle(
+                              color: cyanAccentColor,
+                              fontSize: 11,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
+                        ],
                       ),
                     );
                   }),

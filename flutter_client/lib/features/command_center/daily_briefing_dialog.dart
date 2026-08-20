@@ -4,6 +4,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/daily_briefing.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../shared/widgets/earth_primitives.dart';
+import '../market/market_panels.dart';
 
 void showDailyBriefingDialog(
   BuildContext context, {
@@ -399,94 +400,105 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
   }
 
   Widget _buildDirectivesContent(DailyBriefingReport r) {
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: r.recommendedDirectives.isEmpty
-            ? [
-                const Text('No directives require attention.',
-                    style: TextStyle(color: EarthColors.textMuted)),
-              ]
-            : r.recommendedDirectives.map(_buildDirectiveCard).toList(),
-      ),
-    );
-  }
-
-  Widget _buildDirectiveCard(RecommendedDirective d) {
-    Color badgeColor;
-    if (d.urgency == 'high') {
-      badgeColor = const Color(0xFFFF5252);
-    } else if (d.urgency == 'medium') {
-      badgeColor = const Color(0xFFFFB300);
-    } else {
-      badgeColor = const Color(0xFF38BDF8);
+    if (r.recommendedDirectives.isEmpty) {
+      return const Text('No directives require attention.',
+          style: TextStyle(color: EarthColors.textMuted));
     }
 
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: r.recommendedDirectives.indexed.map((indexed) {
+          final d = indexed.$2;
+          final isLast = indexed.$1 == r.recommendedDirectives.length - 1;
+
+          Color badgeColor;
+          if (d.urgency == 'high') {
+            badgeColor = const Color(0xFFFF5252);
+          } else if (d.urgency == 'medium') {
+            badgeColor = const Color(0xFFFFB300);
+          } else {
+            badgeColor = const Color(0xFF38BDF8);
+          }
+
+          return Container(
+            padding: const EdgeInsets.all(14),
             decoration: BoxDecoration(
-              color: badgeColor.withAlpha(30),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(color: badgeColor),
+              border: Border(
+                bottom: isLast
+                    ? BorderSide.none
+                    : const BorderSide(color: EarthColors.borderSubtle),
+              ),
             ),
-            child: Text(
-              d.urgency.toUpperCase(),
-              style: TextStyle(
-                  color: badgeColor, fontSize: 9, fontWeight: FontWeight.bold),
-            ),
-          ),
-          const SizedBox(width: 14),
-          Expanded(
-            child: Column(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  d.title,
-                  style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 12.5),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: badgeColor.withAlpha(30),
+                    borderRadius: BorderRadius.circular(4),
+                    border: Border.all(color: badgeColor),
+                  ),
+                  child: Text(
+                    d.urgency.toUpperCase(),
+                    style: TextStyle(
+                        color: badgeColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.bold),
+                  ),
                 ),
-                const SizedBox(height: 4),
-                Text(
-                  d.reason,
-                  style: const TextStyle(
-                      color: Colors.white70, fontSize: 11, height: 1.3),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        d.title,
+                        style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12.5),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        d.reason,
+                        style: const TextStyle(
+                            color: Colors.white70, fontSize: 11, height: 1.3),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 14),
+                FilledButton.icon(
+                  key: Key('btn-directive-${d.id}'),
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    if (!widget.isPageMode) Navigator.of(context).pop();
+                    widget.onNavigate(d.targetSection);
+                  },
+                  icon: const Icon(Icons.launch, size: 13),
+                  label: Text(d.actionLabel),
+                  style: FilledButton.styleFrom(
+                    backgroundColor:
+                        EarthThemeController.instance.primaryAccent,
+                    foregroundColor: Colors.black,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    textStyle: const TextStyle(
+                        fontWeight: FontWeight.bold, fontSize: 10.5),
+                  ),
                 ),
               ],
             ),
-          ),
-          const SizedBox(width: 14),
-          FilledButton.icon(
-            key: Key('btn-directive-${d.id}'),
-            onPressed: () {
-              EarthAudioEngine.instance.playClick();
-              if (!widget.isPageMode) Navigator.of(context).pop();
-              widget.onNavigate(d.targetSection);
-            },
-            icon: const Icon(Icons.launch, size: 13),
-            label: Text(d.actionLabel),
-            style: FilledButton.styleFrom(
-              backgroundColor: EarthThemeController.instance.primaryAccent,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              textStyle:
-                  const TextStyle(fontWeight: FontWeight.bold, fontSize: 10.5),
-            ),
-          ),
-        ],
+          );
+        }).toList(),
       ),
     );
   }
@@ -601,102 +613,180 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
   }
 
   Widget _buildMarketsContent(DailyBriefingReport r) {
-    return Padding(
-      padding: EdgeInsets.zero,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          Wrap(
-            spacing: 12,
-            runSpacing: 12,
-            children: r.marketMovements.map((m) {
-              final isUp = m.deltaPct >= 0;
-              return Container(
-                width: 190,
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: _groupSurface,
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: EarthColors.borderSubtle),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(m.commodity,
-                        style: TextStyle(
-                            color: EarthThemeController.instance.primaryAccent,
-                            fontSize: 11,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text('${m.currentPrice.toStringAsFixed(2)} CR',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 14,
-                            fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 4),
-                    Text(
-                      '${isUp ? '+' : ''}${m.deltaPct.toStringAsFixed(2)}% (24h)',
-                      style: TextStyle(
-                          color: isUp
-                              ? const Color(0xFF00E676)
-                              : const Color(0xFFFF5252),
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.bold),
-                    ),
-                  ],
-                ),
-              );
-            }).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildIndustryContent(DailyBriefingReport r) {
-    return Wrap(
-      spacing: 10,
-      runSpacing: 10,
-      children: [
-        _industryMetric(
-            'ACTIVE BUSINESSES', '${r.businessSummary.activeBusinesses}'),
-        _industryMetric(
-            'DAILY OUTPUT', '${r.businessSummary.totalDailyOutput}'),
-        _industryMetric(
-            'ACTIVE MACHINES', '${r.businessSummary.activeMachines}'),
-        _industryMetric(
-            'DEGRADED MACHINES', '${r.businessSummary.degradedMachinesCount}'),
-        _industryMetric(
-            'PENDING CONTRACTS', '${r.businessSummary.pendingContractsCount}'),
-      ],
-    );
-  }
-
-  Widget _industryMetric(String label, String value) {
     return Container(
-      width: 145,
-      padding: const EdgeInsets.all(11),
       decoration: BoxDecoration(
         color: _groupSurface,
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: EarthColors.borderSubtle),
       ),
+      clipBehavior: Clip.antiAlias,
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(label,
-              style: const TextStyle(
-                  color: EarthColors.textMuted,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .6)),
-          const SizedBox(height: 6),
-          Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700)),
-        ],
+        children: r.marketMovements.indexed.map((indexed) {
+          final m = indexed.$2;
+          final isLast = indexed.$1 == r.marketMovements.length - 1;
+          final meta = CommodityMeta.forProduct(m.commodity);
+          final isUp = m.deltaPct >= 0;
+          final deltaStr =
+              '${isUp ? '+' : ''}${m.deltaPct.toStringAsFixed(2)}%';
+          final deltaColor = isUp ? const Color(0xFF00E676) : const Color(0xFFFF5252);
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: isLast
+                    ? BorderSide.none
+                    : const BorderSide(color: EarthColors.borderSubtle),
+              ),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Icon(meta.icon, size: 26, color: meta.color),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              meta.name,
+                              style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Text(
+                            '${m.currentPrice.toStringAsFixed(2)} C',
+                            style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Row(
+                        children: [
+                          Text(
+                            '${m.volume24h} units vol',
+                            style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w600,
+                                color: EarthColors.textMuted),
+                          ),
+                          const Spacer(),
+                          Text(
+                            deltaStr,
+                            style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                color: deltaColor),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildIndustryContent(DailyBriefingReport r) {
+    final items = [
+      (
+        'ACTIVE BUSINESSES',
+        '${r.businessSummary.activeBusinesses}',
+        Icons.storefront_outlined,
+        EarthThemeController.instance.primaryAccent,
+      ),
+      (
+        'DAILY OUTPUT',
+        '${r.businessSummary.totalDailyOutput}',
+        Icons.precision_manufacturing_outlined,
+        const Color(0xFF00E676),
+      ),
+      (
+        'ACTIVE MACHINES',
+        '${r.businessSummary.activeMachines}',
+        Icons.settings_suggest_outlined,
+        const Color(0xFF38BDF8),
+      ),
+      (
+        'DEGRADED MACHINES',
+        '${r.businessSummary.degradedMachinesCount}',
+        Icons.warning_amber_outlined,
+        const Color(0xFFFF5252),
+      ),
+      (
+        'PENDING CONTRACTS',
+        '${r.businessSummary.pendingContractsCount}',
+        Icons.assignment_outlined,
+        const Color(0xFFFFB300),
+      ),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _groupSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: EarthColors.borderSubtle),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: items.indexed.map((indexed) {
+          final item = indexed.$2;
+          final isLast = indexed.$1 == items.length - 1;
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: isLast
+                    ? BorderSide.none
+                    : const BorderSide(color: EarthColors.borderSubtle),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(6),
+                  decoration: BoxDecoration(
+                    color: item.$4.withAlpha(25),
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(item.$3, size: 16, color: item.$4),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    item.$1,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                ),
+                Text(
+                  item.$2,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }

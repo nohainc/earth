@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
+import '../../shared/widgets/earth_primitives.dart';
 import 'net_worth_chart_widget.dart';
 
 void showNetWorthAnalyticsDialog(BuildContext context, {required EarthApi api}) {
@@ -189,36 +190,30 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
           Expanded(
             child: Row(
               children: [
-                Icon(
-                  Icons.account_balance_wallet_outlined,
-                  color: widget.isPageMode
-                      ? EarthColors.textMuted
-                      : EarthThemeController.instance.primaryAccent,
-                  size: 22,
+                Flexible(
+                  child: Text(
+                    'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
+                    style: const TextStyle(
+                      color: EarthColors.textMuted,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 10,
+                      letterSpacing: 1.1,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
-                        style: TextStyle(
-                          color: widget.isPageMode
-                              ? EarthColors.textMuted
-                              : EarthThemeController.instance.primaryAccent,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12.5,
-                          letterSpacing: 1.1,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                      const Text(
-                        '4-Pillar portfolio tracking: Liquid Cash, Commodities, Equity & Other Assets.',
-                        style: TextStyle(color: EarthColors.textMuted, fontSize: 10),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
+                const SizedBox(width: 5),
+                IconButton(
+                  tooltip: 'About Net-Worth Analytics',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(Icons.info_outline,
+                      size: 14, color: EarthColors.textMuted.withValues(alpha: .8)),
+                  onPressed: () => showEarthInfoDialog(
+                    context,
+                    title: 'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
+                    description:
+                        '• 4-Pillar Portfolio Valuation: Real-time accounting across Liquid Cash, Commodities, Equity, and Capital Machinery.\n\n• Solvency & Wealth Index: Continuous valuation history tracking wealth trajectory across planetary simulation epochs.',
                   ),
                 ),
               ],
@@ -236,41 +231,8 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                   _loadHistory();
                 },
               ),
-              const SizedBox(width: 6),
-              if (widget.isPageMode)
-                InkWell(
-                  onTap: () {
-                    EarthAudioEngine.instance.playClick();
-                    if (widget.onNavigate != null) {
-                      widget.onNavigate!('command');
-                    }
-                  },
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: EarthThemeController.instance.primaryAccent.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: EarthThemeController.instance.primaryAccent.withValues(alpha: 0.5)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.arrow_back, size: 11, color: EarthThemeController.instance.primaryAccent),
-                        const SizedBox(width: 4),
-                        Text(
-                          'RETURN TO COMMAND',
-                          style: TextStyle(
-                            color: EarthThemeController.instance.primaryAccent,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                )
-              else
+              if (!widget.isPageMode) ...[
+                const SizedBox(width: 6),
                 IconButton(
                   icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
                   padding: EdgeInsets.zero,
@@ -280,6 +242,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                     Navigator.of(context).pop();
                   },
                 ),
+              ],
             ],
           ),
         ],

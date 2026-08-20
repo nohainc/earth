@@ -168,20 +168,25 @@ class _ContractsPanelState extends State<ContractsPanel> {
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                const Row(
-                  children: [
-                    Icon(Icons.bolt, color: EarthColors.goldMetallic, size: 16),
-                    SizedBox(width: 8),
-                    Text(
-                      'B2B COMMODITY SUPPLY & ESCROW VAULT',
-                      style: TextStyle(
-                        color: EarthColors.goldMetallic,
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
+                const Expanded(
+                  child: Row(
+                    children: [
+                      Icon(Icons.bolt, color: EarthColors.goldMetallic, size: 16),
+                      SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'B2B COMMODITY SUPPLY & ESCROW VAULT',
+                          style: TextStyle(
+                            color: EarthColors.goldMetallic,
+                            fontSize: 11,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 0.8,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
                 ElevatedButton.icon(
                   onPressed: () => showSupplyContractsDialog(
@@ -203,53 +208,44 @@ class _ContractsPanelState extends State<ContractsPanel> {
           ),
 
           // 1. EXECUTIVE CONTRACT PORTFOLIO HEADER
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .85),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: LayoutBuilder(
-              builder: (context, metricConstraints) {
-                final metricWidth = metricConstraints.maxWidth;
-                final numCols = metricWidth >= 600 ? 3 : 1;
-                final itemWidth = numCols == 1
-                    ? metricWidth
-                    : (metricWidth - (numCols - 1) * 12) / numCols;
+          LayoutBuilder(
+            builder: (context, metricConstraints) {
+              final metricWidth = metricConstraints.maxWidth;
+              final numCols = metricWidth >= 600 ? 3 : 1;
+              final itemWidth = numCols == 1
+                  ? metricWidth
+                  : (metricWidth - (numCols - 1) * 12) / numCols;
 
-                return Wrap(
-                  spacing: 12,
-                  runSpacing: 10,
-                  children: [
-                    _metricMiniBox(
-                      width: itemWidth,
-                      title: 'ACTIVE AGREEMENTS',
-                      value: '$activeContractsCount',
-                      accent: cyanAccentColor,
-                      icon: Icons.handshake_outlined,
-                    ),
-                    _metricMiniBox(
-                      width: itemWidth,
-                      title: 'COMMITTED ESCROWS',
-                      value: '${formatWholeNumber(totalContractValue)} C',
-                      accent: violetColor,
-                      icon: Icons.lock_clock_outlined,
-                    ),
-                    _metricMiniBox(
-                      width: itemWidth,
-                      title: 'OPEN DISPUTES',
-                      value: '$disputedContractsCount',
-                      accent: disputedContractsCount > 0
-                          ? Colors.orangeAccent
-                          : Colors.tealAccent,
-                      icon: Icons.gavel_outlined,
-                    ),
-                  ],
-                );
-              },
-            ),
+              return Wrap(
+                spacing: 12,
+                runSpacing: 10,
+                children: [
+                  _metricMiniBox(
+                    width: itemWidth,
+                    title: 'ACTIVE AGREEMENTS',
+                    value: '$activeContractsCount',
+                    accent: cyanAccentColor,
+                    icon: Icons.handshake_outlined,
+                  ),
+                  _metricMiniBox(
+                    width: itemWidth,
+                    title: 'COMMITTED ESCROWS',
+                    value: '${formatWholeNumber(totalContractValue)} C',
+                    accent: violetColor,
+                    icon: Icons.lock_clock_outlined,
+                  ),
+                  _metricMiniBox(
+                    width: itemWidth,
+                    title: 'OPEN DISPUTES',
+                    value: '$disputedContractsCount',
+                    accent: disputedContractsCount > 0
+                        ? Colors.orangeAccent
+                        : Colors.tealAccent,
+                    icon: Icons.gavel_outlined,
+                  ),
+                ],
+              );
+            },
           ),
 
           const SizedBox(height: 16),
@@ -295,70 +291,77 @@ class _ContractsPanelState extends State<ContractsPanel> {
               ),
             )
           else
-            ...contractList.take(12).map((raw) {
-              if (raw is! Map<String, dynamic>) return const SizedBox.shrink();
-              final contract = raw;
-              final contractId =
-                  contract['id']?.toString() ?? 'CTR-UNKNOWN';
-              final proposerId =
-                  contract['proposer_id']?.toString() ?? '';
-              final counterpartyId =
-                  contract['counterparty_id']?.toString() ?? '';
-              final title =
-                  contract['title']?.toString() ?? 'Agreement';
-              final kind = (contract['kind']?.toString() ?? 'contract')
-                  .toUpperCase();
-              final amount = contract['amount'] ?? 0;
-              final status =
-                  contract['status']?.toString() ?? 'proposed';
-              final startDay =
-                  contract['start_day'] ?? contract['startDay'] ?? '-';
-              final endDay =
-                  contract['end_day'] ?? contract['endDay'] ?? '-';
-              final disputeId =
-                  contract['dispute_id'] ?? contract['disputeId'];
-              final disputeStatus =
-                  contract['dispute_status'] ?? contract['disputeStatus'];
-              final isDisputed = disputeId != null;
+            Container(
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .75),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white10),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: contractList.take(12).indexed.map((indexed) {
+                  final raw = indexed.$2;
+                  final isLast = indexed.$1 == contractList.take(12).length - 1;
+                  if (raw is! Map<String, dynamic>) {
+                    return const SizedBox.shrink();
+                  }
+                  final contract = raw;
+                  final contractId =
+                      contract['id']?.toString() ?? 'CTR-UNKNOWN';
+                  final proposerId =
+                      contract['proposer_id']?.toString() ?? '';
+                  final counterpartyId =
+                      contract['counterparty_id']?.toString() ?? '';
+                  final title =
+                      contract['title']?.toString() ?? 'Agreement';
+                  final kind = (contract['kind']?.toString() ?? 'contract')
+                      .toUpperCase();
+                  final amount = contract['amount'] ?? 0;
+                  final status =
+                      contract['status']?.toString() ?? 'proposed';
+                  final startDay =
+                      contract['start_day'] ?? contract['startDay'] ?? '-';
+                  final endDay =
+                      contract['end_day'] ?? contract['endDay'] ?? '-';
+                  final disputeId =
+                      contract['dispute_id'] ?? contract['disputeId'];
+                  final disputeStatus =
+                      contract['dispute_status'] ?? contract['disputeStatus'];
+                  final isDisputed = disputeId != null;
 
-              final isProposer = proposerId == myId;
-              final isCounterparty =
-                  counterpartyId == myId || counterpartyId.isEmpty;
-              final isPending = _pendingContractIds.contains(contractId);
-              final isBusy = widget.busy || isPending;
+                  final isProposer = proposerId == myId;
+                  final isCounterparty =
+                      counterpartyId == myId || counterpartyId.isEmpty;
+                  final isPending = _pendingContractIds.contains(contractId);
+                  final isBusy = widget.busy || isPending;
 
-              Color statusColor = mutedColor;
-              if (status == 'accepted') statusColor = cyanAccentColor;
-              if (status == 'cancelled' || status == 'rejected') {
-                statusColor = Colors.redAccent;
-              }
-              if (isDisputed) statusColor = Colors.orangeAccent;
+                  Color statusColor = mutedColor;
+                  if (status == 'accepted') statusColor = cyanAccentColor;
+                  if (status == 'cancelled' || status == 'rejected') {
+                    statusColor = Colors.redAccent;
+                  }
+                  if (isDisputed) statusColor = Colors.orangeAccent;
 
-              final rawTerms =
-                  contract['terms_json'] ?? contract['terms'];
-              final dynamic decodedTerms = rawTerms is String
-                  ? NanoMarkupHelper.decode(rawTerms)
-                  : rawTerms;
-              final Map<dynamic, dynamic>? termsMap =
-                  decodedTerms is Map ? decodedTerms : null;
+                  final rawTerms =
+                      contract['terms_json'] ?? contract['terms'];
+                  final dynamic decodedTerms = rawTerms is String
+                      ? NanoMarkupHelper.decode(rawTerms)
+                      : rawTerms;
+                  final Map<dynamic, dynamic>? termsMap =
+                      decodedTerms is Map ? decodedTerms : null;
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: .75),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(
-                    color: isDisputed
-                        ? Colors.orangeAccent.withValues(alpha: .4)
-                        : (status == 'accepted'
-                            ? cyanAccentColor.withValues(alpha: .3)
-                            : Colors.white10),
-                  ),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
+                  return Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        bottom: isLast
+                            ? BorderSide.none
+                            : const BorderSide(color: Colors.white10),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -588,7 +591,9 @@ class _ContractsPanelState extends State<ContractsPanel> {
                   ],
                 ),
               );
-            }),
+                }).toList(),
+              ),
+            ),
 
           const SizedBox(height: 8),
 
