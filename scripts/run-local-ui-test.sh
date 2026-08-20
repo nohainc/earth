@@ -61,7 +61,7 @@ if ! command -v osascript >/dev/null 2>&1; then
   exit 1
 fi
 
-api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} DATABASE_READ_ONLY=${(q)DATABASE_READ_ONLY} CORS_ORIGIN=${(q)API_ORIGIN} PORT=${API_PORT} npm run start:prod-local"
+api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CORS_ORIGIN=${(q)API_ORIGIN} npx wrangler dev --config wrangler.api.jsonc --port ${API_PORT}"
 web_command="cd ${(q)ROOT_DIR}/flutter_client && flutter run -d chrome --web-port ${WEB_PORT} --dart-define=EARTH_API_URL=http://localhost:${API_PORT}"
 
 osascript - "$api_command" "$web_command" <<'APPLESCRIPT'
@@ -74,5 +74,5 @@ on run argv
 end run
 APPLESCRIPT
 
-print "Started local PostgreSQL server, API on port ${API_PORT} (read-only: ${DATABASE_READ_ONLY}), and Flutter on port ${WEB_PORT}."
+print "Started local PostgreSQL server, Wrangler Worker API on port ${API_PORT}, and Flutter Chrome client on port ${WEB_PORT}."
 print "Open http://localhost:${WEB_PORT} or static prototype at file://${ROOT_DIR}/prototype3.html"
