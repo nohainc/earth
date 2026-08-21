@@ -10,16 +10,18 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
   final EarthState state;
   final Map<String, dynamic> businessFinancials;
   final Map<String, dynamic> businessProfile;
+  final Map<String, dynamic>? activeBusiness;
 
   const BusinessManagerOverviewPanel(
       {super.key,
       required this.state,
       this.businessFinancials = const {},
-      this.businessProfile = const {}});
+      this.businessProfile = const {},
+      this.activeBusiness});
 
   @override
   Widget build(BuildContext context) {
-    final business = state.business;
+    final business = activeBusiness ?? state.business;
     final fin = businessFinancials['business'] is Map
         ? Map<String, dynamic>.from(businessFinancials['business'] as Map)
         : businessFinancials;

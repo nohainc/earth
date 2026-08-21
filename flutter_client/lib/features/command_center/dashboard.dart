@@ -490,7 +490,8 @@ class Dashboard extends StatelessWidget {
               final managerOverview = BusinessManagerOverviewPanel(
                   state: state,
                   businessFinancials: businessFinancials,
-                  businessProfile: businessProfile);
+                  businessProfile: businessProfile,
+                  activeBusiness: activeBusiness);
               final machines = MachinesPanel(
                 state: state,
                 busy: busy,
