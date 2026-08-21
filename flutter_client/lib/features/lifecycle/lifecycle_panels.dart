@@ -1840,56 +1840,41 @@ class PantheonPanel extends StatelessWidget {
           ),
           const SizedBox(height: 8),
 
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _dynastyNode(
-                generation: 'GEN I · FOUNDING ANCESTOR',
-                name: deceased.isNotEmpty
-                    ? (deceased.first as Map<String, dynamic>)['display_name']
-                            ?.toString() ??
-                        'Lysander Vance'
-                    : 'Lysander Vance',
-                details: 'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
-                score: deceased.isNotEmpty
-                    ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}'
-                    : '84',
-                color: violetColor,
-                isLast: false,
-              ),
-              _treeConnector(),
-              _dynastyNode(
-                generation: 'GEN II · HEIR & SUCCESSOR',
-                name: deceased.length > 1
-                    ? (deceased[1] as Map<String, dynamic>)['display_name']
-                            ?.toString() ??
-                        'Mira Vance'
-                    : 'Mira Vance',
-                details:
-                    'Day 73–144 · Expanded Industrial Grid · 3 Patents Granted',
-                score: deceased.length > 1
-                    ? '${(deceased[1] as Map<String, dynamic>)['final_legacy'] ?? 112}'
-                    : '112',
-                color: cyanAccentColor,
-                isLast: false,
-              ),
-              _treeConnector(),
-              _dynastyNode(
-                generation: 'GEN III · CURRENT ACTIVE CITIZEN',
-                name: living.isNotEmpty
-                    ? (living.first as Map<String, dynamic>)['display_name']
-                            ?.toString() ??
-                        'Amara Kline'
-                    : 'Amara Kline',
-                details: 'Active · Mayor of New Kyoto · Managing 4 Enterprises',
-                score: living.isNotEmpty
-                    ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}'
-                    : '145',
-                color: Colors.tealAccent,
-                isLast: true,
-              ),
-            ],
-          ),
+          Builder(builder: (context) {
+            final recorded = <Map<String, dynamic>>[
+              ...deceased.whereType<Map>().map((raw) => Map<String, dynamic>.from(raw)),
+              ...living.whereType<Map>().map((raw) => Map<String, dynamic>.from(raw)),
+            ];
+            if (recorded.isEmpty) {
+              return const Text(
+                'No dynasty lineage records are available yet. Your first succession will establish the family archive.',
+                style: TextStyle(fontSize: 10.5, color: mutedColor),
+              );
+            }
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: recorded.indexed.map((indexed) {
+                final entry = indexed.$2;
+                final generation = entry['generation'] ?? indexed.$1 + 1;
+                final isLiving = entry['death_game_day'] == null &&
+                    entry['deathGameDay'] == null;
+                final name = entry['display_name'] ?? entry['name'] ?? 'Unknown Human';
+                final score = entry['final_legacy'] ??
+                    entry['composite_legacy_score'] ?? entry['legacy'] ?? 0;
+                final node = _dynastyNode(
+                  generation: 'GEN $generation · ${isLiving ? 'CURRENT ACTIVE CITIZEN' : 'ANCESTOR'}',
+                  name: name.toString(),
+                  details: isLiving ? 'Active · Current dynasty member' : 'Archived · Historical dynasty member',
+                  score: score.toString(),
+                  color: isLiving ? Colors.tealAccent : violetColor,
+                  isLast: indexed.$1 == recorded.length - 1,
+                );
+                return indexed.$1 == recorded.length - 1
+                    ? node
+                    : Column(children: [node, _treeConnector()]);
+              }).toList(),
+            );
+          }),
 
           const SizedBox(height: 16),
 
