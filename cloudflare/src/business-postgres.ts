@@ -216,6 +216,8 @@ export async function hireEmployee(repository: PostgresRepository, input: { huma
 export async function trainEmployee(repository: PostgresRepository, input: { humanId: string; businessId: string; employeeId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     await managedBusiness(tx, input.humanId, input.businessId);
+    const affiliation = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1', [input.humanId]);
+    if (!affiliation.rows[0]?.city_id) throw new Error('Staff training requires an active city affiliation');
     const employee = await tx.query<{ id: string; skill: string; morale: string; status: string }>('SELECT id, skill, morale, status FROM business_employees WHERE id = $1 AND business_id = $2 FOR UPDATE', [input.employeeId, input.businessId]);
     if (!employee.rows[0] || employee.rows[0].status !== 'active') throw new Error('Active employee not found');
     const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`WORKFORCE-TRAIN-${input.correlationId}`]);
