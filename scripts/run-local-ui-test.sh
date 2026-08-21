@@ -23,7 +23,9 @@ else
   DATABASE_READ_ONLY="${DATABASE_READ_ONLY:-true}"
 fi
 
-# Check if using local PostgreSQL and ensure server is started, migrated, and seeded
+# Check if using local PostgreSQL and ensure the server is started.
+# Schema migrations and seed data are managed separately by migrate-local-db.sh;
+# launching the UI must not mutate the local database.
 if [[ "${IS_LOCAL}" == "true" ]]; then
   print "Checking local PostgreSQL server status..."
 
@@ -50,10 +52,7 @@ if [[ "${IS_LOCAL}" == "true" ]]; then
     exit 1
   fi
 
-  print "Updating local database schema & seed data..."
-  (cd "${ROOT_DIR}" && DATABASE_URL="${DATABASE_URL}" npm run db:migrate:postgres)
-  (cd "${ROOT_DIR}" && DATABASE_URL="${DATABASE_URL}" npm run db:seed:postgres)
-  print "Local database is up to date and ready."
+  print "Local PostgreSQL is reachable; leaving the existing schema and data unchanged."
 fi
 
 # Automatically release stale local port listeners before starting
