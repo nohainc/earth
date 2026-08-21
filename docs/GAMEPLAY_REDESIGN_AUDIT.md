@@ -20,7 +20,7 @@ direction exists but gameplay or backend support is incomplete.
 | --- | --- | --- |
 | Revenue and profit are visible | Implemented | Business page shows revenue, costs, profit, margin, and taxable base. |
 | Production and machines are business-owned | Implemented | Machine inventory and production events render under Business. |
-| Staff/workforce gameplay | Implemented | Migration 041 adds employees; the Business page displays workforce capacity and payroll; PostgreSQL-backed hire, train, dismiss, and daily payroll/morale settlement actions are wired. Compensation and role reassignment can be expanded later. |
+| Staff/workforce gameplay | Implemented | Migration 041 adds employees; the Business page displays workforce capacity and payroll; PostgreSQL-backed hire, train, dismiss, role reassignment, wage changes, and daily payroll/morale settlement actions are wired. |
 | Diverse service businesses | Implemented | Registration/catalog includes IT services, consulting, logistics, healthcare, and education; active staffed service businesses now generate server-authoritative daily revenue based on staff skill and morale. |
 | Expansion and reinvestment loop | Implemented | Business registration, machine acquisition/upgrades, staffing, training, contracts, share actions, mergers, dividends, and portfolio-derived objectives provide reinvestment decisions. |
 
