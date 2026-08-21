@@ -180,11 +180,12 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
 
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const gameDay = Number(world.rows[0]?.game_day ?? 1);
-    const dynasty = (await tx.query<{ id: string }>('SELECT id FROM dynasties WHERE email = $1 FOR UPDATE', [input.email])).rows[0];
+    const dynasty = (await tx.query<{ id: string; dynasty_name: string }>('SELECT id, dynasty_name FROM dynasties WHERE email = $1 FOR UPDATE', [input.email])).rows[0];
     if (dynasty) {
       await tx.query('UPDATE dynasty_lineage_records SET is_incumbent = false WHERE dynasty_id = $1', [dynasty.id]);
       const nextGeneration = (await tx.query<{ generation: number }>('SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM dynasty_lineage_records WHERE dynasty_id = $1', [dynasty.id])).rows[0]?.generation ?? 1;
       await tx.query('INSERT INTO dynasty_lineage_records (id,dynasty_id,human_id,predecessor_human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) ON CONFLICT (id) DO UPDATE SET is_incumbent = true', [crypto.randomUUID(), dynasty.id, successor.id, cred.human_id, nextGeneration, successor.display_name, 'Designated Heir', gameDay, 0]);
+      await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,dynasty_name) VALUES ($1,$2,$3,$4,$5,$6,$7)', [crypto.randomUUID(), input.email, successor.id, cred.human_id, nextGeneration, gameDay, dynasty.dynasty_name]);
     }
 
     await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [successor.id, input.email]);

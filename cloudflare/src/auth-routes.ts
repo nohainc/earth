@@ -82,7 +82,9 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     }
   }
   if (url.pathname === '/api/auth/claim-heir' && request.method === 'POST') {
-    const human = await currentHuman(request, env);
+    // The predecessor is normally in Estate or Deceased state when the heir
+    // is claimed, so this route must accept those authenticated identities.
+    const human = await currentHuman(request, env, true);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     try {
       const result = await withRepository(env, (repository) => claimHeirIdentity(repository, { email: human.email }));
