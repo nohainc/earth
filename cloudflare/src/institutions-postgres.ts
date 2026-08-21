@@ -167,8 +167,8 @@ export async function changeCityResidency(repository: PostgresRepository, input:
     const existing = await tx.query<{ city_id: string | null; corporation_id: string | null }>('SELECT city_id, corporation_id FROM memberships WHERE human_id = $1 FOR UPDATE', [input.humanId]);
     const previousCityId = existing.rows[0]?.city_id ?? null;
     const cityCorporationId = city.rows[0]?.corporation_id ?? null;
-    if (input.action === 'join' && existing.rows[0]?.corporation_id && cityCorporationId && existing.rows[0].corporation_id !== cityCorporationId) {
-      throw new Error('This city belongs to another corporation');
+    if (input.action === 'join' && existing.rows[0]?.corporation_id && existing.rows[0].corporation_id !== cityCorporationId) {
+      throw new Error(cityCorporationId ? 'This city belongs to another corporation' : 'Corporation members may move only to a city in their corporation network');
     }
     const gameDay = await day(tx);
     if (input.action === 'join') {

@@ -139,6 +139,21 @@ test('moving cities records departure from the previous city', async () => {
   assert.ok(client.calls.some((call) => call.params.includes('CITY-01') && call.sql.includes('city_transfer')));
 });
 
+test('corporation members cannot retain a corporation while moving outside its city network', async () => {
+  const client = new MockDbClient({
+    'SELECT id, corporation_id FROM cities': { rows: [{ id: 'CITY-03', corporation_id: null }], rowCount: 1 },
+    'SELECT action, game_day FROM membership_events': { rows: [], rowCount: 0 },
+    'SELECT id FROM humans': { rows: [{ id: 'H-01' }], rowCount: 1 },
+    'SELECT city_id, corporation_id FROM memberships': { rows: [{ city_id: 'CITY-01', corporation_id: 'CORP-01' }], rowCount: 1 },
+  });
+  await assert.rejects(
+    () => changeCityResidency(new PostgresRepository(client), {
+      humanId: 'H-01', cityId: 'CITY-03', action: 'join', correlationId: 'move-city-03',
+    }),
+    /only to a city in their corporation network/,
+  );
+});
+
 test('leaving a corporation also clears the affiliated city', async () => {
   const client = new MockDbClient({
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
