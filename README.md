@@ -104,6 +104,7 @@ The implementation checklist for the management-first redesign is in
 ```bash
 npm run check
 npm test
+# Optional developer-only balance/invariant scenarios; this is not a player mode.
 npm run simulate:scenarios
 ```
 
@@ -119,7 +120,7 @@ npm run simulate:scenarios
 - machine lifecycle: acquisition, maintenance, upgrade, resale, recycling
 - bounded Basic/Business AI assistants and explainable recommendations
 - macro liquidity corridor reporting and essential-service lifecycle effects
-- simulated day advancement
+- persistent world-clock advancement and scheduled production settlement
 - authoritative prototype API with ledger entries and auditable command outcomes
 - aurora/night futuristic visual system with a consistent command-center UI
 
@@ -137,8 +138,11 @@ npm run cf:smoke
 
 The production smoke suite also verifies that `/app` serves the compiled Flutter shell, protected API and event endpoints reject unauthenticated access, and the remote PostgreSQL feature schema is present.
 
-The Flutter client is the primary production/test client; local Node/PostgreSQL code remains a reference simulator and compatibility test harness, not the deployed game authority.
+The Flutter client is the primary production/test client. Local PostgreSQL is the
+same authoritative persistence model used for manual production-like testing;
+the local Node server and `simulate:scenarios` command are compatibility and
+balance-verification tools only, not a separate player-facing game mode.
 
 ## Architectural direction
 
-The implementation follows the specification's decision-first, server-authoritative model: the player submits intent, while settlement, governance outcomes, ledger changes, and simulation results remain canonical PostgreSQL/Worker outcomes. Durable Objects coordinate market commands and live events; PostgreSQL remains the authoritative economic state.
+The implementation follows the specification's decision-first, server-authoritative model: the player submits intent, while settlement, governance outcomes, ledger changes, and persistent world-engine results remain canonical PostgreSQL/Worker outcomes. Durable Objects coordinate market commands and live events; PostgreSQL remains the authoritative economic state.
