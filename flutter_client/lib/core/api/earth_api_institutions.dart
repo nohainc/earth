@@ -123,4 +123,24 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
+  Future<EarthState> setCorporationTaxCharter({
+    required String corporationId,
+    int incomeTaxBps = 0,
+    int salesTaxBps = 0,
+    int corporateTaxBps = 0,
+    int propertyTaxBps = 0,
+  }) async {
+    await _request('/api/corporations/$corporationId/tax-charter',
+        method: 'POST',
+        body: {
+          'incomeTaxBps': incomeTaxBps,
+          'salesTaxBps': salesTaxBps,
+          'corporateTaxBps': corporateTaxBps,
+          'propertyTaxBps': propertyTaxBps,
+          'correlationId':
+              'corp-tax-charter-$corporationId-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
 }

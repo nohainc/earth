@@ -8,8 +8,10 @@ import 'institutions_dialogs.dart';
 
 class CorporationOverviewPanel extends StatelessWidget {
   final EarthState state;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function())? action;
 
-  const CorporationOverviewPanel({super.key, required this.state});
+  const CorporationOverviewPanel({super.key, required this.state, this.busy = false, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -74,6 +76,20 @@ class CorporationOverviewPanel extends StatelessWidget {
         const Text(
             'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
             style: TextStyle(color: mutedColor, fontSize: 10.5)),
+        if (isMember && id != '—') ...[
+          const SizedBox(height: 12),
+          OutlinedButton.icon(
+            onPressed: busy
+                ? null
+                : () => showTaxCharterDialog(
+                    context,
+                    action ?? ((_) async {}),
+                    id,
+                    corporation: true),
+            icon: const Icon(Icons.gavel_outlined, size: 14),
+            label: const Text('CORPORATION RULES'),
+          ),
+        ],
         if (cities.isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text('CORPORATION RANKING',

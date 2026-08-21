@@ -271,3 +271,22 @@ export async function setCityTaxCharter(repository: PostgresRepository, input: {
     return { ok: true, cityId: input.cityId, charter, correlationId: input.correlationId };
   });
 }
+
+export async function setCorporationTaxCharter(repository: PostgresRepository, input: { humanId: string; corporationId: string; incomeTaxBps: number; salesTaxBps: number; corporateTaxBps: number; propertyTaxBps: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    if (!(await hasRole(tx, input.humanId, input.corporationId, ['Corporation Executive', 'Corporation Treasurer']))) {
+      throw new Error('An active Corporation Executive or Corporation Treasurer term is required');
+    }
+    const corporation = await tx.query<{ id: string }>('SELECT id FROM corporations WHERE id = $1 FOR UPDATE', [input.corporationId]);
+    if (!corporation.rows[0]) throw new Error('Corporation not found');
+    const incomeTaxBps = Math.max(0, Math.min(5000, Math.round(Number(input.incomeTaxBps ?? 0))));
+    const salesTaxBps = Math.max(0, Math.min(2500, Math.round(Number(input.salesTaxBps ?? 0))));
+    const corporateTaxBps = Math.max(0, Math.min(5000, Math.round(Number(input.corporateTaxBps ?? 0))));
+    const propertyTaxBps = Math.max(0, Math.min(3000, Math.round(Number(input.propertyTaxBps ?? 0))));
+    const gameDay = await day(tx);
+    const charter = { incomeTaxBps, salesTaxBps, corporateTaxBps, propertyTaxBps, updatedBy: input.humanId, updatedGameDay: gameDay };
+    await tx.query('UPDATE institutions SET charter_rules = $1 WHERE id = $2', [toNanoMarkup(charter), input.corporationId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation.tax_charter_updated', `Corporation Tax Charter updated for ${input.corporationId}`, toNanoMarkup({ corporationId: input.corporationId, charter, correlationId: input.correlationId })]);
+    return { ok: true, corporationId: input.corporationId, charter, correlationId: input.correlationId };
+  });
+}

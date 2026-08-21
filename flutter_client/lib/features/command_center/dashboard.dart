@@ -604,7 +604,7 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'corporation':
-        return [CorporationOverviewPanel(state: state)];
+        return [CorporationOverviewPanel(state: state, busy: busy, action: action)];
       case 'city':
         return [
           LayoutBuilder(

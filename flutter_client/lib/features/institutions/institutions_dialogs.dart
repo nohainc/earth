@@ -103,7 +103,9 @@ Future<void> showCommunityContributionDialog(
 Future<void> showTaxCharterDialog(
     BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action,
-    String cityId) async {
+    String institutionId, {
+    bool corporation = false,
+  }) async {
   final income = TextEditingController(text: '5.0');
   final sales = TextEditingController(text: '2.0');
   final corporate = TextEditingController(text: '10.0');
@@ -116,7 +118,7 @@ Future<void> showTaxCharterDialog(
         final parsedIncome = double.tryParse(income.text.trim()) ?? 5.0;
         final parsedCorporate = double.tryParse(corporate.text.trim()) ?? 10.0;
         return AlertDialog(
-          title: const Text('Set city tax charter'),
+          title: Text(corporation ? 'Set corporation tax charter' : 'Set city tax charter'),
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
@@ -154,7 +156,7 @@ Future<void> showTaxCharterDialog(
                   const SizedBox(height: 14),
                   ConsequencePreviewCard(
                     consequence: DecisionConsequence.municipalTaxAdjustment(
-                      cityName: cityId,
+                      cityName: institutionId,
                       oldRatePct: 5.0,
                       newRatePct: (parsedIncome + parsedCorporate) / 2.0,
                     ),
@@ -180,8 +182,16 @@ Future<void> showTaxCharterDialog(
                   return;
                 }
                 Navigator.pop(dialogContext);
-                await action(() => const EarthApi().setCityTaxCharter(
-                      cityId: cityId,
+                await action(() => corporation
+                    ? const EarthApi().setCorporationTaxCharter(
+                      corporationId: institutionId,
+                      incomeTaxBps: (rates[0]! * 100).round(),
+                      salesTaxBps: (rates[1]! * 100).round(),
+                      corporateTaxBps: (rates[2]! * 100).round(),
+                      propertyTaxBps: (rates[3]! * 100).round(),
+                    )
+                    : const EarthApi().setCityTaxCharter(
+                      cityId: institutionId,
                       incomeTaxBps: (rates[0]! * 100).round(),
                       salesTaxBps: (rates[1]! * 100).round(),
                       corporateTaxBps: (rates[2]! * 100).round(),

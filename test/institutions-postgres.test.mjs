@@ -7,6 +7,7 @@ import {
   cityQualification,
   changeCityResidency,
   changeCorporationMembership,
+  setCorporationTaxCharter,
 } from '../cloudflare/src/institutions-postgres.ts';
 
 class MockDbClient {
@@ -127,4 +128,21 @@ test('leaving a corporation also clears the affiliated city', async () => {
   });
   assert.equal(result.ok, true);
   assert.ok(client.calls.some((call) => call.sql.includes('city_id = NULL')));
+});
+
+test('corporation executives can update the corporation tax charter', async () => {
+  const client = new MockDbClient({
+    'SELECT role_assignments.id': { rows: [{ id: 'ROLE-ASSIGNMENT-01' }], rowCount: 1 },
+    'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
+    'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'UPDATE institutions SET charter_rules': { rows: [], rowCount: 1 },
+    'INSERT INTO world_events': { rows: [], rowCount: 1 },
+  });
+  const result = await setCorporationTaxCharter(new PostgresRepository(client), {
+    humanId: 'H-01', corporationId: 'CORP-01', incomeTaxBps: 500,
+    salesTaxBps: 250, corporateTaxBps: 750, propertyTaxBps: 100,
+    correlationId: 'corp-charter-01',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.charter.corporateTaxBps, 750);
 });
