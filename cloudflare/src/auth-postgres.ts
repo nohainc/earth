@@ -112,7 +112,7 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
 
     // 3. Setup starter business, machine, resources, technology
     await tx.query("INSERT INTO institutions (id,kind,name,status) VALUES ($1,'BUSINESS',$2,'active')", [businessId, `${input.displayName} Enterprise`]);
-    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'manufacturing')", [businessId, newHumanId, `${input.displayName} Enterprise`]);
+    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'machines')", [businessId, newHumanId, `${input.displayName} Enterprise`]);
     await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
     await tx.query('INSERT INTO business_constitutions (business_id,updated_by,updated_game_day) VALUES ($1,$2,$3)', [businessId, newHumanId, worldDay]);
     await tx.query('INSERT INTO business_management (business_id,manager_id,appointed_by,appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, newHumanId, worldDay]);
