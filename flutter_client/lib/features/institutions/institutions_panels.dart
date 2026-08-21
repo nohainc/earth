@@ -353,6 +353,7 @@ class CivicRankingsPanel extends StatelessWidget {
     return EarthPanel(
       title: 'CIVIC / CORPORATION & CITY RANKINGS',
       showSurface: false,
+      showTitle: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
@@ -396,7 +397,10 @@ class CivicRankingsPanel extends StatelessWidget {
       Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Text(title,
             style: const TextStyle(
-                color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1)),
         const SizedBox(height: 7),
         if (rows.isEmpty)
           const Text('No ranking data available.',
