@@ -783,6 +783,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
       key: panelKey,
       title: 'INSTITUTIONS / CITY & CORP',
       showSurface: false,
+      showTitle: false,
       contentPadding: EdgeInsets.zero,
       titleColor: mutedColor,
       child: Column(
@@ -1296,8 +1297,7 @@ class CityImpactPanel extends StatelessWidget {
             city['name'] == null
                 ? 'No city effect is currently reported.'
                 : 'Living in ${city['name']} changes your services, costs, and opportunities.',
-            style: const TextStyle(
-                color: inkColor, fontSize: 12, fontWeight: FontWeight.w700),
+            style: const TextStyle(color: mutedColor, fontSize: 11),
           ),
           const SizedBox(height: 12),
           Wrap(
