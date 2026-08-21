@@ -10,7 +10,7 @@ test('Unified Decision Queue Generator', async (t) => {
       contracts: [{ id: 'c-101', title: 'Components Supply', status: 'active' }],
       proposals: [{ id: 'prop-12', title: 'City Tax Charter Amendment', status: 'open' }],
       technology: { progress: 50 },
-      dynasty: { successor_id: null },
+      dynasty: { successor_id: null, perks_available: true },
       business: { id: 'b-1', name: 'AeroCorp', profit: -200 },
       finance: { unpaid_tax: 150 },
       market: [{ product: 'food', supply: 10, demand: 45, price: 12 }],
@@ -27,6 +27,7 @@ test('Unified Decision Queue Generator', async (t) => {
     assert.ok(titles.some((t) => t.includes('Research funding is available')));
     assert.ok(titles.some((t) => t.includes('machine needs maintenance')));
     assert.ok(titles.some((t) => t.includes('dynasty decision is pending')));
+    assert.ok(titles.some((t) => t.includes('Legacy points can unlock')));
 
     // Check properties of each item
     for (const item of queue) {
