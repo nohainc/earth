@@ -156,19 +156,21 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
   const dynastyGen = num(input.dynasty?.generation, 1);
   const perksCount = num(input.dynasty?.perks_count, 0) + num(input.dynasty?.heirlooms_count, 0) + (input.dynasty?.successor_id ? 1 : 0);
   const targetDynastyPerks = 3;
+  const dynastyProgressUnits = Math.max(0, dynastyGen - 1) + perksCount;
+  const dynastyTargetUnits = targetDynastyPerks + 1;
   const dynastyProgress = Math.min(
     100,
-    Math.round(((dynastyGen - 1 + perksCount) / (targetDynastyPerks + 1)) * 100)
+    Math.round((dynastyProgressUnits / dynastyTargetUnits) * 100)
   );
   objectives.push({
     id: 'obj-dynasty-traits',
     category: 'dynasty',
     title: 'Create a Dynasty with Sovereign Traits',
     description: 'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct dynasty traits and heirlooms.',
-    currentValue: perksCount,
-    targetValue: targetDynastyPerks,
+    currentValue: dynastyProgressUnits,
+    targetValue: dynastyTargetUnits,
     progressPercentage: dynastyProgress,
-    metricLabel: `Gen ${dynastyGen} · ${perksCount} / ${targetDynastyPerks} Dynasty Traits Unlocked`,
+    metricLabel: `Gen ${dynastyGen} · ${dynastyProgressUnits} / ${dynastyTargetUnits} Continuity Progress`,
     status: dynastyProgress >= 100 ? 'completed' : 'in_progress',
     rewardDescription: 'Title: "Eternal Patriarch" · 100% Estate Inheritance Tax Waiver · Ancestral Vault Access',
     targetSection: 'dynasty',
