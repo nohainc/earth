@@ -45,10 +45,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT si.*, sim.status AS member_status FROM social_initiatives si LEFT JOIN social_initiative_members sim ON sim.initiative_id = si.id AND sim.human_id = $1 WHERE si.creator_human_id = $1 OR si.target_human_id = $1 OR sim.human_id = $1 ORDER BY si.updated_at DESC LIMIT 30", [viewerId]),
     repository.query("SELECT bta.business_id, bta.technology_id, bta.adopted_game_day, b.name AS business_name, t.name AS technology_name FROM business_technology_adoptions bta JOIN businesses b ON b.id = bta.business_id JOIN technologies t ON t.id = bta.technology_id WHERE b.owner_id = $1 OR EXISTS (SELECT 1 FROM business_management bm WHERE bm.business_id = b.id AND bm.manager_id = $1) OR EXISTS (SELECT 1 FROM business_shares bs WHERE bs.business_id = b.id AND bs.holder_id = $1) ORDER BY bta.adopted_game_day DESC", [viewerId]),
   ]);
-  const dynastyProgress = await repository.query<{ generation: number; dynasty_name: string | null }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation, MAX(d.dynasty_name) AS dynasty_name
-    FROM dynasty_lineage_records dlr
-    JOIN dynasties d ON d.id = dlr.dynasty_id
-    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; dynasty_name: string | null }[] }));
+  const dynastyProgress = await repository.query<{ generation: number; dynasty_name: string | null; perks_count: number; heirlooms_count: number }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation, MAX(d.dynasty_name) AS dynasty_name,
+      COUNT(DISTINCT dp.id)::integer AS perks_count, COUNT(DISTINCT dh.id)::integer AS heirlooms_count
+    FROM dynasties d
+    LEFT JOIN dynasty_lineage_records dlr ON dlr.dynasty_id = d.id
+    LEFT JOIN dynasty_perks dp ON dp.dynasty_id = d.id
+    LEFT JOIN dynasty_heirlooms dh ON dh.dynasty_id = d.id
+    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; dynasty_name: string | null; perks_count: number; heirlooms_count: number }[] }));
   const corporationSharedTechnology = await repository.query(
     `SELECT share.patent_id, patents.technology_id, technologies.name, share.shared_game_day
      FROM corporation_technology_shares share
@@ -144,7 +147,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     },
     governance: { voting_weight: 1 },
     technology: { research_progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), active_licenses: Number(licenses.rows[0]?.count ?? 0) },
-    dynasty: { generation: Number(dynastyProgress.rows[0]?.generation ?? 1), successor_id: succession.rows[0]?.successor_human_id ?? null, perks_count: 0 },
+    dynasty: {
+      generation: Number(dynastyProgress.rows[0]?.generation ?? 1),
+      successor_id: succession.rows[0]?.successor_human_id ?? null,
+      perks_count: Number(dynastyProgress.rows[0]?.perks_count ?? 0),
+      heirlooms_count: Number(dynastyProgress.rows[0]?.heirlooms_count ?? 0),
+    },
     resources: resourceMap,
     netWorth: Number(account.rows[0]?.balance ?? 0) + 15000,
   });
