@@ -127,7 +127,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     proposals: proposals.rows as Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>,
     technology: { progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), is_funding_open: true },
     dynasty: { successor_id: succession.rows[0]?.successor_human_id ?? null },
-    business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100 },
+    business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100, business_count: business.rows.length, service_business_count: business.rows.filter((row) => ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(String(row.sector))).length },
     finance: { unpaid_tax: 0, status: personalFinance.rows[0]?.status ?? 'active' },
     social: social.rows,
     market: prices.rows as Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>,

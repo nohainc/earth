@@ -25,7 +25,7 @@ export interface PlayerObjective {
 
 export interface ObjectivesEvaluationInput {
   human?: { credits?: unknown; standing?: unknown; legacy?: unknown; voting_weight?: unknown; age_years?: unknown };
-  business?: { id?: string; business_count?: unknown; valuation?: unknown; treasury?: unknown; profit?: unknown; net_income?: unknown; revenue?: unknown };
+  business?: { id?: string; business_count?: unknown; service_business_count?: unknown; valuation?: unknown; treasury?: unknown; profit?: unknown; net_income?: unknown; revenue?: unknown };
   institutions?: {
     city?: { health_capacity?: unknown; essential_services_index?: unknown; standing?: unknown };
     corporation?: { treasury?: unknown; member_count?: unknown };
@@ -70,6 +70,25 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     rewardDescription: 'Title: "Industrial Titan" · +500 Legacy Points · Corporate Tax Charter Exemption',
     targetSection: 'business',
     iconName: 'business_center',
+  });
+
+  // 4. Build a service enterprise
+  const serviceBusinessCount = Math.max(0, num(input.business?.service_business_count, 0));
+  const serviceTarget = 2;
+  const serviceEnterpriseProgress = Math.min(100, Math.round((serviceBusinessCount / serviceTarget) * 100));
+  objectives.push({
+    id: 'obj-service-enterprise',
+    category: 'enterprise',
+    title: 'Build a Service Enterprise',
+    description: 'Develop two people-powered service businesses that earn recurring revenue through expertise, contracts, and corporate networks.',
+    currentValue: serviceBusinessCount,
+    targetValue: serviceTarget,
+    progressPercentage: serviceEnterpriseProgress,
+    metricLabel: `${serviceBusinessCount} / ${serviceTarget} Service Businesses`,
+    status: serviceEnterpriseProgress >= 100 ? 'completed' : 'in_progress',
+    rewardDescription: 'Title: "Civic Service Architect" · +250 Legacy Points · Priority access to institutional contracts',
+    targetSection: 'business',
+    iconName: 'support_agent',
   });
 
   // 2. Build a productive food reserve
