@@ -58,7 +58,7 @@ void main() {
       ),
     );
 
-    expect(find.text('ACTIVITY & NOTIFICATIONS CENTER'), findsOneWidget);
+    expect(find.text('EVENT HISTORY & ARCHIVE'), findsOneWidget);
     expect(find.text('LIVE STREAM ACTIVE'), findsNothing);
     expect(find.text('ALERTS (2)'), findsOneWidget);
     expect(find.text('Tax Assessment Cleared'), findsOneWidget);
