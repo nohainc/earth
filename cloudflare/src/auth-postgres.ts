@@ -189,6 +189,11 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
       await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,dynasty_name) VALUES ($1,$2,$3,$4,$5,$6,$7)', [crypto.randomUUID(), input.email, successor.id, cred.human_id, nextGeneration, gameDay, dynasty.dynasty_name]);
     }
 
+    // Equipped heirlooms are family assets: the designated successor carries
+    // them into the next generation instead of leaving their active benefits
+    // attached to the deceased identity.
+    await tx.query('UPDATE dynasty_heirlooms SET equipped_by_human_id = $1 WHERE equipped_by_human_id = $2', [successor.id, cred.human_id]);
+
     await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [successor.id, input.email]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
 
