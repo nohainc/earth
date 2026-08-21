@@ -91,7 +91,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Review the most important changes since the previous simulation cycle.\n\n• Compare cashflow, market movements, industry operations, and civic developments.\n\n• Use recommended directives to move directly to the relevant game system.',
+          '• Review what changed since your last visit.\n\n• Handle the decisions that can affect your businesses, household, city, or long-term direction.\n\n• Detailed market, finance, business, and civic screens remain available through the action links.',
       child: widget.isPageMode
           ? _buildBriefingBody()
           : SizedBox(
@@ -234,8 +234,6 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         ),
         const SizedBox(height: 14),
         _cashflowResult(r.cashflow),
-        const SizedBox(height: 14),
-        _buildCashflowContent(r),
       ],
     );
   }
@@ -287,18 +285,13 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       builder: (context, constraints) {
         final wide = constraints.maxWidth > 1000;
         final left = <Widget>[
-          _buildSectionLabel('STRATEGIC DIRECTIVES REQUIRING ATTENTION'),
+          _buildSectionLabel('WHAT REQUIRES ATTENTION'),
           _buildDirectivesContent(r),
         ];
         final right = <Widget>[
-          _buildSectionLabel(
-            'COMMODITY SPOT AUCTION MOVEMENTS',
-            topOffset: wide ? 0 : 34,
-          ),
-          _buildMarketsContent(r),
-          _buildSectionLabel('INDUSTRY OPERATIONS'),
+          _buildSectionLabel('CURRENT OPERATIONS', topOffset: wide ? 0 : 34),
           _buildIndustryContent(r),
-          _buildSectionLabel('CIVIC & INTELLIGENCE'),
+          _buildSectionLabel('CITY & CIVIC EFFECTS'),
           _buildCivicContent(r),
         ];
         final sections = wide
@@ -311,6 +304,8 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
                       children: [
                         _buildBriefingHeading(context),
                         _buildHeroDeltaBanner(r),
+                        _buildSectionLabel('WHAT CHANGED', topOffset: 28),
+                        _buildRecentChangesContent(r),
                         ...left,
                       ],
                     ),
@@ -336,6 +331,8 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
             else ...[
               _buildBriefingHeading(context),
               _buildHeroDeltaBanner(r),
+              _buildSectionLabel('WHAT CHANGED', topOffset: 28),
+              _buildRecentChangesContent(r),
               ...left,
               ...right,
             ],
@@ -354,7 +351,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
         children: [
           const Flexible(
             child: Text(
-              'EXECUTIVE POSITION & CASHFLOW',
+              'SINCE YOUR LAST VISIT',
               style: TextStyle(
                 color: EarthColors.textMuted,
                 fontSize: 10,
@@ -372,11 +369,11 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
                 size: 14, color: mutedColor.withValues(alpha: .8)),
             onPressed: () => showEarthInfoDialog(
               context,
-              title: 'EXECUTIVE POSITION & CASHFLOW',
+              title: 'SINCE YOUR LAST VISIT',
               description:
-                  '• NET WORTH is the current combined value of your liquid credits and tracked assets. NET CHANGE compares that value with the end of the previous game day.\n\n'
-                  '• INCOME, EXPENSES, and NET CASHFLOW show the operating result for the previous game day. The breakdown identifies the main sources of income and costs.\n\n'
-                  '• Alerts and messages are available from the global HUD, where they can be acted on directly.',
+                  '• The financial result compares your current position with the previous game day.\n\n'
+                  '• The change list highlights business, contract, civic, and household effects that may require a decision.\n\n'
+                  '• Open Finance or Activity for the complete ledger and event history.',
             ),
           ),
         ],
@@ -395,6 +392,78 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           fontWeight: FontWeight.bold,
           letterSpacing: 1.1,
         ),
+      ),
+    );
+  }
+
+  Widget _buildRecentChangesContent(DailyBriefingReport r) {
+    final changes = <(String, String, IconData, Color)>[
+      (
+        'Financial result',
+        '${r.cashflow.netProfit >= 0 ? '+' : ''}${r.cashflow.netProfit.toStringAsFixed(2)} CR net cashflow',
+        r.cashflow.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
+        r.cashflow.netProfit >= 0
+            ? const Color(0xFF00E676)
+            : const Color(0xFFFF5252),
+      ),
+      (
+        'Operations',
+        '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeMachines} machines · ${r.businessSummary.pendingContractsCount} pending contracts',
+        Icons.business_center_outlined,
+        EarthThemeController.instance.primaryAccent,
+      ),
+      if (r.civicSummary.recentCivicEvents.isNotEmpty)
+        (
+          'City and civic life',
+          r.civicSummary.recentCivicEvents.first,
+          Icons.location_city_outlined,
+          EarthColors.goldMetallic,
+        ),
+    ];
+
+    return Container(
+      decoration: BoxDecoration(
+        color: _groupSurface,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: EarthColors.borderSubtle),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        children: changes.indexed.map((indexed) {
+          final change = indexed.$2;
+          final isLast = indexed.$1 == changes.length - 1;
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: isLast
+                    ? BorderSide.none
+                    : const BorderSide(color: EarthColors.borderSubtle),
+              ),
+            ),
+            child: Row(
+              children: [
+                Icon(change.$3, size: 16, color: change.$4),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(change.$1,
+                      style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700)),
+                ),
+                const SizedBox(width: 10),
+                Flexible(
+                  child: Text(change.$2,
+                      textAlign: TextAlign.right,
+                      overflow: TextOverflow.ellipsis,
+                      style:
+                          const TextStyle(color: Colors.white70, fontSize: 10)),
+                ),
+              ],
+            ),
+          );
+        }).toList(),
       ),
     );
   }
@@ -628,7 +697,8 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           final isUp = m.deltaPct >= 0;
           final deltaStr =
               '${isUp ? '+' : ''}${m.deltaPct.toStringAsFixed(2)}%';
-          final deltaColor = isUp ? const Color(0xFF00E676) : const Color(0xFFFF5252);
+          final deltaColor =
+              isUp ? const Color(0xFF00E676) : const Color(0xFFFF5252);
 
           return Container(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),

@@ -157,7 +157,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // 1. SITUATION MATRIX
   // ==========================================================================
   Widget _buildSituationMatrix() {
-    final human = widget.state.human;
     final business = widget.businessFinancials['business'] is Map
         ? Map<String, dynamic>.from(
             widget.businessFinancials['business'] as Map)
