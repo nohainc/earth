@@ -113,6 +113,32 @@ test('changeCityResidency adds or removes human residency', async () => {
   assert.equal(joinResult.ok, true);
 });
 
+test('moving cities records departure from the previous city', async () => {
+  const client = new MockDbClient({
+    'SELECT id, corporation_id FROM cities WHERE id = $1 FOR UPDATE': {
+      rows: [{ id: 'CITY-02', corporation_id: 'CORP-01' }], rowCount: 1,
+    },
+    'SELECT action, game_day FROM membership_events': { rows: [], rowCount: 0 },
+    'SELECT id FROM humans WHERE id = $1': { rows: [{ id: 'H-01' }], rowCount: 1 },
+    'SELECT city_id, corporation_id FROM memberships': {
+      rows: [{ city_id: 'CITY-01', corporation_id: 'CORP-01' }], rowCount: 1,
+    },
+    'SELECT COALESCE(MAX(game_day), 1) AS game_day': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'INSERT INTO memberships': { rows: [], rowCount: 1 },
+    'UPDATE cities SET residents': { rows: [], rowCount: 1 },
+    'INSERT INTO membership_events': { rows: [], rowCount: 1 },
+    'INSERT INTO notifications': { rows: [], rowCount: 1 },
+    'SELECT * FROM memberships WHERE human_id = $1': {
+      rows: [{ human_id: 'H-01', city_id: 'CITY-02', corporation_id: 'CORP-01' }], rowCount: 1,
+    },
+  });
+  const result = await changeCityResidency(new PostgresRepository(client), {
+    humanId: 'H-01', cityId: 'CITY-02', action: 'join', correlationId: 'move-city-01',
+  });
+  assert.equal(result.ok, true);
+  assert.ok(client.calls.some((call) => call.params.includes('CITY-01') && call.sql.includes('city_transfer')));
+});
+
 test('leaving a corporation also clears the affiliated city', async () => {
   const client = new MockDbClient({
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },

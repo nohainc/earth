@@ -173,6 +173,9 @@ export async function changeCityResidency(repository: PostgresRepository, input:
     const gameDay = await day(tx);
     if (input.action === 'join') {
       await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = COALESCE(memberships.corporation_id, excluded.corporation_id), city_id = excluded.city_id, joined_game_day = excluded.joined_game_day', [input.humanId, existing.rows[0]?.corporation_id ?? cityCorporationId, input.cityId, gameDay]);
+      if (previousCityId && previousCityId !== input.cityId) {
+        await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CITY',$3,'left',$4,'city_transfer')", [crypto.randomUUID(), input.humanId, previousCityId, gameDay]);
+      }
     } else {
       await tx.query('UPDATE memberships SET city_id = NULL WHERE human_id = $1 AND city_id = $2', [input.humanId, input.cityId]);
     }
