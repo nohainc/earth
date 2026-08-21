@@ -118,6 +118,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const target = activeHumans * Math.max(0.5, Number(liquidity.rows[0]?.living_cost_index ?? 1)) * 100;
   const businessRow = business.rows[0] ?? {};
   const machineRows = machines.rows as Row[];
+  const activeBusinesses = business.rows.filter((row) => String(row.status ?? 'active') === 'active');
+  const portfolioProfit = activeBusinesses.reduce((sum, row) => sum + Number(row.profit ?? 0), 0);
+  const portfolioValuation = activeBusinesses.reduce((sum, row) => sum + 10000 + Math.max(0, Number(row.profit ?? 0)) * 12, 0);
   const opportunities = rankOpportunities({
     market: prices.rows as Array<{ product: string; supply: unknown; demand: unknown; price: unknown }>,
     machines: machineRows as Array<{ id: string; name: string; output_resource: string; condition: unknown; utilization: unknown }>,
@@ -135,7 +138,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     dynasty: { successor_id: succession.rows[0]?.successor_human_id ?? null, perks_available: Number(dynastyProgress.rows[0]?.legacy_points ?? 0) >= 100 && Number(dynastyProgress.rows[0]?.perks_count ?? 0) < 5 },
     projects: { completed: social.rows.filter((row) => row.kind === 'shared_project' && row.status === 'completed').length },
     city: city ? { id: city.id, residents: city.residents, housing_capacity: city.housing_capacity, energy_capacity: city.energy_capacity, connectivity_capacity: city.connectivity_capacity, health_capacity: city.health_capacity } : undefined,
-    business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100, business_count: business.rows.length, service_business_count: business.rows.filter((row) => ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(String(row.sector))).length },
+    business: { id: businessRow.id, name: businessRow.name, profit: portfolioProfit, net_income: portfolioProfit, valuation: portfolioValuation, condition: businessRow.condition ?? 100, business_count: activeBusinesses.length, service_business_count: activeBusinesses.filter((row) => ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(String(row.sector))).length },
     finance: { unpaid_tax: 0, status: personalFinance.rows[0]?.status ?? 'active' },
     social: social.rows,
     market: prices.rows as Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>,
@@ -143,7 +146,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   });
   const objectives = evaluatePlayerObjectives({
     human: { credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, voting_weight: 1, age_years: humanRow.age_years ?? 31 },
-    business: { id: businessRow.id, business_count: business.rows.length, valuation: 35000, treasury: 5000, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0 },
+    business: { id: businessRow.id, business_count: activeBusinesses.length, valuation: portfolioValuation, treasury: Number(corporation?.treasury ?? 0), profit: portfolioProfit, net_income: portfolioProfit },
     institutions: {
       city: { essential_services_index: worldRow.essential_services_index ?? 0.68, standing: humanRow.standing ?? 0 },
       corporation: { treasury: Number(corporation?.treasury ?? 0), member_count: Number(corporation?.member_count ?? 0) },
