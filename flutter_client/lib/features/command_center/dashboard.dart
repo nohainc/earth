@@ -591,9 +591,11 @@ class Dashboard extends StatelessWidget {
       case 'corporation':
         return [
           LayoutBuilder(builder: (context, constraints) {
-            final directory = CorporationDirectoryPanel(
-                state: state, busy: busy, action: action);
             final overview = CorporationOverviewPanel(
+                state: state, busy: busy, action: action);
+            final isMember = state.membership?['corporation_id'] != null;
+            if (isMember) return overview;
+            final directory = CorporationDirectoryPanel(
                 state: state, busy: busy, action: action);
             if (constraints.maxWidth > 1000) {
               return Row(

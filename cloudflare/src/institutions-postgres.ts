@@ -102,6 +102,34 @@ export async function createCorporation(repository: PostgresRepository, input: {
   });
 }
 
+export async function createCorporationWithCapital(repository: PostgresRepository, input: { founderId: string; corporationName: string; cityName: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const corporationName = input.corporationName.trim();
+    const cityName = input.cityName.trim();
+    if (corporationName.length < 3 || corporationName.length > 80 || cityName.length < 3 || cityName.length > 80) {
+      throw new Error('Corporation and capital city names must be 3 to 80 characters');
+    }
+    const founder = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND life_status = 'active'", [input.founderId]);
+    const existingMembership = await tx.query<{ corporation_id: string | null }>('SELECT corporation_id FROM memberships WHERE human_id = $1', [input.founderId]);
+    if (!founder.rows[0]) throw new Error('Human not found');
+    if (existingMembership.rows[0]?.corporation_id) throw new Error('Leave your current corporation before founding another one');
+    await uniqueInstitutionName(tx, corporationName);
+    await uniqueInstitutionName(tx, cityName);
+    const cityId = `CITY-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const corporationId = `CORP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const gameDay = await day(tx);
+    await tx.query("INSERT INTO institutions (id,kind,name,status) VALUES ($1,'CITY',$2,'active'),($3,'CORPORATION',$4,'active')", [cityId, cityName, corporationId, corporationName]);
+    await tx.query('INSERT INTO cities (id,institution_id,residents,housing_capacity,energy_capacity,connectivity_capacity,health_capacity,treasury,corporation_id) VALUES ($1,$1,1,10,10,10,50,0,$2)', [cityId, corporationId]);
+    await tx.query("INSERT INTO corporations (id,institution_id,member_count,treasury,constitution_version,capital_city_id,admission_policy) VALUES ($1,$1,1,0,1,$2,'open')", [corporationId, cityId]);
+    await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = excluded.city_id, joined_game_day = excluded.joined_game_day', [input.founderId, corporationId, cityId, gameDay]);
+    await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1,$2,0,'CREDIT'),($3,$4,0,'CREDIT')", [`account-city-${cityId}`, cityId, `account-corporation-${corporationId}`, corporationId]);
+    await tx.query("INSERT INTO institution_roles (id,institution_id,name,term_days,eligibility) VALUES ($1,$2,'City Mayor',90,'resident'),($3,$2,'Infrastructure Planner',90,'resident'),($4,$5,'Corporation Executive',90,'member'),($6,$5,'Corporation Treasurer',90,'member')", [`${cityId}-MAYOR`, cityId, `${cityId}-PLANNER`, `${corporationId}-EXECUTIVE`, corporationId, `${corporationId}-TREASURER`]);
+    await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CITY',$3,'joined',$4,'corporation_founding'),($5,$2,'CORPORATION',$6,'joined',$4,'corporation_founding')", [crypto.randomUUID(), input.founderId, cityId, gameDay, crypto.randomUUID(), corporationId]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation.founded', `${corporationName} was founded`, toNanoMarkup({ corporationId, cityId, founderId: input.founderId })]);
+    return { ok: true, corporation: (await tx.query('SELECT * FROM corporations WHERE id = $1', [corporationId])).rows[0], capitalCity: (await tx.query('SELECT * FROM cities WHERE id = $1', [cityId])).rows[0] };
+  });
+}
+
 export async function corporationQualification(repository: PostgresRepository, corporationId: string): Promise<Record<string, unknown>> {
   const corporation = await repository.query<Record<string, unknown>>('SELECT * FROM corporations WHERE id = $1', [corporationId]);
   if (!corporation.rows[0]) throw new Error('Corporation not found');

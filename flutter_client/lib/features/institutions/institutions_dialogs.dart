@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
@@ -262,6 +263,52 @@ Future<void> showAdmissionPolicyDialog(
           ),
         ],
       ),
+    ),
+  );
+}
+
+Future<void> showCorporationWithCapitalDialog(
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action,
+) async {
+  final corporation = TextEditingController();
+  final capital = TextEditingController();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Found a corporation'),
+      content: SizedBox(
+        width: 440,
+        child: Column(mainAxisSize: MainAxisSize.min, children: [
+          const Text(
+              'Your corporation and its capital city are founded together. You become the first member and city resident.',
+              style: TextStyle(fontSize: 11, color: mutedColor)),
+          const SizedBox(height: 12),
+          TextField(
+              controller: corporation,
+              decoration: const InputDecoration(labelText: 'Corporation name')),
+          TextField(
+              controller: capital,
+              decoration:
+                  const InputDecoration(labelText: 'Capital city name')),
+        ]),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CANCEL')),
+        FilledButton(
+          onPressed: () async {
+            final corporationName = corporation.text.trim();
+            final cityName = capital.text.trim();
+            if (corporationName.length < 3 || cityName.length < 3) return;
+            Navigator.pop(dialogContext);
+            await action(() => const EarthApi().createCorporationWithCapital(
+                corporationName: corporationName, cityName: cityName));
+          },
+          child: const Text('FOUND CORPORATION'),
+        ),
+      ],
     ),
   );
 }

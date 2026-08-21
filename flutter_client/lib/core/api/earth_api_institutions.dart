@@ -75,6 +75,17 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
+  Future<EarthState> createCorporationWithCapital({
+    required String corporationName,
+    required String cityName,
+  }) async {
+    await _request('/api/corporations/with-capital', method: 'POST', body: {
+      'corporationName': corporationName,
+      'cityName': cityName,
+    });
+    return world();
+  }
+
   Future<EarthState> spendCorporationTreasury(double amount,
       {String corporationId = 'CORP-001'}) async {
     await _request('/api/corporations/$corporationId/treasury/spend',

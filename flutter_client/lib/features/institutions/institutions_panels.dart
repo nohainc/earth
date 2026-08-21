@@ -98,7 +98,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             widget.state.institutions['corporation'] as Map)
         : const <String, dynamic>{};
     return EarthPanel(
-      title: 'CORPORATION / FIND YOUR NETWORK',
+      title: 'FIND YOUR CORPORATION',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
@@ -167,21 +167,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         ]),
       const SizedBox(height: 14),
       FilledButton.icon(
-        onPressed: widget.busy || widget.state.membership?['city_id'] == null
+        onPressed: widget.busy
             ? null
-            : () => showFormationComposer(context, widget.action,
-                city: false,
-                cityId: widget.state.membership?['city_id']?.toString()),
+            : () => showCorporationWithCapitalDialog(context, widget.action),
         icon: const Icon(Icons.add_business, size: 16),
         label: const Text('CREATE CORPORATION'),
       ),
-      if (widget.state.membership?['city_id'] == null)
-        const Padding(
-          padding: EdgeInsets.only(top: 7),
-          child: Text(
-              'Join a city before founding a corporation so it has a capital city.',
-              style: TextStyle(color: mutedColor, fontSize: 10)),
-        ),
+      const Padding(
+        padding: EdgeInsets.only(top: 7),
+        child: Text(
+            'Founding creates the corporation and its capital city together.',
+            style: TextStyle(color: mutedColor, fontSize: 10)),
+      ),
     ]);
   }
 
@@ -385,11 +382,6 @@ class CorporationOverviewPanel extends StatelessWidget {
     final sharedPatents = state.technology['corporationSharedPatents'] is List
         ? state.technology['corporationSharedPatents'] as List
         : const <dynamic>[];
-    final cities = List<dynamic>.from(state.rankings['corporations'] is List
-        ? state.rankings['corporations'] as List
-        : const [])
-      ..sort((a, b) => (asInt((b as Map)['member_count']) ?? 0)
-          .compareTo(asInt((a as Map)['member_count']) ?? 0));
     final isMember = membership['corporation_id'] != null;
     final cityId = membership['city_id']?.toString();
     final canAdoptCity = state.roles.any((raw) {
@@ -400,7 +392,7 @@ class CorporationOverviewPanel extends StatelessWidget {
     });
 
     return EarthPanel(
-      title: 'CORPORATION / MEMBERSHIP & DIRECTION',
+      title: 'MEMBERSHIP & DIRECTION',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
@@ -506,33 +498,6 @@ class CorporationOverviewPanel extends StatelessWidget {
                       : 'ADMISSION: OPEN'),
             ),
           ],
-        ],
-        if (cities.isNotEmpty) ...[
-          const SizedBox(height: 16),
-          const Text('CORPORATION RANKING',
-              style: TextStyle(
-                  color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
-          const SizedBox(height: 6),
-          ...cities.take(5).toList().asMap().entries.map((entry) {
-            final row = Map<String, dynamic>.from(entry.value as Map);
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(children: [
-                Text('#${entry.key + 1}',
-                    style:
-                        const TextStyle(color: cyanAccentColor, fontSize: 10)),
-                const SizedBox(width: 8),
-                Expanded(
-                    child: Text(
-                        row['name']?.toString() ??
-                            row['id']?.toString() ??
-                            'Corporation',
-                        style: const TextStyle(fontSize: 10.5))),
-                Text('${row['member_count'] ?? 0} members',
-                    style: const TextStyle(color: mutedColor, fontSize: 10)),
-              ]),
-            );
-          }),
         ],
         if (state.rankings['cities'] is List &&
             (state.rankings['cities'] as List).isNotEmpty) ...[

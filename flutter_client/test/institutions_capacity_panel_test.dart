@@ -29,7 +29,7 @@ void main() {
       home: Scaffold(body: CorporationOverviewPanel(state: state)),
     ));
 
-    expect(find.text('CORPORATION / MEMBERSHIP & DIRECTION'), findsOneWidget);
+    expect(find.text('MEMBERSHIP & DIRECTION'), findsOneWidget);
     expect(find.text('You belong to Carthage Dynamics.'), findsOneWidget);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsOneWidget);
