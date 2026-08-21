@@ -122,7 +122,7 @@ class _AdminEmailDeliveriesDialogState extends State<AdminEmailDeliveriesDialog>
                                 border: Border.all(color: bindingConfigured ? const Color(0xFF00E676) : const Color(0xFFFFB300)),
                               ),
                               child: Text(
-                                bindingConfigured ? 'BINDING HEALTHY' : 'SIMULATOR MODE',
+                                bindingConfigured ? 'BINDING HEALTHY' : 'EMAIL BINDING NOT CONFIGURED',
                                 style: TextStyle(
                                   color: bindingConfigured ? const Color(0xFF00E676) : const Color(0xFFFFB300),
                                   fontSize: 8.0,
