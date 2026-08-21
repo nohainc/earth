@@ -323,6 +323,26 @@ async function completeContracts(tx: PostgresRepository, day: number): Promise<v
   }
 }
 
+async function settleServiceContracts(tx: PostgresRepository, day: number): Promise<void> {
+  const contracts = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; starts_game_day: number; ends_game_day: number; terms_json: Record<string, unknown> | null }>("SELECT id, proposer_id, counterparty_id, amount, starts_game_day, ends_game_day, terms_json FROM negotiated_contracts WHERE kind = 'intellectual_service' AND status = 'accepted' AND starts_game_day <= $1 AND ends_game_day > $1 FOR UPDATE", [day]);
+  for (const contract of contracts.rows) {
+    const correlationId = `SERVICE-CONTRACT-${contract.id}-${day}`;
+    if ((await tx.query("SELECT 1 FROM ledger_entries WHERE reason_type = 'service_contract_payment' AND correlation_id = $1", [correlationId])).rows[0]) continue;
+    const duration = Math.max(1, Number(contract.ends_game_day) - Number(contract.starts_game_day));
+    const dailyAmount = centsToMoney(moneyToCents(contract.amount) / BigInt(duration));
+    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' FOR UPDATE", [contract.counterparty_id, contract.proposer_id]);
+    const payer = accounts.rows.find((row) => row.owner_id === contract.counterparty_id);
+    const provider = accounts.rows.find((row) => row.owner_id === contract.proposer_id);
+    if (!payer || !provider || moneyToCents(payer.balance) < moneyToCents(dailyAmount)) continue;
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.account_id, creditAccount: provider.account_id, amount: dailyAmount, reasonType: 'service_contract_payment', reasonId: contract.id, ruleVersion: 'service-contract-v1', correlationId });
+    const terms = contract.terms_json ?? {};
+    const providerBusinessId = typeof terms.proposerBusinessId === 'string' ? terms.proposerBusinessId : null;
+    const payerBusinessId = typeof terms.counterpartyBusinessId === 'string' ? terms.counterpartyBusinessId : null;
+    if (providerBusinessId) await tx.query('UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [dailyAmount, day, providerBusinessId]);
+    if (payerBusinessId) await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [dailyAmount, day, payerBusinessId]);
+  }
+}
+
 async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): Promise<void> {
   const licenses = await tx.query<{ id: string; licensor_id: string; licensee_id: string; licensee_business_id: string | null; royalty_rate: string }>("SELECT technology_licenses.id, licensor_id, licensee_id, licensee_business_id, royalty_rate FROM technology_licenses JOIN patents ON patents.id = technology_licenses.patent_id WHERE technology_licenses.status = 'active' AND patents.status = 'active' AND licensor_id <> licensee_id");
   for (const license of licenses.rows) {
@@ -534,6 +554,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await settleTechnologyRoyalties(tx, day);
     await runAiMaintenance(tx, day);
     await settleSupplyContracts(tx, day);
+    await settleServiceContracts(tx, day);
     await completeContracts(tx, day);
     if (idempotencyKey) {
       await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, toNanoMarkup({ day, minute, newDay, productionEvents })]);

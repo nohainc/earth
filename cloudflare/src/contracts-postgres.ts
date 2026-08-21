@@ -29,30 +29,33 @@ async function managedBusinessForContract(
 
 export async function acceptContract(repository: PostgresRepository, contractId: string, actorId: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; status: string; title: string; terms_json: Record<string, unknown> | null }>('SELECT id, proposer_id, counterparty_id, amount, status, title, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [contractId]);
+    const contract = await tx.query<{ id: string; kind: string; proposer_id: string; counterparty_id: string; amount: string; status: string; title: string; terms_json: Record<string, unknown> | null }>('SELECT id, kind, proposer_id, counterparty_id, amount, status, title, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [contractId]);
     if (!contract.rows[0]) throw new Error('Contract not found');
     const row = contract.rows[0];
     if (row.counterparty_id !== actorId) throw new Error('Only the counterparty may accept this contract');
     if (row.status !== 'proposed') return { ok: true, alreadyProcessed: row.status === 'accepted', status: row.status, contractId };
-    const payer = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.proposer_id]);
-    const receiver = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.counterparty_id]);
+    const isService = row.kind === 'intellectual_service';
+    const payerId = isService ? row.counterparty_id : row.proposer_id;
+    const receiverId = isService ? row.proposer_id : row.counterparty_id;
+    const payer = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [payerId]);
+    const receiver = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [receiverId]);
     const amountCents = moneyToCents(row.amount);
     const amount = centsToMoney(amountCents);
-    if (!payer.rows[0] || !receiver.rows[0] || moneyToCents(payer.rows[0].balance) < amountCents) throw new Error('Proposer has insufficient Credits to settle this contract');
+    if (!payer.rows[0] || !receiver.rows[0] || (!isService && moneyToCents(payer.rows[0].balance) < amountCents)) throw new Error(`${isService ? 'Counterparty' : 'Proposer'} has insufficient Credits to settle this contract`);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     const correlationId = `CONTRACT-${row.id}`;
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.rows[0].account_id, creditAccount: receiver.rows[0].account_id, amount, reasonType: 'contract_payment', reasonId: row.id, ruleVersion: 'contracts-v2', correlationId });
+    if (!isService) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.rows[0].account_id, creditAccount: receiver.rows[0].account_id, amount, reasonType: 'contract_payment', reasonId: row.id, ruleVersion: 'contracts-v2', correlationId });
     await tx.query("UPDATE negotiated_contracts SET status = 'accepted', accepted_game_day = $1 WHERE id = $2 AND status = 'proposed'", [day, row.id]);
     const terms = row.terms_json ?? {};
     const proposerBusinessId = typeof terms.proposerBusinessId === 'string' ? terms.proposerBusinessId : null;
     const counterpartyBusinessId = typeof terms.counterpartyBusinessId === 'string' ? terms.counterpartyBusinessId : null;
     const proposerBusiness = await managedBusinessForContract(tx, row.proposer_id, proposerBusinessId);
     const counterpartyBusiness = await managedBusinessForContract(tx, row.counterparty_id, counterpartyBusinessId);
-    if (proposerBusiness) {
+    if (proposerBusiness && !isService) {
       await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, proposerBusiness]);
     }
-    if (counterpartyBusiness) {
+    if (counterpartyBusiness && !isService) {
       await tx.query('UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, counterpartyBusiness]);
     }
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.accepted', 'A negotiated contract was accepted', toNanoMarkup({ contractId: row.id, amount })]);
