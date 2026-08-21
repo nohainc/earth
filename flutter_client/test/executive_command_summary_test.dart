@@ -82,8 +82,8 @@ void main() {
 
       // Verify Question 1: Situation
       expect(find.text('WHAT IS MY CURRENT SITUATION?'), findsOneWidget);
-      expect(find.text('LIQUID CAPITAL'), findsOneWidget);
-      expect(find.text('ENTERPRISE HEALTH'), findsOneWidget);
+      expect(find.text('PERSONAL FINANCES'), findsOneWidget);
+      expect(find.text('BUSINESS HEALTH'), findsOneWidget);
 
       // Verify Question 2: What Changed
       expect(find.text('WHAT CHANGED SINCE MY LAST VISIT?'), findsOneWidget);

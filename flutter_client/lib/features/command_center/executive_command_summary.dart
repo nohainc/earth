@@ -41,16 +41,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'EXECUTIVE OVERVIEW',
-          style: TextStyle(
-            color: EarthColors.textMuted,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-          ),
-        ),
-        const SizedBox(height: 8),
         // ====================================================================
         // QUESTION 1: WHAT IS MY CURRENT SITUATION?
         // ====================================================================
@@ -198,7 +188,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           children: [
             _situationPill(
               width: itemWidth,
-              label: 'LIQUID CAPITAL',
+              label: 'PERSONAL FINANCES',
               value: credits == null
                   ? 'UNAVAILABLE'
                   : '${formatWholeNumber(credits)} CR',
@@ -209,7 +199,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             ),
             _situationPill(
               width: itemWidth,
-              label: 'ENTERPRISE HEALTH',
+              label: 'BUSINESS HEALTH',
               value: profit == null
                   ? 'UNAVAILABLE'
                   : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
