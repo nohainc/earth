@@ -15,7 +15,6 @@ import '../operations/ai_panel.dart';
 import '../operations/business_panel.dart';
 import '../operations/machines_panel.dart';
 import '../operations/technology_panel.dart';
-import 'command_executive_quadrant.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
@@ -191,6 +190,18 @@ class Dashboard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
+          const Padding(
+            padding: EdgeInsets.only(bottom: 10),
+            child: Text(
+              'CURRENT OPERATIONS',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
+          ),
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
@@ -965,19 +976,6 @@ class Dashboard extends StatelessWidget {
                 objectives: playerObjectives,
                 onNavigate: onNavigate,
               );
-              final social = SocialGameplayPanel(
-                initiatives: socialInitiatives,
-                gameDay: asInt((state.json['clock']
-                        as Map<String, dynamic>?)?['day']) ??
-                    1,
-                onChanged: onRefreshEvents,
-              );
-              final quadrant = CommandExecutiveQuadrant(
-                state: state,
-                businessFinancials: businessFinancials,
-                contracts: contracts,
-                onNavigate: onNavigate,
-              );
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -987,8 +985,6 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           summary,
-                          const SizedBox(height: 34),
-                          quadrant,
                         ],
                       ),
                     ),
@@ -1008,8 +1004,6 @@ class Dashboard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   summary,
-                  const SizedBox(height: 34),
-                  quadrant,
                   const SizedBox(height: 34),
                   objectives,
                 ],

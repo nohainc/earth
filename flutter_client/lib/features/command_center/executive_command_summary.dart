@@ -205,7 +205,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               subvalue: '${energy.toStringAsFixed(0)}% Stamina · Healthy',
               icon: Icons.favorite_outline,
               accent: health < 30 ? Colors.redAccent : Colors.tealAccent,
-              onTap: () => widget.onNavigate?.call('technology'),
+              onTap: () => widget.onNavigate?.call('life'),
             ),
             _situationPill(
               width: itemWidth,
