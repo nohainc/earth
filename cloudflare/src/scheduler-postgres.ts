@@ -412,11 +412,21 @@ async function dissolveInstitutions(tx: PostgresRepository, day: number): Promis
 
 async function snapshotRankings(tx: PostgresRepository, day: number): Promise<void> {
   const [cities, corporations] = await Promise.all([
-    tx.query<{ id: string; treasury: string }>('SELECT id, treasury FROM cities ORDER BY treasury DESC LIMIT 10'),
-    tx.query<{ id: string; treasury: string }>('SELECT id, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10'),
+    tx.query<{ id: string; score: string }>(`SELECT id,
+      (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
+       + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
+       + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
+       + LEAST(1, health_capacity / 100.0) * 20
+       + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) AS score
+      FROM cities ORDER BY score DESC, residents DESC, id LIMIT 10`),
+    tx.query<{ id: string; score: string }>(`SELECT c.id,
+      (LEAST(1, GREATEST(0, c.member_count::numeric) / 100.0) * 55
+       + LEAST(1, GREATEST(0, c.treasury::numeric) / 25000.0) * 25
+       + LEAST(1, (SELECT COUNT(*)::numeric FROM businesses b WHERE b.owner_id IN (SELECT human_id FROM memberships m WHERE m.corporation_id = c.id) AND b.status = 'active') / 10.0) * 20) AS score
+      FROM corporations c ORDER BY score DESC, member_count DESC, id LIMIT 10`),
   ]);
-  for (const [index, row] of cities.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'city_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CITY-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
-  for (const [index, row] of corporations.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'corporation_treasury\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CORP-${day}-${row.id}`, day, row.id, index + 1, Number(row.treasury)]);
+  for (const [index, row] of cities.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'city_development\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CITY-${day}-${row.id}`, day, row.id, index + 1, Number(row.score)]);
+  for (const [index, row] of corporations.rows.entries()) await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,\'corporation_strength\',$3,$4,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`CORP-${day}-${row.id}`, day, row.id, index + 1, Number(row.score)]);
   const prices = await tx.query<{ product: string; price: string }>('SELECT product, price FROM market_prices');
   for (const p of prices.rows) {
     await tx.query('INSERT INTO rankings_snapshots (id,game_day,ranking_type,entity_id,rank,score) VALUES ($1,$2,$3,$4,1,$5) ON CONFLICT (id) DO UPDATE SET score=EXCLUDED.score', [`PRICE-${day}-${p.product}`, day, `market_price_${p.product}`, p.product, Number(p.price)]);

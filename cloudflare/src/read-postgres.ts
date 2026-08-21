@@ -69,11 +69,26 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       [limit]
     ),
     repository.query<{ id: string; residents: number; treasury: string; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number }>(
-      'SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities ORDER BY treasury DESC LIMIT $1',
+      `SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity
+       FROM cities
+       ORDER BY (
+         LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
+         + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
+         + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
+         + LEAST(1, health_capacity / 100.0) * 20
+         + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10
+       ) DESC, residents DESC, id
+       LIMIT $1`,
       [limit]
     ),
     repository.query<{ id: string; member_count: number; treasury: string }>(
-      'SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT $1',
+      `SELECT id, member_count, treasury
+       FROM corporations
+       ORDER BY (LEAST(1, GREATEST(0, member_count::numeric) / 100.0) * 55
+                 + LEAST(1, GREATEST(0, treasury::numeric) / 25000.0) * 25
+                 + LEAST(1, (SELECT COUNT(*)::numeric FROM businesses b WHERE b.owner_id IN (SELECT human_id FROM memberships m WHERE m.corporation_id = corporations.id) AND b.status = 'active') / 10.0) * 20) DESC,
+                member_count DESC, id
+       LIMIT $1`,
       [limit]
     ),
     repository.query<{ id: string; name: string; owner_id: string; progress: number }>(
@@ -175,10 +190,12 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       rank: idx + 1,
       ...c,
       qolIndex: Math.min(100, Math.round(((Number(c.housing_capacity || 0) + Number(c.energy_capacity || 0) + Number(c.health_capacity || 0)) / 300) * 100)),
+      rankingFocus: 'services, population, and financial resilience',
     })),
     corporations: corporations.rows.map((corp, idx) => ({
       rank: idx + 1,
       ...corp,
+      rankingFocus: 'membership, productive businesses, and treasury resilience',
     })),
     technologies: technologies.rows.map((t, idx) => ({
       rank: idx + 1,
