@@ -28,9 +28,23 @@ export async function adoptTechnology(repository: PostgresRepository, input: { h
     await requireResearchJurisdiction(tx, input.humanId);
     const business = await tx.query<{ id: string }>('SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.id = $1 AND b.status = \'active\' AND (b.owner_id = $2 OR bm.manager_id = $2)', [input.businessId, input.humanId]);
     if (!business.rows[0]) throw new Error('Business not found or not managed by this Human');
-    const technology = await tx.query<{ id: string; name: string; progress: string }>('SELECT id, name, progress FROM technologies WHERE id = $1 AND progress >= 100', [input.technologyId]);
+    const technology = await tx.query<{ id: string; name: string; progress: string; owner_id: string }>('SELECT id, name, progress, owner_id FROM technologies WHERE id = $1 AND progress >= 100', [input.technologyId]);
     if (!technology.rows[0]) throw new Error('Technology must be fully researched before adoption');
     if (!(TECHNOLOGY_CATALOG as readonly string[]).includes(technology.rows[0].name)) throw new Error('Technology is outside the approved research catalogue');
+    if (technology.rows[0].owner_id !== input.humanId) {
+      const access = await tx.query<{ source: string }>(`SELECT 'license' AS source
+        FROM technology_licenses
+        JOIN patents ON patents.id = technology_licenses.patent_id
+        WHERE patents.technology_id = $1 AND technology_licenses.licensee_id = $2 AND technology_licenses.status = 'active'
+        UNION ALL
+        SELECT 'corporation_share' AS source
+        FROM patents
+        JOIN corporation_technology_shares shares ON shares.patent_id = patents.id AND shares.status = 'active'
+        JOIN memberships member ON member.corporation_id = shares.corporation_id AND member.human_id = $2
+        WHERE patents.technology_id = $1
+        LIMIT 1`, [input.technologyId, input.humanId]);
+      if (!access.rows[0]) throw new Error('Technology requires ownership, an active license, or corporation sharing');
+    }
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     await tx.query("INSERT INTO business_technology_adoptions (business_id, technology_id, adopted_by, adopted_game_day, status) VALUES ($1,$2,$3,$4,'active') ON CONFLICT (business_id, technology_id) DO UPDATE SET adopted_by = excluded.adopted_by, adopted_game_day = excluded.adopted_game_day, status = 'active'", [input.businessId, input.technologyId, input.humanId, day]);
