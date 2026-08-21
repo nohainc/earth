@@ -21,7 +21,8 @@ export async function acquireMachine(repository: PostgresRepository, input: { ow
     const debitedMaterial = await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'material' AND amount >= $1", [input.material, input.ownerId]);
     if (debitedMaterial.rowCount !== 1) throw new Error('Machine acquisition material reservation failed');
     await tx.query('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity, output_resource, input_resource) VALUES ($1,$2,$3,$4,100,25,0,$5,$6,$7)', [machineId, input.ownerId, input.name, input.machineType, input.capacity, input.output, input.inputResource]);
-    await tx.query("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, $1, $2, 'machine-acquisition' FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1", [machineId, day, input.ownerId]);
+    // Acquired machines remain personal work units until the player chooses
+    // a workplace. This matters once a Human owns more than one business.
     await tx.query('INSERT INTO machine_acquisitions (id, machine_id, owner_id, machine_type, credit_cost, material_cost, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7)', [input.correlationId, machineId, input.ownerId, input.machineType, credit, input.material, day]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'MACHINE', machineId, null, input.ownerId, 1, 'machine_acquisition', input.correlationId, day]);
     return { ok: true, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [machineId])).rows[0], acquisitionId: input.correlationId };
@@ -137,7 +138,8 @@ export async function sellMachine(repository: PostgresRepository, input: { machi
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyerAccount.account_id, creditAccount: sellerAccount.account_id, amount: price, reasonType: 'machine_sale', reasonId: input.machineId, ruleVersion: 'machine-v4', correlationId: saleId });
     await tx.query('UPDATE machines SET owner_id = $1 WHERE id = $2 AND owner_id = $3', [input.buyerId, input.machineId, input.sellerId]);
     await tx.query('DELETE FROM business_assets WHERE machine_id = $1', [input.machineId]);
-    await tx.query("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT id, $1, $2, 'secondary-sale' FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1", [input.machineId, day, input.buyerId]);
+    // A secondary-market purchase also stays in personal inventory until
+    // the buyer explicitly assigns it to a business.
     await tx.query('INSERT INTO machine_sales (id, machine_id, seller_id, buyer_id, price, game_day) VALUES ($1,$2,$3,$4,$5,$6)', [saleId, input.machineId, input.sellerId, input.buyerId, price, day]);
     await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)', [crypto.randomUUID(), 'MACHINE', input.machineId, input.sellerId, input.buyerId, 1, 'secondary_sale', saleId, day]);
     return { ok: true, saleId, machineId: input.machineId, buyerId: input.buyerId, price: Number(price), day, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: saleId };
