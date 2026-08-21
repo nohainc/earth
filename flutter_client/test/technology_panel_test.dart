@@ -5,6 +5,36 @@ import 'package:earth_client/features/operations/technology_panel.dart';
 
 void main() {
   testWidgets(
+      'TechnologyOutcomePanel explains catalog capabilities and effects',
+      (tester) async {
+    const state = EarthState({
+      'technology': {
+        'catalog': [
+          {
+            'name': 'Food Synthesis',
+            'description': 'Builds resilient local food capacity.',
+            'effect': 'Stronger food reserves',
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(
+      const MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+              child: TechnologyOutcomePanel(state: state)),
+        ),
+      ),
+    );
+
+    expect(find.text('CAPABILITY OUTCOMES'), findsOneWidget);
+    expect(find.text('Food Synthesis'), findsOneWidget);
+    expect(find.text('STRONGER FOOD RESERVES'), findsOneWidget);
+    expect(find.text('Builds resilient local food capacity.'), findsOneWidget);
+  });
+
+  testWidgets(
       'TechnologyPanel renders research progress, budget, and triggers funding',
       (tester) async {
     const state = EarthState({

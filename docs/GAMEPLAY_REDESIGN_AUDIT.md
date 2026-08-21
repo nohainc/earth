@@ -31,7 +31,7 @@ direction exists but gameplay or backend support is incomplete.
 | --- | --- | --- |
 | Technology owns research and patents | Implemented | Technology page is framed around research, patents, licensing, and capability focus; research, patenting, and adoption require city jurisdiction, while adoption additionally requires ownership, an active license, or corporation sharing. Private technology records are scoped to the current player. |
 | Machines removed from Technology | Implemented | Machines are rendered in Business only. |
-| Technology affects business outcomes | Implemented | Research focus is applied server-side to production wear/output behavior, while the Technology and Business surfaces explain the capability impact. |
+| Technology affects business outcomes | Implemented | Research focus is applied server-side to production wear/output behavior, while the Technology outcome matrix and Business surfaces explain the capability impact before adoption. |
 | AI is operational and bounded | Implemented | AI panels render under Business and the AI guide requires explicit approval and authoritative commands. |
 
 ## Phase 4 — Life, city, corporation, and governance
@@ -76,7 +76,7 @@ direction exists but gameplay or backend support is incomplete.
 
 ## Final verification
 
-- Full Flutter regression suite: 170 tests passed.
+- Full Flutter regression suite: 172 tests passed.
 - Full Flutter analysis: completed with no compile errors; remaining output is
   pre-existing style/deprecation guidance.
 - Worker dry-run: passed with PostgreSQL authority and current bindings.
