@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { projectGameDeadline } from './game-clock.ts';
 import { rankOpportunities } from './opportunities.ts';
+import { marketFeeRate } from './market-postgres.ts';
 import { generateDecisionQueue } from './decision-queue.ts';
 import { evaluatePlayerObjectives } from './objectives.ts';
 import { economicStartIndex } from './starter-package.ts';
@@ -75,8 +76,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     .filter((row) => row.product === 'components' || row.product === 'energy')
     .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
   const startIndex = economicStartIndex(referencePrice || 50);
-  const feeRule = (await repository.query<{ rate: string }>("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1")).rows[0]?.rate;
-  const feeRate = feeRule ? Number(feeRule) : 0;
+  const feeRate = Number(await marketFeeRate(repository, viewerId));
   const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees] = await Promise.all([
     Promise.all([
       repository.query('SELECT id, name, corporation_id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 20'),
