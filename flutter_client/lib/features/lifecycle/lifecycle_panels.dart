@@ -231,8 +231,8 @@ class SuccessionPanel extends StatelessWidget {
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
-      infoDescription:
-          '• Your succession plan keeps your work, assets, and responsibilities moving forward.\n\n• Choose a trusted successor when you are ready. The current eligibility rules and estate timing are shown here.\n\n• Detailed ownership and financial records belong in Business and Finance; this page focuses on the person and their legacy.',
+        infoDescription:
+            '• Your succession plan keeps your work, assets, and responsibilities moving forward.\n\n• At the end of this life, you can continue as a registered heir who receives the estate, or begin a new adult character and carry forward part of the dynasty legacy.\n\n• A new character starts in a city and follows that city’s corporation affiliation; leaving that corporation means returning to independent life.\n\n• Detailed ownership and financial records belong in Business and Finance; this page focuses on the person and their legacy.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

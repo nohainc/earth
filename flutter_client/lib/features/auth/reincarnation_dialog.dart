@@ -320,7 +320,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Enter the simulation anew at legal adulthood (Age 20) with an indexed starter package. A 500 Credits Naturalization Fee is allocated (250 C to UC Central Treasury, 250 C to Arrival City).',
+                      'Begin the next generation at legal adulthood (Age 20) with an indexed starter package. Your selected city determines your initial civic affiliation: if it belongs to a corporation, the new character joins that corporation. A 500 Credit naturalization fee is allocated between the central and city treasuries.',
                       style:
                           TextStyle(color: EarthColors.textMuted, fontSize: 11),
                     ),

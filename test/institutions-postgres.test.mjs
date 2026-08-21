@@ -6,6 +6,7 @@ import {
   listCorporations,
   cityQualification,
   changeCityResidency,
+  changeCorporationMembership,
 } from '../cloudflare/src/institutions-postgres.ts';
 
 class MockDbClient {
@@ -108,4 +109,22 @@ test('changeCityResidency adds or removes human residency', async () => {
     correlationId: 'join-city-01',
   });
   assert.equal(joinResult.ok, true);
+});
+
+test('leaving a corporation also clears the affiliated city', async () => {
+  const client = new MockDbClient({
+    'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
+    "SELECT id FROM humans": { rows: [{ id: 'H-01' }], rowCount: 1 },
+    'SELECT corporation_id, city_id FROM memberships': { rows: [{ corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
+    'SELECT COALESCE(MAX(game_day), 1) AS game_day': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'UPDATE memberships SET corporation_id = NULL, city_id = NULL': { rows: [], rowCount: 1 },
+    'UPDATE corporations SET member_count': { rows: [], rowCount: 1 },
+    'UPDATE cities SET residents': { rows: [], rowCount: 1 },
+    'SELECT * FROM memberships WHERE human_id = $1': { rows: [{ human_id: 'H-01', corporation_id: null, city_id: null }], rowCount: 1 },
+  });
+  const result = await changeCorporationMembership(new PostgresRepository(client), {
+    humanId: 'H-01', corporationId: 'CORP-01', action: 'leave',
+  });
+  assert.equal(result.ok, true);
+  assert.ok(client.calls.some((call) => call.sql.includes('city_id = NULL')));
 });

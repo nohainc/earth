@@ -97,7 +97,7 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     const technologyId = `TECH-${newHumanId.slice(2)}`;
     const researchId = `R-${newHumanId.slice(2)}`;
     const cityId = input.startingCityId ?? 'CITY-0084';
-    const city = (await tx.query<{ id: string }>('SELECT id FROM cities WHERE id = $1', [cityId])).rows[0];
+    const city = (await tx.query<{ id: string; corporation_id: string | null }>('SELECT id, corporation_id FROM cities WHERE id = $1', [cityId])).rows[0];
     if (!city) throw new Error(`Starting city ${cityId} does not exist`);
 
     // 1. Create new Human with starter capital minus 500 Credit Naturalization Fee (net 9,500 Credits)
@@ -125,7 +125,13 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     }
     await tx.query("INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,'Advanced Automated Assembly',$2,0) ON CONFLICT(id) DO NOTHING", [technologyId, newHumanId]);
     await tx.query('INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,started_game_day) VALUES ($1,$2,$3,2500,0,$4)', [researchId, technologyId, newHumanId, worldDay]);
-    await tx.query('INSERT INTO memberships (human_id,city_id,joined_game_day) VALUES ($1,$2,$3) ON CONFLICT(human_id) DO UPDATE SET city_id = EXCLUDED.city_id', [newHumanId, cityId, worldDay]);
+    // Rebirth begins in the selected city and accepts its corporation rules
+    // when that city is corporation-owned.
+    await tx.query('INSERT INTO memberships (human_id,corporation_id,city_id,joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = EXCLUDED.corporation_id, city_id = EXCLUDED.city_id', [newHumanId, city.corporation_id, cityId, worldDay]);
+    if (city.corporation_id) {
+      await tx.query('UPDATE corporations SET member_count = (SELECT COUNT(*) FROM memberships WHERE corporation_id = $1) WHERE id = $1', [city.corporation_id]);
+      await tx.query('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = $1) WHERE id = $1', [cityId]);
+    }
 
     // 4. Update auth credentials to point to the new human
     await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [newHumanId, input.email]);

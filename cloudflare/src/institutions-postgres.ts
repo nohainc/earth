@@ -114,7 +114,9 @@ export async function changeCorporationMembership(repository: PostgresRepository
     const gameDay = await day(tx);
     if (input.action === 'leave') {
       if (current.corporation_id !== input.corporationId) throw new Error('Human is not a member of this corporation');
-      await tx.query('UPDATE memberships SET corporation_id = NULL WHERE human_id = $1 AND corporation_id = $2', [input.humanId, input.corporationId]);
+      // City affiliation is part of corporation membership. Leaving the
+      // corporation therefore returns the person to the independent state.
+      await tx.query('UPDATE memberships SET corporation_id = NULL, city_id = NULL WHERE human_id = $1 AND corporation_id = $2', [input.humanId, input.corporationId]);
       await refreshPopulation(tx, input.corporationId, [current.city_id]);
       await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CORPORATION',$3,'left',$4,'voluntary_resignation')", [crypto.randomUUID(), input.humanId, input.corporationId, gameDay]);
       await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [`CORP-LEFT-${input.humanId}-${input.corporationId}-${gameDay}`, input.humanId, 'institution', 'Corporation left', `You left corporation ${input.corporationId}.`, input.corporationId]);
