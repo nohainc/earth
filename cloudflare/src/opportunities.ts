@@ -1,4 +1,4 @@
-export type OpportunitySignal = 'market' | 'production' | 'governance' | 'community';
+export type OpportunitySignal = 'market' | 'production' | 'business' | 'governance' | 'community';
 
 export type Opportunity = {
   id: string;
@@ -13,6 +13,7 @@ type MarketSignal = { product: string; supply: unknown; demand: unknown; price: 
 type MachineSignal = { id: string; name: string; output_resource: string; condition: unknown; utilization: unknown };
 type ProposalSignal = { id: string; title: string; status: string; closes_at?: unknown };
 type CommunitySignal = { id: string; name: string; status: string };
+type BusinessSignal = { id: string; name?: string; sector?: string; status?: string };
 
 const numeric = (value: unknown): number => Number(value ?? 0);
 const label = (value: string): string => value.charAt(0).toUpperCase() + value.slice(1);
@@ -25,6 +26,7 @@ const label = (value: string): string => value.charAt(0).toUpperCase() + value.s
 export function rankOpportunities(input: {
   market: MarketSignal[];
   machines: MachineSignal[];
+  businesses?: BusinessSignal[];
   proposals: ProposalSignal[];
   communities: CommunitySignal[];
 }): Opportunity[] {
@@ -56,6 +58,22 @@ export function rankOpportunities(input: {
       priority: numeric(machine.condition) < 40 ? 'high' : 'medium',
       subject: machine.id,
       score: 2 + numeric(machine.condition) / 100,
+    });
+  }
+
+  const serviceSectors = new Set(['it-services', 'consulting', 'logistics', 'healthcare', 'education']);
+  for (const business of input.businesses ?? []) {
+    if (business.status && business.status !== 'active') continue;
+    if (!serviceSectors.has(String(business.sector))) continue;
+    const sectorName = label(String(business.sector).replaceAll('-', ' '));
+    opportunities.push({
+      id: `service-${business.id}`,
+      signal: 'business',
+      title: `${business.name ?? 'Service business'} needs client work`,
+      detail: `${sectorName} capacity earns more when it is matched with a recurring service contract.`,
+      priority: 'medium',
+      subject: business.id,
+      score: 1.8,
     });
   }
 

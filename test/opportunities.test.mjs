@@ -32,6 +32,23 @@ test('returns no market opportunity when supply meets demand', () => {
   assert.deepEqual(opportunities, []);
 });
 
+test('surfaces client-work opportunities for active service businesses', () => {
+  const opportunities = rankOpportunities({
+    market: [],
+    machines: [],
+    businesses: [
+      { id: 'B-IT', name: 'Northstar Systems', sector: 'it-services', status: 'active' },
+      { id: 'B-OLD', name: 'Closed Office', sector: 'consulting', status: 'dissolved' },
+    ],
+    proposals: [],
+    communities: [],
+  });
+
+  assert.equal(opportunities.length, 1);
+  assert.equal(opportunities[0].signal, 'business');
+  assert.equal(opportunities[0].subject, 'B-IT');
+});
+
 test('caps the command-center list to five signals', () => {
   const opportunities = rankOpportunities({
     market: Array.from({ length: 8 }, (_, index) => ({ product: `resource-${index}`, supply: 1, demand: 10 + index, price: 1 })),

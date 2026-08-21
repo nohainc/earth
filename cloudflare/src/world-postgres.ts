@@ -116,6 +116,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const opportunities = rankOpportunities({
     market: prices.rows as Array<{ product: string; supply: unknown; demand: unknown; price: unknown }>,
     machines: machineRows as Array<{ id: string; name: string; output_resource: string; condition: unknown; utilization: unknown }>,
+    businesses: business.rows as Array<{ id: string; name?: string; sector?: string; status?: string }>,
     proposals: proposals.rows as Array<{ id: string; title: string; status: string; closes_at?: unknown }>,
     communities: communities.rows as Array<{ id: string; name: string; status: string }>,
   });
