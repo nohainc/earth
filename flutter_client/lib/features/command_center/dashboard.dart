@@ -5,7 +5,6 @@ import '../../core/models/decision_queue_item.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
-import '../activity/activity_panel.dart';
 import '../contracts/contracts_panel.dart';
 import '../finance/personal_finance_panel.dart';
 import '../governance/governance_panels.dart';
@@ -433,11 +432,30 @@ class Dashboard extends StatelessWidget {
         ];
       case 'messages':
         return [
-          CommLinkDialog(
-            api: const EarthApi(),
-            state: state,
-            isPageMode: true,
-            onNavigate: onNavigate,
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final commLink = CommLinkDialog(
+                api: const EarthApi(),
+                state: state,
+                isPageMode: true,
+                onNavigate: onNavigate,
+              );
+              final initiatives = SocialGameplayPanel(
+                initiatives: socialInitiatives,
+                gameDay: asInt((state.json['clock']
+                        as Map<String, dynamic>?)?['day']) ??
+                    1,
+                onChanged: onRefreshEvents,
+              );
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  commLink,
+                  const SizedBox(height: 34),
+                  initiatives,
+                ],
+              );
+            },
           ),
         ];
       case 'dynasty':
@@ -911,81 +929,6 @@ class Dashboard extends StatelessWidget {
                   personalFinance,
                   const SizedBox(height: 34),
                   financialOutlook,
-                ],
-              );
-            },
-          ),
-        ];
-      case 'activity':
-        return [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final activity = ActivityPanel(
-                panelKey: sectionKeys['activity'],
-                events: events,
-                notifications: notifications,
-                unreadCount: unreadNotifications,
-                isLiveConnected: isLiveConnected,
-                isReconnecting: isReconnecting,
-                connectionStatus: connectionStatus,
-                onRefresh: onRefreshEvents ?? () {},
-                onMarkRead: onMarkNotificationRead ?? (_) async {},
-                onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
-              );
-              final social = SocialGameplayPanel(
-                initiatives: socialInitiatives,
-                gameDay: asInt((state.json['clock']
-                        as Map<String, dynamic>?)?['day']) ??
-                    1,
-                onChanged: onRefreshEvents,
-              );
-              final ownership =
-                  OwnershipTimelinePanel(ownershipEvents: ownershipEvents);
-              final history = HistoryArchivePanel(state: state);
-              final authority =
-                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          activity,
-                          const SizedBox(height: 34),
-                          social
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          ownership,
-                          const SizedBox(height: 34),
-                          history,
-                          const SizedBox(height: 34),
-                          authority,
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  activity,
-                  const SizedBox(height: 34),
-                  social,
-                  const SizedBox(height: 34),
-                  ownership,
-                  const SizedBox(height: 34),
-                  history,
-                  const SizedBox(height: 34),
-                  authority,
                 ],
               );
             },

@@ -161,8 +161,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         '${(widget.state.institutions['city'] is Map ? widget.state.institutions['city']['name'] : null) ?? 'Independent'}';
 
     final credits = formatWholeNumber(widget.state.human['credits']);
-    final flowMap =
-        (widget.state.json['resourceFlows'] is Map ? widget.state.json['resourceFlows'] as Map : const {});
+    final flowMap = (widget.state.json['resourceFlows'] is Map
+        ? widget.state.json['resourceFlows'] as Map
+        : const {});
     double netFor(String key) {
       final raw =
           flowMap[key] ?? (key == 'material' ? flowMap['materials'] : null);
@@ -223,7 +224,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         final centerWidth = math.max(resourceWidth, dateWidth);
         final rightActionsWidth = 112 + (widget.showDrawerButton ? 32 : 0);
         final showBrand = totalWidth - 28 >=
-            brandWidth + 10 + centerWidth + rightActionsWidth + 16 &&
+                brandWidth + 10 + centerWidth + rightActionsWidth + 16 &&
             totalWidth >= 600;
         final showBrandText = showBrand;
 
@@ -459,12 +460,12 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
       elevation: _menuElevation,
       shape: _menuShape,
       onSelected: (value) {
-        if (value == 'messages') {
+        if (value == 'notifications') {
+          widget.onNavigate?.call('briefing');
+        } else if (value == 'messages' || value == 'social') {
           widget.onCommLink?.call();
         } else if (value == 'reconnect') {
           widget.onReconnect?.call();
-        } else {
-          widget.onNavigate?.call('activity');
         }
       },
       itemBuilder: (context) => [
