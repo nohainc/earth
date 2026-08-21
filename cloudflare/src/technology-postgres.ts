@@ -112,7 +112,7 @@ export async function licenseTechnology(repository: PostgresRepository, input: {
       }
     }
     const effectiveFee = internalShare ? 0 : Number(centsToMoney(moneyToCents(input.licenseFee)));
-    await tx.query("INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, royalty_rate) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET royalty_rate = excluded.royalty_rate, status = 'active'", [licenseId, patent.rows[0].id, input.ownerId, input.licenseeId, internalShare ? 0 : input.royaltyRate]);
+      await tx.query("INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, licensee_business_id, royalty_rate) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(id) DO UPDATE SET licensee_business_id = excluded.licensee_business_id, royalty_rate = excluded.royalty_rate, status = 'active'", [licenseId, patent.rows[0].id, input.ownerId, input.licenseeId, input.licenseeBusinessId, internalShare ? 0 : input.royaltyRate]);
     return { ok: true, internalShare, license: (await tx.query('SELECT * FROM technology_licenses WHERE id = $1', [licenseId])).rows[0], licenseFee: effectiveFee, correlationId: input.correlationId };
   });
 }

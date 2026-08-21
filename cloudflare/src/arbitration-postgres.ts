@@ -8,7 +8,7 @@ export async function resolveContractDispute(
   return repository.transaction(async (tx) => {
     const authority = await tx.query("SELECT id FROM role_assignments WHERE role_id = 'ROLE-OUC-DELEGATE' AND human_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT id FROM authority_delegations WHERE role_id = 'ROLE-OUC-DELEGATE' AND delegate_id = $1 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [input.resolverId]);
     if (!authority.rows[0]) throw new Error('OUC arbitration authority is required');
-    const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string }>('SELECT id, proposer_id, counterparty_id, amount FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.contractId]);
+    const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; amount: string; terms_json: Record<string, unknown> | null }>('SELECT id, proposer_id, counterparty_id, amount, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.contractId]);
     if (!contract.rows[0]) throw new Error('Contract not found');
     const dispute = await tx.query<{ id: string }>("SELECT id FROM contract_disputes WHERE contract_id = $1 AND status = 'open' FOR UPDATE", [input.contractId]);
     if (!dispute.rows[0]) throw new Error('Open dispute not found');
@@ -26,8 +26,11 @@ export async function resolveContractDispute(
       await tx.query('UPDATE account_balances SET balance = balance - $1 WHERE account_id = $2 AND balance >= $1', [amount, payer.rows[0].account_id]);
       await tx.query('UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2', [amount, receiver.rows[0].account_id]);
       await tx.query('INSERT INTO ledger_entries (id, game_day, debit_account, credit_account, amount, currency, reason_type, reason_id, rule_version, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10) ON CONFLICT (id) DO NOTHING', [refundId, day, payer.rows[0].account_id, receiver.rows[0].account_id, amount, 'CREDIT', 'contract_arbitration_refund', input.contractId, 'arbitration-v1', refundId]);
-      await tx.query("UPDATE business_financials SET operating_costs = GREATEST(0, operating_costs - $1), profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [amount, day, contract.rows[0].proposer_id]);
-      await tx.query("UPDATE business_financials SET revenue = GREATEST(0, revenue - $1), profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [amount, day, contract.rows[0].counterparty_id]);
+      const terms = contract.rows[0].terms_json ?? {};
+      const proposerBusinessId = typeof terms.proposerBusinessId === 'string' ? terms.proposerBusinessId : null;
+      const counterpartyBusinessId = typeof terms.counterpartyBusinessId === 'string' ? terms.counterpartyBusinessId : null;
+      await tx.query("UPDATE business_financials SET operating_costs = GREATEST(0, operating_costs - $1), profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = COALESCE($3, (SELECT id FROM businesses WHERE owner_id = $4 AND status = 'active' ORDER BY id LIMIT 1))", [amount, day, proposerBusinessId, contract.rows[0].proposer_id]);
+      await tx.query("UPDATE business_financials SET revenue = GREATEST(0, revenue - $1), profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = COALESCE($3, (SELECT id FROM businesses WHERE owner_id = $4 AND status = 'active' ORDER BY id LIMIT 1))", [amount, day, counterpartyBusinessId, contract.rows[0].counterparty_id]);
     }
     return { ok: true, outcome: input.outcome, dispute: (await tx.query('SELECT * FROM contract_disputes WHERE id = $1', [dispute.rows[0].id])).rows[0] };
   });
