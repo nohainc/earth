@@ -63,7 +63,7 @@ class DecisionConsequence {
       actionTitle: 'Acquire Industrial Machine: $machineName',
       actionCategory: 'INDUSTRIAL ASSET ACQUISITION',
       immediateCost: '${costCredits.toStringAsFixed(2)} CR + Initial Power Draw',
-      expectedBenefit: '+$outputYield / Simulation Day (+18% Corporate Revenue Capacity)',
+      expectedBenefit: '+$outputYield / World Day (+18% Corporate Revenue Capacity)',
       risk: '2.5% daily wear; requires periodic overhaul to prevent breakdowns',
       affectedEntities: [businessName, 'Local Commodity Grid'],
       isPermanent: true,

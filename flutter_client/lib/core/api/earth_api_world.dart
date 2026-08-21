@@ -1,7 +1,7 @@
 part of 'earth_api.dart';
 
 extension EarthApiWorld on EarthApi {
-  // --- World & Simulation ---
+  // --- World & Operating Cycle ---
 
   Future<EarthState> world() async =>
       EarthState(await _request('/api/world') as Map<String, dynamic>);

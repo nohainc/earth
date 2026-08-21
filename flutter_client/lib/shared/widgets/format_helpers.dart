@@ -74,7 +74,7 @@ String formatProposalDeadline(Map<String, dynamic> deadline) {
   return 'Closes game day $day at $clock · in $duration real time';
 }
 
-/// Formats a simulation timestamp consistently with the global HUD.
+/// Formats a World timestamp consistently with the global HUD.
 /// Game days are one-based; every fifth year contains 366 days.
 String formatGameDateTime(int gameDay, int gameMinute) {
   var daysLeft = gameDay <= 0 ? 0 : gameDay - 1;

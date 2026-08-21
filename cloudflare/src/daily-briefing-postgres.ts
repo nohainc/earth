@@ -147,7 +147,7 @@ export async function getDailyBriefing(
       id: 'rec_senate_ballot',
       title: 'Cast Sovereign Vote on Municipal Tax Charter',
       urgency: 'medium' as const,
-      reason: 'Senate Proposal #12 (Valparaíso Energy Subsidy) closes in 140 simulation ticks.',
+      reason: 'Senate Proposal #12 (Valparaíso Energy Subsidy) closes in 140 World ticks.',
       actionLabel: 'GOVERNANCE SENATE',
       targetSection: 'civic',
     },
