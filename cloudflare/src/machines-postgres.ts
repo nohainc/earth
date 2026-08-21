@@ -82,6 +82,23 @@ export async function upgradeMachine(repository: PostgresRepository, input: { ma
     if (!membership.rows[0]?.city_id) {
       throw new Error('Machine upgrades require an active city affiliation');
     }
+    const technologyAccess = await tx.query(
+      `SELECT 1
+       FROM research_projects
+       WHERE owner_id = $1 AND progress >= 100
+       UNION ALL
+       SELECT 1
+       FROM corporation_technology_shares share
+       JOIN memberships member ON member.corporation_id = share.corporation_id
+         AND member.human_id = $1
+       JOIN patents ON patents.id = share.patent_id AND patents.status = 'active'
+       WHERE share.status = 'active'
+       LIMIT 1`,
+      [input.ownerId],
+    );
+    if (!technologyAccess.rows[0]) {
+      throw new Error('Machine upgrades require a completed city research project or corporation technology');
+    }
     const prior = await tx.query<{ id: string }>("SELECT id FROM ledger_entries WHERE reason_type = 'machine_upgrade' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, eventId: prior.rows[0].id, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: input.correlationId };
     const machine = await tx.query<{ id: string; name: string; productive_capacity: string }>('SELECT id, name, productive_capacity FROM machines WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.machineId, input.ownerId]);
