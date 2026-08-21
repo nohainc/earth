@@ -310,6 +310,17 @@ Future<void> showBusinessComposerDialog(BuildContext context,
   final sectors = allSectors.where((item) =>
       (hasCity || ['components', 'machines', 'maintenance'].contains(item)) &&
       (hasCorporation || !['it-services', 'consulting', 'logistics', 'healthcare', 'education'].contains(item))).toList();
+  const groups = <String, List<String>>{
+    'Production': ['energy', 'extraction', 'components', 'machines', 'maintenance'],
+    'Infrastructure': ['housing', 'compute', 'r-and-d'],
+    'Services': ['it-services', 'consulting', 'logistics', 'healthcare', 'education'],
+  };
+  final availableGroups = groups.entries
+      .map((entry) => MapEntry(entry.key, entry.value.where(sectors.contains).toList()))
+      .where((entry) => entry.value.isNotEmpty)
+      .toList();
+  String group = availableGroups.first.key;
+  sector = availableGroups.first.value.first;
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -322,15 +333,29 @@ Future<void> showBusinessComposerDialog(BuildContext context,
                           const InputDecoration(labelText: 'Business name')),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                      initialValue: sectors.contains(sector) ? sector : sectors.first,
-                      items: sectors
-                          .map((item) =>
-                              DropdownMenuItem(value: item, child: Text(item)))
+                      initialValue: group,
+                      items: availableGroups
+                          .map((item) => DropdownMenuItem(value: item.key, child: Text(item.key)))
+                          .toList(),
+                      onChanged: (value) {
+                        if (value != null) setState(() {
+                          group = value;
+                          sector = groups[group]!.firstWhere(sectors.contains);
+                        });
+                      },
+                      decoration: const InputDecoration(labelText: 'Business group')),
+                  const SizedBox(height: 8),
+                  DropdownButtonFormField<String>(
+                      key: ValueKey(group),
+                      initialValue: sector,
+                      items: groups[group]!
+                          .where(sectors.contains)
+                          .map((item) => DropdownMenuItem(value: item, child: Text(item)))
                           .toList(),
                       onChanged: (value) {
                         if (value != null) setState(() => sector = value);
                       },
-                      decoration: const InputDecoration(labelText: 'Sector')),
+                      decoration: const InputDecoration(labelText: 'Specialization')),
                 ]),
                 actions: [
                   TextButton(
