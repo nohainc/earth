@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 41,
+  "migrationVersion": 46,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -68,6 +68,13 @@
     "business_assets": [
       "business_id",
       "machine_id"
+    ],
+    "business_technology_adoptions": [
+      "business_id",
+      "technology_id",
+      "adopted_by",
+      "adopted_game_day",
+      "status"
     ],
     "business_employees": [
       "id",
@@ -535,6 +542,11 @@
       "human_id"
     ],
     [
+      "business_technology_adoptions",
+      "business_id",
+      "technology_id"
+    ],
+    [
       "resource_balances",
       "owner_id",
       "resource"
@@ -577,6 +589,7 @@
     "idx_market_ohlc_commodity_day",
     "idx_net_worth_human_day",
     "technology_events_tech_idx",
-    "technology_events_actor_idx"
+    "technology_events_actor_idx",
+    "business_technology_adoptions_technology_idx"
   ]
 }
