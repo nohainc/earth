@@ -173,11 +173,26 @@ class _SettleInheritanceDialog extends StatefulWidget {
 class _SettleInheritanceDialogState extends State<_SettleInheritanceDialog> {
   late final TextEditingController _successorName;
   final _successorId = TextEditingController();
+  List<Map<String, dynamic>> _candidates = const [];
 
   @override
   void initState() {
     super.initState();
     _successorName = TextEditingController(text: widget.defaultSuccessorName);
+    _loadCandidates();
+  }
+
+  Future<void> _loadCandidates() async {
+    try {
+      final result = await const EarthApi().socialDirectory();
+      final humans = (result['humans'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (mounted) setState(() => _candidates = humans);
+    } catch (_) {
+      // Manual Human ID entry remains available if the directory is offline.
+    }
   }
 
   @override
@@ -204,6 +219,34 @@ class _SettleInheritanceDialogState extends State<_SettleInheritanceDialog> {
             decoration: const InputDecoration(labelText: 'Successor name'),
           ),
           const SizedBox(height: 10),
+          if (_candidates.isNotEmpty) ...[
+            const Align(
+              alignment: Alignment.centerLeft,
+              child: Text('Choose an active successor', style: TextStyle(fontSize: 11, color: mutedColor)),
+            ),
+            const SizedBox(height: 6),
+            SizedBox(
+              height: 42,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: _candidates.map((candidate) {
+                  final id = candidate['id']?.toString() ?? '';
+                  final name = candidate['display_name']?.toString() ?? id;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 6),
+                    child: ActionChip(
+                      label: Text(name, style: const TextStyle(fontSize: 10)),
+                      onPressed: () {
+                        _successorId.text = id;
+                        _successorName.text = name;
+                      },
+                    ),
+                  );
+                }).toList(),
+              ),
+            ),
+            const SizedBox(height: 6),
+          ],
           TextField(
             controller: _successorId,
             textCapitalization: TextCapitalization.characters,
