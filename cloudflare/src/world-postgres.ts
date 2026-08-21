@@ -134,6 +134,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     technology: { progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), is_funding_open: true },
     dynasty: { successor_id: succession.rows[0]?.successor_human_id ?? null, perks_available: Number(dynastyProgress.rows[0]?.legacy_points ?? 0) >= 100 && Number(dynastyProgress.rows[0]?.perks_count ?? 0) < 5 },
     projects: { completed: social.rows.filter((row) => row.kind === 'shared_project' && row.status === 'completed').length },
+    city: city ? { id: city.id, residents: city.residents, housing_capacity: city.housing_capacity, energy_capacity: city.energy_capacity, connectivity_capacity: city.connectivity_capacity, health_capacity: city.health_capacity } : undefined,
     business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100, business_count: business.rows.length, service_business_count: business.rows.filter((row) => ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(String(row.sector))).length },
     finance: { unpaid_tax: 0, status: personalFinance.rows[0]?.status ?? 'active' },
     social: social.rows,

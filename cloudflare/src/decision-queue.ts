@@ -2,6 +2,7 @@ export type DecisionCategory =
   | 'business'
   | 'contracts'
   | 'governance'
+  | 'civic'
   | 'technology'
   | 'machines'
   | 'dynasty'
@@ -34,6 +35,7 @@ export interface DecisionQueueInput {
   business?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
   finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
   social?: Array<{ id: string; title?: string; status?: string; deadline_game_day?: unknown; member_status?: string }>;
+  city?: { id?: string; residents?: unknown; housing_capacity?: unknown; energy_capacity?: unknown; connectivity_capacity?: unknown; health_capacity?: unknown };
   market?: Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>;
   gameDay?: number;
 }
@@ -57,6 +59,31 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     expectedImpact: 'Shape an alliance or shared project and improve relationship standing.', riskLevel: 'medium',
     primaryActionLabel: 'Open Social Commons', targetSection: 'activity', urgencyScore: 58,
   });
+
+  const city = input.city;
+  if (city?.id) {
+    const residents = Math.max(1, num(city.residents));
+    const energyRatio = num(city.energy_capacity) / residents;
+    const healthRatio = num(city.health_capacity) / 100;
+    if (energyRatio < 1) items.push({
+      id: `decision-city-energy-${city.id}`, category: 'civic',
+      title: 'Your city needs an energy recovery plan',
+      whyItMatters: `The grid provides ${Math.round(num(city.energy_capacity))} capacity for ${Math.round(residents)} residents.`,
+      deadline: 'Before the next civic cycle',
+      expectedImpact: 'Restore reliable city services and protect local production from brownouts.',
+      riskLevel: energyRatio < 0.75 ? 'critical' : 'high',
+      primaryActionLabel: 'Open City Projects', targetSection: 'city',
+      urgencyScore: Math.round(85 + Math.max(0, 1 - energyRatio) * 15),
+    });
+    if (healthRatio < 0.5) items.push({
+      id: `decision-city-health-${city.id}`, category: 'civic',
+      title: 'Your city needs a health recovery plan',
+      whyItMatters: `Health capacity is at ${Math.round(healthRatio * 100)}%; a prolonged deficit can trigger relocation pressure.`,
+      deadline: 'Before the next civic cycle',
+      expectedImpact: 'Raise health capacity and keep your household and workforce in place.',
+      riskLevel: 'critical', primaryActionLabel: 'Open City Projects', targetSection: 'city', urgencyScore: 92,
+    });
+  }
 
   // 1. Corporation Resource Deficit / Energy Drain
   const energy = num(input.resources?.energy ?? 100);

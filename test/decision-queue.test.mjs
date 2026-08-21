@@ -14,6 +14,7 @@ test('Unified Decision Queue Generator', async (t) => {
       business: { id: 'b-1', name: 'AeroCorp', profit: -200 },
       finance: { unpaid_tax: 150 },
       market: [{ product: 'food', supply: 10, demand: 45, price: 12 }],
+      city: { id: 'CITY-0084', residents: 100, energy_capacity: 60, health_capacity: 35 },
       gameDay: 185,
     });
 
@@ -28,6 +29,8 @@ test('Unified Decision Queue Generator', async (t) => {
     assert.ok(titles.some((t) => t.includes('machine needs maintenance')));
     assert.ok(titles.some((t) => t.includes('dynasty decision is pending')));
     assert.ok(titles.some((t) => t.includes('Legacy points can unlock')));
+    assert.ok(titles.some((t) => t.includes('city needs an energy recovery plan')));
+    assert.ok(titles.some((t) => t.includes('city needs a health recovery plan')));
 
     // Check properties of each item
     for (const item of queue) {
