@@ -20,6 +20,7 @@ class EarthState {
   Map<String, dynamic> get world => _toMap(json['world']);
   Map<String, dynamic> get resources => _toMap(json['resources']);
   Map<String, dynamic> get business => _toMap(json['business']);
+  List<dynamic> get businesses => _toList(json['businesses']);
   Map<String, dynamic> get technology =>
       _toMap(json['technology'] is Map ? (json['technology'] as Map)['research'] : null);
   Map<String, dynamic> get technologyRegistry => _toMap(json['technology']);

@@ -199,6 +199,7 @@ class BusinessPanel extends StatelessWidget {
     final condition = asIntOr(business['condition'], 96);
     final activePolicy =
         (business['policy']?.toString() ?? 'reliability').toLowerCase();
+    final portfolio = state.businesses;
 
     final finMap = businessFinancials['business'] is Map<String, dynamic>
         ? (businessFinancials['business'] as Map<String, dynamic>)
@@ -273,6 +274,10 @@ class BusinessPanel extends StatelessWidget {
                 description:
                     '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.',
               ),
+              if (portfolio.length > 1) ...[
+                _businessPortfolio(portfolio),
+                const SizedBox(height: 12),
+              ],
               Container(
                 width: double.infinity,
                 padding: const EdgeInsets.all(16),
@@ -1341,6 +1346,39 @@ class BusinessPanel extends StatelessWidget {
           ),
         ],
       ),
+    );
+  }
+
+  Widget _businessPortfolio(List<dynamic> businesses) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: surfaceColor.withValues(alpha: .7),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: cyanAccentColor.withValues(alpha: .25)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('BUSINESS PORTFOLIO · ${businesses.length} OPERATIONS',
+            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.w800, color: cyanAccentColor)),
+        const SizedBox(height: 7),
+        ...businesses.whereType<Map>().map((item) {
+          final name = item['name']?.toString() ?? 'Unnamed operation';
+          final status = (item['status']?.toString() ?? 'active').toUpperCase();
+          final profit = item['profit'];
+          return Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(children: [
+              Expanded(child: Text(name, style: const TextStyle(fontSize: 10))),
+              Text(status, style: const TextStyle(fontSize: 9, color: mutedColor)),
+              if (profit != null) ...[
+                const SizedBox(width: 8),
+                Text('${formatWholeNumber(asDoubleOr(profit, 0))} C', style: const TextStyle(fontSize: 10, color: Colors.tealAccent)),
+              ],
+            ]),
+          );
+        }),
+      ]),
     );
   }
 
