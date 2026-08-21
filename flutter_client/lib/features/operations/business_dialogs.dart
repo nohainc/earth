@@ -171,7 +171,8 @@ Future<void> showBusinessConstitutionDialog(
 }
 
 Future<void> showShareTransferDialog(BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action) async {
+    Future<void> Function(Future<EarthState> Function()) action,
+    String? businessId) async {
   final recipient = TextEditingController();
   final shares = TextEditingController(text: '1');
   final otp = TextEditingController();
@@ -217,7 +218,8 @@ Future<void> showShareTransferDialog(BuildContext context,
                     final otpCode = otp.text.trim();
                     Navigator.pop(dialogContext);
                     await action(() => const EarthApi()
-                        .transferShares(targetRecipient, amount, otp: otpCode));
+                        .transferShares(targetRecipient, amount,
+                            otp: otpCode, businessId: businessId));
                   },
                   child: const Text('Transfer')),
             ],

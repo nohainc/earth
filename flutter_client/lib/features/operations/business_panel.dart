@@ -1067,7 +1067,8 @@ class BusinessPanel extends StatelessWidget {
                           icon: Icons.swap_horiz_rounded,
                           onPressed: busy || isDissolved
                               ? null
-                              : () => showShareTransferDialog(context, action),
+                              : () => showShareTransferDialog(
+                                  context, action, businessId),
                         ),
                         _actionButton(
                           label: 'ISSUE SHARES',

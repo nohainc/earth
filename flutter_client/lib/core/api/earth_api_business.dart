@@ -99,10 +99,12 @@ extension EarthApiBusiness on EarthApi {
   }
 
   Future<EarthState> transferShares(String recipientId, int shares,
-      {String? otp}) async {
+      {String? otp, String? businessId}) async {
     await _request('/api/businesses/me/shares/transfer', method: 'POST', body: {
       'recipientId': recipientId.trim(),
       'shares': shares,
+      if (businessId != null && businessId.trim().isNotEmpty)
+        'businessId': businessId.trim(),
       if (otp != null && otp.isNotEmpty) 'otp': otp,
     });
     return world();
