@@ -793,6 +793,19 @@ class InstitutionsCapacityPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Center(
+            child: Text(
+              cityName,
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: cyanAccentColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: .8,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           // 1. CITY ADMINISTRATION COCKPIT CARD
           Container(
             width: double.infinity,
