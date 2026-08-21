@@ -11,7 +11,8 @@ class CorporationOverviewPanel extends StatelessWidget {
   final bool busy;
   final Future<void> Function(Future<EarthState> Function())? action;
 
-  const CorporationOverviewPanel({super.key, required this.state, this.busy = false, this.action});
+  const CorporationOverviewPanel(
+      {super.key, required this.state, this.busy = false, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -23,6 +24,9 @@ class CorporationOverviewPanel extends StatelessWidget {
     final id = corporation['id']?.toString() ?? '—';
     final memberCount = asIntOr(corporation['member_count'], 0);
     final treasury = asDouble(corporation['treasury']);
+    final sharedPatents = state.technology['corporationSharedPatents'] is List
+        ? state.technology['corporationSharedPatents'] as List
+        : const <dynamic>[];
     final cities = List<dynamic>.from(state.rankings['corporations'] is List
         ? state.rankings['corporations'] as List
         : const [])
@@ -75,6 +79,37 @@ class CorporationOverviewPanel extends StatelessWidget {
               Colors.amberAccent),
         ]),
         const SizedBox(height: 16),
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: cyanAccentColor.withValues(alpha: .06),
+            borderRadius: BorderRadius.circular(9),
+            border: Border.all(color: cyanAccentColor.withValues(alpha: .22)),
+          ),
+          child: Row(children: [
+            const Icon(Icons.hub_outlined, size: 18, color: cyanAccentColor),
+            const SizedBox(width: 9),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  const Text('CORPORATION RESEARCH COMMONS',
+                      style: TextStyle(
+                          color: cyanAccentColor,
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: .5)),
+                  const SizedBox(height: 3),
+                  Text(
+                      sharedPatents.isEmpty
+                          ? 'No shared patents are visible yet.'
+                          : '${sharedPatents.length} shared capabilities available to this corporation network.',
+                      style: const TextStyle(color: mutedColor, fontSize: 10)),
+                ])),
+          ]),
+        ),
+        const SizedBox(height: 16),
         const Text('CORPORATION DECISIONS',
             style: TextStyle(
                 color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
@@ -88,9 +123,7 @@ class CorporationOverviewPanel extends StatelessWidget {
             onPressed: busy
                 ? null
                 : () => showTaxCharterDialog(
-                    context,
-                    action ?? ((_) async {}),
-                    id,
+                    context, action ?? ((_) async {}), id,
                     corporation: true),
             icon: const Icon(Icons.gavel_outlined, size: 14),
             label: const Text('CORPORATION RULES'),
@@ -127,7 +160,8 @@ class CorporationOverviewPanel extends StatelessWidget {
             (state.rankings['cities'] as List).isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text('CORPORATION CITY NETWORK',
-              style: TextStyle(color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+              style: TextStyle(
+                  color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
           const SizedBox(height: 6),
           ...(state.rankings['cities'] as List).take(8).map((raw) {
             final row = Map<String, dynamic>.from(raw as Map);
@@ -139,9 +173,11 @@ class CorporationOverviewPanel extends StatelessWidget {
               padding: const EdgeInsets.symmetric(vertical: 3),
               child: Row(children: [
                 Icon(belongsToUs ? Icons.domain : Icons.location_city_outlined,
-                    size: 14, color: belongsToUs ? cyanAccentColor : mutedColor),
+                    size: 14,
+                    color: belongsToUs ? cyanAccentColor : mutedColor),
                 const SizedBox(width: 7),
-                Expanded(child: Text(
+                Expanded(
+                    child: Text(
                   '${row['name'] ?? city} · ${row['residents'] ?? 0} residents',
                   style: const TextStyle(fontSize: 10.5),
                 )),
@@ -149,8 +185,8 @@ class CorporationOverviewPanel extends StatelessWidget {
                   TextButton(
                     onPressed: busy
                         ? null
-                        : () => action?.call(() => const EarthApi()
-                            .joinCity(cityId: city)),
+                        : () => action?.call(
+                            () => const EarthApi().joinCity(cityId: city)),
                     child: const Text('MOVE', style: TextStyle(fontSize: 9)),
                   )
                 else if (isMember && unclaimed && canAdoptCity)
@@ -158,12 +194,15 @@ class CorporationOverviewPanel extends StatelessWidget {
                     onPressed: busy
                         ? null
                         : () => action?.call(() => const EarthApi()
-                            .adoptCityForCorporation(corporationId: id, cityId: city)),
+                            .adoptCityForCorporation(
+                                corporationId: id, cityId: city)),
                     child: const Text('ADOPT', style: TextStyle(fontSize: 9)),
                   )
                 else
                   Text(owner == null ? 'UNCLAIMED' : owner,
-                      style: TextStyle(fontSize: 9, color: belongsToUs ? cyanAccentColor : mutedColor)),
+                      style: TextStyle(
+                          fontSize: 9,
+                          color: belongsToUs ? cyanAccentColor : mutedColor)),
               ]),
             );
           }),
@@ -429,7 +468,10 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                 if (isCityResident && cityMembers.isNotEmpty) ...[
                   const SizedBox(height: 14),
                   const Text('CITY STANDING',
-                      style: TextStyle(color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                      style: TextStyle(
+                          color: inkColor,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800)),
                   const SizedBox(height: 5),
                   Text(
                     playerRank > 0
@@ -439,14 +481,31 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                   ),
                   const SizedBox(height: 6),
                   ...cityMembers.take(5).toList().asMap().entries.map((entry) {
-                    final member = Map<String, dynamic>.from(entry.value as Map);
+                    final member =
+                        Map<String, dynamic>.from(entry.value as Map);
                     final isPlayer = member['id']?.toString() == playerId;
                     return Padding(
                       padding: const EdgeInsets.symmetric(vertical: 2),
                       child: Row(children: [
-                        SizedBox(width: 24, child: Text('#${entry.key + 1}', style: const TextStyle(color: cyanAccentColor, fontSize: 10))),
-                        Expanded(child: Text(member['display_name']?.toString() ?? member['id']?.toString() ?? 'Resident', style: TextStyle(fontSize: 10.5, fontWeight: isPlayer ? FontWeight.w800 : FontWeight.w500, color: isPlayer ? inkColor : mutedColor))),
-                        Text('${member['standing'] ?? 0}', style: const TextStyle(color: mutedColor, fontSize: 10)),
+                        SizedBox(
+                            width: 24,
+                            child: Text('#${entry.key + 1}',
+                                style: const TextStyle(
+                                    color: cyanAccentColor, fontSize: 10))),
+                        Expanded(
+                            child: Text(
+                                member['display_name']?.toString() ??
+                                    member['id']?.toString() ??
+                                    'Resident',
+                                style: TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: isPlayer
+                                        ? FontWeight.w800
+                                        : FontWeight.w500,
+                                    color: isPlayer ? inkColor : mutedColor))),
+                        Text('${member['standing'] ?? 0}',
+                            style: const TextStyle(
+                                color: mutedColor, fontSize: 10)),
                       ]),
                     );
                   }),
