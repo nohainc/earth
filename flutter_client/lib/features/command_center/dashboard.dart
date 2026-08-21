@@ -680,7 +680,7 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final portfolio = TechnologyPortfolioPanel(state: state);
+              final portfolio = TechnologyPortfolioPanel(state: state, action: action);
               final matrix = EarthPanel(
                 title: 'CHOOSE A RESEARCH DIRECTION',
                 showSurface: false,

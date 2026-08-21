@@ -29,6 +29,14 @@ extension EarthApiTechnology on EarthApi {
     return world();
   }
 
+  Future<EarthState> adoptTechnology(String businessId, String technologyId) async {
+    await _request('/api/technology/adopt', method: 'POST', body: {
+      'businessId': businessId,
+      'technologyId': technologyId,
+    });
+    return world();
+  }
+
   Future<EarthState> licenseTechnology() async {
     await _request('/api/technology/me/license', method: 'POST', body: {
       'royaltyRate': 0.05,

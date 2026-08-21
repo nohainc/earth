@@ -8,7 +8,7 @@ import { resolveContractDispute as resolveContractDisputePostgres } from './arbi
 import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, dismissEmployee as dismissEmployeePostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, hireEmployee as hireEmployeePostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, setPolicy as setBusinessPolicyPostgres, trainEmployee as trainEmployeePostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
 import { acquireMachine as acquireMachinePostgres, assignMachineToBusiness as assignMachineToBusinessPostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
 import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
-import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
+import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, challengeProposal as challengeProposalPostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveConstitutionalAppeal as resolveConstitutionalAppealPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
@@ -815,6 +815,22 @@ const worker = {
       const result = await withRepository(env, (repository) => listTechnologyPostgres(repository));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
+    if (url.pathname === '/api/technology/adopt' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ businessId?: string; technologyId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const businessId = parsed.value.businessId?.trim();
+      const technologyId = parsed.value.technologyId?.trim();
+      if (!businessId || !technologyId) return Response.json({ ok: false, error: 'Business and technology are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => adoptTechnologyPostgres(repository, { humanId: viewer.id, businessId, technologyId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Technology adoption failed' }, { status: 409 });
+      }
     }
     if (url.pathname === '/api/technology/projects' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);

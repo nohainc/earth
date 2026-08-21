@@ -8,8 +8,9 @@ import 'technology_dialogs.dart';
 
 class TechnologyPortfolioPanel extends StatelessWidget {
   final EarthState state;
+  final Future<void> Function(Future<EarthState> Function())? action;
 
-  const TechnologyPortfolioPanel({super.key, required this.state});
+  const TechnologyPortfolioPanel({super.key, required this.state, this.action});
 
   @override
   Widget build(BuildContext context) {
@@ -59,10 +60,49 @@ class TechnologyPortfolioPanel extends StatelessWidget {
             'Potential next directions',
             violetColor),
         const SizedBox(height: 12),
+        if (progress == '100' && research['id'] != null && state.businesses.isNotEmpty)
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: action == null ? null : () => _showAdoptionDialog(context, research['id'].toString(), name),
+              icon: const Icon(Icons.upgrade_outlined, size: 15),
+              label: const Text('ADOPT FOR A BUSINESS'),
+            ),
+          ),
         const Text(
             'A breakthrough becomes valuable when you decide where to apply it.',
             style: TextStyle(color: mutedColor, fontSize: 10.5)),
       ]),
+    );
+  }
+
+  Future<void> _showAdoptionDialog(BuildContext context, String technologyId, String technologyName) async {
+    String? businessId;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: Text('Deploy $technologyName'),
+          content: DropdownButtonFormField<String>(
+            decoration: const InputDecoration(labelText: 'Business workplace'),
+            items: state.businesses.map((business) {
+              final id = business['id']?.toString() ?? '';
+              return DropdownMenuItem(value: id, child: Text(business['name']?.toString() ?? id));
+            }).where((item) => item.value!.isNotEmpty).toList(),
+            onChanged: (value) => setState(() => businessId = value),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
+            FilledButton(
+              onPressed: businessId == null ? null : () async {
+                Navigator.pop(dialogContext);
+                await action?.call(() => const EarthApi().adoptTechnology(businessId!, technologyId));
+              },
+              child: const Text('DEPLOY'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

@@ -10,6 +10,20 @@ export const TECHNOLOGY_CATALOG = [
   'Civic Network Infrastructure',
 ] as const;
 
+export async function adoptTechnology(repository: PostgresRepository, input: { humanId: string; businessId: string; technologyId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const business = await tx.query<{ id: string }>('SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.id = $1 AND b.status = \'active\' AND (b.owner_id = $2 OR bm.manager_id = $2)', [input.businessId, input.humanId]);
+    if (!business.rows[0]) throw new Error('Business not found or not managed by this Human');
+    const technology = await tx.query<{ id: string; name: string; progress: string }>('SELECT id, name, progress FROM technologies WHERE id = $1 AND progress >= 100', [input.technologyId]);
+    if (!technology.rows[0]) throw new Error('Technology must be fully researched before adoption');
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 0);
+    await tx.query("INSERT INTO business_technology_adoptions (business_id, technology_id, adopted_by, adopted_game_day, status) VALUES ($1,$2,$3,$4,'active') ON CONFLICT (business_id, technology_id) DO UPDATE SET adopted_by = excluded.adopted_by, adopted_game_day = excluded.adopted_game_day, status = 'active'", [input.businessId, input.technologyId, input.humanId, day]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'business.technology_adopted\',$3,$4)', [crypto.randomUUID(), day, `${technology.rows[0].name} adopted by business`, JSON.stringify({ businessId: input.businessId, technologyId: input.technologyId, adoptedBy: input.humanId })]);
+    return { ok: true, businessId: input.businessId, technologyId: input.technologyId, technologyName: technology.rows[0].name, adoptedGameDay: day };
+  });
+}
+
 async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: string): Promise<void> {
   const membership = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1', [ownerId]);
   if (!membership.rows[0]?.city_id) {
