@@ -37,12 +37,15 @@ extension EarthApiTechnology on EarthApi {
   }
 
   Future<EarthState> licenseTechnologyTo(
-      String licenseeId, double fee, String otp) async {
+      String licenseeId, double fee, String otp,
+      {String? licenseeBusinessId}) async {
     await _request('/api/technology/me/license', method: 'POST', body: {
       'licenseeId': licenseeId.trim(),
       'licenseFee': fee,
       'royaltyRate': 0.05,
       'otp': otp,
+      if (licenseeBusinessId != null && licenseeBusinessId.trim().isNotEmpty)
+        'licenseeBusinessId': licenseeBusinessId.trim(),
     });
     return world();
   }
@@ -66,4 +69,3 @@ extension EarthApiTechnology on EarthApi {
   }
 
 }
-

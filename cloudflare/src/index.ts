@@ -867,7 +867,7 @@ const worker = {
     if ((url.pathname === '/api/technology/TECH-001/license' || url.pathname === '/api/technology/me/license') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ licenseeId?: string; royaltyRate?: number; licenseFee?: number; otp?: string; correlationId?: string }>(request);
+      const parsed = await parseJsonBody<{ licenseeId?: string; licenseeBusinessId?: string; royaltyRate?: number; licenseFee?: number; otp?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const licenseeId = body.licenseeId || viewer.id;
@@ -877,7 +877,7 @@ const worker = {
       if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0 || licenseFee > 100000 || (licenseeId !== viewer.id && licenseFee < 50) || !correlationId) return Response.json({ ok: false, error: 'License terms or Idempotency-Key are invalid' }, { status: 400 });
       if (licenseeId !== viewer.id && !(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for external IP licensing' }, { status: 401 });
       try {
-        const result = await withRepository(env, (repository) => licenseTechnologyPostgres(repository, { ownerId: viewer.id, licenseeId, royaltyRate, licenseFee, correlationId }));
+        const result = await withRepository(env, (repository) => licenseTechnologyPostgres(repository, { ownerId: viewer.id, licenseeId, licenseeBusinessId: body.licenseeBusinessId?.trim() || null, royaltyRate, licenseFee, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {

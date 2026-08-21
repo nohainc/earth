@@ -83,7 +83,7 @@ export async function grantPatent(repository: PostgresRepository, input: { owner
   });
 }
 
-export async function licenseTechnology(repository: PostgresRepository, input: { ownerId: string; licenseeId: string; royaltyRate: number; licenseFee: number; correlationId: string }): Promise<Record<string, unknown>> {
+export async function licenseTechnology(repository: PostgresRepository, input: { ownerId: string; licenseeId: string; licenseeBusinessId?: string | null; royaltyRate: number; licenseFee: number; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ license_id: string; amount: string }>("SELECT reason_id AS license_id, amount FROM ledger_entries WHERE reason_type = 'technology_license_fee' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, license: (await tx.query('SELECT * FROM technology_licenses WHERE id = $1', [prior.rows[0].license_id])).rows[0], licenseFee: Number(prior.rows[0].amount), correlationId: input.correlationId };
@@ -103,7 +103,13 @@ export async function licenseTechnology(repository: PostgresRepository, input: {
       const licenseFee = centsToMoney(licenseFeeCents);
       if (!buyer || !owner || moneyToCents(buyer.balance) < licenseFeeCents) throw new Error('Licensee has insufficient Credits');
       await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: Number(world.rows[0]?.game_day ?? 0), debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: licenseFee, reasonType: 'technology_license_fee', reasonId: licenseId, ruleVersion: 'technology-v4', correlationId: input.correlationId });
-      await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = (SELECT id FROM businesses WHERE owner_id = $3 AND status = 'active' ORDER BY id LIMIT 1)", [licenseFee, Number(world.rows[0]?.game_day ?? 0), input.licenseeId]);
+      const business = input.licenseeBusinessId
+        ? await tx.query<{ id: string }>("SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.id = $1 AND b.status = 'active' AND (b.owner_id = $2 OR bm.manager_id = $2)", [input.licenseeBusinessId, input.licenseeId])
+        : await tx.query<{ id: string }>("SELECT id FROM businesses WHERE owner_id = $1 AND status = 'active' ORDER BY id LIMIT 1", [input.licenseeId]);
+      if (input.licenseeBusinessId && !business.rows[0]) throw new Error('License references a business the licensee cannot manage');
+      if (business.rows[0]) {
+        await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [licenseFee, Number(world.rows[0]?.game_day ?? 0), business.rows[0].id]);
+      }
     }
     const effectiveFee = internalShare ? 0 : Number(centsToMoney(moneyToCents(input.licenseFee)));
     await tx.query("INSERT INTO technology_licenses (id, patent_id, licensor_id, licensee_id, royalty_rate) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET royalty_rate = excluded.royalty_rate, status = 'active'", [licenseId, patent.rows[0].id, input.ownerId, input.licenseeId, internalShare ? 0 : input.royaltyRate]);

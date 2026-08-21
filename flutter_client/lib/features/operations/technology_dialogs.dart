@@ -97,6 +97,7 @@ Future<void> showResearchComposerDialog(BuildContext context,
 Future<void> showLicenseComposerDialog(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action) async {
   final licensee = TextEditingController();
+  final businessId = TextEditingController();
   final fee = TextEditingController(text: '100');
   final otp = TextEditingController();
   await showDialog<void>(
@@ -108,6 +109,10 @@ Future<void> showLicenseComposerDialog(BuildContext context,
                   controller: licensee,
                   decoration:
                       const InputDecoration(labelText: 'Licensee Human ID')),
+              TextField(
+                  controller: businessId,
+                  decoration: const InputDecoration(
+                      labelText: 'Licensee business ID (optional)')),
               TextField(
                   controller: fee,
                   keyboardType:
@@ -133,7 +138,8 @@ Future<void> showLicenseComposerDialog(BuildContext context,
                       return;
                     }
                     await action(() => const EarthApi()
-                        .licenseTechnologyTo(licensee.text, amount, otp.text));
+                        .licenseTechnologyTo(licensee.text, amount, otp.text,
+                            licenseeBusinessId: businessId.text));
                     if (dialogContext.mounted) Navigator.pop(dialogContext);
                   },
                   child: const Text('License')),
