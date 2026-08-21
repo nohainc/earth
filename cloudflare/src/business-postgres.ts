@@ -3,6 +3,7 @@ import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, marketValueToCents, moneyToCents } from './money.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
+import { businessSectorAccess } from './business-rules.ts';
 
 const sectors = new Set([
   'energy', 'extraction', 'components', 'machines', 'maintenance', 'housing',
@@ -17,10 +18,8 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
     if (!sectors.has(input.sector)) throw new Error('Business sector is invalid');
     const membership = await tx.query<{ city_id: string | null; corporation_id: string | null }>('SELECT city_id, corporation_id FROM memberships WHERE human_id = $1', [input.ownerId]);
     const affiliation = membership.rows[0];
-    const independentSectors = new Set(['maintenance', 'machines', 'components']);
-    const serviceSectors = new Set(['it-services', 'consulting', 'logistics', 'healthcare', 'education']);
-    if (!affiliation?.city_id && !independentSectors.has(input.sector)) throw new Error('This business sector requires an active city affiliation');
-    if (serviceSectors.has(input.sector) && !affiliation?.corporation_id) throw new Error('Specialized service businesses require corporation membership');
+    const access = businessSectorAccess(input.sector, Boolean(affiliation?.city_id), Boolean(affiliation?.corporation_id));
+    if (!access.allowed) throw new Error(access.reason);
     const nameConflict = await tx.query('SELECT id FROM institutions WHERE name = $1', [input.name]);
     if (nameConflict.rows[0]) throw new Error('Business name already exists');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
