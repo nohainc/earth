@@ -83,8 +83,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const feeRate = Number(await marketFeeRate(repository, viewerId));
   const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees] = await Promise.all([
     Promise.all([
-      repository.query(`SELECT id, name, corporation_id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity
+      repository.query(`SELECT cities.id, city_institutions.name, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
         FROM cities
+        JOIN institutions city_institutions ON city_institutions.id = cities.institution_id
         ORDER BY (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
           + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
           + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
