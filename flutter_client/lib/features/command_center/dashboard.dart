@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/models/decision_queue_item.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
@@ -109,14 +110,8 @@ class Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final businessMap = businessFinancials['business'] is Map<String, dynamic>
-        ? businessFinancials['business'] as Map<String, dynamic>
-        : state.business;
-    final managerProfit = asDoubleOr(businessMap['profit'], 0);
-    final wornMachines = state.machines.where((raw) {
-      final machine = raw as Map;
-      return asIntOr(machine['condition'], 100) < 45;
-    }).length;
+    final decisions = DecisionQueueItem.synthesizeFromState(state);
+    final visibleDecisions = decisions.take(3).toList();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -125,12 +120,12 @@ class Dashboard extends StatelessWidget {
           const SizedBox(height: 34),
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
             decoration: BoxDecoration(
               gradient: LinearGradient(
                 colors: [
-                  (wornMachines > 0 || managerProfit < 0
-                          ? Colors.orangeAccent
+                  (visibleDecisions.isNotEmpty
+                          ? visibleDecisions.first.riskColor
                           : cyanAccentColor)
                       .withValues(alpha: .16),
                   surfaceColor.withValues(alpha: .78),
@@ -138,54 +133,55 @@ class Dashboard extends StatelessWidget {
               ),
               borderRadius: BorderRadius.circular(12),
               border: Border.all(
-                  color: (wornMachines > 0 || managerProfit < 0
-                          ? Colors.orangeAccent
+                  color: (visibleDecisions.isNotEmpty
+                          ? visibleDecisions.first.riskColor
                           : cyanAccentColor)
                       .withValues(alpha: .35)),
             ),
-            child: Row(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(
-                  wornMachines > 0 || managerProfit < 0
-                      ? Icons.priority_high_rounded
-                      : Icons.auto_awesome_outlined,
-                  color: wornMachines > 0 || managerProfit < 0
-                      ? Colors.orangeAccent
-                      : cyanAccentColor,
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('TODAY\'S MANAGEMENT FOCUS',
+                Row(
+                  children: [
+                    Icon(
+                      visibleDecisions.isNotEmpty
+                          ? Icons.priority_high_rounded
+                          : Icons.check_circle_outline,
+                      color: visibleDecisions.isNotEmpty
+                          ? visibleDecisions.first.riskColor
+                          : cyanAccentColor,
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Text('TODAY\'S MANAGEMENT FOCUS',
                           style: TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.w800,
                               letterSpacing: 1,
                               color: mutedColor)),
-                      const SizedBox(height: 4),
-                      Text(
-                        wornMachines > 0
-                            ? '$wornMachines machine${wornMachines == 1 ? '' : 's'} need attention before capacity turns into downtime.'
-                            : managerProfit < 0
-                                ? 'The business is under margin pressure. Stabilize costs before expanding capacity.'
-                                : 'Protect the current margin, then choose the next investment in people, machines, or research.',
-                        style: const TextStyle(
-                            fontSize: 12, fontWeight: FontWeight.w700),
-                      ),
-                    ],
-                  ),
+                    ),
+                    Text(
+                      visibleDecisions.isEmpty
+                          ? 'NO OPEN DECISIONS'
+                          : '${visibleDecisions.length} ${visibleDecisions.length == 1 ? 'PRIORITY' : 'PRIORITIES'}',
+                      style: const TextStyle(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w800,
+                          color: mutedColor),
+                    ),
+                  ],
                 ),
-                TextButton(
-                  onPressed: () => onNavigate?.call(
-                      wornMachines > 0 || managerProfit < 0
-                          ? 'business'
-                          : 'technology'),
-                  child: Text(wornMachines > 0 || managerProfit < 0
-                      ? 'OPEN BUSINESS'
-                      : 'PLAN NEXT INVESTMENT'),
-                ),
+                const SizedBox(height: 6),
+                if (visibleDecisions.isEmpty)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 36, bottom: 8),
+                    child: Text(
+                      'Operations are stable. Choose the next investment in people, capacity, or research.',
+                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                    ),
+                  )
+                else
+                  ...visibleDecisions.map((decision) => _focusDecisionRow(decision)),
               ],
             ),
           ),
@@ -313,6 +309,49 @@ class Dashboard extends StatelessWidget {
         ],
         ..._selectedPanels(),
       ],
+    );
+  }
+
+  Widget _focusDecisionRow(DecisionQueueItem decision) {
+    return Padding(
+      padding: const EdgeInsets.only(left: 36, bottom: 6),
+      child: Row(
+        children: [
+          Container(
+            width: 6,
+            height: 6,
+            decoration: BoxDecoration(
+              color: decision.riskColor,
+              shape: BoxShape.circle,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  decision.title,
+                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  overflow: TextOverflow.ellipsis,
+                ),
+                Text(
+                  '${decision.deadline} · ${decision.expectedImpact}',
+                  style: const TextStyle(fontSize: 10, color: mutedColor),
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ],
+            ),
+          ),
+          TextButton(
+            onPressed: onNavigate == null
+                ? null
+                : () => onNavigate!.call(decision.targetSection),
+            child: Text(decision.primaryActionLabel),
+          ),
+        ],
+      ),
     );
   }
 
