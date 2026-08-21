@@ -134,7 +134,7 @@ void main() {
     expect(find.text('JOIN OR INSPECT A COMMUNITY'), findsOneWidget);
     expect(find.text('MAKE FIRST MARKET DECISION'), findsOneWidget);
     expect(find.text('START BUSINESS OR RESEARCH'), findsOneWidget);
-    expect(find.text('RECEIVE SIMULATION SIGNAL'), findsOneWidget);
+    expect(find.text('RECEIVE WORLD SIGNAL'), findsOneWidget);
 
     final startBtn = find.byKey(const Key('btn-start-orientation-tour'));
     expect(startBtn, findsOneWidget);

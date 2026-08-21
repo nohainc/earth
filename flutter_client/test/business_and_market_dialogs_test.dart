@@ -133,6 +133,7 @@ void main() {
                 (fn) async {
                   transferred = true;
                 },
+                null,
               ),
               child: const Text('Open Transfer Dialog'),
             ),
