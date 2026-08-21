@@ -10,6 +10,7 @@ class MachinesPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final List<dynamic> productionCatalog;
+  final Map<String, dynamic>? activeBusiness;
   final Future<void> Function(Future<EarthState> Function()) action;
 
   const MachinesPanel({
@@ -17,6 +18,7 @@ class MachinesPanel extends StatelessWidget {
     required this.state,
     required this.busy,
     required this.productionCatalog,
+    this.activeBusiness,
     required this.action,
   });
 
@@ -119,7 +121,7 @@ class MachinesPanel extends StatelessWidget {
               final workplace = businessName == null || businessName.isEmpty
                   ? 'PERSONAL WORK UNIT'
                   : 'WORKPLACE · $businessName';
-              final businessId = state.business['id']?.toString();
+              final businessId = (activeBusiness ?? state.business)['id']?.toString();
 
               final isInactive = status == 'sold' ||
                   status == 'recycled' ||

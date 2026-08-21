@@ -495,6 +495,7 @@ class Dashboard extends StatelessWidget {
                 state: state,
                 busy: busy,
                 productionCatalog: productionCatalog,
+                activeBusiness: activeBusiness,
                 action: action,
               );
               final aiAssistant =
