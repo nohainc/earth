@@ -462,7 +462,10 @@ class Dashboard extends StatelessWidget {
                 businessProfile: businessProfile,
                 action: action,
               );
-              final production = ProductionEventsPanel(state: state);
+              final managerOverview = BusinessManagerOverviewPanel(
+                  state: state,
+                  businessFinancials: businessFinancials,
+                  businessProfile: businessProfile);
               final machines = MachinesPanel(
                 state: state,
                 busy: busy,
@@ -472,27 +475,28 @@ class Dashboard extends StatelessWidget {
               final aiAssistant =
                   AiAssistantPanel(state: state, busy: busy, action: action);
               final recommendations = AiRecommendationsPanel(state: state);
-              final solvency = InstitutionSolvencyPanel(
-                  state: state, busy: busy, action: action);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: business),
+                    Expanded(
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                          managerOverview,
+                          const SizedBox(height: 34),
+                          business
+                        ])),
                     const SizedBox(width: 56),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          production,
-                          const SizedBox(height: 34),
                           machines,
                           const SizedBox(height: 34),
                           aiAssistant,
                           const SizedBox(height: 34),
                           recommendations,
-                          const SizedBox(height: 34),
-                          solvency,
                         ],
                       ),
                     ),
@@ -502,17 +506,15 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  business,
+                  managerOverview,
                   const SizedBox(height: 34),
-                  production,
+                  business,
                   const SizedBox(height: 34),
                   machines,
                   const SizedBox(height: 34),
                   aiAssistant,
                   const SizedBox(height: 34),
                   recommendations,
-                  const SizedBox(height: 34),
-                  solvency,
                 ],
               );
             },

@@ -4,7 +4,48 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/operations/business_panel.dart';
 
 void main() {
-  testWidgets('BusinessPanel renders financial statements, profit, and distributes dividends',
+  testWidgets('BusinessManagerOverviewPanel gives the manager a decision brief',
+      (tester) async {
+    const state = EarthState({
+      'business': {
+        'name': 'Northstar Robotics',
+        'status': 'active',
+        'policy': 'reliability',
+      },
+      'machines': [
+        {'id': 'M-1'},
+      ],
+      'workforce': [
+        {'id': 'W-1', 'status': 'active'},
+      ],
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: BusinessManagerOverviewPanel(
+          state: state,
+          businessFinancials: const {
+            'business': {
+              'revenue': 1000.0,
+              'operating_costs': 700.0,
+              'cash': 5000.0,
+              'payroll': 500.0,
+            },
+          },
+        ),
+      ),
+    ));
+
+    expect(find.text("MANAGER'S BRIEF / Northstar Robotics"), findsOneWidget);
+    expect(find.text('300 C'), findsOneWidget);
+    expect(find.text('10 cycles'), findsOneWidget);
+    expect(find.text('ACTIVE STAFF'), findsOneWidget);
+    expect(find.text('MACHINE CAPACITY'), findsOneWidget);
+    expect(find.textContaining('Next decisions:'), findsOneWidget);
+  });
+
+  testWidgets(
+      'BusinessPanel renders financial statements, profit, and distributes dividends',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -38,7 +79,12 @@ void main() {
                 'controllingHumanId': 'H-0044',
                 'totalIssuedShares': 1000,
                 'holders': [
-                  {'human_id': 'H-0044', 'display_name': 'Amara Kline', 'percentage': 75, 'shares': 750},
+                  {
+                    'human_id': 'H-0044',
+                    'display_name': 'Amara Kline',
+                    'percentage': 75,
+                    'shares': 750
+                  },
                 ],
               },
               businessFinancials: const {
@@ -92,7 +138,8 @@ void main() {
     expect(dividendTriggered, isTrue);
   });
 
-  testWidgets('BusinessPanel displays distress warnings and enables liquidation',
+  testWidgets(
+      'BusinessPanel displays distress warnings and enables liquidation',
       (tester) async {
     const distressedState = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -160,7 +207,8 @@ void main() {
     expect(liquidationTriggered, isTrue);
   });
 
-  testWidgets('BusinessPanel opens shareholder resolution and AI assistant config dialogs',
+  testWidgets(
+      'BusinessPanel opens shareholder resolution and AI assistant config dialogs',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -205,7 +253,8 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Propose shareholder resolution'), findsOneWidget);
-    expect(find.textContaining('>66.7% Supermajority Approval'), findsOneWidget);
+    expect(
+        find.textContaining('>66.7% Supermajority Approval'), findsOneWidget);
     await tester.tap(find.text('CANCEL'));
     await tester.pumpAndSettle();
 

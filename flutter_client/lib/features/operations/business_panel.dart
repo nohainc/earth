@@ -6,6 +6,142 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'business_dialogs.dart';
 
+class BusinessManagerOverviewPanel extends StatelessWidget {
+  final EarthState state;
+  final Map<String, dynamic> businessFinancials;
+  final Map<String, dynamic> businessProfile;
+
+  const BusinessManagerOverviewPanel(
+      {super.key,
+      required this.state,
+      this.businessFinancials = const {},
+      this.businessProfile = const {}});
+
+  @override
+  Widget build(BuildContext context) {
+    final business = state.business;
+    final fin = businessFinancials['business'] is Map
+        ? Map<String, dynamic>.from(businessFinancials['business'] as Map)
+        : businessFinancials;
+    final name =
+        (business['name'] ?? businessProfile['name'] ?? 'Business').toString();
+    final status = (business['status'] ?? 'active').toString().toUpperCase();
+    final revenue = asDouble(fin['revenue']);
+    final costs = asDouble(fin['operating_costs'] ?? fin['costs']);
+    final profit = asDouble(fin['profit']) ??
+        (revenue != null && costs != null ? revenue - costs : null);
+    final cash = asDouble(fin['cash'] ?? fin['balance'] ?? business['cash']);
+    final payroll = asDouble(fin['payroll']);
+    final workforce = state.json['workforce'] is List
+        ? (state.json['workforce'] as List)
+            .whereType<Map>()
+            .where((item) => item['status']?.toString() == 'active')
+            .length
+        : 0;
+    final machineCount = state.machines.length;
+    final policy = (business['policy'] ??
+            businessProfile['policy'] ??
+            'No operating direction chosen')
+        .toString();
+    final bottlenecks = <String>[];
+    if (workforce == 0) bottlenecks.add('staffing');
+    if (machineCount == 0) bottlenecks.add('machine capacity');
+    if (profit != null && profit < 0) bottlenecks.add('cost control');
+
+    return EarthPanel(
+        title: 'MANAGER\'S BRIEF / $name',
+        showSurface: false,
+        contentPadding: EdgeInsets.zero,
+        helpAfterTitle: true,
+        titleColor: mutedColor,
+        infoDescription:
+            '• The decision view for running this business: strategy, people, capacity, cash, and risks.\n\n• Detailed machine controls, AI settings, and production history remain in specialist views.\n\n• Values are shown only when current business data is available.',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(
+              status == 'ACTIVE'
+                  ? 'The operation is active. Choose the next investment or protect the current margin.'
+                  : 'The operation needs attention before it can safely expand.',
+              style: TextStyle(
+                  color: status == 'ACTIVE'
+                      ? Colors.tealAccent
+                      : Colors.orangeAccent,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 10),
+          Wrap(spacing: 10, runSpacing: 10, children: [
+            _metric(
+                'PROFIT / CYCLE',
+                profit == null
+                    ? 'UNAVAILABLE'
+                    : '${formatWholeNumber(profit)} C',
+                Icons.trending_up_outlined,
+                profit == null || profit >= 0
+                    ? Colors.tealAccent
+                    : Colors.orangeAccent),
+            _metric(
+                'CASH RUNWAY',
+                cash == null || payroll == null || payroll <= 0
+                    ? 'UNAVAILABLE'
+                    : '${(cash / payroll).floor()} cycles',
+                Icons.account_balance_wallet_outlined,
+                cyanAccentColor),
+            _metric('ACTIVE STAFF', '$workforce', Icons.groups_outlined,
+                violetColor),
+            _metric('MACHINE CAPACITY', '$machineCount',
+                Icons.precision_manufacturing_outlined, Colors.amberAccent),
+          ]),
+          const SizedBox(height: 10),
+          Text('STRATEGY: $policy',
+              style: const TextStyle(
+                  color: inkColor,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 5),
+          Text(
+              bottlenecks.isEmpty
+                  ? 'No obvious bottleneck is recorded. Consider expansion, staff development, technology adoption, or a stronger contract.'
+                  : 'Needs attention: ${bottlenecks.join(' · ')}',
+              style: TextStyle(
+                  color: bottlenecks.isEmpty ? mutedColor : Colors.orangeAccent,
+                  fontSize: 10.5)),
+          const SizedBox(height: 8),
+          const Text(
+              'Next decisions: hire · train · repair · buy supplies · accept work · adopt technology · expand · conserve cash.',
+              style: TextStyle(color: mutedColor, fontSize: 10.5)),
+        ]));
+  }
+
+  Widget _metric(String label, String value, IconData icon, Color color) =>
+      Container(
+          width: 150,
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: color.withValues(alpha: .28))),
+          child: Row(children: [
+            Icon(icon, size: 15, color: color),
+            const SizedBox(width: 7),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Text(label,
+                      style: const TextStyle(
+                          color: mutedColor,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 3),
+                  Text(value,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                          color: color,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w800))
+                ]))
+          ]));
+}
+
 Widget _businessTopicHeading(BuildContext context, String title,
     {required String description}) {
   return Padding(
@@ -182,7 +318,8 @@ class BusinessPanel extends StatelessWidget {
                           const SizedBox(height: 8),
                           Text(
                             'Manager: $managerName${managerId == null ? '' : ' · $managerId'} · Last settled cycle: Day $lastGameDay',
-                            style: const TextStyle(fontSize: 10, color: mutedColor),
+                            style: const TextStyle(
+                                fontSize: 10, color: mutedColor),
                           ),
                         ],
                       ),
@@ -217,7 +354,8 @@ class BusinessPanel extends StatelessWidget {
                             Text('${workforce.length} active staff',
                                 style: const TextStyle(
                                     fontSize: 12, fontWeight: FontWeight.w800)),
-                            Text('${formatCreditsAmount(payroll)} / cycle payroll',
+                            Text(
+                                '${formatCreditsAmount(payroll)} / cycle payroll',
                                 style: const TextStyle(
                                     fontSize: 10, color: mutedColor)),
                           ],
@@ -245,10 +383,13 @@ class BusinessPanel extends StatelessWidget {
                         runSpacing: 8,
                         children: workforce.map((employee) {
                           final role = employee['role']?.toString() ?? 'Staff';
-                          final name = employee['name']?.toString() ?? 'Employee';
+                          final name =
+                              employee['name']?.toString() ?? 'Employee';
                           final employeeId = employee['id']?.toString() ?? '';
-                          final skill = (asDouble(employee['skill']) ?? 0) * 100;
-                          final morale = (asDouble(employee['morale']) ?? 0) * 100;
+                          final skill =
+                              (asDouble(employee['skill']) ?? 0) * 100;
+                          final morale =
+                              (asDouble(employee['morale']) ?? 0) * 100;
                           return Container(
                             width: 210,
                             padding: const EdgeInsets.all(10),
@@ -262,7 +403,8 @@ class BusinessPanel extends StatelessWidget {
                               children: [
                                 Text(name,
                                     style: const TextStyle(
-                                        fontSize: 11, fontWeight: FontWeight.w700)),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.w700)),
                                 const SizedBox(height: 2),
                                 Text(role,
                                     style: const TextStyle(
@@ -280,7 +422,8 @@ class BusinessPanel extends StatelessWidget {
                                       onPressed: busy || employeeId.isEmpty
                                           ? null
                                           : () => action(() => const EarthApi()
-                                              .trainEmployee(businessId, employeeId)),
+                                              .trainEmployee(
+                                                  businessId, employeeId)),
                                       style: TextButton.styleFrom(
                                           visualDensity: VisualDensity.compact),
                                       child: const Text('TRAIN',
@@ -290,7 +433,8 @@ class BusinessPanel extends StatelessWidget {
                                       onPressed: busy || employeeId.isEmpty
                                           ? null
                                           : () => action(() => const EarthApi()
-                                              .dismissEmployee(businessId, employeeId)),
+                                              .dismissEmployee(
+                                                  businessId, employeeId)),
                                       style: TextButton.styleFrom(
                                           visualDensity: VisualDensity.compact,
                                           foregroundColor: Colors.orangeAccent),
@@ -636,8 +780,7 @@ class BusinessPanel extends StatelessWidget {
                       value:
                           '${profit >= 0 ? '+' : ''}${formatCreditsAmount(profit)}',
                       subtext: 'Margin: ${profitMargin.toStringAsFixed(1)}%',
-                      accent:
-                          profit >= 0 ? cyanAccentColor : Colors.redAccent,
+                      accent: profit >= 0 ? cyanAccentColor : Colors.redAccent,
                       icon: Icons.account_balance_wallet_outlined,
                     ),
                     _metricBox(
@@ -688,8 +831,9 @@ class BusinessPanel extends StatelessWidget {
                           style: TextStyle(
                             fontSize: 9.5,
                             fontWeight: FontWeight.w800,
-                            color:
-                                profit >= 0 ? cyanAccentColor : Colors.redAccent,
+                            color: profit >= 0
+                                ? cyanAccentColor
+                                : Colors.redAccent,
                           ),
                         ),
                       ],
