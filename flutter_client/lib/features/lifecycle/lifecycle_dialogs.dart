@@ -16,9 +16,6 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
   final _name = TextEditingController();
   final _humanId = TextEditingController();
   final _estateDays = TextEditingController(text: '30');
-  double _heirPct = 70.0;
-  double _trustPct = 20.0;
-  double _reservePct = 10.0;
 
   @override
   void dispose() {
@@ -30,9 +27,6 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final totalPct = (_heirPct + _trustPct + _reservePct).round();
-    final isBalanced = totalPct == 100;
-
     return AlertDialog(
       title: const Text('Plan succession & testamentary will'),
       content: SingleChildScrollView(
@@ -41,7 +35,7 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text(
-              'Designate your legal successor and configure testamentary asset distribution across heirs, municipal endowments, and dynastic reserves.',
+              'Designate an existing active Human to receive the estate. If you prefer a new adult, leave succession unregistered and use the separate Civic Rebirth path after mortality.',
               style: TextStyle(fontSize: 11, color: mutedColor),
             ),
             const SizedBox(height: 12),
@@ -57,7 +51,7 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
               controller: _humanId,
               textCapitalization: TextCapitalization.characters,
               decoration: const InputDecoration(
-                labelText: 'Existing Human ID (optional)',
+                labelText: 'Existing Human ID (required for heir claim)',
                 hintText: 'e.g. H-0045',
               ),
             ),
@@ -70,57 +64,12 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
                 hintText: '30',
               ),
             ),
-            const SizedBox(height: 16),
-            const Text(
-              'TESTAMENTARY ALLOCATION',
-              style: TextStyle(
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1,
-                color: inkColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            _allocationRow('Primary Designated Heir', _heirPct, cyanAccentColor, (val) {
-              setState(() {
-                _heirPct = val;
-              });
-            }),
-            _allocationRow('Municipal Public Trust', _trustPct, Colors.tealAccent, (val) {
-              setState(() {
-                _trustPct = val;
-              });
-            }),
-            _allocationRow('Dynastic Family Reserve', _reservePct, violetColor, (val) {
-              setState(() {
-                _reservePct = val;
-              });
-            }),
-            const SizedBox(height: 10),
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: (isBalanced ? Colors.tealAccent : Colors.orangeAccent).withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: (isBalanced ? Colors.tealAccent : Colors.orangeAccent).withValues(alpha: .3)),
-              ),
-              child: Row(
-                children: [
-                  Icon(isBalanced ? Icons.check_circle_outline : Icons.error_outline, size: 14, color: isBalanced ? Colors.tealAccent : Colors.orangeAccent),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      isBalanced
-                          ? 'Total: $totalPct% (100% Balanced Allocation)'
-                          : 'Total: $totalPct% (Allocation must equal 100%)',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        color: isBalanced ? Colors.tealAccent : Colors.orangeAccent,
-                      ),
-                    ),
-                  ),
-                ],
+              padding: const EdgeInsets.all(10),
+              color: Colors.tealAccent.withValues(alpha: .08),
+              child: const Text(
+                'Current inheritance rule: 80% of the estate transfers to the successor after the canonical 20% estate tax. Asset ownership and dynasty lineage transfer with the estate.',
+                style: TextStyle(fontSize: 10.5, color: mutedColor),
               ),
             ),
           ],
@@ -133,7 +82,7 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
         ),
         FilledButton(
           onPressed: () async {
-            if (_name.text.trim().length < 2 || !isBalanced) return;
+            if (_name.text.trim().length < 2) return;
             final parsedDays = int.tryParse(_estateDays.text.trim()) ?? 30;
             final clampedDays = parsedDays.clamp(7, 90);
             final n = _name.text.trim();
@@ -151,36 +100,6 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
     );
   }
 
-  Widget _allocationRow(String title, double value, Color color, ValueChanged<double> onChanged) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text(title, style: const TextStyle(fontSize: 10, color: mutedColor)),
-            Text('${value.round()}%', style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800, color: color)),
-          ],
-        ),
-        SliderTheme(
-          data: SliderThemeData(
-            thumbColor: color,
-            activeTrackColor: color,
-            inactiveTrackColor: Colors.white12,
-            trackHeight: 3,
-            thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
-          ),
-          child: Slider(
-            value: value,
-            min: 0,
-            max: 100,
-            divisions: 20,
-            onChanged: onChanged,
-          ),
-        ),
-      ],
-    );
-  }
 }
 
 Future<void> showSuccessorComposerDialog(BuildContext context,
