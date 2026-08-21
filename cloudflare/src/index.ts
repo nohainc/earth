@@ -815,7 +815,9 @@ const worker = {
       return productionCatalogResponse();
     }
     if (url.pathname === '/api/technology' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listTechnologyPostgres(repository));
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const result = await withRepository(env, (repository) => listTechnologyPostgres(repository, viewer.id));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }

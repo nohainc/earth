@@ -234,11 +234,14 @@ export async function listAuthorityEvents(repository: PostgresRepository, humanI
   return { events: events.rows };
 }
 
-export async function listTechnology(repository: PostgresRepository): Promise<Record<string, unknown>> {
+export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const [projects, patents, licenses] = await Promise.all([
-    repository.query('SELECT * FROM research_projects ORDER BY id'),
-    repository.query('SELECT * FROM patents ORDER BY id'),
-    repository.query('SELECT * FROM technology_licenses ORDER BY id'),
+    repository.query('SELECT * FROM research_projects WHERE owner_id = $1 ORDER BY id', [humanId]),
+    repository.query(`SELECT DISTINCT patents.* FROM patents
+      LEFT JOIN corporation_technology_shares shares ON shares.patent_id = patents.id AND shares.status = 'active'
+      LEFT JOIN memberships member ON member.corporation_id = shares.corporation_id AND member.human_id = $1
+      WHERE patents.owner_id = $1 OR member.human_id IS NOT NULL ORDER BY patents.id`, [humanId]),
+    repository.query('SELECT * FROM technology_licenses WHERE licensor_id = $1 OR licensee_id = $1 ORDER BY id', [humanId]),
   ]);
   return { catalog: TECHNOLOGY_CATALOG_DETAILS, projects: projects.rows, patents: patents.rows, licenses: licenses.rows };
 }
