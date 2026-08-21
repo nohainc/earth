@@ -30,7 +30,6 @@ class ExecutiveCommandSummary extends StatefulWidget {
 }
 
 class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
-  bool _briefingExpanded = false;
   String _selectedActionFilter = 'ALL';
 
   @override
@@ -38,12 +37,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     final briefing = DailyBriefingReport.synthesizeFromState(widget.state);
     final decisionItems = DecisionQueueItem.synthesizeFromState(widget.state);
     final opportunities = widget.state.opportunities;
-
-    final criticalCount = decisionItems
-        .where((i) =>
-            i.riskLevel.toLowerCase() == 'critical' ||
-            i.riskLevel.toLowerCase() == 'high')
-        .length;
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -192,8 +185,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         : const <String, dynamic>{};
     final cityPressure =
         asDouble(cityMap['service_pressure'] ?? cityMap['servicePressure']);
-    final health = asDouble(human['health'] ?? human['vitality']);
-
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 650;
