@@ -193,7 +193,7 @@ export async function changeCorporationMembership(repository: PostgresRepository
       await tx.query('UPDATE memberships SET corporation_id = NULL, city_id = NULL WHERE human_id = $1 AND corporation_id = $2', [input.humanId, input.corporationId]);
       await refreshPopulation(tx, input.corporationId, [current.city_id]);
       await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CORPORATION',$3,'left',$4,'voluntary_resignation')", [crypto.randomUUID(), input.humanId, input.corporationId, gameDay]);
-      await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [`CORP-LEFT-${input.humanId}-${input.corporationId}-${gameDay}`, input.humanId, 'institution', 'Corporation left', `You left corporation ${input.corporationId}.`, input.corporationId]);
+      await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT (id) DO NOTHING', [`CORP-LEFT-${input.humanId}-${input.corporationId}-${gameDay}`, input.humanId, 'institution', 'Corporation left', `You left corporation ${input.corporationId}.`, input.corporationId]);
     } else {
       if (current.corporation_id && current.corporation_id !== input.corporationId) throw new Error('Human already belongs to another corporation');
       if (corporation.rows[0].admission_policy === 'approval') {
