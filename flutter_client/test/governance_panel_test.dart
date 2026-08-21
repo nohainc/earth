@@ -58,7 +58,8 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Universal Citizenship Democratic Ballot'), findsOneWidget);
+    expect(find.textContaining('Universal Citizenship Democratic Ballot'),
+        findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
@@ -66,7 +67,8 @@ void main() {
     expect(castChoice, 'voted');
   });
 
-  testWidgets('ProposalPanel renders cooling-off judicial review state and disables premature execution',
+  testWidgets(
+      'ProposalPanel renders cooling-off judicial review state and disables premature execution',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 10, 'minute': 200},
@@ -110,8 +112,47 @@ void main() {
 
     expect(find.text('UC PROPOSAL PROP-102'), findsOneWidget);
     expect(find.text('COOLING-OFF'), findsOneWidget);
-    expect(find.textContaining('Cooling-off active: Implementation Day 13'), findsOneWidget);
+    expect(find.textContaining('Cooling-off active: Implementation Day 13'),
+        findsOneWidget);
     expect(find.text('COOLING-OFF (DAY 13)'), findsOneWidget);
     expect(find.text('CHALLENGE PROPOSAL'), findsOneWidget);
+  });
+  testWidgets('Civic status and influence explain the player civic position',
+      (tester) async {
+    const state = EarthState({
+      'human': {'id': 'H-1', 'standing': 420},
+      'membership': {
+        'status': 'citizen',
+        'voting_eligible': true,
+        'obligations': 'Annual civic contribution',
+      },
+      'institutions': {
+        'city': {'name': 'Aurelia'}
+      },
+      'governance': {
+        'proposals': [{}]
+      },
+      'roles': [
+        {'human_id': 'H-1', 'name': 'Community Delegate'},
+      ],
+      'communities': [{}],
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: Column(children: [
+            CivicStatusPanel(state: state),
+            CivicInfluencePanel(state: state),
+          ]),
+        ),
+      ),
+    ));
+
+    expect(find.text('CIVIC STATUS'), findsOneWidget);
+    expect(find.text('AURELIA'), findsOneWidget);
+    expect(find.text('ELIGIBLE'), findsOneWidget);
+    expect(find.text('YOUR CIVIC INFLUENCE'), findsOneWidget);
+    expect(find.text('OFFICES HELD'), findsOneWidget);
   });
 }

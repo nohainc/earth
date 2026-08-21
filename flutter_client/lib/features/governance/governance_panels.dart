@@ -6,6 +6,172 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'governance_dialogs.dart';
 
+class CivicStatusPanel extends StatelessWidget {
+  final EarthState state;
+
+  const CivicStatusPanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final human = state.human;
+    final membership = state.membership;
+    final city = state.institutions['city'];
+    final cityMap = city is Map
+        ? Map<String, dynamic>.from(city)
+        : const <String, dynamic>{};
+    final citizenship = membership?['status']?.toString() ??
+        membership?['type']?.toString() ??
+        'Independent citizen';
+    final standing =
+        human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
+    final voting =
+        membership?['voting_eligible'] ?? membership?['votingEligible'] ?? true;
+    final obligations = membership?['obligations']?.toString() ??
+        'Review current laws and tax obligations';
+
+    return EarthPanel(
+      title: 'CIVIC STATUS',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Your current place in the civic system: residency, standing, voting access, and obligations.\n\n• These details explain what you can do in governance today.\n\n• City services and detailed membership history remain on City & Services and your personal record.',
+      child: Wrap(
+        spacing: 10,
+        runSpacing: 10,
+        children: [
+          _statusTile(
+              'RESIDENCY',
+              cityMap['name']?.toString().toUpperCase() ?? 'INDEPENDENT',
+              Icons.location_city_outlined,
+              cyanAccentColor),
+          _statusTile('CITIZENSHIP', citizenship.toUpperCase(),
+              Icons.badge_outlined, violetColor),
+          _statusTile(
+              'VOTING',
+              voting == true ? 'ELIGIBLE' : 'RESTRICTED',
+              Icons.how_to_vote_outlined,
+              voting == true ? Colors.tealAccent : Colors.orangeAccent),
+          _statusTile('STANDING', standing.toString(),
+              Icons.trending_up_outlined, Colors.amberAccent),
+          SizedBox(
+              width: 250,
+              child: Text('Current obligation: $obligations',
+                  style: const TextStyle(color: mutedColor, fontSize: 10.5))),
+        ],
+      ),
+    );
+  }
+
+  Widget _statusTile(String label, String value, IconData icon, Color color) {
+    return Container(
+      width: 135,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: .28))),
+      child: Row(children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 7),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: const TextStyle(
+                  color: mutedColor,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text(value,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w800)),
+        ])),
+      ]),
+    );
+  }
+}
+
+class CivicInfluencePanel extends StatelessWidget {
+  final EarthState state;
+
+  const CivicInfluencePanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final heldRoles = state.roles
+        .where((raw) =>
+            raw is Map &&
+            raw['human_id']?.toString() == state.human['id']?.toString())
+        .length;
+    final proposals =
+        (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
+    final communities = state.communities.length;
+    return EarthPanel(
+      title: 'YOUR CIVIC INFLUENCE',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Influence grows through participation, public responsibility, and relationships.\n\n• Voting, holding office, joining communities, and sponsoring proposals are different ways to shape the world.\n\n• This is a direction for play, not a leaderboard.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        const Text('Choose how you want to matter in public life.',
+            style: TextStyle(
+                color: inkColor, fontSize: 12, fontWeight: FontWeight.w700)),
+        const SizedBox(height: 10),
+        Wrap(spacing: 10, runSpacing: 10, children: [
+          _influenceTile(
+              'OFFICES HELD', '$heldRoles', Icons.account_balance_outlined),
+          _influenceTile('OPEN DECISIONS', '$proposals', Icons.gavel_outlined),
+          _influenceTile('COMMUNITIES', '$communities', Icons.groups_outlined),
+        ]),
+        const SizedBox(height: 10),
+        const Text(
+            'Possible paths: independent citizen · community leader · business-backed politician · city administrator · legal or planetary delegate.',
+            style: TextStyle(color: mutedColor, fontSize: 10.5)),
+      ]),
+    );
+  }
+
+  Widget _influenceTile(String label, String value, IconData icon) {
+    return Container(
+      width: 135,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+        color: surfaceColor.withValues(alpha: .75),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.white10),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, size: 15, color: cyanAccentColor),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label,
+                    style: const TextStyle(
+                        color: mutedColor,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800)),
+                Text(value,
+                    style: const TextStyle(
+                        color: inkColor,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w800)),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class ProposalPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -36,9 +202,11 @@ class ProposalPanel extends StatelessWidget {
         (proposal['votes'] as Map<String, dynamic>?) ?? const {});
     final hasProposal = proposal['id'].toString().isNotEmpty;
     final proposalId = proposal['id'].toString();
-    final isPassed = proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
-    final executionStatus =
-        (proposal['execution_status']?.toString() ?? (isPassed ? 'ready' : 'pending')).toLowerCase();
+    final isPassed =
+        proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
+    final executionStatus = (proposal['execution_status']?.toString() ??
+            (isPassed ? 'ready' : 'pending'))
+        .toLowerCase();
     final isChallenged = executionStatus == 'challenged';
     final isVoided =
         executionStatus == 'voided' || proposal['outcome'] == 'voided';
@@ -47,12 +215,18 @@ class ProposalPanel extends StatelessWidget {
     final currentDay = asIntOr(state.clock['day'], 1);
     final implDay = asInt(proposal['implementation_game_day']) ??
         (proposal['implementation_delay_days'] != null
-            ? (asInt(proposal['resolved_game_day']) ?? currentDay) + asInt(proposal['implementation_delay_days'])!
+            ? (asInt(proposal['resolved_game_day']) ?? currentDay) +
+                asInt(proposal['implementation_delay_days'])!
             : (isPassed ? currentDay : null));
-    final delayDaysRemaining = (implDay != null && currentDay < implDay && isPassed)
-        ? (implDay - currentDay)
-        : 0;
-    final isCoolingOff = isPassed && delayDaysRemaining > 0 && !isChallenged && !isVoided && !isExecuted;
+    final delayDaysRemaining =
+        (implDay != null && currentDay < implDay && isPassed)
+            ? (implDay - currentDay)
+            : 0;
+    final isCoolingOff = isPassed &&
+        delayDaysRemaining > 0 &&
+        !isChallenged &&
+        !isVoided &&
+        !isExecuted;
 
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
@@ -81,7 +255,8 @@ class ProposalPanel extends StatelessWidget {
     if (isVoided) statusColor = Colors.redAccent;
     if (isExecuted) statusColor = Colors.greenAccent;
     if (isCoolingOff) statusColor = Colors.amberAccent;
-    if (isPassed && !isCoolingOff && !isChallenged && !isVoided && !isExecuted) statusColor = Colors.tealAccent;
+    if (isPassed && !isCoolingOff && !isChallenged && !isVoided && !isExecuted)
+      statusColor = Colors.tealAccent;
 
     return EarthPanel(
       title: 'UC PROPOSAL ${hasProposal ? proposal['id'] : ''}',
@@ -144,8 +319,7 @@ class ProposalPanel extends StatelessWidget {
                                     color: statusColor.withValues(alpha: .15),
                                     borderRadius: BorderRadius.circular(4),
                                     border: Border.all(
-                                      color:
-                                          statusColor.withValues(alpha: .35),
+                                      color: statusColor.withValues(alpha: .35),
                                     ),
                                   ),
                                   child: Text(
@@ -177,15 +351,20 @@ class ProposalPanel extends StatelessWidget {
                           if (isCoolingOff) ...[
                             const SizedBox(height: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color: Colors.amberAccent.withValues(alpha: .12),
+                                color:
+                                    Colors.amberAccent.withValues(alpha: .12),
                                 borderRadius: BorderRadius.circular(4),
-                                border: Border.all(color: Colors.amberAccent.withValues(alpha: .3)),
+                                border: Border.all(
+                                    color: Colors.amberAccent
+                                        .withValues(alpha: .3)),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.timer_outlined, size: 13, color: Colors.amberAccent),
+                                  const Icon(Icons.timer_outlined,
+                                      size: 13, color: Colors.amberAccent),
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
@@ -204,8 +383,8 @@ class ProposalPanel extends StatelessWidget {
                           if (proposal['deadline'] is Map) ...[
                             const SizedBox(height: 4),
                             Text(
-                              formatProposalDeadline(proposal['deadline']
-                                  as Map<String, dynamic>),
+                              formatProposalDeadline(
+                                  proposal['deadline'] as Map<String, dynamic>),
                               style: const TextStyle(
                                 color: Colors.orangeAccent,
                                 fontSize: 11,
@@ -339,18 +518,25 @@ class ProposalPanel extends StatelessWidget {
                   !isExecuted)
                 FilledButton.icon(
                   style: FilledButton.styleFrom(
-                    backgroundColor: isCoolingOff ? Colors.amberAccent : cyanAccentColor,
+                    backgroundColor:
+                        isCoolingOff ? Colors.amberAccent : cyanAccentColor,
                     foregroundColor: Colors.black,
                   ),
                   onPressed: busy || isCoolingOff
                       ? null
                       : () => action(
                           () => const EarthApi().executeProposal(proposalId)),
-                  icon: Icon(isCoolingOff ? Icons.lock_clock_outlined : Icons.check_circle_outline, size: 14),
+                  icon: Icon(
+                      isCoolingOff
+                          ? Icons.lock_clock_outlined
+                          : Icons.check_circle_outline,
+                      size: 14),
                   label: Text(
-                    isCoolingOff ? 'COOLING-OFF (DAY $implDay)' : 'EXECUTE PROPOSAL',
-                    style:
-                        const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
+                    isCoolingOff
+                        ? 'COOLING-OFF (DAY $implDay)'
+                        : 'EXECUTE PROPOSAL',
+                    style: const TextStyle(
+                        fontSize: 10.5, fontWeight: FontWeight.w800),
                   ),
                 ),
               if (hasProposal &&
@@ -382,8 +568,8 @@ class ProposalPanel extends StatelessWidget {
                   ),
                   onPressed: busy
                       ? null
-                      : () => showAppealRulingDialog(
-                          context, action, proposalId),
+                      : () =>
+                          showAppealRulingDialog(context, action, proposalId),
                   icon: const Icon(Icons.balance_outlined, size: 14),
                   label: const Text(
                     'ISSUE RULING',
@@ -501,8 +687,8 @@ class RolesPanel extends StatelessWidget {
                                   color: cyanAccentColor.withValues(alpha: .15),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
-                                      color:
-                                          cyanAccentColor.withValues(alpha: .3)),
+                                      color: cyanAccentColor.withValues(
+                                          alpha: .3)),
                                 ),
                                 child: const Text(
                                   'ASSIGNED TO YOU',
@@ -545,8 +731,7 @@ class RolesPanel extends StatelessWidget {
                                   visualDensity: VisualDensity.compact,
                                   foregroundColor: violetColor,
                                   side: BorderSide(
-                                      color:
-                                          violetColor.withValues(alpha: .3)),
+                                      color: violetColor.withValues(alpha: .3)),
                                   padding: const EdgeInsets.symmetric(
                                       horizontal: 8, vertical: 2),
                                 ),
@@ -628,13 +813,13 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
         ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
 
     return EarthPanel(
-      title: 'PUBLIC FINANCE / GOVERNANCE',
+      title: 'LAWS IN FORCE / TAXES & PUBLIC SERVICES',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Public Finance & Municipal Treasury: Statutory fiscal rules and public expenditure budgets funding planetary health, universal basic services, and municipal infrastructure.\n\n• Tax Rule System: Universal citizen tax rates evaluated across personal income, corporate surplus, asset transfers, and resource extraction.\n\n• Public Fund Routing: Citizens serving as City Mayors or City Planners possess authority to deploy UC municipal funds directly into public service operations.',
+          '• These are the rules currently shaping taxes and public services.\n\n• Review what you pay, what public systems receive, and how the rules affect your work, business, and residency.\n\n• Detailed municipal treasury controls belong in City & Services.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -645,7 +830,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: surfaceColor.withValues(alpha: .78),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.orangeAccent.withValues(alpha: .3)),
+              border:
+                  Border.all(color: Colors.orangeAccent.withValues(alpha: .3)),
             ),
             child: const Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -753,8 +939,7 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
           OutlinedButton.icon(
             style: OutlinedButton.styleFrom(
               foregroundColor: cyanAccentColor,
-              side:
-                  BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
+              side: BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
             ),
             onPressed: busy
                 ? null
@@ -807,8 +992,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
                     icon: const Icon(Icons.send_rounded, size: 14),
                     label: const Text(
                       'FUND CITY SERVICES FROM UC · 100 C',
-                      style: TextStyle(
-                          fontSize: 10, fontWeight: FontWeight.w800),
+                      style:
+                          TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
                     ),
                   ),
                 ],

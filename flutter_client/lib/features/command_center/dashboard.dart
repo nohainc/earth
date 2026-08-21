@@ -522,6 +522,8 @@ class Dashboard extends StatelessWidget {
             builder: (context, constraints) {
               final proposal =
                   ProposalPanel(state: state, busy: busy, action: action);
+              final civicStatus = CivicStatusPanel(state: state);
+              final civicInfluence = CivicInfluencePanel(state: state);
               final roles =
                   RolesPanel(state: state, busy: busy, action: action);
               final publicFinance = PublicFinanceGovernancePanel(
@@ -529,10 +531,6 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final membership = CivicMembershipHistoryPanel(
-                  membershipEvents: membershipEvents);
-              final authority =
-                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -541,11 +539,13 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          civicStatus,
+                          const SizedBox(height: 34),
                           proposal,
                           const SizedBox(height: 34),
-                          roles,
+                          civicInfluence,
                           const SizedBox(height: 34),
-                          membership,
+                          roles,
                         ],
                       ),
                     ),
@@ -555,8 +555,6 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           publicFinance,
-                          const SizedBox(height: 34),
-                          authority,
                         ],
                       ),
                     ),
@@ -566,15 +564,16 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  civicStatus,
+                  const SizedBox(height: 34),
                   proposal,
+                  const SizedBox(height: 34),
+                  civicInfluence,
                   const SizedBox(height: 34),
                   roles,
                   const SizedBox(height: 34),
                   publicFinance,
                   const SizedBox(height: 34),
-                  membership,
-                  const SizedBox(height: 34),
-                  authority,
                 ],
               );
             },
