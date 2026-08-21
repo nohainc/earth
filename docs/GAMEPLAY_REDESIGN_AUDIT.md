@@ -66,6 +66,10 @@ direction exists but gameplay or backend support is incomplete.
 - PostgreSQL remains authoritative for the Worker API and economic outcomes.
 - Client recommendations must not silently execute sensitive actions.
 - UI should present a decision before supporting analysis.
+- Dynasty scope is intentionally institutional rather than domestic: succession,
+  laboratory-created future descendants, estates, heirlooms, and legacy are in
+  scope; spouse, parent, and user-to-user child relationships are not. Social
+  connections remain friend/partner communication and messaging features.
 - Future AI-assisted work follows [`AI_DEVELOPMENT_GUIDE.md`](AI_DEVELOPMENT_GUIDE.md).
 
 ## Final verification
