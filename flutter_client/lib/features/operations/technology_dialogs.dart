@@ -9,6 +9,13 @@ Future<void> showResearchComposerDialog(BuildContext context,
   String name = 'Automated Assembly';
   final budget = TextEditingController(text: '240');
   String focus = 'efficiency';
+  int minimumBudget(String technology) => const {
+        'Automated Assembly': 240,
+        'Clean Energy Systems': 320,
+        'Food Synthesis': 280,
+        'Predictive Maintenance': 300,
+        'Civic Network Infrastructure': 360,
+      }[technology] ?? 240;
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -39,8 +46,8 @@ Future<void> showResearchComposerDialog(BuildContext context,
                           controller: budget,
                           keyboardType:
                               const TextInputType.numberWithOptions(decimal: true),
-                          decoration: const InputDecoration(
-                              labelText: 'Initial budget (minimum 240 C)'),
+                          decoration: InputDecoration(
+                              labelText: 'Initial budget (minimum ${minimumBudget(name)} C)'),
                           onChanged: (_) => setState(() {})),
                       const SizedBox(height: 10),
                       DropdownButtonFormField<String>(
@@ -78,8 +85,7 @@ Future<void> showResearchComposerDialog(BuildContext context,
                   FilledButton(
                       onPressed: () async {
                         final amount = double.tryParse(budget.text.trim());
-                        if (amount == null ||
-                            amount < 240) {
+                        if (amount == null || amount < minimumBudget(name)) {
                           return;
                         }
                         await action(() => const EarthApi().startResearch(
