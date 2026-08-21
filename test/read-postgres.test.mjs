@@ -8,6 +8,7 @@ import {
   auditWorld,
   listInstitutions,
   listRankings,
+  listTechnology,
 } from '../cloudflare/src/read-postgres.ts';
 
 class MockDbClient {
@@ -45,6 +46,21 @@ test('listNotifications queries user notifications and counts unread', async () 
   const result = await listNotifications(repo, 'H-001', 10);
   assert.equal(result.notifications.length, 1);
   assert.equal(result.unread, 1);
+});
+
+test('listTechnology scopes private records to the current human', async () => {
+  const client = new MockDbClient({
+    'FROM research_projects WHERE owner_id': { rows: [{ id: 'PROJECT-1', owner_id: 'H-001' }], rowCount: 1 },
+    'FROM patents': { rows: [{ id: 'PAT-1', owner_id: 'H-001' }], rowCount: 1 },
+    'FROM technology_licenses': { rows: [{ id: 'LIC-1', licensee_id: 'H-001' }], rowCount: 1 },
+  });
+  const repo = new PostgresRepository(client);
+
+  const result = await listTechnology(repo, 'H-001');
+  assert.equal(result.projects.length, 1);
+  assert.equal(result.patents.length, 1);
+  assert.equal(result.licenses.length, 1);
+  assert.ok(client.calls.filter((call) => call.params.includes('H-001')).length >= 3);
 });
 
 test('markNotificationRead updates timestamp', async () => {
