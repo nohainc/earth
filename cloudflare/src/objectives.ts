@@ -72,7 +72,26 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     iconName: 'business_center',
   });
 
-  // 2. Become a major civic delegate
+  // 2. Build a productive food reserve
+  const foodReserve = Math.max(0, num(input.resources?.food, 0));
+  const targetFoodReserve = 500;
+  const foodProgress = Math.min(100, Math.round((foodReserve / targetFoodReserve) * 100));
+  objectives.push({
+    id: 'obj-food-security',
+    category: 'enterprise',
+    title: 'Build a Self-Sustaining Food Reserve',
+    description: 'Use productive assets and food systems to maintain a 500-unit reserve that protects your household and businesses from supply shocks.',
+    currentValue: foodReserve,
+    targetValue: targetFoodReserve,
+    progressPercentage: foodProgress,
+    metricLabel: `${Math.round(foodReserve).toLocaleString()} / ${targetFoodReserve.toLocaleString()} Food Units`,
+    status: foodProgress >= 100 ? 'completed' : 'in_progress',
+    rewardDescription: 'Title: "Food Systems Steward" · +200 Legacy Points · Reduced emergency supply costs',
+    targetSection: 'business',
+    iconName: 'restaurant',
+  });
+
+  // 3. Become a major civic delegate
   const votingWeight = Math.max(
     num(input.governance?.voting_weight, 0),
     num(input.human?.voting_weight, 1)
