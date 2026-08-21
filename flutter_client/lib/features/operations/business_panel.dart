@@ -1151,7 +1151,12 @@ class BusinessPanel extends StatelessWidget {
                           onPressed: busy
                               ? null
                               : () =>
-                                  showBusinessComposerDialog(context, action),
+                                  showBusinessComposerDialog(
+                                    context,
+                                    action,
+                                    hasCity: state.membership?['city_id'] != null,
+                                    hasCorporation: state.membership?['corporation_id'] != null,
+                                  ),
                         ),
                         _actionButton(
                           label: 'RECEIVERSHIP & WORKOUT',

@@ -288,10 +288,11 @@ Future<void> showShareIssueDialog(
 }
 
 Future<void> showBusinessComposerDialog(BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action) async {
+    Future<void> Function(Future<EarthState> Function()) action,
+    {bool hasCity = false, bool hasCorporation = false}) async {
   final name = TextEditingController();
   String sector = 'maintenance';
-  const sectors = [
+  const allSectors = [
     'energy',
     'extraction',
     'components',
@@ -306,6 +307,9 @@ Future<void> showBusinessComposerDialog(BuildContext context,
     'healthcare',
     'education',
   ];
+  final sectors = allSectors.where((item) =>
+      (hasCity || ['components', 'machines', 'maintenance'].contains(item)) &&
+      (hasCorporation || !['it-services', 'consulting', 'logistics', 'healthcare', 'education'].contains(item))).toList();
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -318,7 +322,7 @@ Future<void> showBusinessComposerDialog(BuildContext context,
                           const InputDecoration(labelText: 'Business name')),
                   const SizedBox(height: 10),
                   DropdownButtonFormField<String>(
-                      initialValue: sector,
+                      initialValue: sectors.contains(sector) ? sector : sectors.first,
                       items: sectors
                           .map((item) =>
                               DropdownMenuItem(value: item, child: Text(item)))
