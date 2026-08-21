@@ -33,6 +33,7 @@ export interface ObjectivesEvaluationInput {
   governance?: { proposals_voted?: unknown; voting_weight?: unknown };
   technology?: { research_progress?: unknown; active_patents?: unknown; active_licenses?: unknown };
   dynasty?: { generation?: unknown; perks_count?: unknown; heirlooms_count?: unknown; successor_id?: string | null };
+  projects?: { completed?: unknown };
   resources?: Record<string, unknown>;
   netWorth?: number;
 }
@@ -234,6 +235,25 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     rewardDescription: 'Title: "Planetary Benefactor" · Memorial Monument in Pantheon of Living Legends · +1000 Civic Trust',
     targetSection: 'city',
     iconName: 'volunteer_activism',
+  });
+
+  // Shared projects turn relationships into visible civilization-building.
+  const completedProjects = Math.max(0, num(input.projects?.completed, 0));
+  const projectTarget = 3;
+  const projectProgress = Math.min(100, Math.round((completedProjects / projectTarget) * 100));
+  objectives.push({
+    id: 'obj-civic-project-builder',
+    category: 'civic',
+    title: 'Build With Your Community',
+    description: 'Complete three shared city or corporation projects that leave a lasting improvement for the people around your dynasty.',
+    currentValue: completedProjects,
+    targetValue: projectTarget,
+    progressPercentage: projectProgress,
+    metricLabel: `${completedProjects} / ${projectTarget} Shared Projects Completed`,
+    status: projectProgress >= 100 ? 'completed' : 'in_progress',
+    rewardDescription: 'Title: "Commonwealth Builder" · +300 Legacy Points · Stronger institutional project influence',
+    targetSection: 'activity',
+    iconName: 'construction',
   });
 
   return objectives;
