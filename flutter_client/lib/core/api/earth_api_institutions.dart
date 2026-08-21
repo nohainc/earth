@@ -2,6 +2,14 @@ part of 'earth_api.dart';
 
 extension EarthApiInstitutions on EarthApi {
 
+  Future<List<Map<String, dynamic>>> listCities() async {
+    final response = (await _request('/api/cities')) as Map<String, dynamic>;
+    return (response['cities'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
   Future<EarthState> setCityBudget(String category,
       {String cityId = 'CITY-0084'}) async {
     await _request('/api/cities/$cityId/budget', method: 'POST', body: {

@@ -39,6 +39,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
   final _nameController = TextEditingController();
   late final TextEditingController _dynastyController;
   String _selectedCity = 'CITY-0084';
+  List<Map<String, dynamic>> _cities = const [];
   bool _submitting = false;
   String? _error;
 
@@ -58,6 +59,23 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
           ? 'Founding Dynasty'
           : existingDynasty,
     );
+    _loadCities();
+  }
+
+  Future<void> _loadCities() async {
+    try {
+      final cities = await widget.api.listCities();
+      if (!mounted || cities.isEmpty) return;
+      final selected = cities.any((city) => city['id']?.toString() == _selectedCity)
+          ? _selectedCity
+          : cities.first['id']?.toString() ?? _selectedCity;
+      setState(() {
+        _cities = cities;
+        _selectedCity = selected;
+      });
+    } catch (_) {
+      // Keep the known starter-city fallback when the catalog is unavailable.
+    }
   }
 
   Future<void> _submitRebirth() async {
@@ -368,15 +386,17 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                         fillColor: EarthColors.panelSurface,
                       ),
                       dropdownColor: EarthColors.cardSurface,
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'CITY-0084',
-                            child:
-                                Text('New Carthage (Founding City)')),
-                        DropdownMenuItem(
-                            value: 'city-singapore',
-                            child: Text('Singapore (Maritime & Logistics)')),
-                      ],
+                      items: (_cities.isEmpty
+                              ? const [
+                                  {'id': 'CITY-0084', 'name': 'New Carthage (Founding City)'},
+                                  {'id': 'city-singapore', 'name': 'Singapore (Maritime & Logistics)'},
+                                ]
+                              : _cities)
+                          .map((city) => DropdownMenuItem<String>(
+                                value: city['id']?.toString(),
+                                child: Text(city['name']?.toString() ?? city['id']?.toString() ?? 'City'),
+                              ))
+                          .toList(),
                       onChanged: (val) {
                         if (val != null) setState(() => _selectedCity = val);
                       },
