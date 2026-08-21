@@ -16,6 +16,26 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
   final _name = TextEditingController();
   final _humanId = TextEditingController();
   final _estateDays = TextEditingController(text: '30');
+  List<Map<String, dynamic>> _candidates = const [];
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCandidates();
+  }
+
+  Future<void> _loadCandidates() async {
+    try {
+      final result = await const EarthApi().socialDirectory();
+      final humans = (result['humans'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+      if (mounted) setState(() => _candidates = humans);
+    } catch (_) {
+      // Manual Human ID entry remains available if the directory is offline.
+    }
+  }
 
   @override
   void dispose() {
@@ -47,6 +67,31 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
               ),
             ),
             const SizedBox(height: 10),
+            if (_candidates.isNotEmpty) ...[
+              const Text('Choose an active person', style: TextStyle(fontSize: 11, color: mutedColor)),
+              const SizedBox(height: 6),
+              SizedBox(
+                height: 42,
+                child: ListView(
+                  scrollDirection: Axis.horizontal,
+                  children: _candidates.map((candidate) {
+                    final id = candidate['id']?.toString() ?? '';
+                    final name = candidate['display_name']?.toString() ?? id;
+                    return Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ActionChip(
+                        label: Text('$name ($id)', style: const TextStyle(fontSize: 10)),
+                        onPressed: () {
+                          _humanId.text = id;
+                          _name.text = name;
+                        },
+                      ),
+                    );
+                  }).toList(),
+                ),
+              ),
+              const SizedBox(height: 6),
+            ],
             TextField(
               controller: _humanId,
               textCapitalization: TextCapitalization.characters,
