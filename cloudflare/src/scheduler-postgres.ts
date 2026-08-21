@@ -459,14 +459,11 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
     const bestCity = scoredCities.reduce((prev, curr) => (curr.totalScore > prev.totalScore ? curr : prev), scoredCities[0]);
     const worstCity = scoredCities.reduce((prev, curr) => (curr.totalScore < prev.totalScore ? curr : prev), scoredCities[0]);
     if (bestCity.id !== worstCity.id && bestCity.totalScore >= 0.8 && worstCity.totalScore < 0.6 && Number(worstCity.residents) > 5) {
-      const migrant = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 LIMIT 1 FOR UPDATE', [worstCity.id]);
-      if (migrant.rows[0]) {
-        await tx.query('UPDATE memberships SET city_id = $1 WHERE human_id = $2', [bestCity.id, migrant.rows[0].human_id]);
-        await tx.query('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = $1) WHERE id = $1', [worstCity.id]);
-        await tx.query('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = $1) WHERE id = $1', [bestCity.id]);
-        await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CITY',$3,'joined',$4,'economic_migration')", [crypto.randomUUID(), migrant.rows[0].human_id, bestCity.id, day]);
-        await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [`MIGRATION-${migrant.rows[0].human_id}-${day}`, migrant.rows[0].human_id, 'institution', 'Relocated to higher-opportunity city', `You migrated from ${worstCity.id} to ${bestCity.id} due to superior municipal infrastructure and health services.`, bestCity.id]);
-      }
+      // A better city creates an opportunity, not an automatic transfer.
+      // Residence is a core player choice: moving changes services, rules,
+      // corporation affiliation, and the dynasty's long-term identity.
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING', [`MIGRATION-OPPORTUNITY-${worstCity.id}-${bestCity.id}-${day}`, day, 'city.migration_opportunity', `Residents of ${worstCity.id} can consider moving to ${bestCity.id}`, toNanoMarkup({ fromCityId: worstCity.id, toCityId: bestCity.id, fromScore: worstCity.totalScore, toScore: bestCity.totalScore })]);
+      await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) SELECT 'MIGRATION-OPPORTUNITY-' || $1 || '-' || human_id, human_id, 'institution', 'A better city is available', $2, $1 FROM memberships WHERE city_id = $1 ON CONFLICT DO NOTHING", [worstCity.id, `City ${bestCity.id} currently offers stronger services. Review the City page if you want to move; no transfer happens automatically.`]);
     }
   }
 }
