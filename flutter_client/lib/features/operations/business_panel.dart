@@ -22,6 +22,7 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final business = activeBusiness ?? state.business;
+    final businessId = business['id']?.toString();
     final fin = businessFinancials['business'] is Map
         ? Map<String, dynamic>.from(businessFinancials['business'] as Map)
         : businessFinancials;
@@ -37,10 +38,10 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
     final workforce = state.json['workforce'] is List
         ? (state.json['workforce'] as List)
             .whereType<Map>()
-            .where((item) => item['status']?.toString() == 'active')
+            .where((item) => item['status']?.toString() == 'active' && (businessId == null || item['business_id'] == null || item['business_id']?.toString() == businessId))
             .length
         : 0;
-    final machineCount = state.machines.length;
+    final machineCount = state.machines.whereType<Map>().where((item) => businessId == null || item['business_id'] == null || item['business_id']?.toString() == businessId).length;
     final policy = (business['policy'] ??
             businessProfile['policy'] ??
             'No operating direction chosen')
@@ -223,7 +224,7 @@ class BusinessPanel extends StatelessWidget {
             ? state.json['workforce'] as List
             : const [])
         .whereType<Map>()
-        .where((employee) => employee['status']?.toString() == 'active')
+        .where((employee) => employee['status']?.toString() == 'active' && (businessId == null || employee['business_id'] == null || employee['business_id']?.toString() == businessId))
         .toList();
     final payroll = workforce.fold<double>(
         0, (sum, employee) => sum + asDoubleOr(employee['wage'], 0));
