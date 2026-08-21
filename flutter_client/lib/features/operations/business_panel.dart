@@ -266,7 +266,7 @@ class BusinessPanel extends StatelessWidget {
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.\n\n• Unit Economics & Financial Statement:\n  - OPERATING REVENUE: Gross product sales from market batches and executed contracts.\n  - OPERATING COSTS: Combined raw inputs, power, maintenance reserves, and civic taxes.\n  - NET PROFIT / CYCLE: Net operating income with margin % and cost structure ratio breakdown.\n  - TAX ASSESSMENT BASE: Audited canonical taxable turnover.\n\n• Cap Table & Governance: Share distribution across equity holders, controller designation, and constitutional thresholds (Shareholder vote %, Board approval %, Dilution notice days).\n\n• Corporate Action Hub: Execute dividend distributions, equity transfers, share issuance, mergers, managerial appointments, and enterprise liquidation.',
+          '• Keep the business earning more than it spends.\n\n• Watch machine condition, staff capacity, contracts, and cash flow.\n\n• Use the actions below to maintain operations, expand ownership, pay shareholders, or respond to distress.\n\n• Detailed accounting and governance data is available in the relevant sections when you need it.',
       child: LayoutBuilder(
         builder: (context, constraints) {
           final width = constraints.maxWidth;
@@ -279,7 +279,7 @@ class BusinessPanel extends StatelessWidget {
                 context,
                 'ENTERPRISE OPERATIONS / $businessName',
                 description:
-                    '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.',
+                    '• Decide what this business should improve next: income, reliability, capacity, or ownership.',
               ),
               if (portfolio.length > 1) ...[
                 _businessPortfolio(portfolio),
