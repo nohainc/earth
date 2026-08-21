@@ -46,7 +46,7 @@ class MachinesPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Fleet Inventory: Total count of active, idle, and decommissioned machines.\n\n• Machine Telemetry Indicators:\n  - Physical Condition: Structural wear percentage. Below 35% risks critical failure; below 75% increases power draw.\n  - Utilization Rate: Current workload percentage relative to maximum operational speed.\n  - Productive Capacity: Output scaling multiplier.\n  - Conversion Rates: Required input raw materials consumed per cycle to synthesize output products.\n  - Maintenance Due: Countdown of operational cycles until compulsory preventative overhaul.\n\n• Fleet Actions: Dispatch maintenance, acquire new machinery from catalog, or sell idle units.',
+          '• Fleet Inventory: Total count of active, idle, and decommissioned machines.\n\n• Machine Telemetry Indicators:\n  - Physical Condition: Structural wear percentage. Below 35% risks critical failure; below 75% increases power draw.\n  - Utilization Rate: Current workload percentage relative to maximum operational speed.\n  - Productive Capacity: Output scaling multiplier.\n  - Conversion Rates: Required input raw materials consumed per cycle to synthesize output products.\n  - Maintenance Due: Countdown of operational cycles until compulsory preventative overhaul.\n\n• Fleet Actions: Dispatch maintenance, acquire new machinery from the catalog, assign units to a business workplace, or sell idle units. Machine upgrades are researched and authorized through a city affiliation.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

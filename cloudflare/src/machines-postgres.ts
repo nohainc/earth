@@ -61,6 +61,10 @@ export async function setMachineUtilization(repository: PostgresRepository, inpu
 
 export async function upgradeMachine(repository: PostgresRepository, input: { machineId: string; ownerId: string; correlationId: string; creditCost: number; componentsCost: number }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
+    const membership = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1 FOR UPDATE', [input.ownerId]);
+    if (!membership.rows[0]?.city_id) {
+      throw new Error('Machine upgrades require an active city affiliation');
+    }
     const prior = await tx.query<{ id: string }>("SELECT id FROM ledger_entries WHERE reason_type = 'machine_upgrade' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, eventId: prior.rows[0].id, machine: (await tx.query('SELECT * FROM machines WHERE id = $1', [input.machineId])).rows[0], correlationId: input.correlationId };
     const machine = await tx.query<{ id: string; name: string; productive_capacity: string }>('SELECT id, name, productive_capacity FROM machines WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.machineId, input.ownerId]);
