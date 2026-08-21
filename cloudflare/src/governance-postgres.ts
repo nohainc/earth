@@ -58,7 +58,9 @@ export async function castVote(repository: PostgresRepository, input: { proposal
     if (!(await eligible(tx, input.humanId, proposal.rows[0].institution_id))) throw new Error('Human is not eligible to vote at this institution');
     const representation = await tx.query<{ member_count: string | null; residents: string | null }>('SELECT corporations.member_count, cities.residents FROM memberships LEFT JOIN corporations ON corporations.id = memberships.corporation_id LEFT JOIN cities ON cities.id = memberships.city_id WHERE memberships.human_id = $1 LIMIT 1', [input.humanId]);
     const population = Number(representation.rows[0]?.member_count ?? representation.rows[0]?.residents ?? 0);
-    const weight = Math.round((1 + Math.min(2, population / 100)) * 1000) / 1000;
+    const diplomaticPerk = await tx.query("SELECT 1 FROM auth_credentials ac JOIN dynasties d ON d.email = ac.email JOIN dynasty_perks dp ON dp.dynasty_id = d.id WHERE ac.human_id = $1 AND dp.perk_key = 'diplomatic_dynasty' LIMIT 1", [input.humanId]);
+    const dynastyInfluence = diplomaticPerk.rows[0] ? 1.15 : 1;
+    const weight = Math.round((1 + Math.min(2, population / 100)) * dynastyInfluence * 1000) / 1000;
     try {
       await tx.query('INSERT INTO ballots (proposal_id, human_id, choice, weight) VALUES ($1,$2,$3,$4)', [input.proposalId, input.humanId, input.choice, weight]);
     } catch (_error) {
