@@ -115,6 +115,10 @@ class MachinesPanel extends StatelessWidget {
                       .toUpperCase();
               final status =
                   (machine['status']?.toString() ?? 'active').toLowerCase();
+              final businessName = machine['business_name']?.toString();
+              final workplace = businessName == null || businessName.isEmpty
+                  ? 'PERSONAL WORK UNIT'
+                  : 'WORKPLACE · $businessName';
 
               final isInactive = status == 'sold' ||
                   status == 'recycled' ||
@@ -155,6 +159,18 @@ class MachinesPanel extends StatelessWidget {
                                 'Flow: $inputResource → $outputResource · Capacity: ${capacity.toStringAsFixed(1)}x',
                                 style: const TextStyle(
                                     fontSize: 10, color: mutedColor),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                workplace,
+                                style: TextStyle(
+                                  fontSize: 9,
+                                  letterSpacing: .6,
+                                  fontWeight: FontWeight.w700,
+                                  color: businessName == null
+                                      ? Colors.orangeAccent
+                                      : cyanAccentColor,
+                                ),
                               ),
                             ],
                           ),
