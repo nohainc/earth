@@ -4,7 +4,8 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/operations/technology_panel.dart';
 
 void main() {
-  testWidgets('TechnologyPanel renders research progress, budget, and triggers funding',
+  testWidgets(
+      'TechnologyPanel renders research progress, budget, and triggers funding',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -52,17 +53,18 @@ void main() {
       ),
     );
 
-    expect(find.text('TECHNOLOGY / RESEARCH & PATENTS'), findsOneWidget);
+    expect(find.text('RESEARCH / CURRENT BREAKTHROUGH'), findsOneWidget);
     expect(find.text('ADAPTIVE MAINTENANCE AI'), findsOneWidget);
     expect(find.text('72%'), findsOneWidget);
-    expect(find.textContaining('Focus: efficiency · Budget: 1440 C'), findsOneWidget);
+    expect(find.textContaining('Focus: efficiency · Budget: 1440 C'),
+        findsOneWidget);
     expect(find.text('FUND 240 C'), findsOneWidget);
 
     // Verify info icon is present and opens description dialog
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Research Laboratory'), findsOneWidget);
+    expect(find.textContaining('Choose and fund a capability'), findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
@@ -130,7 +132,8 @@ void main() {
     expect(patentTriggered, isTrue);
   });
 
-  testWidgets('TechnologyPanel renders 24-year statutory patent term and public domain transition',
+  testWidgets(
+      'TechnologyPanel renders 24-year statutory patent term and public domain transition',
       (tester) async {
     const patentState = EarthState({
       'clock': {'day': 40, 'minute': 100},
@@ -175,10 +178,36 @@ void main() {
       ),
     );
 
-    expect(find.text('INTELLECTUAL PROPERTY & 24-YEAR STATUTORY TERM'), findsOneWidget);
+    expect(
+        find.text('COMMERCIAL OPTIONS FOR COMPLETED RESEARCH'), findsOneWidget);
     expect(find.text('PUBLIC DOMAIN TERM'), findsOneWidget);
     expect(find.text('258d remaining'), findsOneWidget);
     expect(find.text('24-year statutory term'), findsOneWidget);
+  });
+
+  testWidgets('TechnologyPortfolioPanel separates research from adoption',
+      (tester) async {
+    const state = EarthState({
+      'technology': {
+        'research': {'name': 'Food Systems AI', 'progress': 100},
+        'adoptedTechnologies': ['Adaptive Irrigation'],
+        'availableTechnologies': [
+          {'name': 'Urban Vertical Farming'},
+        ],
+      },
+      'human': {},
+      'institutions': {},
+      'life': {},
+    });
+
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: TechnologyPortfolioPanel(state: state)),
+    ));
+
+    expect(find.text('TECHNOLOGY PORTFOLIO'), findsOneWidget);
+    expect(find.text('Food Systems AI'), findsWidgets);
+    expect(find.text('Adaptive Irrigation'), findsOneWidget);
+    expect(find.text('Urban Vertical Farming'), findsOneWidget);
   });
 }
 

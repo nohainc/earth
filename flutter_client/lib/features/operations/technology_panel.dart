@@ -6,6 +6,111 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'technology_dialogs.dart';
 
+class TechnologyPortfolioPanel extends StatelessWidget {
+  final EarthState state;
+
+  const TechnologyPortfolioPanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final technology = state.technologyRegistry;
+    final research = technology['research'] is Map
+        ? Map<String, dynamic>.from(technology['research'] as Map)
+        : technology;
+    final name =
+        (research['name'] ?? technology['name'] ?? 'Current research project')
+            .toString();
+    final progress =
+        (asDouble(research['progress']) ?? 0).clamp(0, 100).toStringAsFixed(0);
+    final adopted = _names(technology['adopted'] ??
+        technology['adoptedTechnologies'] ??
+        technology['capabilities']);
+    final available =
+        _names(technology['available'] ?? technology['availableTechnologies']);
+    final applied = adopted.isNotEmpty
+        ? adopted
+        : (progress == '100' ? [name] : <String>[]);
+
+    return EarthPanel(
+      title: 'TECHNOLOGY PORTFOLIO',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Researched does not always mean deployed. A capability must be adopted by a business, city service, or personal life before it changes outcomes.\n\n• Use this view to see what is active, what is ready to adopt, and what still needs investment.\n\n• Patent and licensing choices are secondary ways to benefit from a completed capability.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        _portfolioRow('IN DEVELOPMENT', name, '$progress% complete',
+            Colors.lightBlueAccent),
+        const SizedBox(height: 8),
+        _portfolioRow(
+            'ADOPTED / IN USE',
+            applied.isEmpty ? 'Nothing deployed yet' : applied.join(' · '),
+            applied.isEmpty
+                ? 'Choose where research should matter'
+                : 'Changing current outcomes',
+            cyanAccentColor),
+        const SizedBox(height: 8),
+        _portfolioRow(
+            'READY TO EXPLORE',
+            available.isEmpty
+                ? 'New capabilities will appear as research advances'
+                : available.join(' · '),
+            'Potential next directions',
+            violetColor),
+        const SizedBox(height: 12),
+        const Text(
+            'A breakthrough becomes valuable when you decide where to apply it.',
+            style: TextStyle(color: mutedColor, fontSize: 10.5)),
+      ]),
+    );
+  }
+
+  List<String> _names(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((item) => item is Map
+            ? (item['name'] ?? item['title'] ?? item['id'])?.toString()
+            : item.toString())
+        .whereType<String>()
+        .where((name) => name.isNotEmpty)
+        .toList();
+  }
+
+  Widget _portfolioRow(String label, String value, String note, Color color) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(11),
+      decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: .28))),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(Icons.circle, size: 9, color: color),
+        const SizedBox(width: 8),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: TextStyle(
+                  color: color,
+                  fontSize: 9,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .7)),
+          const SizedBox(height: 3),
+          Text(value,
+              style: const TextStyle(
+                  color: inkColor,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700)),
+          const SizedBox(height: 2),
+          Text(note, style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+        ])),
+      ]),
+    );
+  }
+}
+
 class TechnologyPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -40,8 +145,8 @@ class TechnologyPanel extends StatelessWidget {
     final budget = asDoubleOr(budgetNum, 240.0);
     final isComplete = progress >= 100;
 
-    final activePatents = asIntOr(
-        state.technologyRegistry['activePatents'], isComplete ? 1 : 0);
+    final activePatents =
+        asIntOr(state.technologyRegistry['activePatents'], isComplete ? 1 : 0);
     final activeLicenses =
         asIntOr(state.technologyRegistry['activeLicenses'], 1);
 
@@ -54,18 +159,19 @@ class TechnologyPanel extends StatelessWidget {
     final patentGrantedDay = asIntOr(research['patentGrantedDay'], 1);
     const patentDurationDays = 288; // 24 simulation years (12 sim days/yr)
     final patentExpiryDay = patentGrantedDay + patentDurationDays;
-    final daysToPublicDomain = (patentExpiryDay - currentDay).clamp(0, patentDurationDays);
+    final daysToPublicDomain =
+        (patentExpiryDay - currentDay).clamp(0, patentDurationDays);
     final isPublicDomain = isComplete && daysToPublicDomain <= 0;
 
     return EarthPanel(
       key: panelKey,
-      title: 'TECHNOLOGY / RESEARCH & PATENTS',
+      title: 'RESEARCH / CURRENT BREAKTHROUGH',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Research Laboratory: Choose and fund capabilities that improve the player\'s businesses and future options.\n\n• Focus Specialization:\n  - EFFICIENCY: More output from existing capacity.\n  - DURABILITY: Lower wear and maintenance cost.\n  - SAFETY: Less risk during demanding operations.\n  - COST: Better margins from lower input requirements.\n\n• Intellectual Property: Completed research can become a patent, generate licensing income, or enter the public domain. Physical machines and production decisions belong in Businesses & Operations.',
+          '• Choose and fund a capability that improves your businesses, city, or personal life.\n\n• Before funding, compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, decide where to adopt it and whether to keep it private, patent it, license it, or share it publicly. Physical machines and production decisions belong in Businesses & Operations.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -197,7 +303,8 @@ class TechnologyPanel extends StatelessWidget {
                   child: LinearProgressIndicator(
                     value: progress / 100,
                     minHeight: 8,
-                    color: isComplete ? cyanAccentColor : Colors.lightBlueAccent,
+                    color:
+                        isComplete ? cyanAccentColor : Colors.lightBlueAccent,
                     backgroundColor: Colors.white10,
                   ),
                 ),
@@ -215,8 +322,8 @@ class TechnologyPanel extends StatelessWidget {
                       decoration: BoxDecoration(
                         color: focusColor.withValues(alpha: .12),
                         borderRadius: BorderRadius.circular(4),
-                        border: Border.all(
-                            color: focusColor.withValues(alpha: .3)),
+                        border:
+                            Border.all(color: focusColor.withValues(alpha: .3)),
                       ),
                       child: Row(
                         mainAxisSize: MainAxisSize.min,
@@ -264,7 +371,7 @@ class TechnologyPanel extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              'INTELLECTUAL PROPERTY & 24-YEAR STATUTORY TERM',
+              'COMMERCIAL OPTIONS FOR COMPLETED RESEARCH',
               style: TextStyle(
                 fontSize: 10,
                 letterSpacing: 1.2,
@@ -304,9 +411,15 @@ class TechnologyPanel extends StatelessWidget {
                   _ipMetricCard(
                     width: itemWidth,
                     title: 'PUBLIC DOMAIN TERM',
-                    value: isPublicDomain ? 'PUBLIC DOMAIN' : '${daysToPublicDomain}d remaining',
-                    subtext: isPublicDomain ? '0% open royalty blueprint' : '24-year statutory term',
-                    accent: isPublicDomain ? Colors.lightGreenAccent : Colors.amberAccent,
+                    value: isPublicDomain
+                        ? 'PUBLIC DOMAIN'
+                        : '${daysToPublicDomain}d remaining',
+                    subtext: isPublicDomain
+                        ? '0% open royalty blueprint'
+                        : '24-year statutory term',
+                    accent: isPublicDomain
+                        ? Colors.lightGreenAccent
+                        : Colors.amberAccent,
                     icon: Icons.public_outlined,
                   ),
                 ],
@@ -320,7 +433,7 @@ class TechnologyPanel extends StatelessWidget {
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text(
-              'R&D OPERATIONS & IP MONETIZATION',
+              'RESEARCH DECISIONS',
               style: TextStyle(
                 fontSize: 10,
                 letterSpacing: 1.2,
@@ -347,8 +460,8 @@ class TechnologyPanel extends StatelessWidget {
                   style: FilledButton.styleFrom(
                     backgroundColor: cyanAccentColor,
                     foregroundColor: Colors.black,
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 9),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: busy || isComplete
@@ -368,8 +481,8 @@ class TechnologyPanel extends StatelessWidget {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: inkColor,
                     side: const BorderSide(color: Colors.white24),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 9),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: busy
@@ -388,10 +501,9 @@ class TechnologyPanel extends StatelessWidget {
                 OutlinedButton.icon(
                   style: OutlinedButton.styleFrom(
                     foregroundColor: violetColor,
-                    side: BorderSide(
-                        color: violetColor.withValues(alpha: .4)),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 9),
+                    side: BorderSide(color: violetColor.withValues(alpha: .4)),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: busy || !isComplete
@@ -412,14 +524,14 @@ class TechnologyPanel extends StatelessWidget {
                     foregroundColor: cyanAccentColor,
                     side: BorderSide(
                         color: cyanAccentColor.withValues(alpha: .3)),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 9),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: busy
                       ? null
-                      : () => action(
-                          () => const EarthApi().licenseTechnology()),
+                      : () =>
+                          action(() => const EarthApi().licenseTechnology()),
                   icon: const Icon(Icons.share_outlined, size: 15),
                   label: const Text(
                     'LICENSE (5%)',
@@ -435,8 +547,8 @@ class TechnologyPanel extends StatelessWidget {
                     foregroundColor: Colors.tealAccent,
                     side: BorderSide(
                         color: Colors.tealAccent.withValues(alpha: .3)),
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 9),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
                   onPressed: busy

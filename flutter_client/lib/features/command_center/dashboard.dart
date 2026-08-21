@@ -646,14 +646,15 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
+              final portfolio = TechnologyPortfolioPanel(state: state);
               final matrix = EarthPanel(
-                title: 'RESEARCH IMPACT / CAPABILITY ROADMAP',
+                title: 'CHOOSE A RESEARCH DIRECTION',
                 showSurface: false,
                 contentPadding: EdgeInsets.zero,
                 helpAfterTitle: true,
                 titleColor: mutedColor,
                 infoDescription:
-                    '• Capability Roadmap: See how research changes the player\'s organizations and life.\n\n• Research outcomes:\n  - EFFICIENCY: More output from the same staff and machines.\n  - DURABILITY: Fewer breakdowns and lower maintenance costs.\n  - SAFETY: Lower operational risk during demanding cycles.\n  - COST: Reduced resource requirements and better margins.\n\nUse Research & Technology to fund, complete, patent, and license capabilities. Use Businesses & Operations to deploy them.',
+                    '• Your research direction determines which opportunities become available.\n\n• Choose the future you want to build: stronger businesses, better food and energy systems, healthier cities, or more capable information infrastructure.\n\n• A direction is a strategic commitment, not just a category label.',
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -661,56 +662,56 @@ class Dashboard extends StatelessWidget {
                     Chip(
                       avatar: Icon(Icons.bolt_outlined,
                           size: 14, color: Colors.amberAccent),
-                      label: Text('ENERGY',
+                      label: Text('ENERGY & CLIMATE',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.terrain_outlined,
                           size: 14, color: Colors.tealAccent),
-                      label: Text('EXTRACTION',
+                      label: Text('FOOD & RESOURCES',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.settings_outlined,
                           size: 14, color: cyanAccentColor),
-                      label: Text('COMPONENTS',
+                      label: Text('INDUSTRY & AUTOMATION',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.precision_manufacturing_outlined,
                           size: 14, color: violetColor),
-                      label: Text('MACHINES',
+                      label: Text('HOUSING & CITY LIFE',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.build_outlined,
                           size: 14, color: Colors.orangeAccent),
-                      label: Text('MAINTENANCE',
+                      label: Text('HEALTH & SAFETY',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.home_work_outlined,
                           size: 14, color: Colors.lightGreenAccent),
-                      label: Text('HOUSING',
+                      label: Text('TRANSPORT & LOGISTICS',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.memory_outlined,
                           size: 14, color: cyanAccentColor),
-                      label: Text('COMPUTE',
+                      label: Text('COMPUTING & INFORMATION',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
                     Chip(
                       avatar: Icon(Icons.biotech_outlined,
                           size: 14, color: violetColor),
-                      label: Text('R&D',
+                      label: Text('SCIENCE & EXPLORATION',
                           style: TextStyle(
                               fontSize: 10.5, fontWeight: FontWeight.w700)),
                     ),
@@ -726,6 +727,8 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           technology,
+                          const SizedBox(height: 34),
+                          portfolio,
                         ],
                       ),
                     ),
@@ -745,6 +748,8 @@ class Dashboard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   technology,
+                  const SizedBox(height: 34),
+                  portfolio,
                   const SizedBox(height: 34),
                   matrix,
                 ],
