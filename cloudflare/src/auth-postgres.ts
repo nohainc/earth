@@ -179,7 +179,7 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
   return repository.transaction(async (tx) => {
     const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
     if (!cred) throw new Error('Account not found');
-    const predecessor = (await tx.query<{ life_status: string }>('SELECT life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
+    const predecessor = (await tx.query<{ id: string; display_name: string; life_status: string }>('SELECT id, display_name, life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
     if (!predecessor || !['deceased', 'estate'].includes(predecessor.life_status)) {
       throw new Error('An heir can be claimed only after mortality or during an estate period');
     }
@@ -206,6 +206,13 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
 
     await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [successor.id, input.email]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
+
+    // Make succession visible in the same world timeline as mortality and
+    // rebirth. This is the player-facing confirmation that the next
+    // generation is now the active character, even when estate settlement
+    // happened automatically at the moment of death.
+    await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'human.succession_claimed',$3,$4) ON CONFLICT DO NOTHING", [`SUCCESSION-CLAIM-${cred.human_id}-${successor.id}`, gameDay, `${successor.display_name} continued the dynasty`, JSON.stringify({ predecessorId: cred.human_id, successorId: successor.id, dynastyName: dynasty?.dynasty_name ?? null })]);
+    await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'life','Dynastic succession confirmed',$3,$4) ON CONFLICT DO NOTHING", [`SUCCESSION-NOTICE-${cred.human_id}-${successor.id}`, successor.id, `You now continue ${predecessor.display_name}'s dynasty as the designated heir.`, predecessor.id]);
 
     const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
     const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
