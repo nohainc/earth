@@ -56,7 +56,7 @@ direction exists but gameplay or backend support is incomplete.
 | Requirement | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Production world engine is not a separate player mode | Implemented | The persistent PostgreSQL/Worker world clock and scheduled engines are the game loop; scenario simulation remains developer-only verification. |
-| Death and continuation | Implemented | A deceased or estate character can continue as a designated heir or create a new adult through Civic Rebirth; lineage, dynasty identity, and equipped heirlooms continue across generations. |
+| Death and continuation | Implemented | A deceased or estate character can continue as a designated heir or create a new adult through Civic Rebirth; lineage, dynasty identity, and equipped heirlooms continue across generations. Active successors can be selected from the directory during both planning and estate settlement, with manual IDs retained as a fallback. |
 | Player agency over residence | Implemented | City movement is voluntary and corporation entry/movement cannot leave an inconsistent city network. |
 | Consequence-driven civic play | Implemented | Power and health crises create world events, notifications, and actionable city decisions. |
 | Institution development competition | Implemented | City and corporation rankings use service quality, population, productive businesses, and resilience rather than treasury alone. |
