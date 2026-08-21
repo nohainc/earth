@@ -833,8 +833,6 @@ class Dashboard extends StatelessWidget {
                 contracts: contracts,
                 action: action,
               );
-              final authority =
-                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -855,8 +853,6 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           contractsPanel,
-                          const SizedBox(height: 34),
-                          authority,
                         ],
                       ),
                     ),
@@ -871,8 +867,6 @@ class Dashboard extends StatelessWidget {
                   supply,
                   const SizedBox(height: 34),
                   contractsPanel,
-                  const SizedBox(height: 34),
-                  authority,
                 ],
               );
             },
@@ -948,6 +942,8 @@ class Dashboard extends StatelessWidget {
               final ownership =
                   OwnershipTimelinePanel(ownershipEvents: ownershipEvents);
               final history = HistoryArchivePanel(state: state);
+              final authority =
+                  AuthorityHistoryPanel(authorityEvents: authorityEvents);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -969,7 +965,9 @@ class Dashboard extends StatelessWidget {
                         children: [
                           ownership,
                           const SizedBox(height: 34),
-                          history
+                          history,
+                          const SizedBox(height: 34),
+                          authority,
                         ],
                       ),
                     ),
@@ -986,6 +984,8 @@ class Dashboard extends StatelessWidget {
                   ownership,
                   const SizedBox(height: 34),
                   history,
+                  const SizedBox(height: 34),
+                  authority,
                 ],
               );
             },
