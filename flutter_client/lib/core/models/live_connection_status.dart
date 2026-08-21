@@ -41,9 +41,9 @@ extension LiveConnectionStatusX on LiveConnectionStatus {
       case LiveConnectionStatus.reconnecting:
         return 'Re-establishing WebSocket telemetry connection...';
       case LiveConnectionStatus.polling:
-        return 'WebSocket stream disconnected. Periodic polling active (updates every 8s). Simulation data may be slightly delayed.';
+        return 'WebSocket stream disconnected. Periodic polling active (updates every 8s). World data may be slightly delayed.';
       case LiveConnectionStatus.offline:
-        return 'Network connection unreachable. Displaying cached simulation snapshot.';
+        return 'Network connection unreachable. Displaying the cached World snapshot.';
     }
   }
 

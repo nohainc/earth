@@ -60,7 +60,7 @@ class _ActivityPanelState extends State<ActivityPanel>
     if (type == 'world_day_started' ||
         type == 'world_tick' ||
         type == 'world.day_advanced') {
-      return '${dayPrefix}World simulation cycle advanced to Game Day $gameDay';
+      return '${dayPrefix}World operating cycle advanced to Game Day $gameDay';
     }
     if (type == 'market.batch_settled' || type == 'market') {
       return '${dayPrefix}Central Market batch cleared and settled';
@@ -428,7 +428,7 @@ class _ActivityPanelState extends State<ActivityPanel>
                                               size: 32, color: mutedColor),
                                           SizedBox(height: 8),
                                           Text(
-                                            'No recent simulation activity recorded.',
+                                            'No recent World activity recorded.',
                                             style: TextStyle(
                                                 fontSize: 11,
                                                 color: mutedColor),
@@ -537,7 +537,7 @@ class _ActivityPanelState extends State<ActivityPanel>
               context,
               title: 'EVENT HISTORY & ARCHIVE',
               description:
-                  '• Real-Time Operations Telemetry: review personal alerts and public simulation activity.\n\n'
+                  '• Real-Time Operations Telemetry: review personal alerts and public World activity.\n\n'
                   '• Mark notifications as read and refresh the event stream.\n\n'
                   '• Connection status is available from the Alerts menu.',
             ),

@@ -81,7 +81,7 @@ class OnboardingCompletionDialog extends StatelessWidget {
               child: Column(
                 children: [
                   const Text(
-                    'Congratulations, Pioneer. You have mastered the foundational pillars of the simulation: Planetary Chronometry, Macro Resource Economics, Municipal Governance, Spot Batch Auctions, Enterprise Formation, and Live Signal Dispatches.',
+                      'Congratulations, Pioneer. You have mastered the foundational pillars of the World: Planetary Chronometry, Macro Resource Economics, Municipal Governance, Spot Batch Auctions, Enterprise Formation, and Live Signal Dispatches.',
                     style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.4),
                     textAlign: TextAlign.center,
                   ),

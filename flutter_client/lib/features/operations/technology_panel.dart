@@ -160,7 +160,7 @@ class TechnologyPanel extends StatelessWidget {
 
     final currentDay = asIntOr(state.clock['day'], 184);
     final patentGrantedDay = asIntOr(research['patentGrantedDay'], 1);
-    const patentDurationDays = 288; // 24 simulation years (12 sim days/yr)
+    const patentDurationDays = 288; // 24 World years (12 World days/year)
     final patentExpiryDay = patentGrantedDay + patentDurationDays;
     final daysToPublicDomain =
         (patentExpiryDay - currentDay).clamp(0, patentDurationDays);

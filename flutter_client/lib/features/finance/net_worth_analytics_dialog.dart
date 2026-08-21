@@ -213,7 +213,7 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
                     context,
                     title: 'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
                     description:
-                        '• 4-Pillar Portfolio Valuation: Real-time accounting across Liquid Cash, Commodities, Equity, and Capital Machinery.\n\n• Solvency & Wealth Index: Continuous valuation history tracking wealth trajectory across planetary simulation epochs.',
+                        '• 4-Pillar Portfolio Valuation: Real-time accounting across Liquid Cash, Commodities, Equity, and Capital Machinery.\n\n• Solvency & Wealth Index: Continuous valuation history tracking wealth trajectory across World eras.',
                   ),
                 ),
               ],

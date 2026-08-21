@@ -87,7 +87,7 @@ void main() {
     await tester.tap(find.text('PUBLIC FEED'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('World simulation cycle advanced to Game Day 185'), findsOneWidget);
+  expect(find.textContaining('World operating cycle advanced to Game Day 185'), findsOneWidget);
     expect(find.textContaining('Central Market batch cleared and settled'), findsOneWidget);
 
     // Refresh icon

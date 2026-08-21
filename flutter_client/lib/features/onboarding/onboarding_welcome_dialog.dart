@@ -107,7 +107,7 @@ class OnboardingWelcomeDialog extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const Text(
-                      'Welcome, Citizen. To establish your corporate footprint and secure generational longevity in the simulation, follow this 6-step orientation sequence:',
+                      'Welcome, Citizen. To establish your corporate footprint and secure generational longevity in the World, follow this 6-step orientation sequence:',
                       style: TextStyle(
                           color: Colors.white70, fontSize: 12, height: 1.4),
                     ),

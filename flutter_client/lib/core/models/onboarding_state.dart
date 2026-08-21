@@ -27,7 +27,7 @@ class OnboardingStep {
       id: 'world_status',
       title: 'READ WORLD STATUS',
       subtitle: 'Cosmic Clock & Unified Currency',
-      description: 'Observe the planetary clock (1s = 1m in simulation time) and the Credits (CR) monetary standard that powers the United Corporations federation.',
+      description: 'Observe the planetary clock (1s = 1m in World time) and the Credits (CR) monetary standard that powers the United Corporations federation.',
       actionLabel: 'INSPECT WORLD METRICS',
       targetSection: 'command',
       icon: Icons.public_outlined,
@@ -75,7 +75,7 @@ class OnboardingStep {
     OnboardingStep(
       index: 5,
       id: 'receive_consequence',
-      title: 'RECEIVE SIMULATION SIGNAL',
+      title: 'RECEIVE WORLD SIGNAL',
       subtitle: 'Live Outbox & Sub-Space Dispatch',
       description: 'Review your personal activity stream and sub-space comm-link to verify the consequences of your economic actions and claim your civic stipend.',
       actionLabel: 'CHECK ACTIVITY & DISPATCH',
