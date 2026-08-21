@@ -25,7 +25,7 @@ export interface PlayerObjective {
 
 export interface ObjectivesEvaluationInput {
   human?: { credits?: unknown; standing?: unknown; legacy?: unknown; voting_weight?: unknown; age_years?: unknown };
-  business?: { id?: string; valuation?: unknown; treasury?: unknown; profit?: unknown; net_income?: unknown; revenue?: unknown };
+  business?: { id?: string; business_count?: unknown; valuation?: unknown; treasury?: unknown; profit?: unknown; net_income?: unknown; revenue?: unknown };
   institutions?: {
     city?: { health_capacity?: unknown; essential_services_index?: unknown; standing?: unknown };
     corporation?: { treasury?: unknown; member_count?: unknown };
@@ -91,7 +91,26 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     iconName: 'restaurant',
   });
 
-  // 3. Become a major civic delegate
+  // 3. Build a portfolio of independent operations
+  const businessCount = Math.max(0, num(input.business?.business_count, input.business?.id ? 1 : 0));
+  const targetBusinessCount = 3;
+  const portfolioProgress = Math.min(100, Math.round((businessCount / targetBusinessCount) * 100));
+  objectives.push({
+    id: 'obj-enterprise-portfolio',
+    category: 'enterprise',
+    title: 'Build a Portfolio of Enterprises',
+    description: 'Own or manage three distinct operations so your dynasty is not dependent on a single source of income or production.',
+    currentValue: businessCount,
+    targetValue: targetBusinessCount,
+    progressPercentage: portfolioProgress,
+    metricLabel: `${businessCount} / ${targetBusinessCount} Active Operations`,
+    status: portfolioProgress >= 100 ? 'completed' : 'in_progress',
+    rewardDescription: 'Title: "Enterprise Builder" · +300 Legacy Points · Portfolio management privileges',
+    targetSection: 'business',
+    iconName: 'business_center',
+  });
+
+  // 4. Become a major civic delegate
   const votingWeight = Math.max(
     num(input.governance?.voting_weight, 0),
     num(input.human?.voting_weight, 1)

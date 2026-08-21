@@ -18,11 +18,12 @@ test('Player Strategic Objectives Engine', async (t) => {
       netWorth: 28000,
     });
 
-    assert.equal(objectives.length, 7);
+    assert.equal(objectives.length, 8);
 
     const ids = objectives.map((o) => o.id);
     assert.ok(ids.includes('obj-valuable-corporation'));
     assert.ok(ids.includes('obj-food-security'));
+    assert.ok(ids.includes('obj-enterprise-portfolio'));
     assert.ok(ids.includes('obj-civic-delegate'));
     assert.ok(ids.includes('obj-dynasty-traits'));
     assert.ok(ids.includes('obj-technology-licensor'));
@@ -59,7 +60,7 @@ test('Player Strategic Objectives Engine', async (t) => {
       netWorth: 80000,
     });
 
-    assert.equal(objectives.length, 7);
+    assert.equal(objectives.length, 8);
     assert.ok(objectives.some((o) => o.status === 'completed'));
 
     const corpObj = objectives.find((o) => o.id === 'obj-valuable-corporation');

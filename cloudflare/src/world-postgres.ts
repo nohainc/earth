@@ -121,7 +121,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   });
   const objectives = evaluatePlayerObjectives({
     human: { credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, voting_weight: 1, age_years: humanRow.age_years ?? 31 },
-    business: { id: businessRow.id, valuation: 35000, treasury: 5000, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0 },
+    business: { id: businessRow.id, business_count: business.rows.length, valuation: 35000, treasury: 5000, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0 },
     institutions: {
       city: { essential_services_index: worldRow.essential_services_index ?? 0.68, standing: humanRow.standing ?? 0 },
       corporation: { treasury: Number(corporation?.treasury ?? 0), member_count: Number(corporation?.member_count ?? 0) },
