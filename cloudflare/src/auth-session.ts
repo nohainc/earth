@@ -56,7 +56,7 @@ export async function currentHuman(
        WHERE auth_sessions.token_hash = $1
          AND auth_sessions.revoked_at IS NULL
          AND auth_sessions.expires_at > CURRENT_TIMESTAMP
-         AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status = 'estate'))`,
+         AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status IN ('estate', 'deceased')) )`,
       [tokenHash, allowEstate ? 1 : 0],
     ),
   );
