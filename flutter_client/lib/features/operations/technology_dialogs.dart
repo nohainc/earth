@@ -6,7 +6,7 @@ import '../../shared/widgets/consequence_preview_card.dart';
 
 Future<void> showResearchComposerDialog(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action) async {
-  final name = TextEditingController(text: 'Quantum Matrix Grid');
+  String name = 'Automated Assembly';
   final budget = TextEditingController(text: '240');
   String focus = 'efficiency';
   await showDialog<void>(
@@ -20,11 +20,20 @@ Future<void> showResearchComposerDialog(BuildContext context,
                   width: 520,
                   child: SingleChildScrollView(
                     child: Column(mainAxisSize: MainAxisSize.min, children: [
-                      TextField(
-                          controller: name,
-                          decoration:
-                              const InputDecoration(labelText: 'Technology focus'),
-                          onChanged: (_) => setState(() {})),
+                      DropdownButtonFormField<String>(
+                          isExpanded: true,
+                          initialValue: name,
+                          items: const [
+                            'Automated Assembly',
+                            'Clean Energy Systems',
+                            'Food Synthesis',
+                            'Predictive Maintenance',
+                            'Civic Network Infrastructure',
+                          ].map((item) => DropdownMenuItem(value: item, child: Text(item))).toList(),
+                          onChanged: (value) {
+                            if (value != null) setState(() => name = value);
+                          },
+                          decoration: const InputDecoration(labelText: 'Technology catalogue')),
                       const SizedBox(height: 10),
                       TextField(
                           controller: budget,
@@ -54,7 +63,7 @@ Future<void> showResearchComposerDialog(BuildContext context,
                       const SizedBox(height: 14),
                       ConsequencePreviewCard(
                         consequence: DecisionConsequence.researchFunding(
-                          projectName: name.text.trim().isEmpty ? 'Classified Initiative' : name.text.trim(),
+                          projectName: name,
                           computeAllocated: parsedBudget,
                           unlockYield: '+15% $focus boost across industrial production',
                         ),
@@ -69,13 +78,12 @@ Future<void> showResearchComposerDialog(BuildContext context,
                   FilledButton(
                       onPressed: () async {
                         final amount = double.tryParse(budget.text.trim());
-                        if (name.text.trim().length < 3 ||
-                            amount == null ||
+                        if (amount == null ||
                             amount < 240) {
                           return;
                         }
                         await action(() => const EarthApi().startResearch(
-                            name.text.trim(), amount,
+                            name, amount,
                             focus: focus));
                         if (dialogContext.mounted) Navigator.pop(dialogContext);
                       },

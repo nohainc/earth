@@ -173,8 +173,6 @@ void main() {
     expect(find.text('Start'), findsOneWidget);
 
     await tester.enterText(
-        find.widgetWithText(TextField, 'Technology focus'), 'Fusion Cell');
-    await tester.enterText(
         find.widgetWithText(TextField, 'Initial budget (minimum 240 C)'),
         '500');
     await tester.pumpAndSettle();

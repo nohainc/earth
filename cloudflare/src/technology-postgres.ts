@@ -2,6 +2,14 @@ import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 
+export const TECHNOLOGY_CATALOG = [
+  'Automated Assembly',
+  'Clean Energy Systems',
+  'Food Synthesis',
+  'Predictive Maintenance',
+  'Civic Network Infrastructure',
+] as const;
+
 async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: string): Promise<void> {
   const membership = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1', [ownerId]);
   if (!membership.rows[0]?.city_id) {
@@ -12,6 +20,9 @@ async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: stri
 export async function createResearchProject(repository: PostgresRepository, input: { ownerId: string; name: string; budget: number; focus: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     await requireResearchJurisdiction(tx, input.ownerId);
+    if (!(TECHNOLOGY_CATALOG as readonly string[]).includes(input.name)) {
+      throw new Error('Technology must be selected from the approved research catalogue');
+    }
     const prior = await tx.query<{ reason_id: string }>("SELECT reason_id FROM ledger_entries WHERE reason_type = 'research_project_funding' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [prior.rows[0].reason_id])).rows[0], correlationId: input.correlationId };
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.ownerId]);
