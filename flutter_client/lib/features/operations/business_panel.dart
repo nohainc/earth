@@ -647,7 +647,8 @@ class BusinessPanel extends StatelessWidget {
                                 onTap: busy || isDissolved
                                     ? null
                                     : () => action(() =>
-                                        const EarthApi().setPolicy(policy)),
+                                        const EarthApi().setPolicy(policy,
+                                            businessId: businessId)),
                                 borderRadius: BorderRadius.circular(6),
                                 child: Container(
                                   padding: const EdgeInsets.symmetric(

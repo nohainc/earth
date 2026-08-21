@@ -136,9 +136,11 @@ export async function distributeDividends(repository: PostgresRepository, input:
   });
 }
 
-export async function setPolicy(repository: PostgresRepository, input: { humanId: string; policy: string }): Promise<Record<string, unknown>> {
+export async function setPolicy(repository: PostgresRepository, input: { humanId: string; businessId?: string | null; policy: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const business = await tx.query<{ id: string }>('SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.owner_id = $1 OR business_management.manager_id = $1 ORDER BY businesses.id LIMIT 1 FOR UPDATE OF businesses', [input.humanId]);
+    const business = input.businessId
+      ? await tx.query<{ id: string }>('SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND businesses.status = \'active\' AND (businesses.owner_id = $2 OR business_management.manager_id = $2) FOR UPDATE OF businesses', [input.businessId, input.humanId])
+      : await tx.query<{ id: string }>('SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.owner_id = $1 OR business_management.manager_id = $1 ORDER BY businesses.id LIMIT 1 FOR UPDATE OF businesses', [input.humanId]);
     if (!business.rows[0]) throw new Error('No managed business is available to this Human');
     await tx.query('UPDATE businesses SET policy = $1 WHERE id = $2', [input.policy, business.rows[0].id]);
     return { ok: true, policy: input.policy, business: (await tx.query('SELECT * FROM businesses WHERE id = $1', [business.rows[0].id])).rows[0] };

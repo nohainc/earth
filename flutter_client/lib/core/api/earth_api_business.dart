@@ -14,9 +14,9 @@ extension EarthApiBusiness on EarthApi {
   Future<Map<String, dynamic>> businessProfile(String businessId) async =>
       (await _request('/api/businesses/$businessId')) as Map<String, dynamic>;
 
-  Future<EarthState> setPolicy(String policy) async {
+  Future<EarthState> setPolicy(String policy, {String? businessId}) async {
     await _request('/api/businesses/me/policy',
-        method: 'POST', body: {'policy': policy});
+        method: 'POST', body: {'policy': policy, if (businessId != null) 'businessId': businessId});
     return world();
   }
 
