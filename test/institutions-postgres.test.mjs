@@ -30,7 +30,7 @@ class MockDbClient {
 
 test('listCities and listCorporations return rows from database', async () => {
   const client = new MockDbClient({
-    'SELECT * FROM cities': { rows: [{ id: 'CITY-01', name: 'New Kyoto' }], rowCount: 1 },
+    'FROM cities': { rows: [{ id: 'CITY-01', name: 'New Kyoto' }], rowCount: 1 },
     'SELECT * FROM corporations': { rows: [{ id: 'CORP-01', name: 'Aether Dynamics' }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);

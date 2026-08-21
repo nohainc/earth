@@ -394,7 +394,9 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                               : _cities)
                           .map((city) => DropdownMenuItem<String>(
                                 value: city['id']?.toString(),
-                                child: Text(city['name']?.toString() ?? city['id']?.toString() ?? 'City'),
+                                child: Text(
+                                  '${city['name']?.toString() ?? city['id']?.toString() ?? 'City'}${city['corporation_name'] == null ? '' : ' · ${city['corporation_name']} network'}',
+                                ),
                               ))
                           .toList(),
                       onChanged: (val) {

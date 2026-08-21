@@ -14,7 +14,12 @@ async function uniqueInstitutionName(repository: PostgresRepository, name: strin
 }
 
 export async function listCities(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  return { cities: (await repository.query('SELECT * FROM cities ORDER BY id')).rows };
+  return {
+    cities: (await repository.query(`SELECT cities.*, corporation_institutions.name AS corporation_name
+      FROM cities
+      LEFT JOIN institutions corporation_institutions ON corporation_institutions.id = cities.corporation_id
+      ORDER BY cities.id`)).rows,
+  };
 }
 
 export async function listCorporations(repository: PostgresRepository): Promise<Record<string, unknown>> {
