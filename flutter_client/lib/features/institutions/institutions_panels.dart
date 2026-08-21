@@ -498,8 +498,6 @@ class CorporationOverviewPanel extends StatelessWidget {
                   letterSpacing: .8)),
         ),
         const SizedBox(height: 12),
-        const Text('Corporation rules apply across its city network.',
-            style: TextStyle(color: mutedColor, fontSize: 11)),
         const SizedBox(height: 14),
         Wrap(spacing: 10, runSpacing: 10, children: [
           _metric('CORPORATION', '$name\n$id', Icons.account_balance_outlined,
@@ -548,7 +546,10 @@ class CorporationOverviewPanel extends StatelessWidget {
         const SizedBox(height: 16),
         const Text('CORPORATION DECISIONS',
             style: TextStyle(
-                color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                color: inkColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: .7)),
         const SizedBox(height: 5),
         const Text(
             'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
@@ -595,9 +596,12 @@ class CorporationOverviewPanel extends StatelessWidget {
             state.rankings['cities'] is List &&
             (state.rankings['cities'] as List).isNotEmpty) ...[
           const SizedBox(height: 16),
-          const Text('CORPORATION CITY NETWORK',
+          const Text('CORPORATION CITY NETWORK / RULES APPLY ACROSS NETWORK',
               style: TextStyle(
-                  color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                  color: inkColor,
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .55)),
           const SizedBox(height: 6),
           ...(state.rankings['cities'] as List).take(8).map((raw) {
             final row = Map<String, dynamic>.from(raw as Map);
