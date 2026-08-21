@@ -149,6 +149,9 @@ class TechnologyPanel extends StatelessWidget {
         asIntOr(state.technologyRegistry['activePatents'], isComplete ? 1 : 0);
     final activeLicenses =
         asIntOr(state.technologyRegistry['activeLicenses'], 1);
+    final sharedPatents = (tech['corporationSharedPatents'] is List)
+        ? (tech['corporationSharedPatents'] as List)
+        : const <dynamic>[];
 
     Color focusColor = cyanAccentColor;
     if (focus == 'DURABILITY') focusColor = Colors.tealAccent;
@@ -428,6 +431,37 @@ class TechnologyPanel extends StatelessWidget {
           ),
 
           const SizedBox(height: 18),
+
+          if (sharedPatents.isNotEmpty) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: violetColor.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: violetColor.withValues(alpha: .3)),
+              ),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.hub_outlined, size: 18, color: violetColor),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'CORPORATION RESEARCH COMMONS\n${sharedPatents.map((raw) => (raw is Map ? raw['name'] : null)?.toString() ?? 'Shared patent').join(' · ')}',
+                      style: const TextStyle(
+                        fontSize: 10,
+                        height: 1.5,
+                        fontWeight: FontWeight.w700,
+                        color: inkColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 18),
+          ],
 
           // 3. R&D ACTIONS & IP MONETIZATION HUB
           const Padding(

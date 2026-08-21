@@ -47,6 +47,16 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     FROM dynasty_lineage_records dlr
     JOIN dynasties d ON d.id = dlr.dynasty_id
     WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; dynasty_name: string | null }[] }));
+  const corporationSharedTechnology = await repository.query(
+    `SELECT share.patent_id, patents.technology_id, technologies.name, share.shared_game_day
+     FROM corporation_technology_shares share
+     JOIN memberships member ON member.corporation_id = share.corporation_id AND member.human_id = $1
+     JOIN patents ON patents.id = share.patent_id
+     JOIN technologies ON technologies.id = patents.technology_id
+     WHERE share.status = 'active'
+     ORDER BY share.shared_game_day DESC, share.patent_id`,
+    [viewerId],
+  ).catch(() => ({ rows: [] as Array<Record<string, unknown>> }));
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};
   const currentGameDay = Number(worldRow.game_day ?? 184);
@@ -166,7 +176,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     businesses: business.rows,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
-    technology: { research: technology.rows[0] ?? {}, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0) }, machines: machineRows, workforce: employees.rows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
+    technology: { research: technology.rows[0] ?? {}, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0), corporationSharedPatents: corporationSharedTechnology.rows }, machines: machineRows, workforce: employees.rows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }, ...social.rows.map((row) => ({ type: 'social', title: row.title, initiativeId: row.id, status: row.status }))], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows, corporations: rankings[1].rows }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, socialInitiatives: social.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },
