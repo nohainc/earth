@@ -224,7 +224,7 @@ void main() {
     );
 
     // SuccessionPanel
-    expect(find.text('LIFE / BIOLOGICAL AGING & SUCCESSION'), findsOneWidget);
+    expect(find.text('LIFE & LEGACY / SUCCESSION PLAN'), findsOneWidget);
     expect(find.textContaining('Kaelen Kline'), findsOneWidget);
 
     // WorldIntegrityPanel

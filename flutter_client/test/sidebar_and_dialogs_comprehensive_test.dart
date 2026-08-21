@@ -6,7 +6,7 @@ import 'package:earth_client/features/governance/governance_dialogs.dart';
 import 'package:earth_client/features/operations/technology_dialogs.dart';
 
 void main() {
-  testWidgets('Sidebar renders all nav items and triggers onNavigate',
+  testWidgets('Sidebar expands one category at a time and triggers onNavigate',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
@@ -45,15 +45,13 @@ void main() {
     expect(find.widgetWithText(TextButton, 'Command Center'), findsOneWidget);
     expect(find.text('Daily Priorities'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('Trade & Supplies'), findsNothing);
+
+    await tester.tap(find.text('MANAGEMENT'));
+    await tester.pumpAndSettle();
     expect(find.text('Trade & Supplies'), findsOneWidget);
     expect(find.text('Businesses & Operations'), findsOneWidget);
-    expect(find.text('Personal Finance'), findsOneWidget);
-    expect(find.text('Laws & Governance'), findsOneWidget);
-    expect(find.text('City & Services'), findsOneWidget);
-    expect(find.text('Contracts & Revenue'), findsOneWidget);
-    expect(find.text('Research & Technology'), findsOneWidget);
-    expect(find.text('Life & Legacy'), findsOneWidget);
+    expect(find.text('Daily Priorities'), findsNothing);
 
     final financeButton = find.text('Personal Finance');
     expect(financeButton, findsOneWidget);
@@ -92,6 +90,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    expect(find.text('City & Services'), findsNothing);
+    await tester.tap(find.text('LIFE & SOCIETY'));
+    await tester.pumpAndSettle();
     expect(find.text('City & Services'), findsOneWidget);
   });
 

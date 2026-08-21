@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 
-class Sidebar extends StatelessWidget {
+class Sidebar extends StatefulWidget {
   final EarthState state;
   final String selectedSection;
   final ValueChanged<String> onNavigate;
@@ -23,6 +23,34 @@ class Sidebar extends StatelessWidget {
     this.onLogout,
     this.onSecurity,
   });
+
+  @override
+  State<Sidebar> createState() => _SidebarState();
+}
+
+class _SidebarState extends State<Sidebar> {
+  int _expandedGroup = 0;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _expandedGroup = _groupForSection(widget.selectedSection);
+  }
+
+  @override
+  void didUpdateWidget(covariant Sidebar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.selectedSection != widget.selectedSection) {
+      _expandedGroup = _groupForSection(widget.selectedSection);
+    }
+  }
+
+  int _groupForSection(String section) {
+    if (['command', 'briefing', 'messages'].contains(section)) return 0;
+    if (['business', 'contracts', 'finance', 'market'].contains(section)) return 1;
+    if (['corporation', 'city', 'civic', 'life', 'dynasty'].contains(section)) return 2;
+    return 3;
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -67,7 +95,7 @@ class Sidebar extends StatelessWidget {
     ];
 
     return Container(
-      width: 220,
+      width: 224,
       padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
       decoration: const BoxDecoration(
         border: Border(right: BorderSide(color: Colors.white12)),
@@ -81,71 +109,79 @@ class Sidebar extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (int groupIdx = 0;
-                      groupIdx < groups.length;
-                      groupIdx++) ...[
-                    Padding(
-                      padding: EdgeInsets.only(
-                        left: 8,
-                        top: groupIdx == 0 ? 0 : 18,
-                        bottom: 6,
-                      ),
-                      child: Text(
-                        groups[groupIdx].$1,
-                        style: EarthTypography.menuGroup,
-                      ),
-                    ),
-                    for (final item in groups[groupIdx].$2)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 2),
-                        child: SizedBox(
-                          width: double.infinity,
-                          child: TextButton(
-                            onPressed: () => onNavigate(item.$1),
-                            style: TextButton.styleFrom(
-                              splashFactory: NoSplash.splashFactory,
-                              enableFeedback: false,
-                              foregroundColor: violetColor,
-                              backgroundColor: item.$1 == selectedSection
-                                  ? violetColor.withValues(alpha: .16)
-                                  : Colors.transparent,
-                              shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(8),
-                              ),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 12, vertical: 10),
-                              alignment: Alignment.centerLeft,
+                  for (int groupIdx = 0; groupIdx < groups.length; groupIdx++) ...[
+                    InkWell(
+                      onTap: () => setState(() => _expandedGroup =
+                          _expandedGroup == groupIdx ? -1 : groupIdx),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: EdgeInsets.only(
+                          left: 8,
+                          top: groupIdx == 0 ? 0 : 10,
+                          bottom: 6,
+                        ),
+                        child: Row(
+                          children: [
+                            Expanded(child: Text(groups[groupIdx].$1, style: EarthTypography.menuGroup)),
+                            Icon(
+                              _expandedGroup == groupIdx
+                                  ? Icons.expand_less
+                                  : Icons.expand_more,
+                              size: 16,
+                              color: mutedColor,
                             ),
-                            child: Row(
-                              children: [
-                                Icon(
-                                  item.$3,
-                                  size: 16,
-                                  color: item.$1 == selectedSection
-                                      ? inkColor
-                                      : mutedColor,
-                                ),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Text(
-                                    item.$2,
-                                    overflow: TextOverflow.ellipsis,
-                                    maxLines: 1,
-                                    style: EarthTypography.menu.copyWith(
-                                      color: item.$1 == selectedSection
-                                          ? inkColor
-                                          : mutedColor,
-                                      fontWeight: item.$1 == selectedSection
-                                          ? FontWeight.w700
-                                          : FontWeight.w500,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
+                          ],
                         ),
                       ),
+                    ),
+                    AnimatedSize(
+                      duration: const Duration(milliseconds: 160),
+                      curve: Curves.easeOut,
+                      child: _expandedGroup == groupIdx
+                          ? Column(
+                              children: [
+                                for (final item in groups[groupIdx].$2)
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 2),
+                                    child: SizedBox(
+                                      width: double.infinity,
+                                      child: TextButton(
+                                        onPressed: () => widget.onNavigate(item.$1),
+                                        style: TextButton.styleFrom(
+                                          splashFactory: NoSplash.splashFactory,
+                                          enableFeedback: false,
+                                          foregroundColor: violetColor,
+                                          backgroundColor: item.$1 == widget.selectedSection
+                                              ? violetColor.withValues(alpha: .16)
+                                              : Colors.transparent,
+                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          alignment: Alignment.centerLeft,
+                                        ),
+                                        child: Row(
+                                          children: [
+                                            Icon(item.$3, size: 16, color: item.$1 == widget.selectedSection ? inkColor : mutedColor),
+                                            const SizedBox(width: 10),
+                                            Expanded(
+                                              child: Text(
+                                                item.$2,
+                                                overflow: TextOverflow.ellipsis,
+                                                maxLines: 1,
+                                                style: EarthTypography.menu.copyWith(
+                                                  color: item.$1 == widget.selectedSection ? inkColor : mutedColor,
+                                                  fontWeight: item.$1 == widget.selectedSection ? FontWeight.w700 : FontWeight.w500,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            )
+                          : const SizedBox.shrink(),
+                    ),
                   ],
                 ],
               ),
@@ -153,14 +189,14 @@ class Sidebar extends StatelessWidget {
           ),
 
           // 2. FOOTER ADVANCE DAY (IF APPLICABLE)
-          if (canAdvanceDay) ...[
+          if (widget.canAdvanceDay) ...[
             const SizedBox(height: 12),
             const Divider(color: Colors.white12, height: 1, thickness: 1),
             const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(
-                onPressed: busy ? null : onAdvanceDay,
+                onPressed: widget.busy ? null : widget.onAdvanceDay,
                 icon: const Icon(Icons.fast_forward, size: 14),
                 label: const Text('ADVANCE DAY',
                     style: TextStyle(fontSize: 10.5, letterSpacing: 1.3)),

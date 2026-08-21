@@ -141,6 +141,18 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     const dynasty = input.dynastyName ?? 'Founding Dynasty';
     await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,dynasty_name) VALUES ($1,$2,$3,$4,(SELECT COALESCE(MAX(generation), 0) + 1 FROM character_lineage WHERE email = $2),$5,$6)', [crypto.randomUUID(), input.email, newHumanId, prevHuman?.id ?? null, worldDay, dynasty]);
 
+    // Keep the active Family & Dynasty model in sync with the legacy
+    // character lineage record so every new generation is visible in-game.
+    let dynastyRow = (await tx.query<{ id: string }>('SELECT id FROM dynasties WHERE email = $1 FOR UPDATE', [input.email])).rows[0];
+    if (!dynastyRow) {
+      const dynastyId = `DYN-${newHumanId.slice(2)}`;
+      dynastyRow = (await tx.query<{ id: string }>('INSERT INTO dynasties (id,email,dynasty_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [dynastyId, input.email, dynasty, 'From the Red Dust We Build Eternity', newHumanId, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), 0])).rows[0];
+    }
+    const nextGeneration = (await tx.query<{ generation: number }>('SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM dynasty_lineage_records WHERE dynasty_id = $1', [dynastyRow.id])).rows[0]?.generation ?? 1;
+    await tx.query('UPDATE dynasty_lineage_records SET is_incumbent = false WHERE dynasty_id = $1', [dynastyRow.id]);
+    await tx.query('INSERT INTO dynasty_lineage_records (id,dynasty_id,human_id,predecessor_human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) ON CONFLICT (id) DO NOTHING', [crypto.randomUUID(), dynastyRow.id, newHumanId, prevHuman?.id ?? null, nextGeneration, input.displayName, 'Dynastic Successor', worldDay, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
+    await tx.query('UPDATE dynasties SET legacy_points = legacy_points + $1 WHERE id = $2', [Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), dynastyRow.id]);
+
     const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
     const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
     await tx.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), newHumanId, await digest(token), expires]);
@@ -165,6 +177,15 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
 
     const successor = (await tx.query<{ id: string; display_name: string; life_status: string }>('SELECT id, display_name, life_status FROM humans WHERE id = $1', [plan.successor_human_id])).rows[0];
     if (!successor || successor.life_status !== 'active') throw new Error('Designated successor is not currently active');
+
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const gameDay = Number(world.rows[0]?.game_day ?? 1);
+    const dynasty = (await tx.query<{ id: string }>('SELECT id FROM dynasties WHERE email = $1 FOR UPDATE', [input.email])).rows[0];
+    if (dynasty) {
+      await tx.query('UPDATE dynasty_lineage_records SET is_incumbent = false WHERE dynasty_id = $1', [dynasty.id]);
+      const nextGeneration = (await tx.query<{ generation: number }>('SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM dynasty_lineage_records WHERE dynasty_id = $1', [dynasty.id])).rows[0]?.generation ?? 1;
+      await tx.query('INSERT INTO dynasty_lineage_records (id,dynasty_id,human_id,predecessor_human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) ON CONFLICT (id) DO UPDATE SET is_incumbent = true', [crypto.randomUUID(), dynasty.id, successor.id, cred.human_id, nextGeneration, successor.display_name, 'Designated Heir', gameDay, 0]);
+    }
 
     await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [successor.id, input.email]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
