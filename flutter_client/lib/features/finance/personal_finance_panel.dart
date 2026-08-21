@@ -32,6 +32,136 @@ Widget _financeTopicHeading(BuildContext context, String title,
   );
 }
 
+class FinancialOutlookPanel extends StatelessWidget {
+  final EarthState state;
+  final Map<String, dynamic> personalFinanceData;
+
+  const FinancialOutlookPanel({
+    super.key,
+    required this.state,
+    this.personalFinanceData = const {},
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final finState = personalFinanceData['state'] is Map
+        ? Map<String, dynamic>.from(personalFinanceData['state'] as Map)
+        : const <String, dynamic>{};
+    final account = personalFinanceData['account'] is Map
+        ? Map<String, dynamic>.from(personalFinanceData['account'] as Map)
+        : const <String, dynamic>{};
+    final balance = asDouble(state.human['credits'] ?? account['balance']);
+    final income = asDouble(finState['income']);
+    final expenses = asDouble(finState['expenses']);
+    final taxes = asDouble(finState['tax_obligations']);
+    final net = income != null && expenses != null && taxes != null
+        ? income - expenses - taxes
+        : null;
+    final obligations = <String>[];
+    if ((taxes ?? 0) > 0)
+      obligations.add('Tax assessment: ${formatWholeNumber(taxes!)} C');
+    final goals = personalFinanceData['goals'] is List
+        ? (personalFinanceData['goals'] as List)
+            .whereType<Map>()
+            .map(
+                (goal) => goal['name']?.toString() ?? goal['title']?.toString())
+            .whereType<String>()
+            .toList()
+        : const <String>[];
+    final assets = personalFinanceData['assets'] is List
+        ? (personalFinanceData['assets'] as List)
+            .whereType<Map>()
+            .map((asset) =>
+                asset['name']?.toString() ?? asset['title']?.toString())
+            .whereType<String>()
+            .toList()
+        : const <String>[];
+
+    return EarthPanel(
+      title: 'FINANCIAL OUTLOOK',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• This view connects money to decisions: obligations, goals, assets, and financial risk.\n\n• Trade & Supplies handles resources and market orders; Personal Finance handles credits and commitments.\n\n• Values are shown only when current financial data is available.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Wrap(spacing: 10, runSpacing: 10, children: [
+          _outlookTile(
+              'AVAILABLE CREDITS',
+              balance == null
+                  ? 'UNAVAILABLE'
+                  : '${formatWholeNumber(balance)} C',
+              Icons.account_balance_wallet_outlined,
+              EarthResourceColors.credits),
+          _outlookTile(
+              'NET DAILY CHANGE',
+              net == null
+                  ? 'UNAVAILABLE'
+                  : '${net >= 0 ? '+' : ''}${formatWholeNumber(net)} C',
+              Icons.trending_up_outlined,
+              net == null || net >= 0
+                  ? Colors.tealAccent
+                  : Colors.orangeAccent),
+          _outlookTile(
+              'UPCOMING OBLIGATIONS',
+              obligations.isEmpty ? 'None recorded' : obligations.join(' · '),
+              Icons.receipt_long_outlined,
+              Colors.orangeAccent),
+        ]),
+        const SizedBox(height: 12),
+        Text(
+            goals.isEmpty
+                ? 'No financial goal is recorded yet. Consider an emergency reserve, business investment, family support, or financial independence goal.'
+                : 'Goals: ${goals.join(' · ')}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 6),
+        Text(
+            assets.isEmpty
+                ? 'Assets and investments are not itemized in the current financial record.'
+                : 'Assets: ${assets.join(' · ')}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 10),
+        const Text(
+            'Plan before acting: save · invest · pay · borrow · transfer · support family.',
+            style: TextStyle(
+                color: inkColor, fontSize: 10.5, fontWeight: FontWeight.w700)),
+      ]),
+    );
+  }
+
+  Widget _outlookTile(String label, String value, IconData icon, Color color) {
+    return Container(
+        width: 170,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+            color: surfaceColor.withValues(alpha: .75),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withValues(alpha: .28))),
+        child: Row(children: [
+          Icon(icon, size: 15, color: color),
+          const SizedBox(width: 7),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(label,
+                    style: const TextStyle(
+                        color: mutedColor,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text(value,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800))
+              ]))
+        ]));
+  }
+}
+
 class PersonalFinancePanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
@@ -241,10 +371,11 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
     if (confirmed == true && mounted) {
       setState(() => _localBusy = true);
       try {
-        await widget.action(() => const EarthApi().declareInsolvencyRestructuring(
-              reason: reasonController.text,
-              otp: otpController.text.isEmpty ? null : otpController.text,
-            ));
+        await widget
+            .action(() => const EarthApi().declareInsolvencyRestructuring(
+                  reason: reasonController.text,
+                  otp: otpController.text.isEmpty ? null : otpController.text,
+                ));
         if (mounted) {
           setState(() {
             _localBusy = false;
@@ -280,10 +411,10 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
     final accumulationMargin =
         income > 0 ? (netAccumulation / income) * 100 : 0.0;
 
-    final rawLiquidity = (finState?['liquidity_status'] ??
-            (balance > 500 ? 'healthy' : 'tight'))
-        .toString()
-        .toLowerCase();
+    final rawLiquidity =
+        (finState?['liquidity_status'] ?? (balance > 500 ? 'healthy' : 'tight'))
+            .toString()
+            .toLowerCase();
     final insolvencyStatus = (finState?['insolvency_status'] ??
             finState?['status'] ??
             (balance >= 100 ? 'SOLVENT' : 'INSOLVENT'))
@@ -315,7 +446,7 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
 
     return EarthPanel(
       key: widget.panelKey,
-      title: 'PERSONAL FINANCE & TAXATION',
+      title: 'MONEY TODAY / PERSONAL FINANCE',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -328,7 +459,7 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
             children: [
               _financeTopicHeading(
                 context,
-                'PERSONAL FINANCE & TAXATION',
+                'MONEY TODAY / PERSONAL FINANCE',
                 description:
                     '• Personal Wealth & Solvency Cockpit: Real-time liquid credit balance, solvency classification, and immutable statutory asset protection guarantees.',
               ),
@@ -343,10 +474,12 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
                         width: 44,
                         height: 44,
                         decoration: BoxDecoration(
-                          color: EarthResourceColors.credits.withValues(alpha: .2),
+                          color:
+                              EarthResourceColors.credits.withValues(alpha: .2),
                           borderRadius: BorderRadius.circular(10),
                           border: Border.all(
-                              color: EarthResourceColors.credits.withValues(alpha: .4)),
+                              color: EarthResourceColors.credits
+                                  .withValues(alpha: .4)),
                         ),
                         alignment: Alignment.center,
                         child: const Icon(
@@ -395,8 +528,8 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
                                     color: statusColor.withValues(alpha: .15),
                                     borderRadius: BorderRadius.circular(5),
                                     border: Border.all(
-                                        color: statusColor
-                                            .withValues(alpha: .4)),
+                                        color:
+                                            statusColor.withValues(alpha: .4)),
                                   ),
                                   child: Row(
                                     mainAxisSize: MainAxisSize.min,
@@ -477,7 +610,7 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
               // 2. CASH FLOW & PERSONAL UNIT ECONOMICS
               _financeTopicHeading(
                 context,
-                'DAILY CASH FLOW & PERSONAL UNIT ECONOMICS',
+                'CASH FLOW / WHERE MONEY COMES FROM AND GOES',
                 description:
                     '• DAILY RECURRING INFLOW: Aggregate income from enterprise dividends, market sales, and contract payouts.\n• DAILY BASELINE OUTFLOW: Mandatory living expenditures, residential rent, and machine maintenance.\n• NET DAILY ACCUMULATION: Daily surplus or deficit with retained savings margin percentage.\n• ASSESSED TAX OBLIGATIONS: Canonical municipal assessment base due for settlement.',
               ),

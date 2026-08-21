@@ -4,11 +4,17 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/finance/personal_finance_panel.dart';
 
 void main() {
-  testWidgets('PersonalFinancePanel renders credit balance, income, expenses, and tax status',
+  testWidgets(
+      'PersonalFinancePanel renders credit balance, income, expenses, and tax status',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 18420, 'standing': 742, 'legacy': 31},
+      'human': {
+        'id': 'H-0044',
+        'credits': 18420,
+        'standing': 742,
+        'legacy': 31
+      },
       'world': {'health': 100},
       'resources': {},
       'business': {},
@@ -50,7 +56,7 @@ void main() {
       ),
     );
 
-    expect(find.text('PERSONAL FINANCE & TAXATION'), findsOneWidget);
+    expect(find.text('MONEY TODAY / PERSONAL FINANCE'), findsOneWidget);
     expect(find.text('18420'), findsOneWidget);
     expect(find.text('C'), findsWidgets);
     expect(find.text('HEALTHY LIQUIDITY'), findsOneWidget);
@@ -67,7 +73,8 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Personal Wealth & Solvency Cockpit'), findsOneWidget);
+    expect(find.textContaining('Personal Wealth & Solvency Cockpit'),
+        findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
@@ -113,5 +120,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(insolvencyActionTriggered, isTrue);
+  });
+
+  testWidgets('FinancialOutlookPanel connects money to goals and obligations',
+      (tester) async {
+    const state = EarthState({
+      'human': {'credits': 1200},
+    });
+    final data = {
+      'state': {'income': 100, 'expenses': 40, 'tax_obligations': 10},
+      'goals': [
+        {'name': 'Emergency reserve'}
+      ],
+      'assets': [
+        {'name': 'Workshop shares'}
+      ],
+    };
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+          body: FinancialOutlookPanel(state: state, personalFinanceData: data)),
+    ));
+
+    expect(find.text('FINANCIAL OUTLOOK'), findsOneWidget);
+    expect(find.textContaining('Emergency reserve'), findsOneWidget);
+    expect(find.textContaining('Workshop shares'), findsOneWidget);
+    expect(find.textContaining('+50 C'), findsOneWidget);
   });
 }

@@ -872,14 +872,25 @@ class Dashboard extends StatelessWidget {
                 personalFinanceData: personalFinanceData,
                 action: action,
               );
-              final ledger = LedgerPanel(state: state);
+              final financialOutlook = FinancialOutlookPanel(
+                state: state,
+                personalFinanceData: personalFinanceData,
+              );
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: personalFinance),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          personalFinance,
+                          const SizedBox(height: 34),
+                          financialOutlook
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 56),
-                    Expanded(child: ledger),
                   ],
                 );
               }
@@ -888,7 +899,7 @@ class Dashboard extends StatelessWidget {
                 children: [
                   personalFinance,
                   const SizedBox(height: 34),
-                  ledger,
+                  financialOutlook,
                 ],
               );
             },
