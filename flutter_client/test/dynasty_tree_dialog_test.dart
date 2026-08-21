@@ -8,7 +8,9 @@ import 'package:earth_client/core/nano_markup_helper.dart';
 import 'package:earth_client/features/dynasty/dynasty_tree_dialog.dart';
 
 void main() {
-  testWidgets('DynastyTreeDialog renders lineage tree, member list and inspector', (tester) async {
+  testWidgets(
+      'DynastyTreeDialog renders lineage tree, member list and inspector',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -60,7 +62,8 @@ void main() {
                 'death_game_day': null,
                 'is_incumbent': true,
                 'cause_of_death': null,
-                'epitaph': 'Steering House Vance through the corporate expansion age.',
+                'epitaph':
+                    'Steering House Vance through the corporate expansion age.',
                 'lifetime_wealth': 170000.0,
                 'businesses_founded': 2,
                 'proposals_authored': 2,
@@ -85,7 +88,8 @@ void main() {
                 'name': 'The Vance Founding Signet',
                 'heirloom_type': 'founder_seal',
                 'quality_tier': 'Legendary',
-                'stat_buff': '+10% Machine Build Speed & -15% Business Startup Fees',
+                'stat_buff':
+                    '+10% Machine Build Speed & -15% Business Startup Fees',
                 'equipped_by_human_id': 'H-0044',
                 'inscription': 'Forged from titanium.',
               },
@@ -112,10 +116,12 @@ void main() {
         );
       }
 
-      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200, headers: {'content-type': 'application/x-nano-markup'});
+      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200,
+          headers: {'content-type': 'application/x-nano-markup'});
     });
 
-    final transport = EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
+    final transport =
+        EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
     final api = EarthApi(baseUrl: 'http://earth.test', transport: transport);
 
     await tester.pumpWidget(
@@ -134,6 +140,10 @@ void main() {
     expect(find.text('Cassian Vance I'), findsWidgets);
     expect(find.text('Amara Vance'), findsOneWidget);
     expect(find.text('GENERATION 1 DOSSIER'), findsOneWidget);
+    expect(find.text('FAMILY TODAY'), findsOneWidget);
+    expect(find.text('PEOPLE & RELATIONSHIPS'), findsOneWidget);
+    expect(find.text('FAMILY IDENTITY'), findsOneWidget);
+    expect(find.text('FAMILY HEIRLOOMS & SHARED ASSETS'), findsOneWidget);
   });
 
   testWidgets('DynastyTreeDialog unlocks hereditary trait', (tester) async {
@@ -195,10 +205,12 @@ void main() {
         );
       }
 
-      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200, headers: {'content-type': 'application/x-nano-markup'});
+      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200,
+          headers: {'content-type': 'application/x-nano-markup'});
     });
 
-    final transport = EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
+    final transport =
+        EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
     final api = EarthApi(baseUrl: 'http://earth.test', transport: transport);
 
     await tester.pumpWidget(
@@ -213,7 +225,8 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // Scroll until unlock perk button is visible
-    final unlockBtn = find.byKey(const Key('btn-unlock-perk-diplomatic_dynasty'));
+    final unlockBtn =
+        find.byKey(const Key('btn-unlock-perk-diplomatic_dynasty'));
     await tester.scrollUntilVisible(unlockBtn, 200);
     expect(unlockBtn, findsOneWidget);
 
@@ -221,7 +234,9 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('Hereditary Trait "Diplomatic Dynasty" unlocked!'), findsOneWidget);
+    expect(
+        find.textContaining('Hereditary Trait "Diplomatic Dynasty" unlocked!'),
+        findsOneWidget);
   });
 
   testWidgets('DynastyTreeDialog equips and unequips heirloom', (tester) async {
@@ -278,10 +293,12 @@ void main() {
         );
       }
 
-      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200, headers: {'content-type': 'application/x-nano-markup'});
+      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200,
+          headers: {'content-type': 'application/x-nano-markup'});
     });
 
-    final transport = EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
+    final transport =
+        EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
     final api = EarthApi(baseUrl: 'http://earth.test', transport: transport);
 
     await tester.pumpWidget(
@@ -304,10 +321,12 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('equipped to current Dynastic Head'), findsOneWidget);
+    expect(find.textContaining('equipped to current Dynastic Head'),
+        findsOneWidget);
   });
 
-  testWidgets('DynastyTreeDialog opens edit motto dialog and saves creed', (tester) async {
+  testWidgets('DynastyTreeDialog opens edit motto dialog and saves creed',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -349,10 +368,12 @@ void main() {
         );
       }
 
-      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200, headers: {'content-type': 'application/x-nano-markup'});
+      return http.Response(NanoMarkupHelper.encode({'ok': true}), 200,
+          headers: {'content-type': 'application/x-nano-markup'});
     });
 
-    final transport = EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
+    final transport =
+        EarthApiTransport(baseUrl: 'http://earth.test', client: mockClient);
     final api = EarthApi(baseUrl: 'http://earth.test', transport: transport);
 
     await tester.pumpWidget(
@@ -381,6 +402,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('Dynasty creed updated successfully'), findsOneWidget);
+    expect(find.textContaining('Dynasty creed updated successfully'),
+        findsOneWidget);
   });
 }
