@@ -63,7 +63,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const feeRule = (await repository.query<{ rate: string }>("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1")).rows[0]?.rate;
   const feeRate = feeRule ? Number(feeRule) : 0;
   const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees] = await Promise.all([
-    Promise.all([repository.query('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10'), repository.query('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10')]),
+    Promise.all([repository.query('SELECT id, name, corporation_id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 20'), repository.query('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10')]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
     repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
     repository.query("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = $1 AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50", [viewerId]),

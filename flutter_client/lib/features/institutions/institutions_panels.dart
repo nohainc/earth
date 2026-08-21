@@ -117,6 +117,43 @@ class CorporationOverviewPanel extends StatelessWidget {
             );
           }),
         ],
+        if (state.rankings['cities'] is List &&
+            (state.rankings['cities'] as List).isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('CORPORATION CITY NETWORK',
+              style: TextStyle(color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          ...(state.rankings['cities'] as List).take(8).map((raw) {
+            final row = Map<String, dynamic>.from(raw as Map);
+            final city = row['id']?.toString() ?? 'City';
+            final owner = row['corporation_id']?.toString();
+            final belongsToUs = owner == id;
+            final unclaimed = owner == null || owner.isEmpty;
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                Icon(belongsToUs ? Icons.domain : Icons.location_city_outlined,
+                    size: 14, color: belongsToUs ? cyanAccentColor : mutedColor),
+                const SizedBox(width: 7),
+                Expanded(child: Text(
+                  '${row['name'] ?? city} · ${row['residents'] ?? 0} residents',
+                  style: const TextStyle(fontSize: 10.5),
+                )),
+                if (isMember && unclaimed)
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => action?.call(() => const EarthApi()
+                            .adoptCityForCorporation(corporationId: id, cityId: city)),
+                    child: const Text('ADOPT', style: TextStyle(fontSize: 9)),
+                  )
+                else
+                  Text(owner == null ? 'UNCLAIMED' : owner,
+                      style: TextStyle(fontSize: 9, color: belongsToUs ? cyanAccentColor : mutedColor)),
+              ]),
+            );
+          }),
+        ],
       ]),
     );
   }
