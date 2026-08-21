@@ -171,7 +171,7 @@ class TechnologyPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Choose and fund a capability that improves your businesses, city, or personal life.\n\n• Before funding, compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, decide where to adopt it and whether to keep it private, patent it, license it, or share it publicly. Physical machines and production decisions belong in Businesses & Operations.',
+          '• Research is a city capability: you must be affiliated with a city before starting or funding an upgrade. Independent characters can use their existing starter capability, but cannot expand the technology tree until they join a city.\n\n• Choose and fund a capability that improves your businesses, city, or personal life. Compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, decide where to adopt it and whether to keep it private, patent it, license it, or share it publicly. Physical machines and production decisions belong in Businesses & Operations.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

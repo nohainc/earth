@@ -46,52 +46,46 @@ class _SidebarState extends State<Sidebar> {
   }
 
   int _groupForSection(String section) {
-    if (['command', 'briefing', 'messages'].contains(section)) return 0;
-    if (['business', 'contracts', 'finance', 'market'].contains(section)) return 1;
-    if (['corporation', 'city', 'civic', 'life', 'dynasty'].contains(section)) return 2;
-    return 3;
+    const groups = [
+      ['command'],
+      ['briefing'],
+      ['messages'],
+      ['business'],
+      ['contracts'],
+      ['finance', 'market'],
+      ['corporation'],
+      ['city', 'civic'],
+      ['life', 'dynasty'],
+      ['technology'],
+    ];
+    for (var index = 0; index < groups.length; index++) {
+      if (groups[index].contains(section)) return index;
+    }
+    return 0;
   }
 
   @override
   Widget build(BuildContext context) {
     final groups = [
-      (
-        'OVERVIEW',
-        [
-          ('command', 'Command Center', Icons.dashboard_outlined),
-          ('briefing', 'Daily Priorities', Icons.today_outlined),
-          ('messages', 'Messages', Icons.settings_input_antenna),
-        ]
-      ),
-      (
-        'MANAGEMENT',
-        [
-          ('business', 'Businesses & Operations', Icons.storefront_outlined),
-          ('contracts', 'Contracts & Revenue', Icons.handshake_outlined),
-          (
-            'finance',
-            'Personal Finance',
-            Icons.account_balance_wallet_outlined
-          ),
-          ('market', 'Trade & Supplies', Icons.swap_horiz),
-        ]
-      ),
-      (
-        'LIFE & SOCIETY',
-        [
-          ('corporation', 'Corporation', Icons.account_balance_outlined),
-          ('city', 'City & Services', Icons.location_city_outlined),
-          ('civic', 'Laws & Governance', Icons.account_balance_outlined),
-          ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
-          ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
-        ]
-      ),
-      (
-        'DEVELOPMENT',
-        [
-          ('technology', 'Research & Technology', Icons.biotech_outlined),
-        ]
-      ),
+      ('OVERVIEW', [('command', 'Command Center', Icons.dashboard_outlined)]),
+      ('DAILY PLANNING', [('briefing', 'Daily Priorities', Icons.today_outlined)]),
+      ('COMMUNICATIONS', [('messages', 'Messages', Icons.settings_input_antenna)]),
+      ('BUSINESS', [('business', 'Businesses & Operations', Icons.storefront_outlined)]),
+      ('REVENUE', [('contracts', 'Contracts & Revenue', Icons.handshake_outlined)]),
+      ('PERSONAL ECONOMY', [
+        ('finance', 'Personal Finance', Icons.account_balance_wallet_outlined),
+        ('market', 'Trade & Supplies', Icons.swap_horiz),
+      ]),
+      ('CORPORATION', [('corporation', 'Corporation', Icons.account_balance_outlined)]),
+      ('CITY & GOVERNANCE', [
+        ('city', 'City & Services', Icons.location_city_outlined),
+        ('civic', 'Laws & Governance', Icons.account_balance_outlined),
+      ]),
+      ('LIFE & DYNASTY', [
+        ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
+        ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
+      ]),
+      ('RESEARCH & TECHNOLOGY', [('technology', 'Research & Technology', Icons.biotech_outlined)]),
     ];
 
     return Container(

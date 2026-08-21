@@ -23,7 +23,7 @@ export async function settleContinuousTechnology(
     owner_id: string;
     progress: string;
     budget: string;
-  }>("SELECT id, technology_id, owner_id, progress, budget FROM research_projects WHERE status = 'active' AND budget > 0 FOR UPDATE");
+  }>("SELECT rp.id, rp.technology_id, rp.owner_id, rp.progress, rp.budget FROM research_projects rp JOIN memberships m ON m.human_id = rp.owner_id AND m.city_id IS NOT NULL WHERE rp.status = 'active' AND rp.budget > 0 FOR UPDATE OF rp");
 
   for (const proj of activeProjects.rows) {
     const currentProgress = Number(proj.progress ?? 0);
