@@ -140,10 +140,10 @@ Future<void> showMachineAcquisitionDialog(
   final options = catalogOptions.isNotEmpty
       ? catalogOptions
       : [
-          {'type': 'fabrication-rig', 'output': 'components', 'credit': 850, 'material': 50},
-          {'type': 'extraction-unit', 'output': 'material', 'credit': 600, 'material': 40},
-          {'type': 'refining-matrix', 'output': 'material', 'credit': 1200, 'material': 80},
-          {'type': 'compute-cluster', 'output': 'compute', 'credit': 950, 'material': 30},
+          {'type': 'fabricator', 'output': 'components', 'credit': 4800, 'material': 90},
+          {'type': 'extractor', 'output': 'material', 'credit': 4200, 'material': 80},
+          {'type': 'energy-array', 'output': 'energy', 'credit': 3600, 'material': 60},
+          {'type': 'compute-node', 'output': 'compute', 'credit': 5200, 'material': 100},
           {'type': 'food-synthesizer', 'output': 'food', 'credit': 4400, 'material': 75},
         ];
   String selectedType = options.first['type'].toString();
