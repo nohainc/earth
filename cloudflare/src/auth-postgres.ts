@@ -39,7 +39,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, humanId, worldDay]);
     await tx.query("INSERT INTO financial_states (institution_id, institution_kind, status, since_game_day, last_reason) VALUES ($1, 'BUSINESS', 'active', $2, 'starter-package')", [businessId, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
-    await tx.query('INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,$2,$3,0)', [technologyId, `${input.displayName} Adaptive System`, humanId]);
+    await tx.query('INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,$2,$3,0)', [technologyId, 'Automated Assembly', humanId]);
     await tx.query("INSERT INTO machines (id,owner_id,name,machine_type,condition,utilization,maintenance_due,productive_capacity) VALUES ($1,$2,$3,'service-robot',100,25,0,1)", [machineId, humanId, `${input.displayName} Service Unit`]);
     await tx.query("INSERT INTO business_assets (business_id,machine_id,assigned_game_day,assigned_by) VALUES ($1,$2,$3,'starter-package')", [businessId, machineId, worldDay]);
     await tx.query("INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,status,started_game_day) VALUES ($1,$2,$3,0,0,'active',$4)", [researchId, technologyId, humanId, worldDay]);
@@ -123,7 +123,7 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     for (const [res, amt] of Object.entries(starter.resources)) {
       await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [newHumanId, res, amt]);
     }
-    await tx.query("INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,'Advanced Automated Assembly',$2,0) ON CONFLICT(id) DO NOTHING", [technologyId, newHumanId]);
+    await tx.query("INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,'Automated Assembly',$2,0) ON CONFLICT(id) DO NOTHING", [technologyId, newHumanId]);
     await tx.query('INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,started_game_day) VALUES ($1,$2,$3,2500,0,$4)', [researchId, technologyId, newHumanId, worldDay]);
     // Rebirth begins in the selected city and accepts its corporation rules
     // when that city is corporation-owned.
