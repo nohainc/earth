@@ -472,6 +472,12 @@ class _ContractsPanelState extends State<ContractsPanel> {
                   final kind = (contract['kind']?.toString() ?? 'contract')
                       .toUpperCase();
                   final amount = contract['amount'] ?? 0;
+                  final amountValue = asDouble(amount);
+                  final deliveryCost = asDouble(contract['cost'] ??
+                      contract['estimated_cost'] ??
+                      contract['delivery_cost']);
+                  final deliveryProgress = asDouble(
+                      contract['progress'] ?? contract['delivery_progress']);
                   final status = contract['status']?.toString() ?? 'proposed';
                   final startDay =
                       contract['start_day'] ?? contract['startDay'] ?? '-';
@@ -574,7 +580,7 @@ class _ContractsPanelState extends State<ContractsPanel> {
                                   ),
                                   const SizedBox(height: 4),
                                   Text(
-                                    'Kind: $kind · Amount: $amount C · Schedule: Day $startDay → Day $endDay',
+                                    'Type: $kind · Value: $amount C · Schedule: Day $startDay → Day $endDay',
                                     style: const TextStyle(
                                       fontSize: 10.5,
                                       color: mutedColor,
@@ -602,7 +608,7 @@ class _ContractsPanelState extends State<ContractsPanel> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Parties: Proposer $proposerId ⇄ Counterparty $counterpartyId',
+                                'Parties: ${contract['proposer_name'] ?? proposerId} ⇄ ${contract['counterparty_name'] ?? counterpartyId}',
                                 style: const TextStyle(
                                   fontSize: 10,
                                   color: mutedColor,
@@ -617,6 +623,15 @@ class _ContractsPanelState extends State<ContractsPanel> {
                                     fontSize: 10,
                                     color: inkColor,
                                   ),
+                                ),
+                              ],
+                              if (deliveryProgress != null ||
+                                  deliveryCost != null) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  '${deliveryProgress == null ? '' : 'Delivery: ${deliveryProgress.toStringAsFixed(0)}%'}${deliveryProgress != null && deliveryCost != null ? ' · ' : ''}${deliveryCost == null ? '' : 'Expected margin: ${formatWholeNumber((amountValue ?? 0) - deliveryCost)} C'}',
+                                  style: const TextStyle(
+                                      fontSize: 10, color: cyanAccentColor),
                                 ),
                               ],
                             ],
