@@ -63,6 +63,7 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     const resources = await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
     await tx.query('UPDATE machines SET owner_id = $1 WHERE owner_id = $2', [input.successorId, input.predecessorId]);
     await tx.query('UPDATE businesses SET owner_id = $1 WHERE owner_id = $2', [input.successorId, input.predecessorId]);
+    await tx.query('UPDATE business_management SET manager_id = $1, appointed_by = $1, appointed_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE manager_id = $3 AND business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [input.successorId, input.day, input.predecessorId]);
     for (const share of shares.rows) {
       await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,$3) ON CONFLICT (business_id, holder_id) DO UPDATE SET shares = business_shares.shares + EXCLUDED.shares, updated_at = CURRENT_TIMESTAMP', [share.business_id, input.successorId, share.shares]);
     }
@@ -131,6 +132,7 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
       await tx.query('UPDATE humans SET legacy = legacy + $1 WHERE id = $2', [Number(human.legacy) + (gross > 0 ? 1 : 0), successorRow.id]);
       await tx.query('UPDATE machines SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
       await tx.query('UPDATE businesses SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
+      await tx.query('UPDATE business_management SET manager_id = $1, appointed_by = $1, appointed_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE manager_id = $3 AND business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [successorRow.id, day, human.id]);
       for (const share of shares.rows) await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,$3) ON CONFLICT (business_id, holder_id) DO UPDATE SET shares = business_shares.shares + EXCLUDED.shares, updated_at = CURRENT_TIMESTAMP', [share.business_id, successorRow.id, share.shares]);
       await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [human.id]);
       for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [successorRow.id, resource.resource, resource.amount]);
