@@ -3,6 +3,16 @@ import { transferCredits } from './financial-postgres.ts';
 
 const KINDS = ['alliance', 'negotiation', 'campaign', 'announcement', 'lobbying', 'shared_project', 'agreement'] as const;
 export type SocialKind = typeof KINDS[number];
+const PROJECT_EFFECTS = ['housing', 'energy', 'connectivity', 'health', 'corporation_treasury'] as const;
+type ProjectEffect = typeof PROJECT_EFFECTS[number];
+
+function projectTerms(value: unknown): Record<string, unknown> {
+  if (value && typeof value === 'object') return value as Record<string, unknown>;
+  if (typeof value === 'string') {
+    try { return JSON.parse(value) as Record<string, unknown>; } catch (_error) { return {}; }
+  }
+  return {};
+}
 
 export async function listSocialInitiatives(repo: PostgresRepository, humanId: string) {
   const result = await repo.query(`
@@ -60,8 +70,25 @@ export async function createSocialInitiative(repo: PostgresRepository, input: {
   if (!Number.isFinite(creditAmount) || creditAmount < 0 || creditAmount > 1_000_000) throw new Error('Credit amount must be between 0 and 1,000,000');
   if (!Number.isInteger(deadline) || deadline <= Number(input.gameDay ?? 1) || deadline > Number(input.gameDay ?? 1) + 365) throw new Error('Deadline must be 1–365 game days after creation');
   if (!Number.isInteger(contributionTarget) || contributionTarget < 1 || contributionTarget > 100) throw new Error('Contribution target must be between 1 and 100');
+  const institutionId = String(input.terms?.institutionId ?? '').trim();
+  const projectEffect = String(input.terms?.projectEffect ?? '').trim() as ProjectEffect;
+  const projectAmount = Number(input.terms?.projectAmount ?? 0);
+  if (input.kind === 'shared_project') {
+    if (!institutionId || !PROJECT_EFFECTS.includes(projectEffect)) throw new Error('A shared project needs a supported city or corporation effect');
+    if (!Number.isInteger(projectAmount) || projectAmount < 1 || projectAmount > (projectEffect === 'corporation_treasury' ? 5000 : 100)) throw new Error('Project effect amount is outside the allowed range');
+  }
   const id = `social-${crypto.randomUUID()}`;
   const result = await repo.transaction(async (tx) => {
+    if (input.kind === 'shared_project') {
+      const institution = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1 AND status = \'active\'', [institutionId])).rows[0];
+      if (!institution || !['CITY', 'CORPORATION'].includes(institution.kind)) throw new Error('Project institution must be an active city or corporation');
+      const membership = institution.kind === 'CITY'
+        ? await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND city_id = $2', [input.creatorId, institutionId])
+        : await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND corporation_id = $2', [input.creatorId, institutionId]);
+      if (!membership.rows[0]) throw new Error('Project creator must belong to its city or corporation');
+      if (projectEffect === 'corporation_treasury' && institution.kind !== 'CORPORATION') throw new Error('Treasury projects require a corporation');
+      if (projectEffect !== 'corporation_treasury' && institution.kind !== 'CITY') throw new Error('Service projects require a city');
+    }
     const created = await tx.query(`INSERT INTO social_initiatives
       (id, creator_human_id, target_human_id, kind, title, body, terms, deadline_game_day, escrow_amount, escrow_status, game_day, status)
       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`, [id, input.creatorId, input.targetId ?? null, input.kind, input.title, input.body, JSON.stringify({ ...(input.terms ?? {}), contributionTarget }), deadline, creditAmount, creditAmount > 0 ? 'locked' : 'none', input.gameDay ?? 1, input.kind === 'announcement' || input.kind === 'campaign' ? 'active' : 'proposed']);
@@ -82,6 +109,23 @@ export async function createSocialInitiative(repo: PostgresRepository, input: {
     return created.rows[0];
   });
   return result;
+}
+
+async function applyCompletedProject(tx: PostgresRepository, initiative: any, gameDay: number): Promise<void> {
+  const terms = projectTerms(initiative.terms);
+  if (initiative.kind !== 'shared_project') return;
+  const institutionId = String(terms.institutionId ?? '').trim();
+  const effect = String(terms.projectEffect ?? '').trim() as ProjectEffect;
+  const amount = Number(terms.projectAmount ?? 0);
+  if (!institutionId || !PROJECT_EFFECTS.includes(effect) || !Number.isInteger(amount) || amount < 1) return;
+  if (effect === 'corporation_treasury') {
+    await tx.query('UPDATE corporations SET treasury = treasury + $1 WHERE id = $2', [amount, institutionId]);
+  } else {
+    const column = { housing: 'housing_capacity', energy: 'energy_capacity', connectivity: 'connectivity_capacity', health: 'health_capacity' }[effect];
+    if (!column) return;
+    await tx.query(`UPDATE cities SET ${column} = ${column} + $1 WHERE id = $2`, [amount, institutionId]);
+  }
+  await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'institution.project_completed',$3,$4) ON CONFLICT DO NOTHING", [`PROJECT-EFFECT-${initiative.id}`, gameDay, `${initiative.title} improved its institution`, JSON.stringify({ initiativeId: initiative.id, institutionId, effect, amount })]);
 }
 
 export async function respondToSocialInitiative(repo: PostgresRepository, humanId: string, initiativeId: string, accept: boolean) {
@@ -127,6 +171,7 @@ export async function contributeToSocialInitiative(repo: PostgresRepository, hum
         const recipient = (await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [initiative.creator_human_id])).rows[0];
         if (recipient) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: Number(initiative.game_day), debitAccount: escrowAccount, creditAccount: recipient.account_id, amount: initiative.escrow_amount, reasonType: 'social_escrow_release', reasonId: initiativeId, ruleVersion: 'social-v1', correlationId: `RELEASE-${initiativeId}` });
       await tx.query("UPDATE social_initiatives SET escrow_status='released' WHERE id=$1", [initiativeId]);
+      await applyCompletedProject(tx, initiative, currentDay);
       for (const member of (await tx.query<{ human_id: string }>('SELECT human_id FROM social_initiative_members WHERE initiative_id = $1', [initiativeId])).rows) {
         for (const other of (await tx.query<{ human_id: string }>('SELECT human_id FROM social_initiative_members WHERE initiative_id = $1 AND human_id <> $2', [initiativeId, member.human_id])).rows) await updateRelationship(tx, member.human_id, other.human_id, 5, 1, 0, Number(initiative.game_day));
       }

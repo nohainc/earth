@@ -26,6 +26,8 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   final credits = TextEditingController(text: '0');
   final deadline = TextEditingController(text: '7');
   final target = TextEditingController(text: '100');
+  final institution = TextEditingController();
+  final projectAmount = TextEditingController(text: '10');
   List<dynamic> people = const [];
   List<dynamic> timeline = const [];
   List<dynamic> relationships = const [];
@@ -54,6 +56,8 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     credits.dispose();
     deadline.dispose();
     target.dispose();
+    institution.dispose();
+    projectAmount.dispose();
     super.dispose();
   }
 
@@ -126,12 +130,20 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     final credit = double.tryParse(credits.text) ?? 0;
     final day = int.tryParse(deadline.text) ?? 7;
     final targetProgress = int.tryParse(target.text) ?? 100;
+    final effect = _projectEffect;
+    final effectAmount = int.tryParse(projectAmount.text) ?? 0;
+    if (kind == 'shared_project' &&
+        (institution.text.trim().isEmpty || effectAmount < 1)) {
+      setState(() =>
+          error = 'Shared projects need an institution ID and effect amount.');
+      return;
+    }
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
                 title: const Text('Preview social proposal'),
                 content: Text(
-                    'Partner: ${selectedPerson?['display_name'] ?? targetId}\nType: ${kind.replaceAll('_', ' ')}\nEscrow: $credit Credits\nDeadline: game day ${widget.gameDay + day}\nCompletion target: $targetProgress%\n\nAccepting this proposal will update both players\' trust. Escrow is released on completion or forfeited at the deadline.'),
+                    'Partner: ${selectedPerson?['display_name'] ?? targetId}\nType: ${kind.replaceAll('_', ' ')}\n${kind == 'shared_project' ? 'Institution: ${institution.text.trim()}\nEffect: ${effect.replaceAll('_', ' ')} +$effectAmount\n' : ''}Escrow: $credit Credits\nDeadline: game day ${widget.gameDay + day}\nCompletion target: $targetProgress%\n\nAccepting this proposal will update both players\' trust. Escrow is released on completion or forfeited at the deadline.'),
                 actions: [
                   TextButton(
                       onPressed: () => Navigator.pop(ctx, false),
@@ -154,7 +166,12 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
           terms: {
             'creditAmount': credit,
             'deadlineGameDay': widget.gameDay + day,
-            'contributionTarget': targetProgress
+            'contributionTarget': targetProgress,
+            if (kind == 'shared_project') ...{
+              'institutionId': institution.text.trim(),
+              'projectEffect': effect,
+              'projectAmount': effectAmount,
+            }
           });
       title.clear();
       body.clear();
@@ -166,6 +183,9 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
       if (mounted) setState(() => loading = false);
     }
   }
+
+  String get _projectEffect => _selectedProjectEffect;
+  String _selectedProjectEffect = 'housing';
 
   Future<void> _respond(String id, bool accept) async {
     try {
@@ -535,6 +555,50 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 ];
                 return Wrap(spacing: 8, runSpacing: 8, children: controls);
               }),
+              if (kind == 'shared_project') ...[
+                const SizedBox(height: 10),
+                Wrap(spacing: 8, runSpacing: 8, children: [
+                  SizedBox(
+                    width: 220,
+                    child: TextField(
+                      controller: institution,
+                      decoration: const InputDecoration(
+                        labelText: 'City or corporation ID',
+                        hintText: 'e.g. CITY-0084',
+                      ),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 190,
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedProjectEffect,
+                      decoration:
+                          const InputDecoration(labelText: 'Project effect'),
+                      items: const [
+                        'housing',
+                        'energy',
+                        'connectivity',
+                        'health',
+                        'corporation_treasury'
+                      ]
+                          .map((v) => DropdownMenuItem(
+                              value: v, child: Text(v.replaceAll('_', ' '))))
+                          .toList(),
+                      onChanged: (v) => setState(() =>
+                          _selectedProjectEffect = v ?? _selectedProjectEffect),
+                    ),
+                  ),
+                  SizedBox(
+                    width: 130,
+                    child: TextField(
+                      controller: projectAmount,
+                      keyboardType: TextInputType.number,
+                      decoration:
+                          const InputDecoration(labelText: 'Effect amount'),
+                    ),
+                  ),
+                ]),
+              ],
               const SizedBox(height: 16),
               TextField(
                   controller: title,
