@@ -26,8 +26,10 @@ class TechnologyPortfolioPanel extends StatelessWidget {
     final adopted = _names(technology['adopted'] ??
         technology['adoptedTechnologies'] ??
         technology['capabilities']);
-    final available =
-        _names(technology['available'] ?? technology['availableTechnologies']);
+    final catalog = _names(technology['catalog']);
+    final available = _names(technology['available'] ??
+        technology['availableTechnologies'] ??
+        catalog.where((item) => item != name && !adopted.contains(item)).toList());
     final applied = adopted;
 
     return EarthPanel(
