@@ -26,12 +26,14 @@ export async function settleContinuousTechnology(
   }>("SELECT rp.id, rp.technology_id, rp.owner_id, rp.progress, rp.budget FROM research_projects rp JOIN memberships m ON m.human_id = rp.owner_id AND m.city_id IS NOT NULL WHERE rp.status = 'active' AND rp.budget > 0 FOR UPDATE OF rp");
   const pioneerOwners = await repo.query<{ human_id: string }>("SELECT ac.human_id FROM auth_credentials ac JOIN dynasties d ON d.email = ac.email JOIN dynasty_perks dp ON dp.dynasty_id = d.id WHERE dp.perk_key = 'technological_pioneers'");
   const pioneerIds = new Set(pioneerOwners.rows.map((row) => row.human_id));
+  const cipherOwners = await repo.query<{ human_id: string }>("SELECT equipped_by_human_id AS human_id FROM dynasty_heirlooms WHERE heirloom_type = 'quantum_cipher' AND equipped_by_human_id IS NOT NULL");
+  const cipherIds = new Set(cipherOwners.rows.map((row) => row.human_id));
 
   for (const proj of activeProjects.rows) {
     const currentProgress = Number(proj.progress ?? 0);
     const budget = Number(proj.budget ?? 0);
     const dailyRate = Math.min(10, Math.max(1, budget / 100));
-    const dynastyFactor = pioneerIds.has(proj.owner_id) ? 1.15 : 1;
+    const dynastyFactor = (pioneerIds.has(proj.owner_id) ? 1.15 : 1) * (cipherIds.has(proj.owner_id) ? 1.1 : 1);
     const deltaProgress = Math.round(dailyRate * elapsedDays * dynastyFactor * 100) / 100;
     const newProgress = Math.min(100, currentProgress + deltaProgress);
 
