@@ -74,6 +74,16 @@ class BusinessPanel extends StatelessWidget {
     final profit = asDoubleOr(finMap['profit'], revenue - operatingCosts);
     final taxedRevenue = asDoubleOr(finMap['taxed_revenue'], revenue);
     final lastGameDay = finMap['last_game_day'] ?? state.clock['day'] ?? 184;
+    final managerName = business['manager_name']?.toString() ?? 'You';
+    final managerId = business['manager_id']?.toString();
+    final workforce = (state.json['workforce'] is List
+            ? state.json['workforce'] as List
+            : const [])
+        .whereType<Map>()
+        .where((employee) => employee['status']?.toString() == 'active')
+        .toList();
+    final payroll = workforce.fold<double>(
+        0, (sum, employee) => sum + asDoubleOr(employee['wage'], 0));
 
     final profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0.0;
     final costRatio =
@@ -127,6 +137,178 @@ class BusinessPanel extends StatelessWidget {
                 description:
                     '• Executive Entity Identity: Entity ID, sector classification, live corporate status (Active / Distressed / Insolvent), and machine fleet health score.',
               ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      violetColor.withValues(alpha: .18),
+                      surfaceColor.withValues(alpha: .72),
+                    ],
+                  ),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: violetColor.withValues(alpha: .35)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Icon(Icons.flag_outlined, color: cyanAccentColor),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'MANAGER\'S BRIEF',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                              color: cyanAccentColor,
+                            ),
+                          ),
+                          const SizedBox(height: 5),
+                          Text(
+                            profit >= 0
+                                ? 'The operation is generating value. Protect its margin, then decide where the next credit should go.'
+                                : 'The operation is losing value. Stabilize costs and capacity before expanding.',
+                            style: const TextStyle(
+                              fontSize: 12,
+                              height: 1.35,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Manager: $managerName${managerId == null ? '' : ' · $managerId'} · Last settled cycle: Day $lastGameDay',
+                            style: const TextStyle(fontSize: 10, color: mutedColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              _businessTopicHeading(
+                context,
+                'WORKFORCE / OPERATING CAPACITY',
+                description:
+                    '• Staff are part of the business, not abstract analytics. Their skills and morale affect the organization\'s ability to deliver work.\n• Payroll is a recurring operating cost.\n• Future management actions will include hiring, training, compensation, and role assignment.',
+              ),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: surfaceColor.withValues(alpha: .78),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.white10),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text('${workforce.length} active staff',
+                                style: const TextStyle(
+                                    fontSize: 12, fontWeight: FontWeight.w800)),
+                            Text('${formatCreditsAmount(payroll)} / cycle payroll',
+                                style: const TextStyle(
+                                    fontSize: 10, color: mutedColor)),
+                          ],
+                        ),
+                        OutlinedButton.icon(
+                          onPressed: busy
+                              ? null
+                              : () => showHireEmployeeDialog(
+                                  context, action, businessId),
+                          icon: const Icon(Icons.person_add_alt_1, size: 14),
+                          label: const Text('HIRE',
+                              style: TextStyle(fontSize: 10)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    if (workforce.isEmpty)
+                      const Text(
+                        'No staff are assigned yet. The operation is currently machine-led.',
+                        style: TextStyle(fontSize: 11, color: mutedColor),
+                      )
+                    else
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: workforce.map((employee) {
+                          final role = employee['role']?.toString() ?? 'Staff';
+                          final name = employee['name']?.toString() ?? 'Employee';
+                          final employeeId = employee['id']?.toString() ?? '';
+                          final skill = (asDouble(employee['skill']) ?? 0) * 100;
+                          final morale = (asDouble(employee['morale']) ?? 0) * 100;
+                          return Container(
+                            width: 210,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: .035),
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(color: Colors.white10),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(name,
+                                    style: const TextStyle(
+                                        fontSize: 11, fontWeight: FontWeight.w700)),
+                                const SizedBox(height: 2),
+                                Text(role,
+                                    style: const TextStyle(
+                                        fontSize: 10, color: mutedColor)),
+                                const SizedBox(height: 7),
+                                Text(
+                                    'Skill ${skill.toStringAsFixed(0)}% · Morale ${morale.toStringAsFixed(0)}%',
+                                    style: const TextStyle(
+                                        fontSize: 9.5, color: cyanAccentColor)),
+                                const SizedBox(height: 8),
+                                Wrap(
+                                  spacing: 4,
+                                  children: [
+                                    TextButton(
+                                      onPressed: busy || employeeId.isEmpty
+                                          ? null
+                                          : () => action(() => const EarthApi()
+                                              .trainEmployee(businessId, employeeId)),
+                                      style: TextButton.styleFrom(
+                                          visualDensity: VisualDensity.compact),
+                                      child: const Text('TRAIN',
+                                          style: TextStyle(fontSize: 9)),
+                                    ),
+                                    TextButton(
+                                      onPressed: busy || employeeId.isEmpty
+                                          ? null
+                                          : () => action(() => const EarthApi()
+                                              .dismissEmployee(businessId, employeeId)),
+                                      style: TextButton.styleFrom(
+                                          visualDensity: VisualDensity.compact,
+                                          foregroundColor: Colors.orangeAccent),
+                                      child: const Text('DISMISS',
+                                          style: TextStyle(fontSize: 9)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          );
+                        }).toList(),
+                      ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 34),
+
               // 1. EXECUTIVE ENTERPRISE HEADER CARD
               Container(
                 width: double.infinity,

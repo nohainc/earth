@@ -47,6 +47,19 @@ DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:seed:postgres
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:verify:manifest
 ```
 
+For manual local PostgreSQL testing, use the same database for migrations and
+the local Worker API. The migration helper defaults to the Docker database:
+
+```bash
+./scripts/migrate-local-db.sh --seed
+DATABASE_READ_ONLY=false DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth npm run start:wrangler
+```
+
+The Flutter client should then use `http://localhost:8788`. The legacy
+`server.js` reference simulator is intended for automated tests and is not the
+manual PostgreSQL-backed application path.
+
+
 The Flutter client in `flutter_client/` is the production web application. It reads canonical state from the Cloudflare Worker API backed by PlanetScale PostgreSQL through Hyperdrive. The public landing page is served at `/landing`; the authenticated application is served at `/app`.
 
 To run Flutter against the deployed Worker and PostgreSQL-backed API:
@@ -70,6 +83,11 @@ npx wrangler deploy --domains earthuc.com
 The versioned REST error and authority contract is documented in
 [`docs/API_CONTRACT.md`](docs/API_CONTRACT.md). The current response version is
 `2026-08`. Internal serialized state strings, world event details, negotiated contract terms, governance rule values, and municipal charters are serialized using **Nano Markup** (`nanomarkup` by `nohainc`).
+
+Product and architecture guardrails for future AI-assisted development are in
+[`docs/AI_DEVELOPMENT_GUIDE.md`](docs/AI_DEVELOPMENT_GUIDE.md).
+The implementation checklist for the management-first redesign is in
+[`docs/GAMEPLAY_REDESIGN_AUDIT.md`](docs/GAMEPLAY_REDESIGN_AUDIT.md).
 
 ## Repository map
 

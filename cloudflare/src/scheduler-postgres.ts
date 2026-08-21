@@ -8,7 +8,7 @@ import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 import { expireSocialInitiatives } from './social-gameplay-postgres.ts';
 
-const products = ['material', 'components', 'energy', 'compute'];
+const products = ['food', 'material', 'components', 'energy', 'compute'];
 
 async function settleBusinessDepreciation(tx: PostgresRepository, day: number): Promise<void> {
   const assets = await tx.query<{ business_id: string; machine_id: string; book_value: string }>('SELECT business_assets.business_id, business_assets.machine_id, COALESCE(machine_acquisitions.credit_cost, 0) AS book_value FROM business_assets LEFT JOIN machine_acquisitions ON machine_acquisitions.machine_id = business_assets.machine_id');
@@ -21,6 +21,68 @@ async function settleBusinessDepreciation(tx: PostgresRepository, day: number): 
     if (prior.rows[0]) continue;
     await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, asset.business_id]);
     await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,$4,$5,\'CREDIT\',\'business_depreciation\',$6,\'business-finance-v1\',$7)', [crypto.randomUUID(), day, `business-${asset.business_id}`, 'account-depreciation-expense', amount, asset.machine_id, correlationId]);
+  }
+}
+
+async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Promise<void> {
+  const payroll = await tx.query<{ business_id: string; total: string }>(
+    "SELECT business_id, COALESCE(SUM(wage), 0) AS total FROM business_employees WHERE status = 'active' GROUP BY business_id",
+  );
+  for (const row of payroll.rows) {
+    const total = Number(row.total ?? 0);
+    if (total <= 0) continue;
+    await tx.query(
+      'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
+      [total, day, row.business_id],
+    );
+    await tx.query(
+      "UPDATE business_employees SET morale = GREATEST(0, morale - 0.01), updated_at = CURRENT_TIMESTAMP WHERE business_id = $1 AND status = 'active'",
+      [row.business_id],
+    );
+  }
+}
+
+async function settleServiceBusinessRevenue(tx: PostgresRepository, day: number): Promise<void> {
+  const serviceBusinesses = await tx.query<{ business_id: string; revenue: string }>(
+    "SELECT b.id AS business_id, COALESCE(SUM(e.skill * e.morale * 160), 0) AS revenue FROM businesses b JOIN business_employees e ON e.business_id = b.id AND e.status = 'active' WHERE b.status = 'active' AND b.sector IN ('it-services', 'consulting', 'logistics', 'healthcare', 'education') GROUP BY b.id",
+  );
+  for (const row of serviceBusinesses.rows) {
+    const revenue = Number(row.revenue ?? 0);
+    if (revenue <= 0) continue;
+    await tx.query(
+      'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
+      [revenue, day, row.business_id],
+    );
+  }
+}
+
+async function settleInstitutionBusinessEffects(tx: PostgresRepository, day: number): Promise<void> {
+  const businesses = await tx.query<{ business_id: string; sector: string; city_id: string | null; corporation_id: string | null; housing_capacity: string | null; energy_capacity: string | null; connectivity_capacity: string | null; health_capacity: string | null; residents: string | null }>(
+    "SELECT b.id AS business_id, b.sector, m.city_id, m.corporation_id, c.housing_capacity, c.energy_capacity, c.connectivity_capacity, c.health_capacity, c.residents FROM businesses b LEFT JOIN memberships m ON m.human_id = b.owner_id LEFT JOIN cities c ON c.id = m.city_id WHERE b.status = 'active'",
+  );
+  for (const business of businesses.rows) {
+    const residents = Math.max(1, Number(business.residents ?? 1));
+    const ratios = [
+      Number(business.housing_capacity ?? residents) / residents,
+      Number(business.energy_capacity ?? residents) / residents,
+      Number(business.connectivity_capacity ?? residents) / residents,
+      Number(business.health_capacity ?? 100) / 100,
+    ];
+    const servicePressure = Math.max(0, Math.min(...ratios));
+    if (business.city_id && servicePressure < 0.75) {
+      const disruptionCost = Math.round((0.75 - servicePressure) * 100 * 100) / 100;
+      await tx.query(
+        'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
+        [disruptionCost, day, business.business_id],
+      );
+    }
+    if (business.corporation_id && ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(business.sector)) {
+      const networkRevenue = 20;
+      await tx.query(
+        'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
+        [networkRevenue, day, business.business_id],
+      );
+    }
   }
 }
 
@@ -435,6 +497,9 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
       if (day % 365 === 0) await processMortality(tx, day);
       await settleBusinessDepreciation(tx, day);
+      await settleWorkforcePayroll(tx, day);
+      await settleServiceBusinessRevenue(tx, day);
+      await settleInstitutionBusinessEffects(tx, day);
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
       await processCityDynamics(tx, day);

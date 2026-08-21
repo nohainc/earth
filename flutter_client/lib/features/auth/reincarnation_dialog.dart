@@ -38,7 +38,7 @@ class ReincarnationDialog extends StatefulWidget {
 class _ReincarnationDialogState extends State<ReincarnationDialog> {
   final _nameController = TextEditingController();
   final _dynastyController = TextEditingController(text: 'Founding Dynasty');
-  String _selectedCity = 'city-new-tokyo';
+  String _selectedCity = 'CITY-0084';
   bool _submitting = false;
   String? _error;
 
@@ -359,19 +359,9 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                       dropdownColor: EarthColors.cardSurface,
                       items: const [
                         DropdownMenuItem(
-                            value: 'city-new-tokyo',
+                            value: 'CITY-0084',
                             child:
-                                Text('Neo-Tokyo (High Technology & Compute)')),
-                        DropdownMenuItem(
-                            value: 'city-new-york',
-                            child:
-                                Text('New York (Financial & Corporate Hub)')),
-                        DropdownMenuItem(
-                            value: 'city-london',
-                            child: Text('London (Industrial & Trade Center)')),
-                        DropdownMenuItem(
-                            value: 'city-geneva',
-                            child: Text('Geneva (Global Governance & Law)')),
+                                Text('New Carthage (Founding City)')),
                         DropdownMenuItem(
                             value: 'city-singapore',
                             child: Text('Singapore (Maritime & Logistics)')),

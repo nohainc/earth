@@ -23,6 +23,22 @@ class MachinesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final machines = state.machines;
+    final activeMachines = machines.where((raw) {
+      final status = (raw as Map)['status']?.toString() ?? 'active';
+      return status != 'sold' && status != 'recycled' && status != 'decommissioned';
+    }).toList();
+    final totalCapacity = activeMachines.fold<double>(
+        0, (sum, raw) => sum + asDoubleOr((raw as Map)['productive_capacity'], 1));
+    final averageUtilization = activeMachines.isEmpty
+        ? 0.0
+        : activeMachines.fold<double>(
+                0, (sum, raw) => sum + asDoubleOr((raw as Map)['utilization'], 0)) /
+            activeMachines.length;
+    final averageCondition = activeMachines.isEmpty
+        ? 0.0
+        : activeMachines.fold<double>(
+                0, (sum, raw) => sum + asDoubleOr((raw as Map)['condition'], 100)) /
+            activeMachines.length;
     return EarthPanel(
       title: 'AUTOMATION / MACHINE INVENTORY',
       showSurface: false,
@@ -51,6 +67,26 @@ class MachinesPanel extends StatelessWidget {
                 child: const Text('ACQUIRE MACHINE'),
               ),
             ],
+          ),
+          const SizedBox(height: 14),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .7),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: Colors.white10),
+            ),
+            child: Wrap(
+              spacing: 24,
+              runSpacing: 10,
+              children: [
+                _capacityMetric('ACTIVE CAPACITY', '${totalCapacity.toStringAsFixed(1)}x', Icons.speed_outlined),
+                _capacityMetric('UTILIZATION', '${averageUtilization.toStringAsFixed(0)}%', Icons.bolt_outlined),
+                _capacityMetric('FLEET CONDITION', '${averageCondition.toStringAsFixed(0)}%', Icons.health_and_safety_outlined),
+                _capacityMetric('GROWTH DECISION', activeMachines.isEmpty ? 'START FLEET' : 'EXPAND OR OPTIMIZE', Icons.trending_up_outlined),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
           if (machines.isEmpty)
@@ -248,6 +284,24 @@ class MachinesPanel extends StatelessWidget {
             }),
         ],
       ),
+    );
+  }
+
+  Widget _capacityMetric(String label, String value, IconData icon) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 15, color: cyanAccentColor),
+        const SizedBox(width: 6),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(label, style: const TextStyle(fontSize: 8.5, color: mutedColor, letterSpacing: .6)),
+            const SizedBox(height: 2),
+            Text(value, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
+          ],
+        ),
+      ],
     );
   }
 }

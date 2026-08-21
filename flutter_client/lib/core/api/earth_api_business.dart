@@ -42,6 +42,42 @@ extension EarthApiBusiness on EarthApi {
     return world();
   }
 
+  Future<EarthState> hireEmployee(
+      String businessId, String name, String role, double wage) async {
+    await _request('/api/businesses/$businessId/employees',
+        method: 'POST',
+        body: {
+          'name': name.trim(),
+          'role': role.trim(),
+          'wage': wage,
+          'correlationId':
+              'employee-hire-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
+  Future<EarthState> trainEmployee(
+      String businessId, String employeeId) async {
+    await _request('/api/businesses/$businessId/employees/$employeeId/train',
+        method: 'POST',
+        body: {
+          'correlationId':
+              'employee-train-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
+  Future<EarthState> dismissEmployee(
+      String businessId, String employeeId) async {
+    await _request('/api/businesses/$businessId/employees/$employeeId/dismiss',
+        method: 'POST',
+        body: {
+          'correlationId':
+              'employee-dismiss-${DateTime.now().microsecondsSinceEpoch}',
+        });
+    return world();
+  }
+
   Future<EarthState> createBusiness(String name, String sector) async {
     await _request('/api/businesses', method: 'POST', body: {
       'name': name,

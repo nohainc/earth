@@ -64,7 +64,9 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
   }
   if (url.pathname === '/api/auth/rebirth' && request.method === 'POST') {
-    const human = await currentHuman(request, env);
+    // Rebirth is the transition out of an estate/deceased state, so this
+    // route must authenticate those identities instead of requiring active.
+    const human = await currentHuman(request, env, true);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ displayName?: string; dynastyName?: string; startingCityId?: string }>(request);
     if (!parsed.ok) return parsed.response;

@@ -4,7 +4,11 @@ import { centsToMoney, marketValueToCents, moneyToCents } from './money.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
-const sectors = new Set(['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d']);
+const sectors = new Set([
+  'energy', 'extraction', 'components', 'machines', 'maintenance', 'housing',
+  'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare',
+  'education',
+]);
 
 export async function createBusiness(repository: PostgresRepository, input: { ownerId: string; name: string; sector: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -134,7 +138,7 @@ export async function distributeDividends(repository: PostgresRepository, input:
 
 export async function setPolicy(repository: PostgresRepository, input: { humanId: string; policy: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const business = await tx.query<{ id: string }>('SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.owner_id = $1 OR business_management.manager_id = $1 ORDER BY businesses.id LIMIT 1 FOR UPDATE', [input.humanId]);
+    const business = await tx.query<{ id: string }>('SELECT businesses.id FROM businesses LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.owner_id = $1 OR business_management.manager_id = $1 ORDER BY businesses.id LIMIT 1 FOR UPDATE OF businesses', [input.humanId]);
     if (!business.rows[0]) throw new Error('No managed business is available to this Human');
     await tx.query('UPDATE businesses SET policy = $1 WHERE id = $2', [input.policy, business.rows[0].id]);
     return { ok: true, policy: input.policy, business: (await tx.query('SELECT * FROM businesses WHERE id = $1', [business.rows[0].id])).rows[0] };
@@ -146,7 +150,7 @@ export async function liquidateBusiness(repository: PostgresRepository, input: {
     const prior = await tx.query<{ id: string }>('SELECT id FROM bankruptcy_events WHERE institution_id = $1 AND correlation_id = $2 LIMIT 1', [input.businessId, input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, businessId: input.businessId, releasedMachines: 0, correlationId: input.correlationId };
     const business = await tx.query<{ id: string; owner_id: string; status: string; financial_status: string | null }>(
-      "SELECT businesses.id, businesses.owner_id, businesses.status, financial_states.status AS financial_status FROM businesses LEFT JOIN financial_states ON financial_states.institution_id = businesses.id WHERE businesses.id = $1 FOR UPDATE",
+      "SELECT businesses.id, businesses.owner_id, businesses.status, financial_states.status AS financial_status FROM businesses LEFT JOIN financial_states ON financial_states.institution_id = businesses.id WHERE businesses.id = $1 FOR UPDATE OF businesses",
       [input.businessId],
     );
     if (!business.rows[0]) throw new Error('Business not found');
@@ -179,6 +183,58 @@ export async function appointManager(repository: PostgresRepository, input: { ow
     await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(business_id) DO UPDATE SET manager_id = EXCLUDED.manager_id, appointed_by = EXCLUDED.appointed_by, appointed_game_day = EXCLUDED.appointed_game_day, updated_at = CURRENT_TIMESTAMP', [input.businessId, input.managerId, input.ownerId, day]);
     await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'business.manager_appointed', `Manager appointed for ${input.businessId}`, toNanoMarkup({ businessId: input.businessId, managerId: input.managerId, appointedBy: input.ownerId })]);
     return { ok: true, management: (await tx.query('SELECT * FROM business_management WHERE business_id = $1', [input.businessId])).rows[0] };
+  });
+}
+
+async function managedBusiness(tx: PostgresRepository, humanId: string, businessId: string) {
+  const result = await tx.query<{ id: string; owner_id: string }>(
+    'SELECT b.id, b.owner_id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.id = $1 AND (b.owner_id = $2 OR bm.manager_id = $2) FOR UPDATE OF b',
+    [businessId, humanId],
+  );
+  if (!result.rows[0]) throw new Error('Business management access denied');
+  return result.rows[0];
+}
+
+export async function hireEmployee(repository: PostgresRepository, input: { humanId: string; businessId: string; name: string; role: string; wage: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    await managedBusiness(tx, input.humanId, input.businessId);
+    if (input.name.trim().length < 2 || input.role.trim().length < 2) throw new Error('Employee name and role are required');
+    if (!Number.isFinite(input.wage) || input.wage <= 0) throw new Error('Employee wage must be positive');
+    const prior = await tx.query<{ id: string }>('SELECT id FROM business_employees WHERE id = $1', [`EMP-${input.correlationId}`]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, employeeId: prior.rows[0].id, correlationId: input.correlationId };
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 0);
+    const employeeId = `EMP-${input.correlationId}`;
+    await tx.query('INSERT INTO business_employees (id,business_id,name,role,wage,hired_game_day) VALUES ($1,$2,$3,$4,$5,$6)', [employeeId, input.businessId, input.name.trim(), input.role.trim(), input.wage, day]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [`WORKFORCE-HIRE-${input.correlationId}`, day, 'business.employee_hired', `${input.name.trim()} joined the business`, toNanoMarkup({ businessId: input.businessId, employeeId, role: input.role.trim(), wage: input.wage, correlationId: input.correlationId })]);
+    return { ok: true, employeeId, businessId: input.businessId, correlationId: input.correlationId };
+  });
+}
+
+export async function trainEmployee(repository: PostgresRepository, input: { humanId: string; businessId: string; employeeId: string; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    await managedBusiness(tx, input.humanId, input.businessId);
+    const employee = await tx.query<{ id: string; skill: string; morale: string; status: string }>('SELECT id, skill, morale, status FROM business_employees WHERE id = $1 AND business_id = $2 FOR UPDATE', [input.employeeId, input.businessId]);
+    if (!employee.rows[0] || employee.rows[0].status !== 'active') throw new Error('Active employee not found');
+    const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`WORKFORCE-TRAIN-${input.correlationId}`]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, employeeId: input.employeeId, correlationId: input.correlationId };
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 0);
+    const cost = 120;
+    await tx.query('UPDATE business_employees SET skill = LEAST(1, skill + 0.05), morale = GREATEST(0, morale - 0.01), updated_at = CURRENT_TIMESTAMP WHERE id = $1', [input.employeeId]);
+    await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [cost, day, input.businessId]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [`WORKFORCE-TRAIN-${input.correlationId}`, day, 'business.employee_trained', `Training completed for ${input.employeeId}`, toNanoMarkup({ businessId: input.businessId, employeeId: input.employeeId, cost, correlationId: input.correlationId })]);
+    return { ok: true, employeeId: input.employeeId, cost, correlationId: input.correlationId };
+  });
+}
+
+export async function dismissEmployee(repository: PostgresRepository, input: { humanId: string; businessId: string; employeeId: string; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    await managedBusiness(tx, input.humanId, input.businessId);
+    const employee = await tx.query<{ id: string; name: string }>('SELECT id, name FROM business_employees WHERE id = $1 AND business_id = $2 FOR UPDATE', [input.employeeId, input.businessId]);
+    if (!employee.rows[0]) throw new Error('Employee not found');
+    await tx.query("UPDATE business_employees SET status = 'dismissed', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [input.employeeId]);
+    return { ok: true, employeeId: input.employeeId, name: employee.rows[0].name, correlationId: input.correlationId };
   });
 }
 

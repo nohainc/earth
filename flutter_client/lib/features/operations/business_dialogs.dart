@@ -5,6 +5,38 @@ import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
 import '../../shared/widgets/consequence_preview_card.dart';
 
+Future<void> showHireEmployeeDialog(
+    BuildContext context,
+    Future<void> Function(Future<EarthState> Function()) action,
+    String? businessId) async {
+  if (businessId == null || businessId.isEmpty) return;
+  final name = TextEditingController();
+  final role = TextEditingController(text: 'Operations Specialist');
+  final wage = TextEditingController(text: '55');
+  await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+            title: const Text('Hire a staff member'),
+            content: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+              TextField(controller: role, decoration: const InputDecoration(labelText: 'Role')),
+              TextField(controller: wage, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Wage / cycle')),
+            ]),
+            actions: [
+              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
+              FilledButton(
+                onPressed: () async {
+                  final amount = double.tryParse(wage.text.trim());
+                  if (name.text.trim().length < 2 || role.text.trim().length < 2 || amount == null || amount <= 0) return;
+                  Navigator.pop(dialogContext);
+                  await action(() => const EarthApi().hireEmployee(businessId, name.text, role.text, amount));
+                },
+                child: const Text('HIRE'),
+              ),
+            ],
+          ));
+}
+
 Future<void> showBusinessManagerDialog(
     BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action,
@@ -265,7 +297,12 @@ Future<void> showBusinessComposerDialog(BuildContext context,
     'maintenance',
     'housing',
     'compute',
-    'r-and-d'
+    'r-and-d',
+    'it-services',
+    'consulting',
+    'logistics',
+    'healthcare',
+    'education',
   ];
   await showDialog<void>(
       context: context,

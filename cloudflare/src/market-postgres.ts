@@ -13,7 +13,7 @@ type MarketOrderInput = {
   correlationId: string;
 };
 
-const products = new Set(['material', 'components', 'energy', 'compute']);
+const products = new Set(['food', 'material', 'components', 'energy', 'compute']);
 
 async function feeRate(repository: PostgresRepository): Promise<string> {
   const result = await repository.query<{ rate: string }>("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1");

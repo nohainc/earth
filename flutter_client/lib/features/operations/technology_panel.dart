@@ -65,7 +65,7 @@ class TechnologyPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Collaborative R&D Laboratory: Planetary technological development funded through citizen and enterprise contributions.\n\n• Focus Specialization:\n  - EFFICIENCY: Boosts machine output per cycle.\n  - DURABILITY: Reduces wear rate and extends mean time between maintenance.\n  - SAFETY: Eliminates catastrophic failure risks during continuous overload.\n  - COST: Minimizes input feedstock requirements.\n\n• Intellectual Property & 24-Year Patent Term (Spec §1.14.2):\n  - Commercial Exclusivity: Completed research (100%) registers a patent granting exclusive manufacturing rights and recurring royalties (5.00% standard rate).\n  - Public Domain Transition: After 24 simulation years (288 game days), all patents expire into the Public Domain, becoming free open-source blueprints (0% royalty) to advance civilization.',
+          '• Research Laboratory: Choose and fund capabilities that improve the player\'s businesses and future options.\n\n• Focus Specialization:\n  - EFFICIENCY: More output from existing capacity.\n  - DURABILITY: Lower wear and maintenance cost.\n  - SAFETY: Less risk during demanding operations.\n  - COST: Better margins from lower input requirements.\n\n• Intellectual Property: Completed research can become a patent, generate licensing income, or enter the public domain. Physical machines and production decisions belong in Businesses & Operations.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

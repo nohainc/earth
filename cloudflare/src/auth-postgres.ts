@@ -96,7 +96,9 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     const machineId = `M-${newHumanId.slice(2)}-01`;
     const technologyId = `TECH-${newHumanId.slice(2)}`;
     const researchId = `R-${newHumanId.slice(2)}`;
-    const cityId = input.startingCityId ?? 'city-new-tokyo';
+    const cityId = input.startingCityId ?? 'CITY-0084';
+    const city = (await tx.query<{ id: string }>('SELECT id FROM cities WHERE id = $1', [cityId])).rows[0];
+    if (!city) throw new Error(`Starting city ${cityId} does not exist`);
 
     // 1. Create new Human with starter capital minus 500 Credit Naturalization Fee (net 9,500 Credits)
     const netStartingCredits = Math.max(1000, Number(starter.credits) - 500);
@@ -108,15 +110,20 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = $1', [`account-${cityId}-treasury`]).catch(() => tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\''));
 
     // 3. Setup starter business, machine, resources, technology
-    await tx.query('INSERT INTO institutions (id,kind,name) VALUES ($1,\'BUSINESS\',$2)', [businessId, `${input.displayName} Enterprise`]);
-    await tx.query('INSERT INTO businesses (id,institution_id,owner_id,business_type,registration_day) VALUES ($1,$1,$2,\'manufacturing\',$3)', [businessId, newHumanId, worldDay]);
+    await tx.query("INSERT INTO institutions (id,kind,name,status) VALUES ($1,'BUSINESS',$2,'active')", [businessId, `${input.displayName} Enterprise`]);
+    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'manufacturing')", [businessId, newHumanId, `${input.displayName} Enterprise`]);
+    await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
+    await tx.query('INSERT INTO business_constitutions (business_id,updated_by,updated_game_day) VALUES ($1,$2,$3)', [businessId, newHumanId, worldDay]);
+    await tx.query('INSERT INTO business_management (business_id,manager_id,appointed_by,appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, newHumanId, worldDay]);
+    await tx.query("INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,last_reason) VALUES ($1,'BUSINESS','active',$2,'rebirth')", [businessId, worldDay]);
+    await tx.query("INSERT INTO personal_financial_states (human_id,status,since_game_day,protected_credits,last_reason) VALUES ($1,'active',$2,100,'rebirth')", [newHumanId, worldDay]);
     await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,1000)', [businessId, newHumanId]);
     await tx.query('INSERT INTO machines (id,owner_id,name,machine_type,condition,utilization,maintenance_due,productive_capacity) VALUES ($1,$2,\'Core Fabricator Mark I\',\'fabricator\',100,0,$3,1)', [machineId, newHumanId, worldDay + 30]);
-    await tx.query('INSERT INTO business_assets (business_id,machine_id) VALUES ($1,$2)', [businessId, machineId]);
+    await tx.query("INSERT INTO business_assets (business_id,machine_id,assigned_game_day,assigned_by) VALUES ($1,$2,$3,'rebirth')", [businessId, machineId, worldDay]);
     for (const [res, amt] of Object.entries(starter.resources)) {
       await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [newHumanId, res, amt]);
     }
-    await tx.query('INSERT INTO technologies (id,name,tier,category) VALUES ($1,\'Advanced Automated Assembly\',1,\'manufacturing\') ON CONFLICT(id) DO NOTHING', [technologyId]);
+    await tx.query("INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,'Advanced Automated Assembly',$2,0) ON CONFLICT(id) DO NOTHING", [technologyId, newHumanId]);
     await tx.query('INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,started_game_day) VALUES ($1,$2,$3,2500,0,$4)', [researchId, technologyId, newHumanId, worldDay]);
     await tx.query('INSERT INTO memberships (human_id,city_id,joined_game_day) VALUES ($1,$2,$3) ON CONFLICT(human_id) DO UPDATE SET city_id = EXCLUDED.city_id', [newHumanId, cityId, worldDay]);
 

@@ -5,7 +5,7 @@ import { declarePersonalInsolvency as declarePersonalInsolvencyPostgres, publicS
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, liquidateExpiredEstates as liquidateExpiredEstatesPostgres, registerSuccessor as registerSuccessorPostgres, settleInheritance as settleInheritancePostgres } from './lifecycle-postgres';
 import { acceptContract as acceptContractPostgres, cancelContract as cancelContractPostgres, createContract as createContractPostgres, openDispute as openDisputePostgres } from './contracts-postgres';
 import { resolveContractDispute as resolveContractDisputePostgres } from './arbitration-postgres';
-import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, setPolicy as setBusinessPolicyPostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
+import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, dismissEmployee as dismissEmployeePostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, hireEmployee as hireEmployeePostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, setPolicy as setBusinessPolicyPostgres, trainEmployee as trainEmployeePostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
 import { acquireMachine as acquireMachinePostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
 import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
@@ -1386,7 +1386,7 @@ const worker = {
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const product = body.product;
-      if (!['material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
+      if (!['food', 'material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => settleMarketPostgres(repository, product!));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -1580,7 +1580,7 @@ const worker = {
       const body = parsed.value;
       const name = body.name?.trim();
       const sector = body.sector?.trim() ?? 'maintenance';
-      const sectors = ['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d'];
+      const sectors = ['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare', 'education'];
       if (!name || name.length < 3 || name.length > 80 || !sectors.includes(sector)) return Response.json({ ok: false, error: 'Business name or sector is invalid' }, { status: 400 });
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
@@ -1591,6 +1591,41 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Business registration failed';
         return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /requires/i.test(message) ? 409 : 400 });
+      }
+    }
+    const employeeCollectionMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/employees$/);
+    if (employeeCollectionMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ name?: string; role?: string; wage?: number; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      const wage = Number(body.wage);
+      if (!correlationId || !body.name?.trim() || !body.role?.trim() || !Number.isFinite(wage) || wage <= 0) return Response.json({ ok: false, error: 'Employee name, role, wage, and correlation ID are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => hireEmployeePostgres(repository, { humanId: viewer.id, businessId: employeeCollectionMatch[1], name: body.name!, role: body.role!, wage, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Employee hiring failed' }, { status: 409 });
+      }
+    }
+    const employeeActionMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/employees\/([^/]+)\/(train|dismiss)$/);
+    if (employeeActionMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+      if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
+      try {
+        const input = { humanId: viewer.id, businessId: employeeActionMatch[1], employeeId: employeeActionMatch[2], correlationId };
+        const result = await withRepository(env, (repository) => employeeActionMatch[3] === 'train' ? trainEmployeePostgres(repository, input) : dismissEmployeePostgres(repository, input));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Employee action failed' }, { status: 409 });
       }
     }
     const businessLiquidationMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/liquidate$/);

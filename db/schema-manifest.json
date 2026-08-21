@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 36,
+  "migrationVersion": 41,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -69,6 +69,15 @@
       "business_id",
       "machine_id"
     ],
+    "business_employees": [
+      "id",
+      "business_id",
+      "role",
+      "skill",
+      "morale",
+      "wage",
+      "status"
+    ],
     "business_constitutions": [
       "business_id",
       "version"
@@ -103,7 +112,8 @@
     "cities": [
       "id",
       "institution_id",
-      "treasury"
+      "treasury",
+      "status"
     ],
     "comm_channels": [
       "id",
@@ -259,7 +269,8 @@
       "id",
       "owner_id",
       "condition",
-      "productive_capacity"
+      "productive_capacity",
+      "focus"
     ],
     "maintenance_events": [
       "id",
@@ -339,7 +350,8 @@
       "closes_game_day",
       "closes_game_minute",
       "implementation_game_day",
-      "implementation_game_minute"
+      "implementation_game_minute",
+      "updated_at"
     ],
     "rankings_snapshots": [
       "id",
@@ -357,7 +369,8 @@
       "id",
       "technology_id",
       "owner_id",
-      "progress"
+      "progress",
+      "updated_at"
     ],
     "resource_balances": [
       "owner_id",
@@ -396,7 +409,15 @@
       "progress",
       "version",
       "required_compute",
-      "cost_credits"
+      "cost_credits",
+      "status"
+    ],
+    "technology_events": [
+      "id",
+      "technology_id",
+      "event_type",
+      "actor_id",
+      "game_day"
     ],
     "technology_licenses": [
       "id",
@@ -554,6 +575,8 @@
     "idx_commodity_futures_seller",
     "idx_commodity_futures_buyer",
     "idx_market_ohlc_commodity_day",
-    "idx_net_worth_human_day"
+    "idx_net_worth_human_day",
+    "technology_events_tech_idx",
+    "technology_events_actor_idx"
   ]
 }

@@ -110,12 +110,87 @@ class Dashboard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final businessMap = businessFinancials['business'] is Map<String, dynamic>
+        ? businessFinancials['business'] as Map<String, dynamic>
+        : state.business;
+    final managerProfit = asDoubleOr(businessMap['profit'], 0);
+    final wornMachines = state.machines.where((raw) {
+      final machine = raw as Map;
+      return asIntOr(machine['condition'], 100) < 45;
+    }).length;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (selectedSection == 'command') ...[
           HeroCard(key: sectionKeys['command'], state: state),
           const SizedBox(height: 34),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  (wornMachines > 0 || managerProfit < 0
+                          ? Colors.orangeAccent
+                          : cyanAccentColor)
+                      .withValues(alpha: .16),
+                  surfaceColor.withValues(alpha: .78),
+                ],
+              ),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(
+                  color: (wornMachines > 0 || managerProfit < 0
+                          ? Colors.orangeAccent
+                          : cyanAccentColor)
+                      .withValues(alpha: .35)),
+            ),
+            child: Row(
+              children: [
+                Icon(
+                  wornMachines > 0 || managerProfit < 0
+                      ? Icons.priority_high_rounded
+                      : Icons.auto_awesome_outlined,
+                  color: wornMachines > 0 || managerProfit < 0
+                      ? Colors.orangeAccent
+                      : cyanAccentColor,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text('TODAY\'S MANAGEMENT FOCUS',
+                          style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 1,
+                              color: mutedColor)),
+                      const SizedBox(height: 4),
+                      Text(
+                        wornMachines > 0
+                            ? '$wornMachines machine${wornMachines == 1 ? '' : 's'} need attention before capacity turns into downtime.'
+                            : managerProfit < 0
+                                ? 'The business is under margin pressure. Stabilize costs before expanding capacity.'
+                                : 'Protect the current margin, then choose the next investment in people, machines, or research.',
+                        style: const TextStyle(
+                            fontSize: 12, fontWeight: FontWeight.w700),
+                      ),
+                    ],
+                  ),
+                ),
+                TextButton(
+                  onPressed: () => onNavigate?.call(
+                      wornMachines > 0 || managerProfit < 0
+                          ? 'business'
+                          : 'technology'),
+                  child: Text(wornMachines > 0 || managerProfit < 0
+                      ? 'OPEN BUSINESS'
+                      : 'PLAN NEXT INVESTMENT'),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
           LayoutBuilder(
             builder: (context, constraints) {
               final availableWidth = constraints.maxWidth;
@@ -235,7 +310,7 @@ class Dashboard extends StatelessWidget {
       case 'market':
         return [
           LayoutBuilder(
-            builder: (context, constraints) {
+            builder: (context, _) {
               final signals = MarketSignalsPanel(
                 panelKey: sectionKeys['market'],
                 state: state,
@@ -247,39 +322,55 @@ class Dashboard extends StatelessWidget {
               final orders =
                   MyMarketOrdersPanel(state: state, busy: busy, action: action);
               final macro = MacroLiquidityPanel(state: state);
-              final topics = constraints.maxWidth > 1000
-                  ? Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  signals,
+                  const SizedBox(height: 24),
+                  Theme(
+                    data: Theme.of(context).copyWith(
+                      dividerColor: Colors.transparent,
+                      splashColor: Colors.transparent,
+                    ),
+                    child: ExpansionTile(
+                      tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                      childrenPadding: EdgeInsets.zero,
+                      title: const Text(
+                        'ADVANCED TRADE TOOLS',
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: 1.1,
+                          color: mutedColor,
+                        ),
+                      ),
+                      subtitle: const Text(
+                        'Order book, open orders, and macro liquidity analysis',
+                        style: TextStyle(fontSize: 11, color: mutedColor),
+                      ),
                       children: [
-                        Expanded(child: signals),
-                        const SizedBox(width: 56),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                              orderBook,
-                              const SizedBox(height: 34),
-                              orders,
-                              const SizedBox(height: 34),
-                              macro,
-                            ],
+                        const SizedBox(height: 12),
+                        orderBook,
+                        const SizedBox(height: 24),
+                        orders,
+                        const SizedBox(height: 24),
+                        macro,
+                        Align(
+                          alignment: Alignment.centerLeft,
+                          child: TextButton.icon(
+                            onPressed: onNavigate == null
+                                ? null
+                                : () => onNavigate!.call('derivatives'),
+                            icon: const Icon(Icons.show_chart, size: 14),
+                            label: const Text('OPEN ADVANCED DERIVATIVES',
+                                style: TextStyle(fontSize: 10)),
                           ),
                         ),
                       ],
-                    )
-                  : Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        signals,
-                        const SizedBox(height: 34),
-                        orderBook,
-                        const SizedBox(height: 34),
-                        orders,
-                        const SizedBox(height: 34),
-                        macro,
-                      ],
-                    );
-              return topics;
+                    ),
+                  ),
+                ],
+              );
             },
           ),
         ];
@@ -340,6 +431,15 @@ class Dashboard extends StatelessWidget {
                 action: action,
               );
               final production = ProductionEventsPanel(state: state);
+              final machines = MachinesPanel(
+                state: state,
+                busy: busy,
+                productionCatalog: productionCatalog,
+                action: action,
+              );
+              final aiAssistant =
+                  AiAssistantPanel(state: state, busy: busy, action: action);
+              final recommendations = AiRecommendationsPanel(state: state);
               final solvency = InstitutionSolvencyPanel(
                   state: state, busy: busy, action: action);
               if (constraints.maxWidth > 1000) {
@@ -354,6 +454,12 @@ class Dashboard extends StatelessWidget {
                         children: [
                           production,
                           const SizedBox(height: 34),
+                          machines,
+                          const SizedBox(height: 34),
+                          aiAssistant,
+                          const SizedBox(height: 34),
+                          recommendations,
+                          const SizedBox(height: 34),
                           solvency,
                         ],
                       ),
@@ -367,6 +473,12 @@ class Dashboard extends StatelessWidget {
                   business,
                   const SizedBox(height: 34),
                   production,
+                  const SizedBox(height: 34),
+                  machines,
+                  const SizedBox(height: 34),
+                  aiAssistant,
+                  const SizedBox(height: 34),
+                  recommendations,
                   const SizedBox(height: 34),
                   solvency,
                 ],
@@ -512,23 +624,14 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final machines = MachinesPanel(
-                state: state,
-                busy: busy,
-                productionCatalog: productionCatalog,
-                action: action,
-              );
-              final aiAssistant =
-                  AiAssistantPanel(state: state, busy: busy, action: action);
-              final recommendations = AiRecommendationsPanel(state: state);
               final matrix = EarthPanel(
-                title: 'EIGHT-SECTOR ECONOMY / INTERDEPENDENT MATRIX',
+                title: 'RESEARCH IMPACT / CAPABILITY ROADMAP',
                 showSurface: false,
                 contentPadding: EdgeInsets.zero,
                 helpAfterTitle: true,
                 titleColor: mutedColor,
                 infoDescription:
-                    '• Eight-Sector Industrial Matrix: The macroeconomic production loop linking raw extraction, power generation, mechanical fabrication, residential housing, computational infrastructure, and research.\n\n• Interdependency Loops:\n  - ENERGY & EXTRACTION: Powers high-capacity mining and bio-nutrient yields.\n  - COMPONENTS & MACHINES: Converts raw ores into precision subassemblies and industrial fabrication rigs.\n  - MAINTENANCE & HOUSING: Preserves fleet condition and citizen vitality.\n  - COMPUTE & R&D: Fuels quantum research algorithms unlocking patentable technologies.',
+                    '• Capability Roadmap: See how research changes the player\'s organizations and life.\n\n• Research outcomes:\n  - EFFICIENCY: More output from the same staff and machines.\n  - DURABILITY: Fewer breakdowns and lower maintenance costs.\n  - SAFETY: Lower operational risk during demanding cycles.\n  - COST: Reduced resource requirements and better margins.\n\nUse Research & Technology to fund, complete, patent, and license capabilities. Use Businesses & Operations to deploy them.',
                 child: Wrap(
                   spacing: 8,
                   runSpacing: 8,
@@ -601,8 +704,6 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           technology,
-                          const SizedBox(height: 34),
-                          machines,
                         ],
                       ),
                     ),
@@ -611,10 +712,6 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          aiAssistant,
-                          const SizedBox(height: 34),
-                          recommendations,
-                          const SizedBox(height: 34),
                           matrix,
                         ],
                       ),
@@ -626,12 +723,6 @@ class Dashboard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   technology,
-                  const SizedBox(height: 34),
-                  machines,
-                  const SizedBox(height: 34),
-                  aiAssistant,
-                  const SizedBox(height: 34),
-                  recommendations,
                   const SizedBox(height: 34),
                   matrix,
                 ],

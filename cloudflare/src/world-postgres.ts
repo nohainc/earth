@@ -1,10 +1,12 @@
-import type { PostgresRepository } from './repository';
-import { projectGameDeadline } from './game-clock';
-import { rankOpportunities } from './opportunities';
-import { generateDecisionQueue } from './decision-queue';
-import { evaluatePlayerObjectives } from './objectives';
-import { economicStartIndex } from './starter-package';
+import type { PostgresRepository } from './repository.ts';
+import { projectGameDeadline } from './game-clock.ts';
+import { rankOpportunities } from './opportunities.ts';
+import { generateDecisionQueue } from './decision-queue.ts';
+import { evaluatePlayerObjectives } from './objectives.ts';
+import { economicStartIndex } from './starter-package.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
+import { reconcileWorldSimulation } from './engines/simulation-orchestrator.ts';
+import { computeResourceFlows } from './engines/resource-flow-engine.ts';
 
 type Row = Record<string, any>;
 
@@ -17,6 +19,9 @@ function ratio(value: unknown, divisor: unknown, cap = 1): number {
 }
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId: string): Promise<Record<string, unknown>> {
+  await reconcileWorldSimulation(repository, viewerId);
+  const flows = await computeResourceFlows(repository, viewerId);
+
   const [world, human, institutions, resources, business, technology, proposals, machines, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts, social] = await Promise.all([
     repository.query('SELECT * FROM world_state WHERE id = $1', ['WORLD']),
     repository.query('SELECT * FROM humans WHERE id = $1', [viewerId]),
@@ -57,7 +62,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const startIndex = economicStartIndex(referencePrice || 50);
   const feeRule = (await repository.query<{ rate: string }>("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1")).rows[0]?.rate;
   const feeRate = feeRule ? Number(feeRule) : 0;
-  const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history] = await Promise.all([
+  const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees] = await Promise.all([
     Promise.all([repository.query('SELECT id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 10'), repository.query('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10')]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
     repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
@@ -79,6 +84,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query('SELECT institution_id, institution_kind, status, since_game_day, recovery_game_day FROM financial_states ORDER BY institution_kind, institution_id'),
     repository.query("SELECT institution_roles.id, institution_roles.name, institution_roles.institution_id, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id"),
     Promise.all([repository.query('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12'), repository.query('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20')]),
+    repository.query("SELECT e.id, e.business_id, e.name, e.role, e.skill, e.morale, e.wage, e.status, e.hired_game_day FROM business_employees e WHERE e.business_id IN (SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.owner_id = $1 OR bm.manager_id = $1 OR EXISTS (SELECT 1 FROM business_shares bs WHERE bs.business_id = b.id AND bs.holder_id = $1)) ORDER BY e.status, e.name", [viewerId]),
   ]);
   const serviceRatios = city ? { housing: ratio(city.housing_capacity, city.residents), energy: ratio(city.energy_capacity, city.residents), connectivity: ratio(city.connectivity_capacity, city.residents), health: ratio(city.health_capacity, 100) } : { housing: 0.75, energy: 0.75, connectivity: 0.75, health: 0.5 };
   const serviceStatus = { housing: serviceRatios.housing >= 1 ? 'normal' : serviceRatios.housing >= 0.75 ? 'basic' : 'critical', utilities: serviceRatios.energy >= 1 ? 'normal' : serviceRatios.energy >= 0.75 ? 'basic' : 'critical', connectivity: serviceRatios.connectivity >= 1 ? 'normal' : serviceRatios.connectivity >= 0.75 ? 'basic' : 'critical', health: serviceRatios.health >= 0.8 ? 'normal' : serviceRatios.health >= 0.5 ? 'basic' : 'critical' };
@@ -146,10 +152,12 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     life: { generation: 1, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
     membership: membership.rows[0] ?? null,
     institutions: { ouc: mapByKind(institutions.rows, 'OUC'), corporation: { ...mapByKind(institutions.rows, 'CORPORATION'), ...corporation }, city: { ...mapByKind(institutions.rows, 'CITY'), ...city }, business: mapByKind(institutions.rows, 'BUSINESS') },
-    resources: resourceMap, business: businessRow,
+    resources: resourceMap,
+    resourceFlows: flows,
+    business: businessRow,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
-    technology: { research: technology.rows[0] ?? {}, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0) }, machines: machineRows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
+    technology: { research: technology.rows[0] ?? {}, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0) }, machines: machineRows, workforce: employees.rows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }, ...social.rows.map((row) => ({ type: 'social', title: row.title, initiativeId: row.id, status: row.status }))], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows, corporations: rankings[1].rows }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, socialInitiatives: social.rows, roles: roles.rows, communities: communities.rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },

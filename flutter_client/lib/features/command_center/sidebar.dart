@@ -31,35 +31,32 @@ class Sidebar extends StatelessWidget {
         'OVERVIEW',
         [
           ('command', 'Command Center', Icons.dashboard_outlined),
-          ('briefing', 'Executive Briefing', Icons.newspaper_outlined),
+          ('briefing', 'Daily Priorities', Icons.today_outlined),
           ('messages', 'Messages', Icons.settings_input_antenna),
-          ('activity', 'Activity & Events', Icons.notifications_none),
         ]
       ),
       (
-        'ECONOMY',
+        'MANAGEMENT',
         [
-          ('market', 'Market', Icons.swap_horiz),
-          ('business', 'Business', Icons.storefront_outlined),
-          ('finance', 'Finance', Icons.account_balance_wallet_outlined),
-          ('net_worth', 'Net Worth Analytics', Icons.pie_chart_outline),
-          ('derivatives', 'Futures & Derivatives', Icons.show_chart),
+          ('business', 'Businesses & Operations', Icons.storefront_outlined),
+          ('contracts', 'Contracts & Revenue', Icons.handshake_outlined),
+          ('finance', 'Personal Finance', Icons.account_balance_wallet_outlined),
+          ('market', 'Trade & Supplies', Icons.swap_horiz),
         ]
       ),
       (
-        'CIVIC & LAW',
+        'LIFE & SOCIETY',
         [
-          ('civic', 'Governance', Icons.account_balance_outlined),
-          ('city', 'My City', Icons.location_city_outlined),
-          ('contracts', 'Contracts', Icons.handshake_outlined),
-        ]
-      ),
-      (
-        'DEVELOPMENT & LEGACY',
-        [
-          ('technology', 'Technology', Icons.biotech_outlined),
-          ('dynasty', 'Dynasty Tree', Icons.account_tree_outlined),
+          ('city', 'City & Services', Icons.location_city_outlined),
+          ('civic', 'Laws & Governance', Icons.account_balance_outlined),
           ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
+          ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
+        ]
+      ),
+      (
+        'DEVELOPMENT',
+        [
+          ('technology', 'Research & Technology', Icons.biotech_outlined),
         ]
       ),
     ];
