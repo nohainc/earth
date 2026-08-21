@@ -27,7 +27,8 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/player_objective.dart';
 import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
-import '../activity/activity_panel.dart';
+import '../lifecycle/historical_archive_panel.dart';
+import 'quick_actions_panel.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
       'command' => 'COMMAND CENTER',
@@ -783,20 +784,7 @@ class Dashboard extends StatelessWidget {
       case 'succession':
         return [SuccessionPanel(state: state, busy: busy, action: action)];
       case 'history':
-        return [
-          ActivityPanel(
-            panelKey: sectionKeys['history'],
-            events: events,
-            notifications: notifications,
-            unreadCount: unreadNotifications,
-            isLiveConnected: isLiveConnected,
-            isReconnecting: isReconnecting,
-            connectionStatus: connectionStatus,
-            onRefresh: onRefreshEvents ?? () {},
-            onMarkRead: onMarkNotificationRead ?? (_) async {},
-            onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
-          )
-        ];
+        return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
       case 'life':
         return [
           LayoutBuilder(
@@ -980,6 +968,9 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          QuickActionsPanel(
+                              state: state, onNavigate: onNavigate),
+                          const SizedBox(height: 28),
                           summary,
                         ],
                       ),
@@ -999,6 +990,8 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  QuickActionsPanel(state: state, onNavigate: onNavigate),
+                  const SizedBox(height: 28),
                   summary,
                   const SizedBox(height: 34),
                   objectives,
