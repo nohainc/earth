@@ -153,6 +153,9 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('UPDATE dynasty_lineage_records SET is_incumbent = false WHERE dynasty_id = $1', [dynastyRow.id]);
     await tx.query('INSERT INTO dynasty_lineage_records (id,dynasty_id,human_id,predecessor_human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) ON CONFLICT (id) DO NOTHING', [crypto.randomUUID(), dynastyRow.id, newHumanId, prevHuman?.id ?? null, nextGeneration, input.displayName, 'Dynastic Successor', worldDay, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
     await tx.query('UPDATE dynasties SET legacy_points = legacy_points + $1 WHERE id = $2', [Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), dynastyRow.id]);
+    // A new adult starts with a fresh estate, but still carries the family's
+    // equipped heirlooms and their active dynasty benefits.
+    await tx.query('UPDATE dynasty_heirlooms SET equipped_by_human_id = $1 WHERE equipped_by_human_id = $2', [newHumanId, prevHuman?.id ?? '']);
 
     const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
     const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
