@@ -839,7 +839,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                             children: [
                               Expanded(
                                 child: Text(
-                                  'CITY: $cityName ($cityId)',
+                                  cityId,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w800,
                                     fontSize: 13,

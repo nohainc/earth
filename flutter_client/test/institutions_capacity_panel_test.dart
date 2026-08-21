@@ -123,8 +123,7 @@ void main() {
     );
 
     expect(find.text('INSTITUTIONS / CITY & CORP'), findsNothing);
-    expect(
-        find.textContaining('CITY: NEW CARTHAGE (CITY-0084)'), findsOneWidget);
+    expect(find.text('CITY-0084'), findsOneWidget);
     expect(
         find.textContaining(
             '142 residents · Housing cap: 200 · Energy cap: 300'),
