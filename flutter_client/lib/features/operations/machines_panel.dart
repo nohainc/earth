@@ -369,11 +369,11 @@ class ProductionEventsPanel extends StatelessWidget {
                 final event = raw as Map<String, dynamic>;
                 final gameDay = event['game_day'] ?? state.clock['day'] ?? 184;
                 final outputResource =
-                    (event['output_resource']?.toString() ?? 'MATERIAL')
+                    (event['resource']?.toString() ?? event['output_resource']?.toString() ?? 'MATERIAL')
                         .toUpperCase();
-                final outputAmount = event['output_amount'] ?? 0;
+                final outputAmount = event['amount'] ?? event['output_amount'] ?? 0;
                 final machineType =
-                    (event['machine_type']?.toString() ?? 'RIG').toUpperCase();
+                    (event['machine_name']?.toString() ?? event['machine_type']?.toString() ?? 'RIG').toUpperCase();
 
                 Color resColor = cyanAccentColor;
                 if (outputResource.contains('ENERGY'))
