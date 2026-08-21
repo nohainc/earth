@@ -47,16 +47,18 @@ class _SidebarState extends State<Sidebar> {
 
   int _groupForSection(String section) {
     const groups = [
-      ['command'],
-      ['briefing'],
-      ['messages'],
-      ['business'],
-      ['contracts'],
-      ['finance', 'market'],
-      ['corporation'],
-      ['city', 'civic'],
-      ['life', 'dynasty'],
-      ['technology'],
+      ['command', 'briefing', 'messages'],
+      [
+        'business',
+        'machines',
+        'contracts',
+        'market',
+        'finance',
+        'technology',
+        'patents'
+      ],
+      ['corporation', 'city', 'civic', 'public-finance'],
+      ['life', 'dynasty', 'succession', 'history'],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -67,25 +69,56 @@ class _SidebarState extends State<Sidebar> {
   @override
   Widget build(BuildContext context) {
     final groups = [
-      ('OVERVIEW', [('command', 'Command Center', Icons.dashboard_outlined)]),
-      ('DAILY PLANNING', [('briefing', 'Daily Priorities', Icons.today_outlined)]),
-      ('COMMUNICATIONS', [('messages', 'Messages', Icons.settings_input_antenna)]),
-      ('BUSINESS', [('business', 'Businesses & Operations', Icons.storefront_outlined)]),
-      ('REVENUE', [('contracts', 'Contracts & Revenue', Icons.handshake_outlined)]),
-      ('PERSONAL ECONOMY', [
-        ('finance', 'Personal Finance', Icons.account_balance_wallet_outlined),
-        ('market', 'Trade & Supplies', Icons.swap_horiz),
-      ]),
-      ('CORPORATION', [('corporation', 'Corporation', Icons.account_balance_outlined)]),
-      ('CITY & GOVERNANCE', [
-        ('city', 'City & Services', Icons.location_city_outlined),
-        ('civic', 'Laws & Governance', Icons.account_balance_outlined),
-      ]),
-      ('LIFE & DYNASTY', [
-        ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
-        ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
-      ]),
-      ('RESEARCH & TECHNOLOGY', [('technology', 'Research & Technology', Icons.biotech_outlined)]),
+      (
+        'COMMAND',
+        [
+          ('command', 'Command Center', Icons.dashboard_outlined),
+          ('briefing', 'Daily Priorities', Icons.today_outlined),
+          ('messages', 'Messages', Icons.settings_input_antenna),
+        ]
+      ),
+      (
+        'ENTERPRISE & ECONOMY',
+        [
+          ('business', 'Businesses & Operations', Icons.storefront_outlined),
+          (
+            'machines',
+            'Machines & Production',
+            Icons.precision_manufacturing_outlined
+          ),
+          ('contracts', 'Contracts & Revenue', Icons.handshake_outlined),
+          ('market', 'Trade & Supplies', Icons.swap_horiz),
+          (
+            'finance',
+            'Personal Finance',
+            Icons.account_balance_wallet_outlined
+          ),
+          ('technology', 'Research & Technology', Icons.biotech_outlined),
+          ('patents', 'Patents & Licensing', Icons.assignment_outlined),
+        ]
+      ),
+      (
+        'CIVIC INSTITUTIONS',
+        [
+          ('corporation', 'Corporation', Icons.account_balance_outlined),
+          ('city', 'City & Services', Icons.location_city_outlined),
+          ('civic', 'Laws & Governance', Icons.account_balance_outlined),
+          (
+            'public-finance',
+            'Public Finance',
+            Icons.account_balance_wallet_outlined
+          ),
+        ]
+      ),
+      (
+        'LIFE & DYNASTY',
+        [
+          ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
+          ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
+          ('succession', 'Succession & Estate', Icons.fork_right_outlined),
+          ('history', 'Historical Archive', Icons.history_outlined),
+        ]
+      ),
     ];
 
     return Container(
@@ -103,7 +136,9 @@ class _SidebarState extends State<Sidebar> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  for (int groupIdx = 0; groupIdx < groups.length; groupIdx++) ...[
+                  for (int groupIdx = 0;
+                      groupIdx < groups.length;
+                      groupIdx++) ...[
                     InkWell(
                       onTap: () => setState(() => _expandedGroup =
                           _expandedGroup == groupIdx ? -1 : groupIdx),
@@ -116,7 +151,9 @@ class _SidebarState extends State<Sidebar> {
                         ),
                         child: Row(
                           children: [
-                            Expanded(child: Text(groups[groupIdx].$1, style: EarthTypography.menuGroup)),
+                            Expanded(
+                                child: Text(groups[groupIdx].$1,
+                                    style: EarthTypography.menuGroup)),
                             Icon(
                               _expandedGroup == groupIdx
                                   ? Icons.expand_less
@@ -140,30 +177,48 @@ class _SidebarState extends State<Sidebar> {
                                     child: SizedBox(
                                       width: double.infinity,
                                       child: TextButton(
-                                        onPressed: () => widget.onNavigate(item.$1),
+                                        onPressed: () =>
+                                            widget.onNavigate(item.$1),
                                         style: TextButton.styleFrom(
                                           splashFactory: NoSplash.splashFactory,
                                           enableFeedback: false,
                                           foregroundColor: violetColor,
-                                          backgroundColor: item.$1 == widget.selectedSection
-                                              ? violetColor.withValues(alpha: .16)
-                                              : Colors.transparent,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                                          backgroundColor:
+                                              item.$1 == widget.selectedSection
+                                                  ? violetColor.withValues(
+                                                      alpha: .16)
+                                                  : Colors.transparent,
+                                          shape: RoundedRectangleBorder(
+                                              borderRadius:
+                                                  BorderRadius.circular(8)),
+                                          padding: const EdgeInsets.symmetric(
+                                              horizontal: 12, vertical: 10),
                                           alignment: Alignment.centerLeft,
                                         ),
                                         child: Row(
                                           children: [
-                                            Icon(item.$3, size: 16, color: item.$1 == widget.selectedSection ? inkColor : mutedColor),
+                                            Icon(item.$3,
+                                                size: 16,
+                                                color: item.$1 ==
+                                                        widget.selectedSection
+                                                    ? inkColor
+                                                    : mutedColor),
                                             const SizedBox(width: 10),
                                             Expanded(
                                               child: Text(
                                                 item.$2,
                                                 overflow: TextOverflow.ellipsis,
                                                 maxLines: 1,
-                                                style: EarthTypography.menu.copyWith(
-                                                  color: item.$1 == widget.selectedSection ? inkColor : mutedColor,
-                                                  fontWeight: item.$1 == widget.selectedSection ? FontWeight.w700 : FontWeight.w500,
+                                                style: EarthTypography.menu
+                                                    .copyWith(
+                                                  color: item.$1 ==
+                                                          widget.selectedSection
+                                                      ? inkColor
+                                                      : mutedColor,
+                                                  fontWeight: item.$1 ==
+                                                          widget.selectedSection
+                                                      ? FontWeight.w700
+                                                      : FontWeight.w500,
                                                 ),
                                               ),
                                             ),

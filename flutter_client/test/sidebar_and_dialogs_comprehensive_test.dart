@@ -41,18 +41,20 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('OVERVIEW'), findsOneWidget);
+    expect(find.text('COMMAND'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Command Center'), findsOneWidget);
-    expect(find.text('Daily Priorities'), findsNothing);
-    expect(find.text('Messages'), findsNothing);
+    expect(find.text('Daily Priorities'), findsOneWidget);
+    expect(find.text('Messages'), findsOneWidget);
     expect(find.text('Trade & Supplies'), findsNothing);
 
-    await tester.tap(find.text('DAILY PLANNING'));
+    await tester.tap(find.text('ENTERPRISE & ECONOMY'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('COMMAND'));
     await tester.pumpAndSettle();
     expect(find.text('Daily Priorities'), findsOneWidget);
-    expect(find.text('Command Center'), findsNothing);
+    expect(find.text('Command Center'), findsOneWidget);
 
-    await tester.tap(find.text('PERSONAL ECONOMY'));
+    await tester.tap(find.text('ENTERPRISE & ECONOMY'));
     await tester.pumpAndSettle();
     expect(find.text('Trade & Supplies'), findsOneWidget);
     expect(find.text('Personal Finance'), findsOneWidget);
@@ -96,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('City & Services'), findsNothing);
-    await tester.tap(find.text('CITY & GOVERNANCE'));
+    await tester.tap(find.text('CIVIC INSTITUTIONS'));
     await tester.pumpAndSettle();
     expect(find.text('City & Services'), findsOneWidget);
   });

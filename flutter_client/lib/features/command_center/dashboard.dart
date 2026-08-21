@@ -27,6 +27,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/player_objective.dart';
 import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
+import '../activity/activity_panel.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
       'command' => 'COMMAND CENTER',
@@ -41,6 +42,11 @@ String dashboardSectionTitle(String section) => switch (section) {
       'city' => 'MY CITY',
       'dynasty' => 'DYNASTY TREE',
       'technology' => 'TECHNOLOGY',
+      'patents' => 'PATENTS & LICENSING',
+      'machines' => 'MACHINES & PRODUCTION',
+      'public-finance' => 'PUBLIC FINANCE',
+      'succession' => 'SUCCESSION & ESTATE',
+      'history' => 'HISTORICAL ARCHIVE',
       'life' => 'LEGACY',
       'contracts' => 'CONTRACTS',
       'finance' => 'FINANCE',
@@ -481,13 +487,6 @@ class Dashboard extends StatelessWidget {
                   businessFinancials: businessFinancials,
                   businessProfile: businessProfile,
                   activeBusiness: activeBusiness);
-              final machines = MachinesPanel(
-                state: state,
-                busy: busy,
-                productionCatalog: productionCatalog,
-                activeBusiness: activeBusiness,
-                action: action,
-              );
               final aiAssistant =
                   AiAssistantPanel(state: state, busy: busy, action: action);
               final recommendations = AiRecommendationsPanel(state: state);
@@ -508,8 +507,6 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          machines,
-                          const SizedBox(height: 34),
                           aiAssistant,
                           const SizedBox(height: 34),
                           recommendations,
@@ -525,8 +522,6 @@ class Dashboard extends StatelessWidget {
                   managerOverview,
                   const SizedBox(height: 34),
                   business,
-                  const SizedBox(height: 34),
-                  machines,
                   const SizedBox(height: 34),
                   aiAssistant,
                   const SizedBox(height: 34),
@@ -547,11 +542,6 @@ class Dashboard extends StatelessWidget {
               final civicInfluence = CivicInfluencePanel(state: state);
               final roles =
                   RolesPanel(state: state, busy: busy, action: action);
-              final publicFinance = PublicFinanceGovernancePanel(
-                state: state,
-                busy: busy,
-                action: action,
-              );
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -574,9 +564,7 @@ class Dashboard extends StatelessWidget {
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          publicFinance,
-                        ],
+                        children: [],
                       ),
                     ),
                   ],
@@ -593,15 +581,15 @@ class Dashboard extends StatelessWidget {
                   const SizedBox(height: 34),
                   roles,
                   const SizedBox(height: 34),
-                  publicFinance,
-                  const SizedBox(height: 34),
                 ],
               );
             },
           ),
         ];
       case 'corporation':
-        return [CorporationOverviewPanel(state: state, busy: busy, action: action)];
+        return [
+          CorporationOverviewPanel(state: state, busy: busy, action: action)
+        ];
       case 'city':
         return [
           LayoutBuilder(
@@ -669,7 +657,6 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final portfolio = TechnologyPortfolioPanel(state: state, action: action);
               final matrix = EarthPanel(
                 title: 'CHOOSE A RESEARCH DIRECTION',
                 showSurface: false,
@@ -751,7 +738,6 @@ class Dashboard extends StatelessWidget {
                         children: [
                           technology,
                           const SizedBox(height: 34),
-                          portfolio,
                         ],
                       ),
                     ),
@@ -772,13 +758,44 @@ class Dashboard extends StatelessWidget {
                 children: [
                   technology,
                   const SizedBox(height: 34),
-                  portfolio,
-                  const SizedBox(height: 34),
                   matrix,
                 ],
               );
             },
           ),
+        ];
+      case 'machines':
+        return [
+          MachinesPanel(
+            state: state,
+            busy: busy,
+            productionCatalog: productionCatalog,
+            activeBusiness: activeBusiness,
+            action: action,
+          )
+        ];
+      case 'patents':
+        return [TechnologyPortfolioPanel(state: state, action: action)];
+      case 'public-finance':
+        return [
+          PublicFinanceGovernancePanel(state: state, busy: busy, action: action)
+        ];
+      case 'succession':
+        return [SuccessionPanel(state: state, busy: busy, action: action)];
+      case 'history':
+        return [
+          ActivityPanel(
+            panelKey: sectionKeys['history'],
+            events: events,
+            notifications: notifications,
+            unreadCount: unreadNotifications,
+            isLiveConnected: isLiveConnected,
+            isReconnecting: isReconnecting,
+            connectionStatus: connectionStatus,
+            onRefresh: onRefreshEvents ?? () {},
+            onMarkRead: onMarkNotificationRead ?? (_) async {},
+            onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
+          )
         ];
       case 'life':
         return [
