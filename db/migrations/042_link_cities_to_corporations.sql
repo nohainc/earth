@@ -2,6 +2,9 @@
 -- Existing city membership remains intact; this only links the seeded city
 -- to the seeded corporation so residency can carry corporation membership.
 
+ALTER TABLE cities
+  ADD COLUMN IF NOT EXISTS corporation_id TEXT REFERENCES corporations(id);
+
 UPDATE cities
 SET corporation_id = 'CORP-001'
 WHERE id = 'CITY-0084'
