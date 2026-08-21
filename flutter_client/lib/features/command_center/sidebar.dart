@@ -70,7 +70,7 @@ class _SidebarState extends State<Sidebar> {
   Widget build(BuildContext context) {
     final groups = [
       (
-        'COMMAND',
+        'NOW',
         [
           ('command', 'Command Center', Icons.dashboard_outlined),
           ('briefing', 'Daily Priorities', Icons.today_outlined),

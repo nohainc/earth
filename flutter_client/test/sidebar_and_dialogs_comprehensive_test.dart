@@ -41,7 +41,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('COMMAND'), findsOneWidget);
+    expect(find.text('NOW'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Command Center'), findsOneWidget);
     expect(find.text('Daily Priorities'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
@@ -49,7 +49,7 @@ void main() {
 
     await tester.tap(find.text('ENTERPRISE & ECONOMY'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('COMMAND'));
+    await tester.tap(find.text('NOW'));
     await tester.pumpAndSettle();
     expect(find.text('Daily Priorities'), findsOneWidget);
     expect(find.text('Command Center'), findsOneWidget);
