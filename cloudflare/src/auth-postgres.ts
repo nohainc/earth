@@ -179,6 +179,10 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
   return repository.transaction(async (tx) => {
     const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
     if (!cred) throw new Error('Account not found');
+    const predecessor = (await tx.query<{ life_status: string }>('SELECT life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
+    if (!predecessor || !['deceased', 'estate'].includes(predecessor.life_status)) {
+      throw new Error('An heir can be claimed only after mortality or during an estate period');
+    }
     const plan = (await tx.query<{ successor_human_id: string; successor_name: string }>('SELECT successor_human_id, successor_name FROM succession_plans WHERE human_id = $1', [cred.human_id])).rows[0];
     if (!plan?.successor_human_id) throw new Error('No designated successor registered for this character');
 
