@@ -53,8 +53,9 @@ void main() {
       home: Scaffold(body: CorporationOverviewPanel(state: state)),
     ));
 
-    expect(find.text('MEMBERSHIP'), findsOneWidget);
-    expect(find.text('You belong to Carthage Dynamics.'), findsOneWidget);
+    expect(find.text('CORPORATION'), findsNWidgets(2));
+    expect(find.text('You belong to Carthage Dynamics.'), findsNothing);
+    expect(find.text('LEAVE CORPORATION'), findsOneWidget);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsOneWidget);
     expect(find.text('12500 C'), findsOneWidget);

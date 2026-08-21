@@ -118,7 +118,7 @@ class _SidebarState extends State<Sidebar> {
             'Public Finance',
             Icons.account_balance_wallet_outlined
           ),
-          ('civic-rankings', 'Civic Rankings', Icons.leaderboard_outlined),
+          ('civic-rankings', 'Rankings', Icons.leaderboard_outlined),
         ]
       ),
       (

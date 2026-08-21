@@ -479,7 +479,7 @@ class CorporationOverviewPanel extends StatelessWidget {
     }
 
     return EarthPanel(
-      title: 'MEMBERSHIP',
+      title: 'CORPORATION',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
@@ -497,15 +497,6 @@ class CorporationOverviewPanel extends StatelessWidget {
                   letterSpacing: .8)),
         ),
         const SizedBox(height: 12),
-        Text(
-            isMember
-                ? 'You belong to $name.'
-                : 'You are currently independent.',
-            style: TextStyle(
-                color: isMember ? Colors.tealAccent : Colors.orangeAccent,
-                fontSize: 13,
-                fontWeight: FontWeight.w800)),
-        const SizedBox(height: 5),
         const Text('Corporation rules apply across its city network.',
             style: TextStyle(color: mutedColor, fontSize: 11)),
         const SizedBox(height: 14),
@@ -593,6 +584,12 @@ class CorporationOverviewPanel extends StatelessWidget {
             ),
           ],
         ],
+        const SizedBox(height: 12),
+        OutlinedButton.icon(
+          onPressed: busy ? null : () => _confirmLeave(context, name, id),
+          icon: const Icon(Icons.logout, size: 14),
+          label: const Text('LEAVE CORPORATION'),
+        ),
         if (isMember &&
             state.rankings['cities'] is List &&
             (state.rankings['cities'] as List).isNotEmpty) ...[
@@ -647,6 +644,49 @@ class CorporationOverviewPanel extends StatelessWidget {
         ],
       ]),
     );
+  }
+
+  Future<void> _confirmLeave(
+      BuildContext context, String corporationName, String corporationId) async {
+    final confirmation = TextEditingController();
+    var confirmed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Leave corporation?'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+                'Leaving $corporationName removes your corporation and city affiliation. Your personal assets remain yours.',
+                style: const TextStyle(fontSize: 11)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmation,
+              onChanged: (value) =>
+                  setState(() => confirmed = value.trim() == corporationName),
+              decoration: InputDecoration(
+                  labelText: 'Type "$corporationName" to confirm'),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('CANCEL')),
+            FilledButton(
+              onPressed: confirmed
+                  ? () async {
+                      Navigator.pop(dialogContext);
+                      await (action ?? ((_) async {}))(() => const EarthApi()
+                          .leaveCorporation(corporationId: corporationId));
+                    }
+                  : null,
+              child: const Text('LEAVE CORPORATION'),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmation.dispose();
   }
 
   Widget _metric(String label, String value, IconData icon, Color color) {
