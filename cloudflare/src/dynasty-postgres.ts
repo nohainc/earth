@@ -129,8 +129,8 @@ export async function getDynastyOverview(
         dynastyName,
         'From the Red Dust We Build Eternity',
         humanId,
-        250,
-        150000.0,
+        0,
+        0.0,
       ]
     );
     dynasty = insertRes.rows[0];
@@ -156,10 +156,10 @@ export async function getDynastyOverview(
         true,
         null,
         'Pioneering the dawn of the United Corporations era.',
-        150000.0,
-        2,
-        1,
-        120,
+        0.0,
+        0,
+        0,
+        0,
       ]
     );
 
