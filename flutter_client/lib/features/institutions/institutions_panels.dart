@@ -88,11 +88,51 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         .action(() => const EarthApi().joinCorporation(corporationId: id));
   }
 
-  Future<void> _leave() async {
+  Future<void> _confirmLeave(BuildContext context) async {
     final id = widget.state.membership?['corporation_id']?.toString();
     if (id == null) return;
-    await widget
-        .action(() => const EarthApi().leaveCorporation(corporationId: id));
+    final corporation = widget.state.institutions['corporation'] is Map
+        ? Map<String, dynamic>.from(
+            widget.state.institutions['corporation'] as Map)
+        : const <String, dynamic>{};
+    final name = corporation['name']?.toString() ?? 'your corporation';
+    final confirmation = TextEditingController();
+    var confirmed = false;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Leave corporation?'),
+          content: Column(mainAxisSize: MainAxisSize.min, children: [
+            Text(
+                'This will remove you from $name and its current city. Your businesses and personal assets remain yours.',
+                style: const TextStyle(fontSize: 11)),
+            const SizedBox(height: 12),
+            TextField(
+              controller: confirmation,
+              onChanged: (value) => setState(() => confirmed = value.trim() == name),
+              decoration: InputDecoration(labelText: 'Type "$name" to confirm'),
+            ),
+          ]),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('CANCEL')),
+            FilledButton(
+              onPressed: confirmed
+                  ? () async {
+                      Navigator.pop(dialogContext);
+                      await widget.action(() => const EarthApi()
+                          .leaveCorporation(corporationId: id));
+                    }
+                  : null,
+              child: const Text('LEAVE CORPORATION'),
+            ),
+          ],
+        ),
+      ),
+    );
+    confirmation.dispose();
   }
 
   @override
@@ -123,7 +163,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           'You are a member of $name. Your corporation membership places you in its capital city: $city.'),
       const SizedBox(height: 14),
       OutlinedButton.icon(
-        onPressed: widget.busy ? null : _leave,
+        onPressed: widget.busy ? null : () => _confirmLeave(context),
         icon: const Icon(Icons.logout, size: 15),
         label: const Text('LEAVE CORPORATION'),
       ),
@@ -228,6 +268,15 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
 
   Widget _details(Map<String, dynamic> row) {
     final approval = row['admission_policy']?.toString() == 'approval';
+    final rules = row['rules'] is Map
+        ? Map<String, dynamic>.from(row['rules'] as Map)
+        : const <String, dynamic>{};
+    String tax(String key) {
+      final basisPoints = asDouble(rules[key]);
+      return basisPoints == null
+          ? 'default'
+          : '${(basisPoints / 100).toStringAsFixed(2)}%';
+    }
     return Container(
       padding: const EdgeInsets.all(13),
       decoration: BoxDecoration(
@@ -244,6 +293,17 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             style: const TextStyle(color: mutedColor, fontSize: 10.5)),
         Text('Members: ${row['member_count'] ?? 0}',
             style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 8),
+        const Text('CORPORATION RULES',
+            style: TextStyle(
+                color: inkColor, fontSize: 9, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 3),
+        Text(
+            'Income tax: ${tax('incomeTaxBps')} · Sales tax: ${tax('salesTaxBps')}',
+            style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+        Text(
+            'Corporate tax: ${tax('corporateTaxBps')} · Property tax: ${tax('propertyTaxBps')}',
+            style: const TextStyle(color: mutedColor, fontSize: 9.5)),
         const SizedBox(height: 10),
         Text(approval ? 'ADMISSION: ADMIN APPROVAL' : 'ADMISSION: OPEN',
             style: TextStyle(

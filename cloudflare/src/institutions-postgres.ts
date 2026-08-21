@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
-import { toNanoMarkup } from './nano-markup.ts';
+import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 
 async function day(repository: PostgresRepository): Promise<number> {
   const result = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -27,6 +27,7 @@ export async function listCorporations(repository: PostgresRepository, search = 
   const result = await repository.query(`
     SELECT corporations.*, institutions.name, institutions.status,
            capital_institutions.name AS capital_city_name,
+           institutions.charter_rules,
            COALESCE((SELECT COUNT(*) FROM cities WHERE cities.corporation_id = corporations.id), 0)::integer AS city_count
     FROM corporations
     JOIN institutions ON institutions.id = corporations.institution_id
@@ -34,7 +35,13 @@ export async function listCorporations(repository: PostgresRepository, search = 
     WHERE institutions.status = 'active' AND ($1 = '%%' OR institutions.name ILIKE $1)
     ORDER BY corporations.member_count DESC, institutions.name ASC
     LIMIT 100`, [term]);
-  return { corporations: result.rows };
+  return {
+    corporations: result.rows.map((row) => ({
+      ...row,
+      rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules),
+      charter_rules: undefined,
+    })),
+  };
 }
 
 export async function createCity(repository: PostgresRepository, input: { founderId: string; communityId: string; name: string }): Promise<Record<string, unknown>> {

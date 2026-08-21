@@ -601,13 +601,13 @@ class Dashboard extends StatelessWidget {
               return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: directory),
-                    const SizedBox(width: 34),
                     Expanded(child: overview),
+                    const SizedBox(width: 34),
+                    Expanded(child: directory),
                   ]);
             }
             return Column(
-                children: [directory, const SizedBox(height: 34), overview]);
+                children: [overview, const SizedBox(height: 34), directory]);
           })
         ];
       case 'city':
