@@ -658,77 +658,7 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final matrix = EarthPanel(
-                title: 'CHOOSE A RESEARCH DIRECTION',
-                showSurface: false,
-                contentPadding: EdgeInsets.zero,
-                helpAfterTitle: true,
-                titleColor: mutedColor,
-                infoDescription:
-                    '• Your research direction determines which opportunities become available.\n\n• Choose the future you want to build: stronger businesses, better food and energy systems, healthier cities, or more capable information infrastructure.\n\n• A direction is a strategic commitment, not just a category label.',
-                child: Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    Chip(
-                      avatar: Icon(Icons.bolt_outlined,
-                          size: 14, color: Colors.amberAccent),
-                      label: Text('ENERGY & CLIMATE',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.terrain_outlined,
-                          size: 14, color: Colors.tealAccent),
-                      label: Text('FOOD & RESOURCES',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.settings_outlined,
-                          size: 14, color: cyanAccentColor),
-                      label: Text('INDUSTRY & AUTOMATION',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.precision_manufacturing_outlined,
-                          size: 14, color: violetColor),
-                      label: Text('HOUSING & CITY LIFE',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.build_outlined,
-                          size: 14, color: Colors.orangeAccent),
-                      label: Text('HEALTH & SAFETY',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.home_work_outlined,
-                          size: 14, color: Colors.lightGreenAccent),
-                      label: Text('TRANSPORT & LOGISTICS',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.memory_outlined,
-                          size: 14, color: cyanAccentColor),
-                      label: Text('COMPUTING & INFORMATION',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                    Chip(
-                      avatar: Icon(Icons.biotech_outlined,
-                          size: 14, color: violetColor),
-                      label: Text('SCIENCE & EXPLORATION',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w700)),
-                    ),
-                  ],
-                ),
-              );
+              final matrix = TechnologyOutcomePanel(state: state);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,

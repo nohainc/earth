@@ -29,7 +29,9 @@ class TechnologyPortfolioPanel extends StatelessWidget {
     final catalog = _names(technology['catalog']);
     final available = _names(technology['available'] ??
         technology['availableTechnologies'] ??
-        catalog.where((item) => item != name && !adopted.contains(item)).toList());
+        catalog
+            .where((item) => item != name && !adopted.contains(item))
+            .toList());
     final applied = adopted;
 
     return EarthPanel(
@@ -60,11 +62,16 @@ class TechnologyPortfolioPanel extends StatelessWidget {
             'Potential next directions',
             violetColor),
         const SizedBox(height: 12),
-        if (progress == '100' && research['id'] != null && state.businesses.isNotEmpty)
+        if (progress == '100' &&
+            research['id'] != null &&
+            state.businesses.isNotEmpty)
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: action == null ? null : () => _showAdoptionDialog(context, research['id'].toString(), name),
+              onPressed: action == null
+                  ? null
+                  : () => _showAdoptionDialog(
+                      context, research['id'].toString(), name),
               icon: const Icon(Icons.upgrade_outlined, size: 15),
               label: const Text('ADOPT FOR A BUSINESS'),
             ),
@@ -76,7 +83,8 @@ class TechnologyPortfolioPanel extends StatelessWidget {
     );
   }
 
-  Future<void> _showAdoptionDialog(BuildContext context, String technologyId, String technologyName) async {
+  Future<void> _showAdoptionDialog(
+      BuildContext context, String technologyId, String technologyName) async {
     String? businessId;
     await showDialog<void>(
       context: context,
@@ -85,19 +93,29 @@ class TechnologyPortfolioPanel extends StatelessWidget {
           title: Text('Deploy $technologyName'),
           content: DropdownButtonFormField<String>(
             decoration: const InputDecoration(labelText: 'Business workplace'),
-            items: state.businesses.map((business) {
-              final id = business['id']?.toString() ?? '';
-              return DropdownMenuItem(value: id, child: Text(business['name']?.toString() ?? id));
-            }).where((item) => item.value!.isNotEmpty).toList(),
+            items: state.businesses
+                .map((business) {
+                  final id = business['id']?.toString() ?? '';
+                  return DropdownMenuItem(
+                      value: id,
+                      child: Text(business['name']?.toString() ?? id));
+                })
+                .where((item) => item.value!.isNotEmpty)
+                .toList(),
             onChanged: (value) => setState(() => businessId = value),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('CANCEL')),
             FilledButton(
-              onPressed: businessId == null ? null : () async {
-                Navigator.pop(dialogContext);
-                await action?.call(() => const EarthApi().adoptTechnology(businessId!, technologyId));
-              },
+              onPressed: businessId == null
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      await action?.call(() => const EarthApi()
+                          .adoptTechnology(businessId!, technologyId));
+                    },
               child: const Text('DEPLOY'),
             ),
           ],
@@ -147,6 +165,107 @@ class TechnologyPortfolioPanel extends StatelessWidget {
           Text(note, style: const TextStyle(color: mutedColor, fontSize: 9.5)),
         ])),
       ]),
+    );
+  }
+}
+
+class TechnologyOutcomePanel extends StatelessWidget {
+  final EarthState state;
+
+  const TechnologyOutcomePanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final rawCatalog = state.technologyRegistry['catalog'];
+    final catalog = rawCatalog is List && rawCatalog.isNotEmpty
+        ? rawCatalog
+        : const [
+            {
+              'name': 'Automated Assembly',
+              'description':
+                  'Improves machine throughput for component and manufactured-goods production.',
+              'effect': 'Higher production output'
+            },
+            {
+              'name': 'Clean Energy Systems',
+              'description':
+                  'Reduces the operating burden of energy-intensive workplaces and infrastructure.',
+              'effect': 'Lower energy costs'
+            },
+            {
+              'name': 'Food Synthesis',
+              'description':
+                  'Enables high-yield food production for resilient local supply.',
+              'effect': 'Stronger food reserves'
+            },
+            {
+              'name': 'Predictive Maintenance',
+              'description':
+                  'Reduces machine wear when actively adopted by a workplace.',
+              'effect': 'Longer machine life'
+            },
+            {
+              'name': 'Civic Network Infrastructure',
+              'description':
+                  'Improves the coordination capacity of city services and civic institutions.',
+              'effect': 'Better civic capacity'
+            },
+          ];
+    return EarthPanel(
+      title: 'CAPABILITY OUTCOMES',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      titleColor: mutedColor,
+      helpAfterTitle: true,
+      infoDescription:
+          '• Each approved capability has a practical target.\n\n• Research creates potential; adoption connects it to a business or civic workplace.\n\n• Compare the outcome with your current bottleneck before spending research Credits.',
+      child: Column(
+          children: catalog.take(8).map((raw) {
+        final item = raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : const <String, dynamic>{};
+        final name =
+            (item['name'] ?? item['title'] ?? 'Approved capability').toString();
+        final description = (item['description'] ??
+                'Approved capability with a defined gameplay effect.')
+            .toString();
+        final effect = (item['effect'] ?? 'Practical capability improvement')
+            .toString()
+            .replaceAll('_', ' ');
+        return Container(
+          width: double.infinity,
+          margin: const EdgeInsets.only(bottom: 7),
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+              color: surfaceColor.withValues(alpha: .65),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Colors.white12)),
+          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            const Icon(Icons.auto_awesome_outlined,
+                size: 16, color: cyanAccentColor),
+            const SizedBox(width: 8),
+            Expanded(
+                child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                  Row(children: [
+                    Expanded(
+                        child: Text(name,
+                            style: const TextStyle(
+                                fontSize: 10.5, fontWeight: FontWeight.w800))),
+                    Text(effect.toUpperCase(),
+                        style: const TextStyle(
+                            color: violetColor,
+                            fontSize: 8,
+                            fontWeight: FontWeight.w800))
+                  ]),
+                  const SizedBox(height: 3),
+                  Text(description,
+                      style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                ])),
+          ]),
+        );
+      }).toList()),
     );
   }
 }
