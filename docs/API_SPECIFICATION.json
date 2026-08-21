@@ -33,6 +33,32 @@
         }
       }
     },
+    "/api/technology/adopt": {
+      "post": {
+        "summary": "Deploy a completed technology to a managed business",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": ["businessId", "technologyId"],
+                "properties": {
+                  "businessId": { "type": "string" },
+                  "technologyId": { "type": "string" }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Technology deployed" },
+          "400": { "description": "Validation error" },
+          "401": { "description": "Authentication required" },
+          "409": { "description": "Business or technology cannot be adopted" }
+        }
+      }
+    },
     "/api/market/orders": {
       "post": {
         "summary": "Place a buy or sell limit market order",

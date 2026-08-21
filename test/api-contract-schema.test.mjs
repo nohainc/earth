@@ -13,7 +13,7 @@ test('API Contract Specification and Schema Validation', async () => {
   assert.equal(contract.servers[0].url, 'https://earthuc.com');
 
   // Verify paths
-  const requiredPaths = ['/api/health', '/api/world', '/api/market/orders', '/api/governance/proposals/{id}/vote', '/api/history', '/api/events'];
+  const requiredPaths = ['/api/health', '/api/world', '/api/technology/adopt', '/api/market/orders', '/api/governance/proposals/{id}/vote', '/api/history', '/api/events'];
   for (const path of requiredPaths) {
     assert.ok(contract.paths[path], `Contract must document path ${path}`);
   }
