@@ -630,7 +630,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Periodic Batch Auction Architecture (Spec §1.10):\n  - Major commodities clear via scheduled Batch Auctions (every 4 World hours) rather than continuous front-run order books.\n  - Uniform Price Clearing (P*): All buy orders >= P* and sell orders <= P* fill at the identical market clearing price.\n  - Pro-Rata Shortage Allocation: Excess supply or demand at exact P* is allocated proportionally.\n\n• Commodity Selector: Select between Food, Materials, Energy, Components, and Compute to view spot clearing price, 24h price delta, and market liquidity.\n\n• Liquidity Pressure Gauge: Real-time ratio comparing total aggregated sell volume against buy volume.\n\n• Execution Terminal: Submit limit Buy or Sell orders with explicit quantity and unit price controls.',
+          '• Buy resources you need, sell what your businesses do not use, or leave an order open for a later fill.\n\n• Compare the current price with your stock, production plans, and contracts before acting.\n\n• Orders may fill later, partially, or at a market-cleared price.\n\n• The market supports your businesses; it is not the main source of progression.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -638,7 +638,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             context,
             'MARKET ACTION / BUY & SELL',
             description:
-                '• Periodic Batch Auction Architecture: major commodities clear every 4 World hours at one uniform price.\n\n• Commodity Selector: choose Food, Materials, Energy, Components, or Compute to review price, change, and liquidity.\n\n• Liquidity Pressure Gauge: compares aggregated sell volume against buy volume.\n\n• Execution Terminal: submit limit buy or sell orders with explicit quantity and price controls.',
+                '• Decide whether to buy, sell, produce internally, sign a supply contract, or wait. Open orders can fill later.',
           ),
           // 0. BATCH AUCTION CLEARING BANNER
           Container(
