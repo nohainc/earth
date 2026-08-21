@@ -39,7 +39,7 @@ class TechnologyPortfolioPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Researched does not always mean deployed. A capability must be adopted by a business, city service, or personal life before it changes outcomes.\n\n• Use this view to see what is active, what is ready to adopt, and what still needs investment.\n\n• Patent and licensing choices are secondary ways to benefit from a completed capability.',
+          '• Researched does not always mean deployed. A capability must be adopted by a business, city service, or personal life before it changes outcomes.\n\n• Use this view to see what is active, what is ready to adopt, and what still needs investment.\n\n• Patents are advanced corporation records; everyday gameplay is about choosing where to apply completed capabilities.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _portfolioRow('IN DEVELOPMENT', name, '$progress% complete',
             Colors.lightBlueAccent),
@@ -214,7 +214,7 @@ class TechnologyPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Research is a city capability: you must be affiliated with a city before starting or funding an upgrade. Independent characters can use their existing starter capability, but cannot expand the technology tree until they join a city.\n\n• Choose and fund a capability that improves your businesses, city, or personal life. Compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, decide where to adopt it and whether to keep it private, patent it, license it, or share it publicly. Physical machines and production decisions belong in Businesses & Operations.',
+          '• Research is a city capability: you must be affiliated with a city before starting or funding an upgrade. Independent characters can use their existing starter capability, but cannot expand the technology tree until they join a city.\n\n• Choose and fund a capability that improves your businesses, city, or personal life. Compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, adopt the capability where it matters. Corporation patents and shared research are advanced institutional actions. Physical machines and production decisions belong in Businesses & Operations.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -586,51 +586,6 @@ class TechnologyPanel extends StatelessWidget {
                   icon: const Icon(Icons.verified_user_outlined, size: 15),
                   label: const Text(
                     'GRANT PATENT',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .6,
-                    ),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: cyanAccentColor,
-                    side: BorderSide(
-                        color: cyanAccentColor.withValues(alpha: .3)),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: busy
-                      ? null
-                      : () =>
-                          action(() => const EarthApi().licenseTechnology()),
-                  icon: const Icon(Icons.share_outlined, size: 15),
-                  label: const Text(
-                    'LICENSE (5%)',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .6,
-                    ),
-                  ),
-                ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.tealAccent,
-                    side: BorderSide(
-                        color: Colors.tealAccent.withValues(alpha: .3)),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: busy
-                      ? null
-                      : () => showLicenseComposerDialog(context, action),
-                  icon: const Icon(Icons.person_add_alt_1_outlined, size: 15),
-                  label: const Text(
-                    'LICENSE TO HUMAN',
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w700,
