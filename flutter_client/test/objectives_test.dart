@@ -66,7 +66,7 @@ void main() {
     test('synthesizes all exemplar objectives from state', () {
       final objectives = PlayerObjective.synthesizeFromState(testState);
 
-      expect(objectives.length, 6);
+      expect(objectives.length, 9);
 
       final titles = objectives.map((o) => o.title).toList();
       expect(titles.any((t) => t.contains('Valuable Corporation')), isTrue);
@@ -103,7 +103,7 @@ void main() {
       expect(find.textContaining('OVERALL PROGRESS'), findsOneWidget);
 
       // Verify Filter Pills
-      expect(find.textContaining('ALL (6)'), findsOneWidget);
+      expect(find.textContaining('ALL (9)'), findsOneWidget);
       expect(find.text('ENTERPRISE'), findsOneWidget);
       expect(find.text('CIVIC & DYNASTY'), findsOneWidget);
       expect(find.text('TECH & FINANCE'), findsOneWidget);

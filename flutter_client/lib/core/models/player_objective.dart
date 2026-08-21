@@ -149,6 +149,13 @@ class PlayerObjective {
     final rawBiz = state.json['business'];
     final biz = rawBiz is Map ? rawBiz : const {};
     final profit = _toDouble(biz['profit'], 0.0);
+    final businessCount = _toDouble(
+        biz['business_count'] ?? (state.businesses.isNotEmpty ? state.businesses.length : null),
+        biz['id'] != null ? 1.0 : 0.0);
+    final serviceBusinessCount = _toDouble(biz['service_business_count'], 0.0);
+    final rawResources = state.json['resources'];
+    final resources = rawResources is Map ? rawResources : const {};
+    final foodReserve = _toDouble(resources['food'], 0.0);
 
     final rawLife = state.json['life'];
     final life = rawLife is Map ? rawLife : const {};
@@ -200,6 +207,48 @@ class PlayerObjective {
         rewardDescription:
             'Title: "Grand Tribune" · Veto Injunction Power on City Budgets · +350 Standing',
         targetSection: 'civic',
+      ),
+      PlayerObjective(
+        id: 'obj-food-security',
+        category: 'enterprise',
+        title: 'Build a Self-Sustaining Food Reserve',
+        description: 'Use productive assets and food systems to maintain a 500-unit reserve that protects your household and businesses from supply shocks.',
+        currentValue: foodReserve,
+        targetValue: 500.0,
+        progressPercentage: (foodReserve / 500.0 * 100.0).clamp(0.0, 100.0),
+        metricLabel: '${foodReserve.round()} / 500 Food Units',
+        status: foodReserve >= 500.0 ? 'completed' : 'in_progress',
+        rewardDescription: 'Title: "Food Systems Steward" · +200 Legacy Points · Reduced emergency supply costs',
+        targetSection: 'business',
+        iconName: 'restaurant',
+      ),
+      PlayerObjective(
+        id: 'obj-enterprise-portfolio',
+        category: 'enterprise',
+        title: 'Build a Portfolio of Enterprises',
+        description: 'Own or manage three distinct operations so your dynasty is not dependent on a single source of income or production.',
+        currentValue: businessCount,
+        targetValue: 3.0,
+        progressPercentage: (businessCount / 3.0 * 100.0).clamp(0.0, 100.0),
+        metricLabel: '${businessCount.round()} / 3 Active Operations',
+        status: businessCount >= 3.0 ? 'completed' : 'in_progress',
+        rewardDescription: 'Title: "Enterprise Builder" · +300 Legacy Points · Portfolio management privileges',
+        targetSection: 'business',
+        iconName: 'business_center',
+      ),
+      PlayerObjective(
+        id: 'obj-service-enterprise',
+        category: 'enterprise',
+        title: 'Build a Service Enterprise',
+        description: 'Develop two people-powered service businesses that earn recurring revenue through expertise, contracts, and corporate networks.',
+        currentValue: serviceBusinessCount,
+        targetValue: 2.0,
+        progressPercentage: (serviceBusinessCount / 2.0 * 100.0).clamp(0.0, 100.0),
+        metricLabel: '${serviceBusinessCount.round()} / 2 Service Businesses',
+        status: serviceBusinessCount >= 2.0 ? 'completed' : 'in_progress',
+        rewardDescription: 'Title: "Civic Service Architect" · +250 Legacy Points · Priority access to institutional contracts',
+        targetSection: 'business',
+        iconName: 'support_agent',
       ),
       PlayerObjective(
         id: 'obj-dynasty-traits',

@@ -43,7 +43,15 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
         return widget.objectives.where((o) => o.isCompleted).toList();
       case 'ALL':
       default:
-        return widget.objectives.take(3).toList();
+        final highlights = <PlayerObjective>[];
+        for (final category in ['enterprise', 'civic', 'dynasty']) {
+          final match = widget.objectives.cast<PlayerObjective?>().firstWhere(
+                (objective) => objective?.category.toLowerCase() == category,
+                orElse: () => null,
+              );
+          if (match != null) highlights.add(match);
+        }
+        return highlights;
     }
   }
 
