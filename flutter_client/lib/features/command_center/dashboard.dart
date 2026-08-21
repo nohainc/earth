@@ -38,7 +38,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'briefing' => 'EXECUTIVE BRIEFING',
       'messages' => 'MESSAGES',
       'business' => 'BUSINESS',
-      'civic' => 'GOVERNANCE',
+      'civic' => 'EARTH RULES',
       'corporation' => 'CORPORATION',
       'city' => 'MY CITY',
       'dynasty' => 'DYNASTY TREE',
@@ -535,66 +535,40 @@ class Dashboard extends StatelessWidget {
         ];
       case 'civic':
       case 'governance':
-        return [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final proposal =
-                  ProposalPanel(state: state, busy: busy, action: action);
-              final civicStatus = CivicStatusPanel(state: state);
-              final civicInfluence = CivicInfluencePanel(state: state);
-              final roles =
-                  RolesPanel(state: state, busy: busy, action: action);
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          civicStatus,
-                          const SizedBox(height: 34),
-                          proposal,
-                          const SizedBox(height: 34),
-                          civicInfluence,
-                          const SizedBox(height: 34),
-                          roles,
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [],
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  civicStatus,
-                  const SizedBox(height: 34),
-                  proposal,
-                  const SizedBox(height: 34),
-                  civicInfluence,
-                  const SizedBox(height: 34),
-                  roles,
-                  const SizedBox(height: 34),
-                ],
-              );
-            },
-          ),
-        ];
+        return [ProposalPanel(state: state, busy: busy, action: action)];
       case 'corporation':
         return [
           LayoutBuilder(builder: (context, constraints) {
             final overview = CorporationOverviewPanel(
                 state: state, busy: busy, action: action);
             final isMember = state.membership?['corporation_id'] != null;
-            if (isMember) return overview;
+            if (isMember) {
+              final corporationId =
+                  state.membership?['corporation_id']?.toString();
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  overview,
+                  if (corporationId != null) ...[
+                    const SizedBox(height: 34),
+                    ProposalPanel(
+                      state: state,
+                      busy: busy,
+                      action: action,
+                      institutionId: corporationId,
+                      scopeLabel: 'CORPORATION',
+                    ),
+                    const SizedBox(height: 34),
+                    RolesPanel(
+                      state: state,
+                      busy: busy,
+                      action: action,
+                      institutionId: corporationId,
+                    ),
+                  ],
+                ],
+              );
+            }
             final directory = CorporationDirectoryPanel(
                 state: state, busy: busy, action: action);
             if (constraints.maxWidth > 1000) {
@@ -621,6 +595,15 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
+              final cityId = state.membership?['city_id']?.toString();
+              final cityProposal = cityId == null
+                  ? null
+                  : ProposalPanel(
+                      state: state,
+                      busy: busy,
+                      action: action,
+                      institutionId: cityId,
+                      scopeLabel: 'CITY');
               final communities =
                   CommunitiesPanel(state: state, busy: busy, action: action);
               final cityImpact = CityImpactPanel(state: state);
@@ -633,6 +616,19 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           institutions,
+                          if (cityProposal != null) ...[
+                            const SizedBox(height: 34),
+                            cityProposal,
+                          ],
+                          if (cityId != null) ...[
+                            const SizedBox(height: 34),
+                            RolesPanel(
+                              state: state,
+                              busy: busy,
+                              action: action,
+                              institutionId: cityId,
+                            ),
+                          ],
                           const SizedBox(height: 34),
                           humanServices,
                           const SizedBox(height: 34),
@@ -656,6 +652,19 @@ class Dashboard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   institutions,
+                  if (cityProposal != null) ...[
+                    const SizedBox(height: 34),
+                    cityProposal,
+                  ],
+                  if (cityId != null) ...[
+                    const SizedBox(height: 34),
+                    RolesPanel(
+                      state: state,
+                      busy: busy,
+                      action: action,
+                      institutionId: cityId,
+                    ),
+                  ],
                   const SizedBox(height: 34),
                   humanServices,
                   const SizedBox(height: 34),

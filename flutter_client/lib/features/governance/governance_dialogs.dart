@@ -3,14 +3,15 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 
 Future<void> showProposalComposer(BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action) async {
+    Future<void> Function(Future<EarthState> Function()) action,
+    {String institutionId = 'OUC-001', String scopeLabel = 'UC'}) async {
   final title = TextEditingController();
   final body = TextEditingController();
   final targetRate = TextEditingController();
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Create UC proposal'),
+            title: Text('Create $scopeLabel proposal'),
             content: SizedBox(
               width: 420,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -55,6 +56,7 @@ Future<void> showProposalComposer(BuildContext context,
                     }
                     await action(() => const EarthApi().createProposal(
                         title.text.trim(), body.text.trim(),
+                        institutionId: institutionId,
                         targetCategory: rate == null ? null : 'finance',
                         targetRate: rate));
                     if (dialogContext.mounted) Navigator.pop(dialogContext);

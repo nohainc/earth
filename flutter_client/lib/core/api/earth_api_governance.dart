@@ -8,9 +8,9 @@ extension EarthApiGovernance on EarthApi {
   }
 
   Future<EarthState> createProposal(String title, String body,
-      {String? targetCategory, double? targetRate}) async {
+      {String institutionId = 'OUC-001', String? targetCategory, double? targetRate}) async {
     await _request('/api/governance/proposals', method: 'POST', body: {
-      'institutionId': 'OUC-001',
+      'institutionId': institutionId,
       'title': title,
       'body': body,
       'durationHours': 72,

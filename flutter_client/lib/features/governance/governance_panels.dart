@@ -176,18 +176,26 @@ class ProposalPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final String institutionId;
+  final String scopeLabel;
 
   const ProposalPanel({
     super.key,
     required this.state,
     required this.busy,
     required this.action,
+    this.institutionId = 'OUC-001',
+    this.scopeLabel = 'UC',
   });
 
   @override
   Widget build(BuildContext context) {
-    final proposals =
-        (state.governance['proposals'] as List<dynamic>?) ?? const [];
+    final proposals = ((state.governance['proposals'] as List<dynamic>?) ??
+            const [])
+        .where((raw) => raw is Map &&
+            (raw['institution_id'] ?? raw['institutionId'])?.toString() ==
+                institutionId)
+        .toList();
     final proposal = proposals.isEmpty
         ? <String, dynamic>{
             'id': '',
@@ -259,7 +267,7 @@ class ProposalPanel extends StatelessWidget {
       statusColor = Colors.tealAccent;
 
     return EarthPanel(
-      title: 'UC PROPOSAL ${hasProposal ? proposal['id'] : ''}',
+      title: '$scopeLabel PROPOSAL ${hasProposal ? proposal['id'] : ''}',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
@@ -503,11 +511,14 @@ class ProposalPanel extends StatelessWidget {
                   foregroundColor: inkColor,
                   side: const BorderSide(color: Colors.white24),
                 ),
-                onPressed:
-                    busy ? null : () => showProposalComposer(context, action),
+                onPressed: busy
+                    ? null
+                    : () => showProposalComposer(context, action,
+                        institutionId: institutionId,
+                        scopeLabel: scopeLabel),
                 icon: const Icon(Icons.note_add_outlined, size: 14),
                 label: const Text(
-                  'CREATE PROPOSAL',
+                    'CREATE $scopeLabel PROPOSAL',
                   style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
                 ),
               ),
@@ -589,12 +600,14 @@ class RolesPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
+  final String? institutionId;
 
   const RolesPanel({
     super.key,
     required this.state,
     required this.busy,
     required this.action,
+    this.institutionId,
   });
 
   @override
@@ -607,7 +620,7 @@ class RolesPanel extends StatelessWidget {
       titleColor: mutedColor,
       infoDescription:
           '• Institutional Offices & Public Governance: Constitutional offices designated to oversee planetary infrastructure, municipal finance, and civil administration.\n\n• Constitutional Separation of Powers:\n  - ROLE-OUC-DELEGATE: Legislative and arbitral delegate with voting authority on public referendums.\n  - ROLE-CITY-MAYOR / PLANNER: Municipal executive authority allocating public finance into civic services.\n  - ROLE-JUSTICE: Supreme court jurist hearing constitutional challenges and appeals.\n\n• Action Protocols: Open roles may be claimed by qualifying citizens; active incumbents may resign or designate surrogates via delegation.',
-      child: state.roles.isEmpty
+      child: _scopedRoles.isEmpty
           ? const Text('No institutional terms are active yet.',
               style: TextStyle(color: mutedColor, fontSize: 11))
           : Container(
@@ -618,9 +631,9 @@ class RolesPanel extends StatelessWidget {
               ),
               clipBehavior: Clip.antiAlias,
               child: Column(
-                children: state.roles.indexed.map((indexed) {
+                children: _scopedRoles.indexed.map((indexed) {
                   final raw = indexed.$2;
-                  final isLast = indexed.$1 == state.roles.length - 1;
+                  final isLast = indexed.$1 == _scopedRoles.length - 1;
                   final role = raw as Map<String, dynamic>;
                   final roleId = role['id']?.toString() ?? 'ROLE';
                   final name = role['name']?.toString() ?? roleId;
@@ -793,6 +806,14 @@ class RolesPanel extends StatelessWidget {
             ),
     );
   }
+
+  List<dynamic> get _scopedRoles => institutionId == null
+      ? state.roles
+      : state.roles.where((raw) {
+          if (raw is! Map) return false;
+          return (raw['institution_id'] ?? raw['institutionId'])?.toString() ==
+              institutionId;
+        }).toList();
 }
 
 class PublicFinanceGovernancePanel extends StatelessWidget {
