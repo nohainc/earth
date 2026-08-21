@@ -12,29 +12,20 @@ class HeroCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final healthRaw = state.world['health'];
-    final healthScore = (healthRaw is num)
-        ? healthRaw.toInt()
-        : int.tryParse(healthRaw?.toString() ?? '68') ?? 68;
-
-    String statusText = 'STABLE';
+    String statusText = 'READY';
     Color statusColor = cyanAccentColor;
-    if (healthScore < 40) {
-      statusText = 'RECOVERING';
-      statusColor = Colors.orangeAccent;
-    } else if (healthScore < 70) {
-      statusText = 'NOMINAL';
-      statusColor = Colors.tealAccent;
-    }
 
-    final citizenName =
-        (state.human['display_name'] ?? state.human['name'])?.toString().toUpperCase() ?? 'AMARA KLINE';
+    final citizenName = (state.human['display_name'] ?? state.human['name'])
+            ?.toString()
+            .toUpperCase() ??
+        'AMARA KLINE';
     final citizenAge = state.human['age_years'] ?? state.human['age'] ?? '31';
     final citizenGen = state.human['generation'] ?? '1';
     final cityRaw = state.institutions['city'];
     final cityName =
         (cityRaw is Map ? cityRaw['name'] : null)?.toString().toUpperCase() ??
             'NEW CARTHAGE';
+    final businessName = state.business['name']?.toString().toUpperCase();
 
     return Container(
       width: double.infinity,
@@ -98,7 +89,7 @@ class HeroCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 3),
                 Text(
-                  'AGE $citizenAge  ·  GEN $citizenGen  ·  $cityName',
+                  'AGE $citizenAge  ·  GEN $citizenGen  ·  $cityName${businessName == null ? '' : '  ·  $businessName'}',
                   style: const TextStyle(
                     color: mutedColor,
                     fontSize: 11,
@@ -122,27 +113,13 @@ class HeroCard extends StatelessWidget {
                       formatWholeNumber(state.human['standing'] ?? 0),
                       cyanAccentColor,
                     ),
-                    _statusPill(
-                      'Legacy',
-                      formatWholeNumber(state.human['legacy'] ?? 0),
-                      Colors.indigoAccent,
-                    ),
-                    _statusPill(
-                      'World Health',
-                      '$healthScore/100',
-                      statusColor,
-                    ),
                     if (asDoubleOr(state.human['credits'], 0) < 500)
                       _quickAlertBadge('LOW LIQUIDITY', Colors.orangeAccent),
-                    if (healthScore < 50)
-                      _quickAlertBadge('PLANETARY DECAY', Colors.redAccent),
                   ],
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 16),
-          _citizenAvatar(citizenName),
         ],
       ),
     );

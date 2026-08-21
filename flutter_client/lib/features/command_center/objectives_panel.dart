@@ -43,14 +43,13 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
         return widget.objectives.where((o) => o.isCompleted).toList();
       case 'ALL':
       default:
-        return widget.objectives;
+        return widget.objectives.take(3).toList();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final completedCount =
-        widget.objectives.where((o) => o.isCompleted).length;
+    final completedCount = widget.objectives.where((o) => o.isCompleted).length;
     final totalCount = widget.objectives.length;
     final overallProgress = totalCount > 0
         ? widget.objectives
@@ -60,13 +59,13 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
         : 0.0;
 
     return EarthPanel(
-      title: 'LONG-TERM STRATEGIC OBJECTIVES',
+      title: 'CURRENT DIRECTION',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Long-Term Ambition Codex: Optional, measurable strategic pathways designed for enduring planetary mastery.\n\n• Core Ambition Tracks:\n  - Enterprise Titan: Build the most valuable corporation & industrial infrastructure.\n  - Civic Tribune: Secure dominant voting delegation & direct municipal legislation.\n  - Sovereign Dynasty: Cultivate deep generational lineages & permanent perks.\n  - Tech Pioneer: License exclusive patents to global manufacturing firms.\n  - Sovereign Capital: Achieve complete personal financial independence.\n  - Public Benefactor: Maximize civic standing & municipal infrastructure.\n\n• Progression: All objectives track automatically against live world metrics and award permanent titles, tax benefits, and legacy points upon completion.',
+          '• Current Direction: Choose the kind of manager and citizen you want to become.\n\n• Direction Tracks:\n  - Enterprise: Build profitable businesses and productive organizations.\n  - Civic: Improve your city and shape its laws.\n  - Dynasty: Build a lasting family and preserve your estate.\n  - Technology: Develop capabilities and earn licensing income.\n  - Finance: Achieve personal independence.\n\n• Progression: Directions track against live world metrics and unlock practical rewards, titles, and new opportunities.',
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -87,7 +86,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
                     const Icon(Icons.stars, color: Color(0xFFFFD54F), size: 16),
                     const SizedBox(width: 6),
                     Text(
-                      '$completedCount OF $totalCount OBJECTIVES MASTERED',
+                      '$completedCount OF $totalCount DIRECTIONS COMPLETED',
                       style: const TextStyle(
                         color: Color(0xFFFFD54F),
                         fontSize: 10.5,
@@ -97,7 +96,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
                     ),
                     const Spacer(),
                     Text(
-                      '${overallProgress.round()}% TOTAL AMBITION',
+                      '${overallProgress.round()}% OVERALL PROGRESS',
                       style: const TextStyle(
                         color: inkColor,
                         fontSize: 11,
@@ -210,7 +209,9 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
               : surfaceColor.withValues(alpha: 0.5),
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isSelected ? cyanAccentColor.withValues(alpha: 0.8) : Colors.white12,
+            color: isSelected
+                ? cyanAccentColor.withValues(alpha: 0.8)
+                : Colors.white12,
             width: 1,
           ),
         ),
@@ -267,7 +268,8 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     if (isDone) ...[
-                      const Icon(Icons.check, size: 10, color: Color(0xFF00E676)),
+                      const Icon(Icons.check,
+                          size: 10, color: Color(0xFF00E676)),
                       const SizedBox(width: 3),
                     ],
                     Text(
@@ -298,7 +300,8 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
           const SizedBox(height: 4),
           Text(
             objective.description,
-            style: const TextStyle(color: mutedColor, fontSize: 11, height: 1.3),
+            style:
+                const TextStyle(color: mutedColor, fontSize: 11, height: 1.3),
           ),
           const SizedBox(height: 10),
 
@@ -348,7 +351,8 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
             ),
             child: Row(
               children: [
-                const Icon(Icons.military_tech_outlined, size: 14, color: Color(0xFFFFD54F)),
+                const Icon(Icons.military_tech_outlined,
+                    size: 14, color: Color(0xFFFFD54F)),
                 const SizedBox(width: 6),
                 Expanded(
                   child: Text(
@@ -367,11 +371,13 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
                       : null,
                   borderRadius: BorderRadius.circular(4),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                     decoration: BoxDecoration(
                       color: catColor.withValues(alpha: 0.15),
                       borderRadius: BorderRadius.circular(4),
-                      border: Border.all(color: catColor.withValues(alpha: 0.5)),
+                      border:
+                          Border.all(color: catColor.withValues(alpha: 0.5)),
                     ),
                     child: Row(
                       mainAxisSize: MainAxisSize.min,
@@ -420,7 +426,8 @@ Future<void> showObjectivesDialog(
           child: Column(
             children: [
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
                     const Icon(Icons.stars, color: Color(0xFFFFD54F), size: 20),
@@ -436,7 +443,8 @@ Future<void> showObjectivesDialog(
                     ),
                     const Spacer(),
                     IconButton(
-                      icon: const Icon(Icons.close, color: mutedColor, size: 20),
+                      icon:
+                          const Icon(Icons.close, color: mutedColor, size: 20),
                       onPressed: () => Navigator.of(ctx).pop(),
                     ),
                   ],

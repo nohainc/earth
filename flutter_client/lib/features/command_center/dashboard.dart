@@ -177,11 +177,13 @@ class Dashboard extends StatelessWidget {
                     padding: EdgeInsets.only(left: 36, bottom: 8),
                     child: Text(
                       'Operations are stable. Choose the next investment in people, capacity, or research.',
-                      style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                      style:
+                          TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
                     ),
                   )
                 else
-                  ...visibleDecisions.map((decision) => _focusDecisionRow(decision)),
+                  ...visibleDecisions
+                      .map((decision) => _focusDecisionRow(decision)),
               ],
             ),
           ),
@@ -218,12 +220,8 @@ class Dashboard extends StatelessWidget {
               final matFlow = (flows['materials'] ?? flows['material'])
                       as Map<String, dynamic>? ??
                   {'inflow': 24, 'outflow': 8, 'net': 16};
-              final compFlow = flows['components'] as Map<String, dynamic>? ??
-                  {'inflow': 10, 'outflow': 12, 'net': -2};
               final energyFlow = flows['energy'] as Map<String, dynamic>? ??
                   {'inflow': 30, 'outflow': 18, 'net': 12};
-              final computeFlow = flows['compute'] as Map<String, dynamic>? ??
-                  {'inflow': 12, 'outflow': 4, 'net': 8};
 
               return Wrap(
                 spacing: 14,
@@ -261,16 +259,6 @@ class Dashboard extends StatelessWidget {
                   ),
                   EarthFlowMetric(
                     width: itemWidth,
-                    icon: Icons.settings_outlined,
-                    label: 'COMPONENTS',
-                    accent: EarthResourceColors.components,
-                    inflow: asDoubleOr(compFlow['inflow'], 10),
-                    outflow: asDoubleOr(compFlow['outflow'], 12),
-                    net: asDoubleOr(compFlow['net'], -2),
-                    onTap: () => onNavigate?.call('business'),
-                  ),
-                  EarthFlowMetric(
-                    width: itemWidth,
                     icon: Icons.bolt_outlined,
                     label: 'ENERGY',
                     accent: EarthResourceColors.energy,
@@ -278,16 +266,6 @@ class Dashboard extends StatelessWidget {
                     outflow: asDoubleOr(energyFlow['outflow'], 18),
                     net: asDoubleOr(energyFlow['net'], 12),
                     onTap: () => onNavigate?.call('business'),
-                  ),
-                  EarthFlowMetric(
-                    width: itemWidth,
-                    icon: Icons.memory_rounded,
-                    label: 'COMPUTE',
-                    accent: EarthResourceColors.compute,
-                    inflow: asDoubleOr(computeFlow['inflow'], 12),
-                    outflow: asDoubleOr(computeFlow['outflow'], 4),
-                    net: asDoubleOr(computeFlow['net'], 8),
-                    onTap: () => onNavigate?.call('technology'),
                   ),
                 ],
               );
@@ -332,7 +310,8 @@ class Dashboard extends StatelessWidget {
               children: [
                 Text(
                   decision.title,
-                  style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w700),
+                  style: const TextStyle(
+                      fontSize: 12, fontWeight: FontWeight.w700),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
@@ -1113,98 +1092,98 @@ class EarthFlowMetric extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-        decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .85),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.white12),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Expanded(
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(icon, size: 14, color: accent),
-                      const SizedBox(width: 6),
-                      Flexible(
-                        child: Text(
-                          label,
-                          overflow: TextOverflow.ellipsis,
-                          style: TextStyle(
-                            fontSize: 10.5,
-                            letterSpacing: 1.1,
-                            color: mutedColor,
-                            fontWeight: FontWeight.w700,
+          decoration: BoxDecoration(
+            color: surfaceColor.withValues(alpha: .85),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.white12),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(icon, size: 14, color: accent),
+                        const SizedBox(width: 6),
+                        Flexible(
+                          child: Text(
+                            label,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              letterSpacing: 1.1,
+                              color: mutedColor,
+                              fontWeight: FontWeight.w700,
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 4),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 5, vertical: 1.5),
-                  decoration: BoxDecoration(
-                    color: badgeColor,
-                    borderRadius: BorderRadius.circular(4),
-                    border:
-                        Border.all(color: badgeTextColor.withValues(alpha: .3)),
-                  ),
-                  child: Text(
-                    badgeLabel,
-                    style: TextStyle(
-                      fontSize: 8.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: .8,
-                      color: badgeTextColor,
+                      ],
                     ),
                   ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Text(
-              netStr,
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w800,
-                color: netColor,
-                letterSpacing: -.3,
+                  const SizedBox(width: 4),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 5, vertical: 1.5),
+                    decoration: BoxDecoration(
+                      color: badgeColor,
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(
+                          color: badgeTextColor.withValues(alpha: .3)),
+                    ),
+                    child: Text(
+                      badgeLabel,
+                      style: TextStyle(
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: .8,
+                        color: badgeTextColor,
+                      ),
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 6),
-            Wrap(
-              spacing: 8,
-              runSpacing: 2,
-              children: [
-                Text(
-                  '▲ +$inStr in',
-                  style: const TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.greenAccent,
-                  ),
+              const SizedBox(height: 8),
+              Text(
+                netStr,
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w800,
+                  color: netColor,
+                  letterSpacing: -.3,
                 ),
-                Text(
-                  '▼ -$outStr out',
-                  style: TextStyle(
-                    fontSize: 9.5,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.redAccent.withValues(alpha: .85),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 8,
+                runSpacing: 2,
+                children: [
+                  Text(
+                    '▲ +$inStr in',
+                    style: const TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.greenAccent,
+                    ),
                   ),
-                ),
-              ],
-            ),
-          ],
+                  Text(
+                    '▼ -$outStr out',
+                    style: TextStyle(
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.redAccent.withValues(alpha: .85),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-    ),
-  );
+    );
   }
 }

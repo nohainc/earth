@@ -3,7 +3,6 @@ import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/daily_briefing.dart';
 import '../../core/models/decision_queue_item.dart';
-import '../../core/models/player_objective.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../../core/audio/earth_audio_engine.dart';
 
@@ -38,10 +37,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   Widget build(BuildContext context) {
     final briefing = DailyBriefingReport.synthesizeFromState(widget.state);
     final decisionItems = DecisionQueueItem.synthesizeFromState(widget.state);
-    final objectives = PlayerObjective.synthesizeFromState(widget.state);
     final opportunities = widget.state.opportunities;
-
-    final primaryObjective = objectives.isNotEmpty ? objectives.first : null;
 
     final criticalCount = decisionItems
         .where((i) =>
@@ -52,6 +48,16 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
+        const Text(
+          'EXECUTIVE OVERVIEW',
+          style: TextStyle(
+            color: EarthColors.textMuted,
+            fontSize: 10,
+            fontWeight: FontWeight.bold,
+            letterSpacing: 1.1,
+          ),
+        ),
+        const SizedBox(height: 8),
         // ====================================================================
         // QUESTION 1: WHAT IS MY CURRENT SITUATION?
         // ====================================================================
@@ -63,7 +69,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               '• Situation Matrix & Core Metrics: Real-time overview of spendable capital reserves, enterprise solvency & fleet condition, biological energy & vitality status, and active strategic ambition progress.\n\n• Actionable Drill-Down: Select any matrix item to jump directly to its management interface.',
         ),
         const SizedBox(height: 8),
-        _buildSituationMatrix(primaryObjective),
+        _buildSituationMatrix(),
         const SizedBox(height: 34),
 
         // ====================================================================
@@ -118,7 +124,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         ),
         const SizedBox(width: 6),
         IconButton(
-          icon: const Icon(Icons.info_outline, size: 14, color: EarthColors.textMuted),
+          icon: const Icon(Icons.info_outline,
+              size: 14, color: EarthColors.textMuted),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
           tooltip: 'Info',
@@ -156,22 +163,43 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // ==========================================================================
   // 1. SITUATION MATRIX
   // ==========================================================================
-  Widget _buildSituationMatrix(PlayerObjective? primaryObjective) {
-    final player = widget.state.json['player'] as Map<String, dynamic>? ?? {};
+  Widget _buildSituationMatrix() {
     final human = widget.state.human;
-    final business = widget.state.business;
-    final credits = (player['credits'] ?? player['cash'] ?? 0).toDouble();
-    final energy = (player['energy'] ?? 100).toDouble();
-    final health = (human['vitality'] ?? 100).toDouble();
-    final corpName = business['name']?.toString() ?? 'Vance Logistics';
-    final isSolvent = business['solvent'] ?? true;
+    final business = widget.businessFinancials['business'] is Map
+        ? Map<String, dynamic>.from(
+            widget.businessFinancials['business'] as Map)
+        : widget.state.business;
+    final credits = asDouble(widget.state.human['credits']) ??
+        asDouble(widget.state.json['player'] is Map
+            ? (widget.state.json['player'] as Map)['credits']
+            : null);
+    final profit = asDouble(business['profit']);
+    final margin = asDouble(business['margin'] ?? business['profit_margin']);
+    final workforce = widget.state.json['workforce'] is List
+        ? (widget.state.json['workforce'] as List)
+        : const [];
+    final activeStaff =
+        workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
+    final capacity =
+        asInt(business['workforceCapacity'] ?? business['staffCapacity']);
+    final machines = widget.state.machines;
+    final degradedMachines = machines.where((machine) {
+      return machine is Map && (asDouble(machine['condition']) ?? 100) < 60;
+    }).length;
+    final city = widget.state.institutions['city'];
+    final cityMap = city is Map
+        ? Map<String, dynamic>.from(city)
+        : const <String, dynamic>{};
+    final cityPressure =
+        asDouble(cityMap['service_pressure'] ?? cityMap['servicePressure']);
+    final health = asDouble(human['health'] ?? human['vitality']);
 
     return LayoutBuilder(
       builder: (context, constraints) {
         final isNarrow = constraints.maxWidth < 650;
         final itemWidth = isNarrow
             ? (constraints.maxWidth - 8) / 2
-            : (constraints.maxWidth - 24) / 4;
+            : (constraints.maxWidth - 32) / 5;
 
         return Wrap(
           spacing: 8,
@@ -180,45 +208,68 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             _situationPill(
               width: itemWidth,
               label: 'LIQUID CAPITAL',
-              value: '${formatWholeNumber(credits)} CR',
-              subvalue: '+930 CR/day net',
+              value: credits == null
+                  ? 'UNAVAILABLE'
+                  : '${formatWholeNumber(credits)} CR',
+              subvalue: 'Spendable now',
               icon: Icons.account_balance_wallet_outlined,
               accent: EarthColors.cyanAccent,
               onTap: () => widget.onNavigate?.call('finance'),
             ),
             _situationPill(
               width: itemWidth,
-              label: 'ENTERPRISE HEALTH',
-              value: corpName.toUpperCase(),
-              subvalue:
-                  isSolvent ? 'SOLVENT · 100% FLEET' : 'INSOLVENT RISK',
+              label: 'BUSINESS HEALTH',
+              value: profit == null
+                  ? 'UNAVAILABLE'
+                  : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
+              subvalue: margin == null
+                  ? 'Profit data unavailable'
+                  : '${margin.toStringAsFixed(1)}% margin',
               icon: Icons.storefront_outlined,
-              accent: isSolvent
+              accent: profit == null || profit >= 0
                   ? const Color(0xFF00E676)
                   : Colors.orangeAccent,
               onTap: () => widget.onNavigate?.call('business'),
             ),
             _situationPill(
               width: itemWidth,
-              label: 'BIOMETRIC VITALITY',
-              value: '${health.toStringAsFixed(0)}% VITALITY',
-              subvalue: '${energy.toStringAsFixed(0)}% Stamina · Healthy',
-              icon: Icons.favorite_outline,
-              accent: health < 30 ? Colors.redAccent : Colors.tealAccent,
-              onTap: () => widget.onNavigate?.call('life'),
+              label: 'WORKFORCE',
+              value: activeStaff == 0 && capacity == null
+                  ? 'UNAVAILABLE'
+                  : '$activeStaff STAFF',
+              subvalue: capacity == null
+                  ? 'Capacity unavailable'
+                  : '$capacity capacity',
+              icon: Icons.groups_outlined,
+              accent: Colors.lightBlueAccent,
+              onTap: () => widget.onNavigate?.call('business'),
             ),
             _situationPill(
               width: itemWidth,
-              label: 'STRATEGIC AMBITION',
-              value: primaryObjective != null
-                  ? primaryObjective.title
-                  : 'VALUABLE CORP',
-              subvalue: primaryObjective != null
-                  ? '${primaryObjective.progressPercentage.toStringAsFixed(0)}% Progress'
-                  : 'Active',
-              icon: Icons.flag_outlined,
-              accent: EarthColors.goldMetallic,
-              onTap: () => widget.onNavigate?.call('command'),
+              label: 'OPERATIONS',
+              value: machines.isEmpty
+                  ? 'NO MACHINES'
+                  : '${machines.length} MACHINES',
+              subvalue: degradedMachines == 0
+                  ? 'Running normally'
+                  : '$degradedMachines need attention',
+              icon: Icons.precision_manufacturing_outlined,
+              accent:
+                  degradedMachines == 0 ? cyanAccentColor : Colors.orangeAccent,
+              onTap: () => widget.onNavigate?.call('business'),
+            ),
+            _situationPill(
+              width: itemWidth,
+              label: 'CITY EFFECT',
+              value: cityMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
+              subvalue: cityPressure == null
+                  ? 'Pressure unavailable'
+                  : 'Pressure ${cityPressure.toStringAsFixed(0)}%',
+              icon: Icons.location_city_outlined,
+              accent: cityPressure != null && cityPressure > 70
+                  ? Colors.orangeAccent
+                  : Colors.tealAccent,
+              onTap: () => widget.onNavigate?.call('city'),
             ),
           ],
         );
@@ -378,66 +429,28 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           ),
           const SizedBox(height: 12),
 
-          // Market Moores & Headline Chips
+          // Operational and civic headline changes
           Wrap(
             spacing: 6,
             runSpacing: 6,
             children: [
-              ...briefing.marketMovements.take(3).map((m) {
-                final isUp = m.deltaPct >= 0;
-                return Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: EarthColors.cardSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: EarthColors.borderSubtle),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(isUp ? Icons.arrow_upward : Icons.arrow_downward,
-                          size: 10,
-                          color: isUp
-                              ? const Color(0xFF00E676)
-                              : Colors.redAccent),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${m.commodity.toUpperCase()}: ${m.currentPrice.toStringAsFixed(1)} CR (${isUp ? '+' : ''}${m.deltaPct.toStringAsFixed(1)}%)',
-                        style: TextStyle(
-                          color:
-                              isUp ? const Color(0xFF00E676) : Colors.redAccent,
-                          fontSize: 10,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                );
-              }),
-              if (briefing.civicSummary.recentCivicEvents.isNotEmpty)
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  decoration: BoxDecoration(
-                    color: EarthColors.cardSurface,
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: EarthColors.borderSubtle),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.gavel,
-                          size: 10, color: EarthColors.goldMetallic),
-                      const SizedBox(width: 4),
-                      Text(
-                        briefing.civicSummary.recentCivicEvents.first,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 10),
-                      ),
-                    ],
-                  ),
+              if (briefing.businessSummary.degradedMachinesCount > 0)
+                _headlineChip(
+                  Icons.precision_manufacturing_outlined,
+                  '${briefing.businessSummary.degradedMachinesCount} machine${briefing.businessSummary.degradedMachinesCount == 1 ? '' : 's'} need attention',
+                  Colors.orangeAccent,
                 ),
+              if (briefing.businessSummary.pendingContractsCount > 0)
+                _headlineChip(
+                  Icons.description_outlined,
+                  '${briefing.businessSummary.pendingContractsCount} contract${briefing.businessSummary.pendingContractsCount == 1 ? '' : 's'} pending',
+                  EarthColors.cyanAccent,
+                ),
+              if (briefing.civicSummary.recentCivicEvents.isNotEmpty)
+                _headlineChip(
+                    Icons.gavel,
+                    briefing.civicSummary.recentCivicEvents.first,
+                    EarthColors.goldMetallic),
             ],
           ),
 
@@ -502,6 +515,27 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           Text(sub,
               style: const TextStyle(color: Colors.white54, fontSize: 9),
               overflow: TextOverflow.ellipsis),
+        ],
+      ),
+    );
+  }
+
+  Widget _headlineChip(IconData icon, String text, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: EarthColors.cardSurface,
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: EarthColors.borderSubtle),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 10, color: color),
+          const SizedBox(width: 4),
+          Text(text,
+              style: TextStyle(
+                  color: color, fontSize: 10, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -581,8 +615,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           const SizedBox(height: 10),
           const Row(
             children: [
-              Icon(Icons.trending_up,
-                  size: 13, color: EarthColors.cyanAccent),
+              Icon(Icons.trending_up, size: 13, color: EarthColors.cyanAccent),
               SizedBox(width: 6),
               Text(
                 'LIVE STRATEGIC OPPORTUNITIES',
@@ -670,7 +703,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     );
   }
 
-  Widget _buildUnifiedDecisionItem(DecisionQueueItem item, {bool isLast = false}) {
+  Widget _buildUnifiedDecisionItem(DecisionQueueItem item,
+      {bool isLast = false}) {
     final isCritical = item.riskLevel.toLowerCase() == 'critical' ||
         item.riskLevel.toLowerCase() == 'high';
     final categoryColor = _getDecisionCategoryColor(item);
