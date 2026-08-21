@@ -152,11 +152,11 @@ export async function contributeToSocialInitiative(repo: PostgresRepository, hum
   return repo.transaction(async (tx) => {
     const initiative = (await tx.query<any>("SELECT * FROM social_initiatives WHERE id = $1 FOR UPDATE", [initiativeId])).rows[0];
     if (!initiative || initiative.status !== 'active') throw new Error('This initiative is not accepting contributions');
+    const terms = projectTerms(initiative.terms);
     const currentDay = Number((await tx.query<any>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? initiative.game_day);
     if (initiative.deadline_game_day != null && currentDay > Number(initiative.deadline_game_day)) throw new Error('This initiative has expired');
     let member = (await tx.query<any>('SELECT * FROM social_initiative_members WHERE initiative_id = $1 AND human_id = $2 FOR UPDATE', [initiativeId, humanId])).rows[0];
     if (!member && initiative.kind === 'shared_project') {
-      const terms = projectTerms(initiative.terms);
       const institutionId = String(terms.institutionId ?? '').trim();
       const institution = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1 AND status = \'active\'', [institutionId])).rows[0];
       const eligible = institution?.kind === 'CITY'
@@ -171,15 +171,16 @@ export async function contributeToSocialInitiative(repo: PostgresRepository, hum
     }
     if (!member || member.status !== 'accepted') throw new Error('Accept the initiative before contributing');
     await tx.query('UPDATE social_initiative_members SET contribution = contribution + $1 WHERE initiative_id = $2 AND human_id = $3', [contribution, initiativeId, humanId]);
-    const remaining = Math.max(0, Number(initiative.terms?.contributionTarget ?? 100) - Number(initiative.progress));
+    const contributionTarget = Number(terms.contributionTarget ?? 100);
+    const remaining = Math.max(0, contributionTarget - Number(initiative.progress));
     const applied = Math.min(contribution, remaining);
     if (applied <= 0) throw new Error('This initiative is already complete');
     const newProgress = Math.min(100, Number(initiative.progress) + applied);
-    const isComplete = newProgress >= Number(initiative.terms?.contributionTarget ?? 100);
+    const isComplete = newProgress >= contributionTarget;
     const result = await tx.query<any>(`UPDATE social_initiatives SET progress = $1, status = $2, updated_at = NOW() WHERE id = $3 AND status = 'active' RETURNING *`, [newProgress, isComplete ? 'completed' : 'active', initiativeId]);
     if (!result.rows[0]) throw new Error('This initiative is no longer accepting contributions');
-    await tx.query('UPDATE humans SET standing = standing + 1, legacy = legacy + CASE WHEN $1 >= 100 THEN 1 ELSE 0 END WHERE id = $2', [result.rows[0].progress, humanId]);
-    if (Number(result.rows[0].progress) >= 100) {
+    await tx.query('UPDATE humans SET standing = standing + 1, legacy = legacy + CASE WHEN $1 THEN 1 ELSE 0 END WHERE id = $2', [isComplete, humanId]);
+    if (isComplete) {
       const initiative = (await tx.query<any>('SELECT * FROM social_initiatives WHERE id = $1 FOR UPDATE', [initiativeId])).rows[0];
       if (initiative.escrow_status === 'locked' && Number(initiative.escrow_amount) > 0) {
         const escrowAccount = `social-${initiativeId}`;
