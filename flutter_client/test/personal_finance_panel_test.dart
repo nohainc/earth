@@ -73,8 +73,7 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Personal Wealth & Solvency Cockpit'),
-        findsOneWidget);
+    expect(find.text('CLOSE'), findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 

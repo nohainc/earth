@@ -496,7 +496,7 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Personal Wealth & Solvency Cockpit: Real-time liquid credit balance, solvency classification, and immutable statutory asset protection guarantees.\n\n• Unit Economics & Cash Flow:\n  - DAILY RECURRING INFLOW: Aggregate income from enterprise dividends, market sales, and contract payouts.\n  - DAILY BASELINE OUTFLOW: Mandatory living expenditures, residential rent, and machine maintenance.\n  - NET DAILY ACCUMULATION: Daily surplus or deficit with retained savings margin percentage.\n  - ASSESSED TAX OBLIGATIONS: Canonical municipal assessment base due for settlement.\n\n• Statutory Protection Shield: 100 C reserve floor and basic service robot are legally immune from forfeiture or insolvency seizure.\n\n• Financial Actions: Settle tax dues immediately to preserve civic standing, or invoke sovereign restructuring when facing severe deficits.',
+          '• Keep enough Credits for daily life, taxes, and unexpected problems.\n\n• Use surplus to improve businesses, support your family, or build a reserve.\n\n• This page covers personal money and commitments; resources and market orders belong in Trade & Supplies.\n\n• Detailed income and expense breakdowns remain available when you need to investigate a problem.',
       child: LayoutBuilder(
         builder: (context, constraints) {
           return Column(
@@ -657,7 +657,7 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
                 context,
                 'CASH FLOW / WHERE MONEY COMES FROM AND GOES',
                 description:
-                    '• DAILY RECURRING INFLOW: Aggregate income from enterprise dividends, market sales, and contract payouts.\n• DAILY BASELINE OUTFLOW: Mandatory living expenditures, residential rent, and machine maintenance.\n• NET DAILY ACCUMULATION: Daily surplus or deficit with retained savings margin percentage.\n• ASSESSED TAX OBLIGATIONS: Canonical municipal assessment base due for settlement.',
+                    '• Decide whether today\'s money should cover life, taxes, family, business investment, or savings.',
               ),
               const SizedBox(height: 8),
 
