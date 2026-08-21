@@ -37,6 +37,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'messages' => 'MESSAGES',
       'business' => 'BUSINESS',
       'civic' => 'GOVERNANCE',
+      'corporation' => 'CORPORATION',
       'city' => 'MY CITY',
       'dynasty' => 'DYNASTY TREE',
       'technology' => 'TECHNOLOGY',
@@ -602,6 +603,8 @@ class Dashboard extends StatelessWidget {
             },
           ),
         ];
+      case 'corporation':
+        return [CorporationOverviewPanel(state: state)];
       case 'city':
         return [
           LayoutBuilder(

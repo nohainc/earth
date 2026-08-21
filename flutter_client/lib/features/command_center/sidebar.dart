@@ -40,13 +40,18 @@ class Sidebar extends StatelessWidget {
         [
           ('business', 'Businesses & Operations', Icons.storefront_outlined),
           ('contracts', 'Contracts & Revenue', Icons.handshake_outlined),
-          ('finance', 'Personal Finance', Icons.account_balance_wallet_outlined),
+          (
+            'finance',
+            'Personal Finance',
+            Icons.account_balance_wallet_outlined
+          ),
           ('market', 'Trade & Supplies', Icons.swap_horiz),
         ]
       ),
       (
         'LIFE & SOCIETY',
         [
+          ('corporation', 'Corporation', Icons.account_balance_outlined),
           ('city', 'City & Services', Icons.location_city_outlined),
           ('civic', 'Laws & Governance', Icons.account_balance_outlined),
           ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),

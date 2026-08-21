@@ -6,6 +6,136 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'institutions_dialogs.dart';
 
+class CorporationOverviewPanel extends StatelessWidget {
+  final EarthState state;
+
+  const CorporationOverviewPanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final corporation = state.institutions['corporation'] is Map
+        ? Map<String, dynamic>.from(state.institutions['corporation'] as Map)
+        : const <String, dynamic>{};
+    final membership = state.membership ?? const <String, dynamic>{};
+    final name = (corporation['name'] ?? 'Independent').toString();
+    final id = corporation['id']?.toString() ?? '—';
+    final memberCount = asIntOr(corporation['member_count'], 0);
+    final treasury = asDouble(corporation['treasury']);
+    final cities = List<dynamic>.from(state.rankings['corporations'] is List
+        ? state.rankings['corporations'] as List
+        : const [])
+      ..sort((a, b) => (asInt((b as Map)['member_count']) ?? 0)
+          .compareTo(asInt((a as Map)['member_count']) ?? 0));
+    final isMember = membership['corporation_id'] != null;
+    final cityId = membership['city_id']?.toString();
+
+    return EarthPanel(
+      title: 'CORPORATION / MEMBERSHIP & DIRECTION',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Corporation membership determines which shared rules, cities, technologies, contracts, and services are available to you.\n\n• A city belongs to a corporation: moving between cities changes your local services and opportunities while preserving corporation membership.\n\n• Independent people use Earth default rules and do not participate in corporation decisions.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+            isMember
+                ? 'You belong to $name.'
+                : 'You are currently independent.',
+            style: TextStyle(
+                color: isMember ? Colors.tealAccent : Colors.orangeAccent,
+                fontSize: 13,
+                fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        Text(
+            isMember
+                ? 'Your current city: ${cityId ?? 'not assigned'}. Corporation rules apply across every city in this network.'
+                : 'Join a corporation to access shared cities, technologies, contracts, and civic influence.',
+            style: const TextStyle(color: mutedColor, fontSize: 11)),
+        const SizedBox(height: 14),
+        Wrap(spacing: 10, runSpacing: 10, children: [
+          _metric('CORPORATION', '$name\n$id', Icons.account_balance_outlined,
+              cyanAccentColor),
+          _metric(
+              'MEMBERS', '$memberCount', Icons.groups_outlined, violetColor),
+          _metric(
+              'TREASURY',
+              treasury == null
+                  ? 'UNAVAILABLE'
+                  : '${formatWholeNumber(treasury)} C',
+              Icons.account_balance_wallet_outlined,
+              Colors.amberAccent),
+        ]),
+        const SizedBox(height: 16),
+        const Text('CORPORATION DECISIONS',
+            style: TextStyle(
+                color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 5),
+        const Text(
+            'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
+            style: TextStyle(color: mutedColor, fontSize: 10.5)),
+        if (cities.isNotEmpty) ...[
+          const SizedBox(height: 16),
+          const Text('CORPORATION RANKING',
+              style: TextStyle(
+                  color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+          const SizedBox(height: 6),
+          ...cities.take(5).toList().asMap().entries.map((entry) {
+            final row = Map<String, dynamic>.from(entry.value as Map);
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 3),
+              child: Row(children: [
+                Text('#${entry.key + 1}',
+                    style:
+                        const TextStyle(color: cyanAccentColor, fontSize: 10)),
+                const SizedBox(width: 8),
+                Expanded(
+                    child: Text(
+                        row['name']?.toString() ??
+                            row['id']?.toString() ??
+                            'Corporation',
+                        style: const TextStyle(fontSize: 10.5))),
+                Text('${row['member_count'] ?? 0} members',
+                    style: const TextStyle(color: mutedColor, fontSize: 10)),
+              ]),
+            );
+          }),
+        ],
+      ]),
+    );
+  }
+
+  Widget _metric(String label, String value, IconData icon, Color color) {
+    return Container(
+      width: 175,
+      padding: const EdgeInsets.all(10),
+      decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: color.withValues(alpha: .28))),
+      child: Row(children: [
+        Icon(icon, size: 15, color: color),
+        const SizedBox(width: 7),
+        Expanded(
+            child:
+                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text(label,
+              style: const TextStyle(
+                  color: mutedColor,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 3),
+          Text(value,
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+              style: TextStyle(
+                  color: color, fontSize: 11, fontWeight: FontWeight.w800)),
+        ])),
+      ]),
+    );
+  }
+}
+
 class InstitutionsCapacityPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;

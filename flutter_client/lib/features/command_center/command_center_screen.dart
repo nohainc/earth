@@ -45,6 +45,7 @@ class _CommandCenterState extends State<CommandCenter> {
     'market': GlobalKey(),
     'business': GlobalKey(),
     'civic': GlobalKey(),
+    'corporation': GlobalKey(),
     'city': GlobalKey(),
     'technology': GlobalKey(),
     'life': GlobalKey(),
@@ -428,7 +429,9 @@ class _CommandCenterState extends State<CommandCenter> {
       OnboardingController.instance.completeStep('world_status');
     } else if (section == 'net_worth' || section == 'finance') {
       OnboardingController.instance.completeStep('personal_resources');
-    } else if (section == 'city' || section == 'civic') {
+    } else if (section == 'city' ||
+        section == 'civic' ||
+        section == 'corporation') {
       OnboardingController.instance.completeStep('join_community');
     } else if (section == 'market' || section == 'derivatives') {
       OnboardingController.instance.completeStep('first_market_decision');

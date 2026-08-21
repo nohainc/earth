@@ -5,6 +5,38 @@ import 'package:earth_client/features/institutions/institutions_panels.dart';
 
 void main() {
   testWidgets(
+      'CorporationOverviewPanel presents affiliation and corporation direction',
+      (tester) async {
+    const state = EarthState({
+      'human': {'id': 'H-0044'},
+      'institutions': {
+        'corporation': {
+          'id': 'CORP-001',
+          'name': 'Carthage Dynamics',
+          'member_count': 38,
+          'treasury': 12500,
+        },
+      },
+      'membership': {'corporation_id': 'CORP-001', 'city_id': 'CITY-0084'},
+      'rankings': {
+        'corporations': [
+          {'id': 'CORP-001', 'name': 'Carthage Dynamics', 'member_count': 38},
+        ],
+      },
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: CorporationOverviewPanel(state: state)),
+    ));
+
+    expect(find.text('CORPORATION / MEMBERSHIP & DIRECTION'), findsOneWidget);
+    expect(find.text('You belong to Carthage Dynamics.'), findsOneWidget);
+    expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
+    expect(find.text('38'), findsOneWidget);
+    expect(find.text('12500 C'), findsOneWidget);
+  });
+
+  testWidgets(
       'InstitutionsCapacityPanel renders city residency, pressure ratios, and proposes budget',
       (tester) async {
     const state = EarthState({
