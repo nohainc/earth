@@ -517,9 +517,10 @@ class ProposalPanel extends StatelessWidget {
                         institutionId: institutionId,
                         scopeLabel: scopeLabel),
                 icon: const Icon(Icons.note_add_outlined, size: 14),
-                label: const Text(
-                    'CREATE $scopeLabel PROPOSAL',
-                  style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
+                label: Text(
+                  'CREATE $scopeLabel PROPOSAL',
+                  style: const TextStyle(
+                      fontSize: 10.5, fontWeight: FontWeight.w700),
                 ),
               ),
               if (hasProposal &&
