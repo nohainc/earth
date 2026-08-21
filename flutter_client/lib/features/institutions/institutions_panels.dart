@@ -28,6 +28,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   List<Map<String, dynamic>> _corporations = const [];
   Map<String, dynamic>? _selected;
   bool _loading = true;
+  int _searchGeneration = 0;
 
   bool get _isMember => widget.state.membership?['corporation_id'] != null;
 
@@ -57,11 +58,12 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       setState(() => _loading = false);
       return;
     }
+    final generation = ++_searchGeneration;
     setState(() => _loading = true);
     try {
       final rows =
           await const EarthApi().listCorporations(search: _search.text);
-      if (!mounted) return;
+      if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _corporations = rows;
         _selected = rows.isEmpty
@@ -73,7 +75,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         _loading = false;
       });
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted && generation == _searchGeneration) {
+        setState(() => _loading = false);
+      }
     }
   }
 
@@ -136,7 +140,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         Expanded(
           child: TextField(
             controller: _search,
-            onSubmitted: (_) => _load(),
+            onChanged: (_) => _load(),
             decoration: const InputDecoration(
               prefixIcon: Icon(Icons.search, size: 17),
               hintText: 'Search corporations',
@@ -391,8 +395,31 @@ class CorporationOverviewPanel extends StatelessWidget {
           role?.toString().toLowerCase() == 'corporation executive';
     });
 
+    if (!isMember) {
+      return EarthPanel(
+        title: 'MEMBERSHIP',
+        showSurface: false,
+        contentPadding: EdgeInsets.zero,
+        helpAfterTitle: true,
+        titleColor: mutedColor,
+        infoDescription:
+            '• Corporation membership is optional. Independent people use Earth default rules until they choose a corporation.',
+        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          const Text('You are currently independent.',
+              style: TextStyle(
+                  color: Colors.orangeAccent,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w800)),
+          const SizedBox(height: 5),
+          const Text(
+              'Join a corporation to access shared cities, technologies, contracts, and civic influence.',
+              style: TextStyle(color: mutedColor, fontSize: 11)),
+        ]),
+      );
+    }
+
     return EarthPanel(
-      title: 'MEMBERSHIP & DIRECTION',
+      title: 'MEMBERSHIP',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
@@ -499,7 +526,8 @@ class CorporationOverviewPanel extends StatelessWidget {
             ),
           ],
         ],
-        if (state.rankings['cities'] is List &&
+        if (isMember &&
+            state.rankings['cities'] is List &&
             (state.rankings['cities'] as List).isNotEmpty) ...[
           const SizedBox(height: 16),
           const Text('CORPORATION CITY NETWORK',

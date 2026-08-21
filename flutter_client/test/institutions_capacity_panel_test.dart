@@ -4,6 +4,30 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
 
 void main() {
+  testWidgets('CorporationOverviewPanel keeps independent status minimal',
+      (tester) async {
+    const state = EarthState({
+      'institutions': {},
+      'membership': {},
+      'rankings': {
+        'corporations': [
+          {'name': 'Hidden Corporation', 'member_count': 99},
+        ],
+      },
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: CorporationOverviewPanel(state: state)),
+    ));
+
+    expect(find.text('MEMBERSHIP'), findsOneWidget);
+    expect(find.text('You are currently independent.'), findsOneWidget);
+    expect(find.textContaining('Join a corporation to access'), findsOneWidget);
+    expect(find.text('Hidden Corporation'), findsNothing);
+    expect(find.text('CORPORATION DECISIONS'), findsNothing);
+    expect(find.text('TREASURY'), findsNothing);
+  });
+
   testWidgets(
       'CorporationOverviewPanel presents affiliation and corporation direction',
       (tester) async {
@@ -29,7 +53,7 @@ void main() {
       home: Scaffold(body: CorporationOverviewPanel(state: state)),
     ));
 
-    expect(find.text('MEMBERSHIP & DIRECTION'), findsOneWidget);
+    expect(find.text('MEMBERSHIP'), findsOneWidget);
     expect(find.text('You belong to Carthage Dynamics.'), findsOneWidget);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsOneWidget);
