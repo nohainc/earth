@@ -84,6 +84,7 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
     if (!cred) throw new Error('Account not found');
     const prevHuman = (await tx.query<{ id: string; display_name: string; legacy: number; standing: number; life_status: string }>('SELECT id, display_name, legacy, standing, life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
+    const existingDynasty = (await tx.query<{ dynasty_name: string }>('SELECT dynasty_name FROM dynasties WHERE email = $1', [input.email])).rows[0];
 
     const world = await tx.query<{ game_day: number; living_cost_index: string }>("SELECT game_day, living_cost_index FROM world_state WHERE id = 'WORLD'");
     const worldDay = Number(world.rows[0]?.game_day ?? 184);
@@ -138,7 +139,7 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
 
     // 5. Inscribe into character lineage
-    const dynasty = input.dynastyName ?? 'Founding Dynasty';
+    const dynasty = input.dynastyName?.trim() || existingDynasty?.dynasty_name || 'Founding Dynasty';
     await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,dynasty_name) VALUES ($1,$2,$3,$4,(SELECT COALESCE(MAX(generation), 0) + 1 FROM character_lineage WHERE email = $2),$5,$6)', [crypto.randomUUID(), input.email, newHumanId, prevHuman?.id ?? null, worldDay, dynasty]);
 
     // Keep the active Family & Dynasty model in sync with the legacy
