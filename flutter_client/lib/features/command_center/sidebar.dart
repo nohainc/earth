@@ -112,12 +112,7 @@ class _SidebarState extends State<Sidebar> {
           ('corporation', corporationName, Icons.account_balance_outlined),
           if (isCorporationMember)
             ('city', cityName, Icons.location_city_outlined),
-          ('civic', 'Earth Rules', Icons.public_outlined),
-          (
-            'public-finance',
-            'Public Finance',
-            Icons.account_balance_wallet_outlined
-          ),
+          ('civic', 'Public', Icons.public_outlined),
           ('civic-rankings', 'Rankings', Icons.leaderboard_outlined),
         ]
       ),

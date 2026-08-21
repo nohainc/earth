@@ -38,7 +38,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'briefing' => 'EXECUTIVE BRIEFING',
       'messages' => 'MESSAGES',
       'business' => 'BUSINESS',
-      'civic' => 'EARTH RULES',
+      'civic' => 'PUBLIC',
       'corporation' => 'CORPORATION',
       'city' => 'MY CITY',
       'dynasty' => 'DYNASTY TREE',
@@ -535,7 +535,12 @@ class Dashboard extends StatelessWidget {
         ];
       case 'civic':
       case 'governance':
-        return [ProposalPanel(state: state, busy: busy, action: action)];
+        return [
+          ProposalPanel(state: state, busy: busy, action: action),
+          const SizedBox(height: 34),
+          PublicFinanceGovernancePanel(
+              state: state, busy: busy, action: action),
+        ];
       case 'corporation':
         return [
           LayoutBuilder(builder: (context, constraints) {

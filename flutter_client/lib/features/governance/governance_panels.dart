@@ -972,56 +972,6 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
               style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
             ),
           ),
-          if (state.roles.any((raw) {
-            if (raw is! Map<String, dynamic>) return false;
-            final role = raw;
-            final holder = role['human_id']?.toString();
-            final roleId = role['id']?.toString();
-            return holder == state.human['id'] &&
-                (roleId == 'ROLE-CITY-MAYOR' || roleId == 'ROLE-CITY-PLANNER');
-          })) ...[
-            const SizedBox(height: 10),
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: violetColor.withValues(alpha: .12),
-                borderRadius: BorderRadius.circular(6),
-                border: Border.all(color: violetColor.withValues(alpha: .25)),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'As an active city finance role, you can route UC funds into local services.',
-                    style: TextStyle(
-                        color: inkColor,
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w500),
-                  ),
-                  const SizedBox(height: 8),
-                  FilledButton.icon(
-                    style: FilledButton.styleFrom(
-                      backgroundColor: violetColor,
-                      foregroundColor: Colors.white,
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: busy
-                        ? null
-                        : () => action(() => const EarthApi()
-                            .spendPublicFinance(
-                                'CITY-0084', 'public-services', 100)),
-                    icon: const Icon(Icons.send_rounded, size: 14),
-                    label: const Text(
-                      'FUND CITY SERVICES FROM UC · 100 C',
-                      style:
-                          TextStyle(fontSize: 10, fontWeight: FontWeight.w800),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
         ],
       ),
     );

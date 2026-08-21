@@ -7,7 +7,7 @@ void main() {
   test('dashboardSectionTitle maps keys to human-readable titles', () {
     expect(dashboardSectionTitle('market'), 'MARKET');
     expect(dashboardSectionTitle('business'), 'BUSINESS');
-    expect(dashboardSectionTitle('civic'), 'GOVERNANCE');
+    expect(dashboardSectionTitle('civic'), 'PUBLIC');
     expect(dashboardSectionTitle('city'), 'MY CITY');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
     expect(dashboardSectionTitle('life'), 'LEGACY');
