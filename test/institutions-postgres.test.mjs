@@ -70,8 +70,8 @@ test('cityQualification evaluates active population, housing, and health capacit
 
 test('changeCityResidency adds or removes human residency', async () => {
   const client = new MockDbClient({
-    'SELECT id FROM cities WHERE id = $1 FOR UPDATE': {
-      rows: [{ id: 'CITY-01' }],
+    'SELECT id, corporation_id FROM cities WHERE id = $1 FOR UPDATE': {
+      rows: [{ id: 'CITY-01', corporation_id: null }],
       rowCount: 1,
     },
     'SELECT action, game_day FROM membership_events': {

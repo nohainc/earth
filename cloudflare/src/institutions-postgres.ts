@@ -72,6 +72,7 @@ export async function createCorporation(repository: PostgresRepository, input: {
     const members = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 AND corporation_id IS NULL', [input.cityId]);
     await tx.query("INSERT INTO institutions (id,kind,name,status) VALUES ($1,'CORPORATION',$2,'active')", [corporationId, name]);
     await tx.query('INSERT INTO corporations (id,institution_id,member_count,treasury,constitution_version) VALUES ($1,$1,0,0,1)', [corporationId]);
+    await tx.query('UPDATE cities SET corporation_id = $1 WHERE id = $2', [corporationId, input.cityId]);
     await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $2, 0, 'CREDIT')", [`account-corporation-${corporationId}`, corporationId]);
     await tx.query("INSERT INTO institution_roles (id,institution_id,name,term_days,eligibility) VALUES ($1,$2,'Corporation Executive',90,'member'),($3,$2,'Corporation Treasurer',90,'member'),($4,$2,'OUC Delegate',90,'representative')", [`${corporationId}-EXECUTIVE`, corporationId, `${corporationId}-TREASURER`, `${corporationId}-DELEGATE`]);
     await tx.query('UPDATE memberships SET corporation_id = $1 WHERE city_id = $2 AND corporation_id IS NULL', [corporationId, input.cityId]);
@@ -132,7 +133,7 @@ export async function changeCorporationMembership(repository: PostgresRepository
 
 export async function changeCityResidency(repository: PostgresRepository, input: { humanId: string; cityId: string; action: 'join' | 'leave'; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const city = await tx.query<{ id: string }>('SELECT id FROM cities WHERE id = $1 FOR UPDATE', [input.cityId]);
+    const city = await tx.query<{ id: string; corporation_id: string | null }>('SELECT id, corporation_id FROM cities WHERE id = $1 FOR UPDATE', [input.cityId]);
     if (!city.rows[0]) throw new Error('City not found');
     const replay = await tx.query<{ action: string; game_day: number }>('SELECT action, game_day FROM membership_events WHERE id = $1 AND human_id = $2 AND institution_id = $3', [input.correlationId, input.humanId, input.cityId]);
     if (replay.rows[0]) return { ok: true, alreadyProcessed: true, residency: replay.rows[0].action === 'joined' ? 'resident' : 'independent', correlationId: input.correlationId, gameDay: Number(replay.rows[0].game_day), membership: (await tx.query('SELECT * FROM memberships WHERE human_id = $1', [input.humanId])).rows[0] ?? null };
@@ -140,13 +141,21 @@ export async function changeCityResidency(repository: PostgresRepository, input:
     if (!human.rows[0]) throw new Error('Human not found');
     const existing = await tx.query<{ city_id: string | null; corporation_id: string | null }>('SELECT city_id, corporation_id FROM memberships WHERE human_id = $1 FOR UPDATE', [input.humanId]);
     const previousCityId = existing.rows[0]?.city_id ?? null;
+    const cityCorporationId = city.rows[0]?.corporation_id ?? null;
+    if (input.action === 'join' && existing.rows[0]?.corporation_id && cityCorporationId && existing.rows[0].corporation_id !== cityCorporationId) {
+      throw new Error('This city belongs to another corporation');
+    }
     const gameDay = await day(tx);
     if (input.action === 'join') {
-      await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET city_id = excluded.city_id, joined_game_day = excluded.joined_game_day', [input.humanId, existing.rows[0]?.corporation_id ?? null, input.cityId, gameDay]);
+      await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = COALESCE(memberships.corporation_id, excluded.corporation_id), city_id = excluded.city_id, joined_game_day = excluded.joined_game_day', [input.humanId, existing.rows[0]?.corporation_id ?? cityCorporationId, input.cityId, gameDay]);
     } else {
       await tx.query('UPDATE memberships SET city_id = NULL WHERE human_id = $1 AND city_id = $2', [input.humanId, input.cityId]);
     }
     await refreshPopulation(tx, null, [previousCityId, input.cityId]);
+    if (input.action === 'join' && cityCorporationId && !existing.rows[0]?.corporation_id) {
+      await refreshPopulation(tx, cityCorporationId, []);
+      await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CORPORATION',$3,'joined',$4,'city_affiliation')", [crypto.randomUUID(), input.humanId, cityCorporationId, gameDay]);
+    }
     const action = input.action === 'join' ? 'joined' : 'left';
     await tx.query('INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,\'CITY\',$3,$4,$5,$6)', [input.correlationId, input.humanId, input.cityId, action, gameDay, input.action === 'join' ? 'voluntary_residency' : 'voluntary_departure']);
     await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [`CITY-${action.toUpperCase()}-${input.humanId}-${input.cityId}-${gameDay}`, input.humanId, 'institution', action === 'joined' ? 'City residency established' : 'City residency ended', action === 'joined' ? `You are now a resident of city ${input.cityId}.` : `You left city ${input.cityId}.`, input.cityId]);
