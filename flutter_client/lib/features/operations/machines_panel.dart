@@ -119,6 +119,7 @@ class MachinesPanel extends StatelessWidget {
               final workplace = businessName == null || businessName.isEmpty
                   ? 'PERSONAL WORK UNIT'
                   : 'WORKPLACE · $businessName';
+              final businessId = state.business['id']?.toString();
 
               final isInactive = status == 'sold' ||
                   status == 'recycled' ||
@@ -278,6 +279,23 @@ class MachinesPanel extends StatelessWidget {
                             child: const Text('SELL MACHINE',
                                 style: TextStyle(fontSize: 10)),
                           ),
+                          if (businessId != null && businessId.isNotEmpty)
+                            OutlinedButton(
+                              style: OutlinedButton.styleFrom(
+                                visualDensity: VisualDensity.compact,
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                              ),
+                              onPressed: busy
+                                  ? null
+                                  : () => action(() => const EarthApi().assignMachineToBusiness(
+                                        id,
+                                        businessName == null || businessName.isEmpty ? businessId : null,
+                                      )),
+                              child: Text(
+                                businessName == null || businessName.isEmpty ? 'ASSIGN TO BUSINESS' : 'RELEASE TO PERSONAL',
+                                style: const TextStyle(fontSize: 10),
+                              ),
+                            ),
                           OutlinedButton(
                             style: OutlinedButton.styleFrom(
                               visualDensity: VisualDensity.compact,

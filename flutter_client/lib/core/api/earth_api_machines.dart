@@ -42,6 +42,11 @@ extension EarthApiMachines on EarthApi {
     return world();
   }
 
+  Future<EarthState> assignMachineToBusiness(String machineId, String? businessId) async {
+    await _request('/api/machines/$machineId/workplace', method: 'POST', body: {'businessId': businessId});
+    return world();
+  }
+
   Future<EarthState> upgradeMachine(String machineId, {String otp = ''}) async {
     await _request('/api/machines/$machineId/upgrade', method: 'POST', body: {
       if (otp.isNotEmpty) 'otp': otp,
@@ -60,4 +65,3 @@ extension EarthApiMachines on EarthApi {
   }
 
 }
-

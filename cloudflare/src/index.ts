@@ -6,7 +6,7 @@ import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPos
 import { acceptContract as acceptContractPostgres, cancelContract as cancelContractPostgres, createContract as createContractPostgres, openDispute as openDisputePostgres } from './contracts-postgres';
 import { resolveContractDispute as resolveContractDisputePostgres } from './arbitration-postgres';
 import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, dismissEmployee as dismissEmployeePostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, hireEmployee as hireEmployeePostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, setPolicy as setBusinessPolicyPostgres, trainEmployee as trainEmployeePostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
-import { acquireMachine as acquireMachinePostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
+import { acquireMachine as acquireMachinePostgres, assignMachineToBusiness as assignMachineToBusinessPostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
 import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, challengeProposal as challengeProposalPostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveConstitutionalAppeal as resolveConstitutionalAppealPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
@@ -1920,6 +1920,22 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine utilization update failed' }, { status: 404 });
+      }
+    }
+    const workplaceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/workplace$/);
+    if (workplaceMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ businessId?: string | null }>(request);
+      if (!parsed.ok) return parsed.response;
+      const businessId = parsed.value.businessId?.trim() || null;
+      try {
+        const result = await withRepository(env, (repository) => assignMachineToBusinessPostgres(repository, { machineId: workplaceMatch[1], ownerId: viewer.id, businessId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Machine workplace update failed';
+        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
     }
     const upgradeMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/upgrade$/);

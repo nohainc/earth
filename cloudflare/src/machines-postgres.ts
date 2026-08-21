@@ -59,6 +59,22 @@ export async function setMachineUtilization(repository: PostgresRepository, inpu
   return { ok: true, machine: result.rows[0] };
 }
 
+export async function assignMachineToBusiness(repository: PostgresRepository, input: { machineId: string; ownerId: string; businessId: string | null }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const machine = await tx.query<{ id: string }>('SELECT id FROM machines WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.machineId, input.ownerId]);
+    if (!machine.rows[0]) throw new Error('Machine not found for this Human');
+    if (input.businessId) {
+      const business = await tx.query<{ id: string }>(`SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.id = $1 AND b.status = 'active' AND (b.owner_id = $2 OR bm.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares bs WHERE bs.business_id = b.id AND bs.holder_id = $2))`, [input.businessId, input.ownerId]);
+      if (!business.rows[0]) throw new Error('Business workplace access denied');
+      await tx.query("INSERT INTO business_assets (business_id, machine_id, assigned_game_day, assigned_by) SELECT $1, $2, game_day, $3 FROM world_state WHERE id = 'WORLD' ON CONFLICT (machine_id) DO UPDATE SET business_id = EXCLUDED.business_id, assigned_game_day = EXCLUDED.assigned_game_day, assigned_by = EXCLUDED.assigned_by", [input.businessId, input.machineId, input.ownerId]);
+    } else {
+      await tx.query('DELETE FROM business_assets WHERE machine_id = $1', [input.machineId]);
+    }
+    const result = await tx.query('SELECT machines.*, business_assets.business_id, businesses.name AS business_name FROM machines LEFT JOIN business_assets ON business_assets.machine_id = machines.id LEFT JOIN businesses ON businesses.id = business_assets.business_id WHERE machines.id = $1', [input.machineId]);
+    return { ok: true, machine: result.rows[0] };
+  });
+}
+
 export async function upgradeMachine(repository: PostgresRepository, input: { machineId: string; ownerId: string; correlationId: string; creditCost: number; componentsCost: number }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const membership = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1 FOR UPDATE', [input.ownerId]);
