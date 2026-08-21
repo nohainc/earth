@@ -1,10 +1,21 @@
 part of 'earth_api.dart';
 
 extension EarthApiInstitutions on EarthApi {
-
   Future<List<Map<String, dynamic>>> listCities() async {
     final response = (await _request('/api/cities')) as Map<String, dynamic>;
     return (response['cities'] as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((row) => Map<String, dynamic>.from(row))
+        .toList();
+  }
+
+  Future<List<Map<String, dynamic>>> listCorporations({String? search}) async {
+    final query = search == null || search.trim().isEmpty
+        ? ''
+        : '?search=${Uri.encodeQueryComponent(search.trim())}';
+    final response =
+        (await _request('/api/corporations$query')) as Map<String, dynamic>;
+    return (response['corporations'] as List<dynamic>? ?? const [])
         .whereType<Map>()
         .map((row) => Map<String, dynamic>.from(row))
         .toList();
@@ -30,6 +41,15 @@ extension EarthApiInstitutions on EarthApi {
       {String corporationId = 'CORP-001'}) async {
     await _request('/api/corporations/$corporationId/membership',
         method: 'DELETE');
+    return world();
+  }
+
+  Future<EarthState> setCorporationAdmissionPolicy({
+    required String corporationId,
+    required String policy,
+  }) async {
+    await _request('/api/corporations/$corporationId/admission-policy',
+        method: 'POST', body: {'policy': policy});
     return world();
   }
 
@@ -118,16 +138,14 @@ extension EarthApiInstitutions on EarthApi {
     int corporateTaxBps = 0,
     int propertyTaxBps = 0,
   }) async {
-    await _request('/api/cities/$cityId/tax-charter',
-        method: 'POST',
-        body: {
-          'incomeTaxBps': incomeTaxBps,
-          'salesTaxBps': salesTaxBps,
-          'corporateTaxBps': corporateTaxBps,
-          'propertyTaxBps': propertyTaxBps,
-          'correlationId':
-              'tax-charter-$cityId-${DateTime.now().microsecondsSinceEpoch}',
-        });
+    await _request('/api/cities/$cityId/tax-charter', method: 'POST', body: {
+      'incomeTaxBps': incomeTaxBps,
+      'salesTaxBps': salesTaxBps,
+      'corporateTaxBps': corporateTaxBps,
+      'propertyTaxBps': propertyTaxBps,
+      'correlationId':
+          'tax-charter-$cityId-${DateTime.now().microsecondsSinceEpoch}',
+    });
     return world();
   }
 
@@ -159,5 +177,4 @@ extension EarthApiInstitutions on EarthApi {
         method: 'POST');
     return world();
   }
-
 }

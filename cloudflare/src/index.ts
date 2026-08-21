@@ -16,7 +16,7 @@ import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as upda
 import { changeDelegation as changeDelegationPostgres, changeRole as changeRolePostgres, listRoles as listRolesPostgres } from './roles-postgres';
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
-import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
+import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, decideCorporationMembershipRequest as decideCorporationMembershipRequestPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationAdmissionPolicy as setCorporationAdmissionPolicyPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
@@ -610,7 +610,7 @@ const worker = {
       }
     }
     if (url.pathname === '/api/corporations' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listCorporationsPostgres(repository));
+      const result = await withRepository(env, (repository) => listCorporationsPostgres(repository, url.searchParams.get('search') ?? ''));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
@@ -723,6 +723,38 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Corporation membership change failed';
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /already|member/i.test(message) ? 409 : 400 });
+      }
+    }
+    const corporationAdmissionMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/admission-policy$/);
+    if (corporationAdmissionMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ policy?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const policy = parsed.value.policy === 'approval' ? 'approval' : parsed.value.policy === 'open' ? 'open' : null;
+      if (!policy) return Response.json({ ok: false, error: 'Policy must be open or approval' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => setCorporationAdmissionPolicyPostgres(repository, { humanId: viewer.id, corporationId: corporationAdmissionMatch[1], policy }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Admission policy update failed' }, { status: 403 });
+      }
+    }
+    const corporationRequestMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/membership-requests\/([^/]+)$/);
+    if (corporationRequestMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ decision?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const decision = parsed.value.decision === 'approved' ? 'approved' : parsed.value.decision === 'rejected' ? 'rejected' : null;
+      if (!decision) return Response.json({ ok: false, error: 'Decision must be approved or rejected' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => decideCorporationMembershipRequestPostgres(repository, { humanId: viewer.id, corporationId: corporationRequestMatch[1], requestId: corporationRequestMatch[2], decision }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Membership request decision failed' }, { status: 403 });
       }
     }
     const residencyMatch = url.pathname.match(/^\/api\/cities\/([^/]+)\/residency$/);

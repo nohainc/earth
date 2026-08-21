@@ -28,8 +28,8 @@ Future<void> showFormationComposer(BuildContext context,
                     await action(() => city
                         ? const EarthApi()
                             .createCity(selectedName, communityId ?? 'COM-001')
-                        : const EarthApi()
-                            .createCorporation(selectedName, cityId ?? 'CITY-0084'));
+                        : const EarthApi().createCorporation(
+                            selectedName, cityId ?? 'CITY-0084'));
                   },
                   child: const Text('Submit')),
             ],
@@ -91,7 +91,8 @@ Future<void> showCommunityContributionDialog(
             final val = double.tryParse(amount.text.trim());
             if (val == null || val <= 0) return;
             Navigator.pop(dialogContext);
-            await action(() => const EarthApi().contributeToCommunity(communityId, val));
+            await action(
+                () => const EarthApi().contributeToCommunity(communityId, val));
           },
           child: const Text('Contribute'),
         ),
@@ -101,11 +102,11 @@ Future<void> showCommunityContributionDialog(
 }
 
 Future<void> showTaxCharterDialog(
-    BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action,
-    String institutionId, {
-    bool corporation = false,
-  }) async {
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action,
+  String institutionId, {
+  bool corporation = false,
+}) async {
   final income = TextEditingController(text: '5.0');
   final sales = TextEditingController(text: '2.0');
   final corporate = TextEditingController(text: '10.0');
@@ -118,7 +119,9 @@ Future<void> showTaxCharterDialog(
         final parsedIncome = double.tryParse(income.text.trim()) ?? 5.0;
         final parsedCorporate = double.tryParse(corporate.text.trim()) ?? 10.0;
         return AlertDialog(
-          title: Text(corporation ? 'Set corporation tax charter' : 'Set city tax charter'),
+          title: Text(corporation
+              ? 'Set corporation tax charter'
+              : 'Set city tax charter'),
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
@@ -131,26 +134,34 @@ Future<void> showTaxCharterDialog(
                   ),
                   TextField(
                     controller: income,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Income tax (%)'),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration:
+                        const InputDecoration(labelText: 'Income tax (%)'),
                     onChanged: (_) => setState(() {}),
                   ),
                   TextField(
                     controller: sales,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Sales tax (%)'),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration:
+                        const InputDecoration(labelText: 'Sales tax (%)'),
                     onChanged: (_) => setState(() {}),
                   ),
                   TextField(
                     controller: corporate,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Corporate tax (%)'),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration:
+                        const InputDecoration(labelText: 'Corporate tax (%)'),
                     onChanged: (_) => setState(() {}),
                   ),
                   TextField(
                     controller: property,
-                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(labelText: 'Property tax (%)'),
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration:
+                        const InputDecoration(labelText: 'Property tax (%)'),
                     onChanged: (_) => setState(() {}),
                   ),
                   const SizedBox(height: 14),
@@ -178,31 +189,79 @@ Future<void> showTaxCharterDialog(
                   double.tryParse(corporate.text.trim()),
                   double.tryParse(property.text.trim()),
                 ];
-                if (rates.any((value) => value == null || value < 0 || value > 30)) {
+                if (rates
+                    .any((value) => value == null || value < 0 || value > 30)) {
                   return;
                 }
                 Navigator.pop(dialogContext);
                 await action(() => corporation
                     ? const EarthApi().setCorporationTaxCharter(
-                      corporationId: institutionId,
-                      incomeTaxBps: (rates[0]! * 100).round(),
-                      salesTaxBps: (rates[1]! * 100).round(),
-                      corporateTaxBps: (rates[2]! * 100).round(),
-                      propertyTaxBps: (rates[3]! * 100).round(),
-                    )
+                        corporationId: institutionId,
+                        incomeTaxBps: (rates[0]! * 100).round(),
+                        salesTaxBps: (rates[1]! * 100).round(),
+                        corporateTaxBps: (rates[2]! * 100).round(),
+                        propertyTaxBps: (rates[3]! * 100).round(),
+                      )
                     : const EarthApi().setCityTaxCharter(
-                      cityId: institutionId,
-                      incomeTaxBps: (rates[0]! * 100).round(),
-                      salesTaxBps: (rates[1]! * 100).round(),
-                      corporateTaxBps: (rates[2]! * 100).round(),
-                      propertyTaxBps: (rates[3]! * 100).round(),
-                    ));
+                        cityId: institutionId,
+                        incomeTaxBps: (rates[0]! * 100).round(),
+                        salesTaxBps: (rates[1]! * 100).round(),
+                        corporateTaxBps: (rates[2]! * 100).round(),
+                        propertyTaxBps: (rates[3]! * 100).round(),
+                      ));
               },
               child: const Text('SAVE CHARTER'),
             ),
           ],
         );
       },
+    ),
+  );
+}
+
+Future<void> showAdmissionPolicyDialog(
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action,
+  String corporationId, {
+  String currentPolicy = 'open',
+}) async {
+  var policy = currentPolicy == 'approval' ? 'approval' : 'open';
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setState) => AlertDialog(
+        title: const Text('Corporation admission'),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          RadioListTile<String>(
+            value: 'open',
+            groupValue: policy,
+            onChanged: (value) => setState(() => policy = value!),
+            title: const Text('Open membership'),
+            subtitle:
+                const Text('New members join the capital city immediately.'),
+          ),
+          RadioListTile<String>(
+            value: 'approval',
+            groupValue: policy,
+            onChanged: (value) => setState(() => policy = value!),
+            title: const Text('Admin approval'),
+            subtitle: const Text('Administrators review membership requests.'),
+          ),
+        ]),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('CANCEL')),
+          FilledButton(
+            onPressed: () async {
+              Navigator.pop(dialogContext);
+              await action(() => const EarthApi().setCorporationAdmissionPolicy(
+                  corporationId: corporationId, policy: policy));
+            },
+            child: const Text('SAVE POLICY'),
+          ),
+        ],
+      ),
     ),
   );
 }

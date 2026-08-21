@@ -46,6 +46,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'patents' => 'PATENTS & LICENSING',
       'machines' => 'MACHINES & PRODUCTION',
       'public-finance' => 'PUBLIC FINANCE',
+      'civic-rankings' => 'CIVIC RANKINGS',
       'succession' => 'SUCCESSION & ESTATE',
       'history' => 'HISTORICAL ARCHIVE',
       'life' => 'LEGACY',
@@ -589,7 +590,23 @@ class Dashboard extends StatelessWidget {
         ];
       case 'corporation':
         return [
-          CorporationOverviewPanel(state: state, busy: busy, action: action)
+          LayoutBuilder(builder: (context, constraints) {
+            final directory = CorporationDirectoryPanel(
+                state: state, busy: busy, action: action);
+            final overview = CorporationOverviewPanel(
+                state: state, busy: busy, action: action);
+            if (constraints.maxWidth > 1000) {
+              return Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(child: directory),
+                    const SizedBox(width: 34),
+                    Expanded(child: overview),
+                  ]);
+            }
+            return Column(
+                children: [directory, const SizedBox(height: 34), overview]);
+          })
         ];
       case 'city':
         return [
@@ -711,6 +728,8 @@ class Dashboard extends StatelessWidget {
         return [
           PublicFinanceGovernancePanel(state: state, busy: busy, action: action)
         ];
+      case 'civic-rankings':
+        return [CivicRankingsPanel(state: state)];
       case 'succession':
         return [SuccessionPanel(state: state, busy: busy, action: action)];
       case 'history':

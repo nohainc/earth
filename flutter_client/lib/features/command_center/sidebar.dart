@@ -57,7 +57,7 @@ class _SidebarState extends State<Sidebar> {
         'technology',
         'patents'
       ],
-      ['corporation', 'city', 'civic', 'public-finance'],
+      ['corporation', 'city', 'civic', 'public-finance', 'civic-rankings'],
       ['life', 'dynasty', 'succession', 'history'],
     ];
     for (var index = 0; index < groups.length; index++) {
@@ -108,6 +108,7 @@ class _SidebarState extends State<Sidebar> {
             'Public Finance',
             Icons.account_balance_wallet_outlined
           ),
+          ('civic-rankings', 'Civic Rankings', Icons.leaderboard_outlined),
         ]
       ),
       (

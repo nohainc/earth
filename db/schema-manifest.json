@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 47,
+  "migrationVersion": 48,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -167,7 +167,16 @@
     "corporations": [
       "id",
       "institution_id",
-      "treasury"
+      "treasury",
+      "capital_city_id",
+      "admission_policy"
+    ],
+    "corporation_membership_requests": [
+      "id",
+      "corporation_id",
+      "human_id",
+      "status",
+      "requested_game_day"
     ],
     "deceased_profiles": [
       "human_id",

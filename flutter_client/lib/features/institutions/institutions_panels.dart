@@ -6,6 +6,364 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'institutions_dialogs.dart';
 
+class CorporationDirectoryPanel extends StatefulWidget {
+  final EarthState state;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const CorporationDirectoryPanel({
+    super.key,
+    required this.state,
+    required this.busy,
+    required this.action,
+  });
+
+  @override
+  State<CorporationDirectoryPanel> createState() =>
+      _CorporationDirectoryPanelState();
+}
+
+class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
+  final _search = TextEditingController();
+  List<Map<String, dynamic>> _corporations = const [];
+  Map<String, dynamic>? _selected;
+  bool _loading = true;
+
+  bool get _isMember => widget.state.membership?['corporation_id'] != null;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  @override
+  void didUpdateWidget(covariant CorporationDirectoryPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.state.membership?['corporation_id'] !=
+        widget.state.membership?['corporation_id']) {
+      _load();
+    }
+  }
+
+  @override
+  void dispose() {
+    _search.dispose();
+    super.dispose();
+  }
+
+  Future<void> _load() async {
+    if (_isMember) {
+      setState(() => _loading = false);
+      return;
+    }
+    setState(() => _loading = true);
+    try {
+      final rows =
+          await const EarthApi().listCorporations(search: _search.text);
+      if (!mounted) return;
+      setState(() {
+        _corporations = rows;
+        _selected = rows.isEmpty
+            ? null
+            : (_selected == null
+                ? rows.first
+                : rows.firstWhere((row) => row['id'] == _selected!['id'],
+                    orElse: () => rows.first));
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _join() async {
+    final id = _selected?['id']?.toString();
+    if (id == null) return;
+    await widget
+        .action(() => const EarthApi().joinCorporation(corporationId: id));
+  }
+
+  Future<void> _leave() async {
+    final id = widget.state.membership?['corporation_id']?.toString();
+    if (id == null) return;
+    await widget
+        .action(() => const EarthApi().leaveCorporation(corporationId: id));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final current = widget.state.institutions['corporation'] is Map
+        ? Map<String, dynamic>.from(
+            widget.state.institutions['corporation'] as Map)
+        : const <String, dynamic>{};
+    return EarthPanel(
+      title: 'CORPORATION / FIND YOUR NETWORK',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Independent people can compare active corporations and choose a network.\n\n• Every corporation has a capital city. Joining places you there automatically.\n\n• Open corporations accept members immediately; approval corporations create a request for their administrators.\n\n• Once affiliated, leave your current corporation before choosing another one.',
+      child: _isMember ? _memberView(current) : _directoryView(),
+    );
+  }
+
+  Widget _memberView(Map<String, dynamic> current) {
+    final name = current['name']?.toString() ?? 'your corporation';
+    final city = current['capital_city_name']?.toString() ??
+        widget.state.membership?['city_id']?.toString() ??
+        'capital city';
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      _statusCard(Icons.verified_user_outlined, 'AFFILIATED',
+          'You are a member of $name. Your corporation membership places you in its capital city: $city.'),
+      const SizedBox(height: 14),
+      OutlinedButton.icon(
+        onPressed: widget.busy ? null : _leave,
+        icon: const Icon(Icons.logout, size: 15),
+        label: const Text('LEAVE CORPORATION'),
+      ),
+      const SizedBox(height: 7),
+      const Text(
+          'Leaving ends the corporation-city affiliation and returns you to the independent ruleset.',
+          style: TextStyle(color: mutedColor, fontSize: 10)),
+    ]);
+  }
+
+  Widget _directoryView() {
+    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+      Row(children: [
+        Expanded(
+          child: TextField(
+            controller: _search,
+            onSubmitted: (_) => _load(),
+            decoration: const InputDecoration(
+              prefixIcon: Icon(Icons.search, size: 17),
+              hintText: 'Search corporations',
+              isDense: true,
+            ),
+          ),
+        ),
+        const SizedBox(width: 8),
+        IconButton(
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh, size: 18)),
+      ]),
+      const SizedBox(height: 12),
+      if (_loading)
+        const LinearProgressIndicator()
+      else if (_corporations.isEmpty)
+        _statusCard(Icons.search_off, 'NO MATCHES',
+            'No active corporations match this search.')
+      else
+        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Expanded(
+              child: Column(
+                  children: _corporations.map(_corporationRow).toList())),
+          if (_selected != null) ...[
+            const SizedBox(width: 14),
+            Expanded(child: _details(_selected!)),
+          ],
+        ]),
+      const SizedBox(height: 14),
+      FilledButton.icon(
+        onPressed: widget.busy || widget.state.membership?['city_id'] == null
+            ? null
+            : () => showFormationComposer(context, widget.action,
+                city: false,
+                cityId: widget.state.membership?['city_id']?.toString()),
+        icon: const Icon(Icons.add_business, size: 16),
+        label: const Text('CREATE CORPORATION'),
+      ),
+      if (widget.state.membership?['city_id'] == null)
+        const Padding(
+          padding: EdgeInsets.only(top: 7),
+          child: Text(
+              'Join a city before founding a corporation so it has a capital city.',
+              style: TextStyle(color: mutedColor, fontSize: 10)),
+        ),
+    ]);
+  }
+
+  Widget _corporationRow(Map<String, dynamic> row) {
+    final selected = _selected?['id'] == row['id'];
+    return InkWell(
+      onTap: () => setState(() => _selected = row),
+      child: Container(
+        width: double.infinity,
+        margin: const EdgeInsets.only(bottom: 7),
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: selected
+              ? cyanAccentColor.withValues(alpha: .10)
+              : surfaceColor.withValues(alpha: .65),
+          borderRadius: BorderRadius.circular(8),
+          border:
+              Border.all(color: selected ? cyanAccentColor : Colors.white12),
+        ),
+        child: Row(children: [
+          const Icon(Icons.account_balance_outlined,
+              size: 16, color: cyanAccentColor),
+          const SizedBox(width: 8),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(
+                    row['name']?.toString() ??
+                        row['id']?.toString() ??
+                        'Corporation',
+                    style: const TextStyle(
+                        fontSize: 11, fontWeight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text(
+                    '${row['member_count'] ?? 0} members · ${row['capital_city_name'] ?? 'capital city'}',
+                    style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+              ])),
+        ]),
+      ),
+    );
+  }
+
+  Widget _details(Map<String, dynamic> row) {
+    final approval = row['admission_policy']?.toString() == 'approval';
+    return Container(
+      padding: const EdgeInsets.all(13),
+      decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: violetColor.withValues(alpha: .28))),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(row['name']?.toString() ?? 'Corporation',
+            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 8),
+        Text('Capital city: ${row['capital_city_name'] ?? 'not assigned'}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        Text('Network cities: ${row['city_count'] ?? 0}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        Text('Members: ${row['member_count'] ?? 0}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 10),
+        Text(approval ? 'ADMISSION: ADMIN APPROVAL' : 'ADMISSION: OPEN',
+            style: TextStyle(
+                color: approval ? Colors.orangeAccent : Colors.tealAccent,
+                fontSize: 9,
+                fontWeight: FontWeight.w800)),
+        const SizedBox(height: 12),
+        FilledButton(
+            onPressed: widget.busy ? null : _join,
+            child: Text(approval ? 'REQUEST MEMBERSHIP' : 'JOIN CORPORATION')),
+      ]),
+    );
+  }
+
+  Widget _statusCard(IconData icon, String label, String text) => Container(
+        width: double.infinity,
+        padding: const EdgeInsets.all(13),
+        decoration: BoxDecoration(
+            color: cyanAccentColor.withValues(alpha: .07),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: cyanAccentColor.withValues(alpha: .22))),
+        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Icon(icon, color: cyanAccentColor, size: 19),
+          const SizedBox(width: 9),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(label,
+                    style: const TextStyle(
+                        color: cyanAccentColor,
+                        fontSize: 9,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 4),
+                Text(text, style: const TextStyle(fontSize: 11, height: 1.3)),
+              ])),
+        ]),
+      );
+}
+
+class CivicRankingsPanel extends StatelessWidget {
+  final EarthState state;
+  const CivicRankingsPanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    return EarthPanel(
+      title: 'CIVIC / CORPORATION & CITY RANKINGS',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          'Compare institutions by the measures that shape civic life: productive membership, city services, and resilience—not treasury alone.',
+      child: LayoutBuilder(builder: (context, constraints) {
+        final corp = _rows(state.rankings['corporations']);
+        final cities = _rows(state.rankings['cities']);
+        final wide = constraints.maxWidth > 700;
+        final children = [
+          _rankingColumn(
+              'CORPORATIONS', corp, Icons.account_balance_outlined, 'members'),
+          _rankingColumn(
+              'CITIES', cities, Icons.location_city_outlined, 'residents'),
+        ];
+        return wide
+            ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                Expanded(child: children[0]),
+                const SizedBox(width: 18),
+                Expanded(child: children[1])
+              ])
+            : Column(children: [
+                children[0],
+                const SizedBox(height: 18),
+                children[1]
+              ]);
+      }),
+    );
+  }
+
+  List<Map<String, dynamic>> _rows(dynamic value) => value is List
+      ? value
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .take(10)
+          .toList()
+      : const [];
+
+  Widget _rankingColumn(String title, List<Map<String, dynamic>> rows,
+          IconData icon, String secondary) =>
+      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title,
+            style: const TextStyle(
+                color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+        const SizedBox(height: 7),
+        if (rows.isEmpty)
+          const Text('No ranking data available.',
+              style: TextStyle(color: mutedColor, fontSize: 10)),
+        ...rows.asMap().entries.map((entry) => Padding(
+            padding: const EdgeInsets.symmetric(vertical: 4),
+            child: Row(children: [
+              Text('#${entry.key + 1}',
+                  style: const TextStyle(
+                      color: cyanAccentColor,
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800)),
+              const SizedBox(width: 8),
+              Icon(icon, size: 14, color: mutedColor),
+              const SizedBox(width: 6),
+              Expanded(
+                  child: Text(
+                      entry.value['name']?.toString() ??
+                          entry.value['id']?.toString() ??
+                          'Institution',
+                      style: const TextStyle(fontSize: 10.5))),
+              Text(
+                  '${entry.value[secondary] ?? entry.value['member_count'] ?? 0}',
+                  style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+            ]))),
+      ]);
+}
+
 class CorporationOverviewPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -128,6 +486,26 @@ class CorporationOverviewPanel extends StatelessWidget {
             icon: const Icon(Icons.gavel_outlined, size: 14),
             label: const Text('CORPORATION RULES'),
           ),
+          if (canAdoptCity) ...[
+            const SizedBox(height: 8),
+            OutlinedButton.icon(
+              onPressed: busy
+                  ? null
+                  : () => showAdmissionPolicyDialog(
+                        context,
+                        action ?? ((_) async {}),
+                        id,
+                        currentPolicy:
+                            corporation['admission_policy']?.toString() ??
+                                'open',
+                      ),
+              icon: const Icon(Icons.how_to_reg_outlined, size: 14),
+              label: Text(
+                  corporation['admission_policy']?.toString() == 'approval'
+                      ? 'ADMISSION: APPROVAL'
+                      : 'ADMISSION: OPEN'),
+            ),
+          ],
         ],
         if (cities.isNotEmpty) ...[
           const SizedBox(height: 16),
