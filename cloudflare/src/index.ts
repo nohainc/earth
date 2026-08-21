@@ -5,7 +5,7 @@ import { declarePersonalInsolvency as declarePersonalInsolvencyPostgres, publicS
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, liquidateExpiredEstates as liquidateExpiredEstatesPostgres, registerSuccessor as registerSuccessorPostgres, settleInheritance as settleInheritancePostgres } from './lifecycle-postgres';
 import { acceptContract as acceptContractPostgres, cancelContract as cancelContractPostgres, createContract as createContractPostgres, openDispute as openDisputePostgres } from './contracts-postgres';
 import { resolveContractDispute as resolveContractDisputePostgres } from './arbitration-postgres';
-import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, dismissEmployee as dismissEmployeePostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, hireEmployee as hireEmployeePostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, setPolicy as setBusinessPolicyPostgres, trainEmployee as trainEmployeePostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
+import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, dismissEmployee as dismissEmployeePostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, hireEmployee as hireEmployeePostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, reassignEmployee as reassignEmployeePostgres, setPolicy as setBusinessPolicyPostgres, trainEmployee as trainEmployeePostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
 import { acquireMachine as acquireMachinePostgres, assignMachineToBusiness as assignMachineToBusinessPostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
 import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
@@ -1661,17 +1661,17 @@ const worker = {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Employee hiring failed' }, { status: 409 });
       }
     }
-    const employeeActionMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/employees\/([^/]+)\/(train|dismiss)$/);
+    const employeeActionMatch = url.pathname.match(/^\/api\/businesses\/([^/]+)\/employees\/([^/]+)\/(train|dismiss|reassign)$/);
     if (employeeActionMatch && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ correlationId?: string }>(request);
+      const parsed = await parseJsonBody<{ role?: string; wage?: number; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
       try {
         const input = { humanId: viewer.id, businessId: employeeActionMatch[1], employeeId: employeeActionMatch[2], correlationId };
-        const result = await withRepository(env, (repository) => employeeActionMatch[3] === 'train' ? trainEmployeePostgres(repository, input) : dismissEmployeePostgres(repository, input));
+        const result = await withRepository(env, (repository) => employeeActionMatch[3] === 'train' ? trainEmployeePostgres(repository, input) : employeeActionMatch[3] === 'dismiss' ? dismissEmployeePostgres(repository, input) : reassignEmployeePostgres(repository, { ...input, role: parsed.value.role ?? '', wage: Number(parsed.value.wage) }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {

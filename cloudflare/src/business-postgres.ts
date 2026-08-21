@@ -254,6 +254,24 @@ export async function dismissEmployee(repository: PostgresRepository, input: { h
   });
 }
 
+export async function reassignEmployee(repository: PostgresRepository, input: { humanId: string; businessId: string; employeeId: string; role: string; wage: number; correlationId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    await managedBusiness(tx, input.humanId, input.businessId);
+    const role = input.role.trim();
+    if (role.length < 2 || role.length > 80) throw new Error('Employee role is invalid');
+    if (!Number.isFinite(input.wage) || input.wage <= 0) throw new Error('Employee wage must be positive');
+    const employee = await tx.query<{ id: string; name: string; role: string; wage: string; status: string }>('SELECT id, name, role, wage, status FROM business_employees WHERE id = $1 AND business_id = $2 FOR UPDATE', [input.employeeId, input.businessId]);
+    if (!employee.rows[0] || employee.rows[0].status !== 'active') throw new Error('Active employee not found');
+    const eventId = `WORKFORCE-REASSIGN-${input.correlationId}`;
+    const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [eventId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, employeeId: input.employeeId, correlationId: input.correlationId };
+    const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+    await tx.query('UPDATE business_employees SET role = $1, wage = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3', [role, input.wage, input.employeeId]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [eventId, day, 'business.employee_reassigned', `${employee.rows[0].name} changed role`, toNanoMarkup({ businessId: input.businessId, employeeId: input.employeeId, oldRole: employee.rows[0].role, role, oldWage: Number(employee.rows[0].wage), wage: input.wage, correlationId: input.correlationId })]);
+    return { ok: true, employeeId: input.employeeId, role, wage: input.wage, correlationId: input.correlationId };
+  });
+}
+
 export async function updateConstitution(repository: PostgresRepository, input: { ownerId: string; businessId: string; shareholderVoteThreshold: number; boardApprovalThreshold: number; dilutionNoticeDays: number }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const business = await tx.query<{ id: string; owner_id: string }>('SELECT id, owner_id FROM businesses WHERE id = $1 FOR UPDATE', [input.businessId]);

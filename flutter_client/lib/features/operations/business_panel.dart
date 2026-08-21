@@ -433,6 +433,34 @@ class BusinessPanel extends StatelessWidget {
                                     TextButton(
                                       onPressed: busy || employeeId.isEmpty
                                           ? null
+                                          : () async {
+                                              final roleController = TextEditingController(text: role);
+                                              final wageController = TextEditingController(text: (asDouble(employee['wage']) ?? 0).toStringAsFixed(0));
+                                              final result = await showDialog<List<String>>(
+                                                context: context,
+                                                builder: (dialogContext) => AlertDialog(
+                                                  title: Text('Update $name'),
+                                                  content: Column(mainAxisSize: MainAxisSize.min, children: [
+                                                    TextField(controller: roleController, decoration: const InputDecoration(labelText: 'Role')),
+                                                    TextField(controller: wageController, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Daily wage')),
+                                                  ]),
+                                                  actions: [
+                                                    TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
+                                                    FilledButton(onPressed: () => Navigator.pop(dialogContext, [roleController.text, wageController.text]), child: const Text('SAVE')),
+                                                  ],
+                                                ),
+                                              );
+                                              final newWage = double.tryParse(result?[1] ?? '');
+                                              if (result != null && result[0].trim().length >= 2 && newWage != null && newWage > 0) {
+                                                await action(() => const EarthApi().reassignEmployee(businessId, employeeId, result[0], newWage));
+                                              }
+                                            },
+                                      style: TextButton.styleFrom(visualDensity: VisualDensity.compact),
+                                      child: const Text('UPDATE', style: TextStyle(fontSize: 9)),
+                                    ),
+                                    TextButton(
+                                      onPressed: busy || employeeId.isEmpty
+                                          ? null
                                           : () => action(() => const EarthApi()
                                               .trainEmployee(
                                                   businessId, employeeId)),
