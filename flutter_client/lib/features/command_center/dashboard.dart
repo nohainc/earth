@@ -391,17 +391,6 @@ class Dashboard extends StatelessWidget {
                         orders,
                         const SizedBox(height: 24),
                         macro,
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: TextButton.icon(
-                            onPressed: onNavigate == null
-                                ? null
-                                : () => onNavigate!.call('derivatives'),
-                            icon: const Icon(Icons.show_chart, size: 14),
-                            label: const Text('OPEN ADVANCED DERIVATIVES',
-                                style: TextStyle(fontSize: 10)),
-                          ),
-                        ),
                       ],
                     ),
                   ),
