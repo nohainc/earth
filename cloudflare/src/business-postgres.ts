@@ -15,6 +15,12 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
     const prior = await tx.query<{ reason_id: string }>("SELECT reason_id FROM ledger_entries WHERE reason_type = 'business_registration' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, business: (await tx.query('SELECT * FROM businesses WHERE id = $1', [prior.rows[0].reason_id])).rows[0], shares: 100, correlationId: input.correlationId };
     if (!sectors.has(input.sector)) throw new Error('Business sector is invalid');
+    const membership = await tx.query<{ city_id: string | null; corporation_id: string | null }>('SELECT city_id, corporation_id FROM memberships WHERE human_id = $1', [input.ownerId]);
+    const affiliation = membership.rows[0];
+    const independentSectors = new Set(['maintenance', 'machines', 'components']);
+    const serviceSectors = new Set(['it-services', 'consulting', 'logistics', 'healthcare', 'education']);
+    if (!affiliation?.city_id && !independentSectors.has(input.sector)) throw new Error('This business sector requires an active city affiliation');
+    if (serviceSectors.has(input.sector) && !affiliation?.corporation_id) throw new Error('Specialized service businesses require corporation membership');
     const nameConflict = await tx.query('SELECT id FROM institutions WHERE name = $1', [input.name]);
     if (nameConflict.rows[0]) throw new Error('Business name already exists');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
