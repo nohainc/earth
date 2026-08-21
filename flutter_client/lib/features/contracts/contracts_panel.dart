@@ -782,7 +782,8 @@ class _ContractsPanelState extends State<ContractsPanel> {
             ),
             onPressed: widget.busy
                 ? null
-                : () => showContractComposerDialog(context, widget.action),
+                : () => showContractComposerDialog(context, widget.action,
+                    businesses: widget.state.businesses),
             icon: const Icon(Icons.add_rounded, size: 16),
             label: const Text(
               'PROPOSE NEW AGREEMENT',

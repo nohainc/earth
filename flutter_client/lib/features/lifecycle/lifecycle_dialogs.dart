@@ -258,11 +258,13 @@ Future<void> showRecoveryDialog(
 }
 
 Future<void> showContractComposerDialog(BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action) async {
+    Future<void> Function(Future<EarthState> Function()) action,
+    {List<dynamic> businesses = const []}) async {
   final counterparty = TextEditingController();
   final title = TextEditingController();
   final amount = TextEditingController(text: '100');
   var kind = 'intellectual_service';
+  String? businessId;
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
@@ -284,6 +286,20 @@ Future<void> showContractComposerDialog(BuildContext context,
                       ],
                       onChanged: (value) =>
                           setState(() => kind = value ?? kind)),
+                  if (businesses.isNotEmpty)
+                    DropdownButtonFormField<String>(
+                      initialValue: businessId,
+                      decoration: const InputDecoration(
+                          labelText: 'Charge from business (optional)'),
+                      items: businesses.whereType<Map>().map((raw) {
+                        final business = Map<String, dynamic>.from(raw);
+                        final id = business['id']?.toString() ?? '';
+                        final name = business['name']?.toString() ?? id;
+                        return DropdownMenuItem<String>(
+                            value: id, child: Text(name));
+                      }).where((item) => item.value!.isNotEmpty).toList(),
+                      onChanged: (value) => setState(() => businessId = value),
+                    ),
                   TextField(
                       controller: counterparty,
                       decoration: const InputDecoration(
@@ -313,7 +329,10 @@ Future<void> showContractComposerDialog(BuildContext context,
                         }
                         Navigator.pop(dialogContext);
                         await action(() => const EarthApi().createContract(
-                            kind, counterparty.text, title.text, value));
+                            kind, counterparty.text, title.text, value,
+                            terms: businessId == null
+                                ? null
+                                : {'proposerBusinessId': businessId}));
                       },
                       child: const Text('Propose')),
                 ],
