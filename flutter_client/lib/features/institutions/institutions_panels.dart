@@ -480,6 +480,7 @@ class CorporationOverviewPanel extends StatelessWidget {
 
     return EarthPanel(
       title: 'CORPORATION',
+      showTitle: false,
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
