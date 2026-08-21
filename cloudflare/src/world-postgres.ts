@@ -43,6 +43,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = $1 OR negotiated_contracts.counterparty_id = $1 ORDER BY negotiated_contracts.created_at DESC LIMIT 30", [viewerId]),
     repository.query("SELECT si.*, sim.status AS member_status FROM social_initiatives si LEFT JOIN social_initiative_members sim ON sim.initiative_id = si.id AND sim.human_id = $1 WHERE si.creator_human_id = $1 OR si.target_human_id = $1 OR sim.human_id = $1 ORDER BY si.updated_at DESC LIMIT 30", [viewerId]),
   ]);
+  const dynastyProgress = await repository.query<{ generation: number }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation
+    FROM dynasty_lineage_records dlr
+    JOIN dynasties d ON d.id = dlr.dynasty_id
+    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number }[] }));
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};
   const currentGameDay = Number(worldRow.game_day ?? 184);
@@ -128,7 +132,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     },
     governance: { voting_weight: 1 },
     technology: { research_progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), active_licenses: Number(licenses.rows[0]?.count ?? 0) },
-    dynasty: { generation: 1, successor_id: succession.rows[0]?.id ?? null, perks_count: 0 },
+    dynasty: { generation: Number(dynastyProgress.rows[0]?.generation ?? 1), successor_id: succession.rows[0]?.successor_human_id ?? null, perks_count: 0 },
     resources: resourceMap,
     netWorth: Number(account.rows[0]?.balance ?? 0) + 15000,
   });
