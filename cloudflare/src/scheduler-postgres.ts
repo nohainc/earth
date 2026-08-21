@@ -5,10 +5,25 @@ import { transferCredits } from './financial-postgres.ts';
 import { classifyBusinessFinancialStatus } from './business-finance.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
 import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
-import { toNanoMarkup } from './nano-markup.ts';
+import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { expireSocialInitiatives } from './social-gameplay-postgres.ts';
 
 const products = ['food', 'material', 'components', 'energy', 'compute'];
+
+function charterRate(raw: unknown, key: string): number | null {
+  if (!raw) return null;
+  const charter = fromNanoMarkup<Record<string, unknown>>(raw);
+  const value = Number(charter?.[key]);
+  return Number.isFinite(value) ? value / 10000 : null;
+}
+
+function effectiveRate(cityRules: unknown, corporationRules: unknown, key: string, earthRate: string): string {
+  const city = charterRate(cityRules, key);
+  if (city !== null) return String(city);
+  const corporation = charterRate(corporationRules, key);
+  if (corporation !== null) return String(corporation);
+  return earthRate;
+}
 
 async function settleBusinessDepreciation(tx: PostgresRepository, day: number): Promise<void> {
   const assets = await tx.query<{ business_id: string; machine_id: string; book_value: string }>('SELECT business_assets.business_id, business_assets.machine_id, COALESCE(machine_acquisitions.credit_cost, 0) AS book_value FROM business_assets LEFT JOIN machine_acquisitions ON machine_acquisitions.machine_id = business_assets.machine_id');
@@ -89,10 +104,11 @@ async function settleInstitutionBusinessEffects(tx: PostgresRepository, day: num
 async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise<void> {
   const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true");
   if (!rule.rows[0]) return;
-  const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id WHERE businesses.status = 'active'");
+  const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string; city_charter: string | null; corporation_charter: string | null }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN memberships ON memberships.human_id = businesses.owner_id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE businesses.status = 'active'");
   for (const business of businesses.rows) {
     const taxableCents = moneyToCents(business.revenue) - moneyToCents(business.taxed_revenue);
-    const taxCents = taxableCents > 0n ? rateAmountToCents(taxableCents, rule.rows[0].rate, 1) : 0n;
+    const effectiveCorporateRate = effectiveRate(business.city_charter, business.corporation_charter, 'corporateTaxBps', rule.rows[0].rate);
+    const taxCents = taxableCents > 0n ? rateAmountToCents(taxableCents, effectiveCorporateRate, 1) : 0n;
     if (taxCents <= 0n) { await tx.query('UPDATE business_financials SET taxed_revenue = GREATEST(taxed_revenue, revenue), last_game_day = $1 WHERE business_id = $2', [day, business.id]); continue; }
     const tax = centsToMoney(taxCents);
     const correlationId = `BUSINESS-TAX-${business.id}-${day}`;
@@ -110,9 +126,10 @@ async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<voi
   const world = await tx.query<{ living_cost_index: string }>("SELECT living_cost_index FROM world_state WHERE id = 'WORLD'");
   if (!rule.rows[0]) return;
   const levyBaseCents = compoundRateAmountToCents(10000n, String(world.rows[0]?.living_cost_index ?? '1'));
-  const humans = await tx.query<{ id: string; account_id: string; balance: string }>("SELECT humans.id, account_balances.account_id, account_balances.balance FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' WHERE humans.life_status = 'active'");
+  const humans = await tx.query<{ id: string; account_id: string; balance: string; city_charter: string | null; corporation_charter: string | null }>("SELECT humans.id, account_balances.account_id, account_balances.balance, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' LEFT JOIN memberships ON memberships.human_id = humans.id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE humans.life_status = 'active'");
   for (const human of humans.rows) {
-    const levyCents = rateAmountToCents(levyBaseCents, rule.rows[0].rate, 1);
+    const effectiveIncomeRate = effectiveRate(human.city_charter, human.corporation_charter, 'incomeTaxBps', rule.rows[0].rate);
+    const levyCents = rateAmountToCents(levyBaseCents, effectiveIncomeRate, 1);
     const levy = centsToMoney(levyCents);
     const correlationId = `BASIC-LEVY-${human.id}-${day}-v${rule.rows[0].version}`;
     if (levyCents <= 0n || moneyToCents(human.balance) < levyCents || (await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'basic_levy\' AND correlation_id = $1', [correlationId])).rows[0]) continue;
