@@ -57,7 +57,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     whyItMatters: 'Accepting builds trust and unlocks shared civic, corporate, or diplomatic outcomes.',
     deadline: socialDecision.deadline_game_day ? `By game day ${socialDecision.deadline_game_day}` : 'Before the initiative expires',
     expectedImpact: 'Shape an alliance or shared project and improve relationship standing.', riskLevel: 'medium',
-    primaryActionLabel: 'Open Social Commons', targetSection: 'activity', urgencyScore: 58,
+    primaryActionLabel: 'Open Social Commons', targetSection: 'messages', urgencyScore: 58,
   });
 
   const city = input.city;

@@ -252,7 +252,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     metricLabel: `${completedProjects} / ${projectTarget} Shared Projects Completed`,
     status: projectProgress >= 100 ? 'completed' : 'in_progress',
     rewardDescription: 'Title: "Commonwealth Builder" · +300 Legacy Points · Stronger institutional project influence',
-    targetSection: 'activity',
+    targetSection: 'messages',
     iconName: 'construction',
   });
 

@@ -79,7 +79,7 @@ class OnboardingStep {
       subtitle: 'Live Outbox & Sub-Space Dispatch',
       description: 'Review your personal activity stream and sub-space comm-link to verify the consequences of your economic actions and claim your civic stipend.',
       actionLabel: 'CHECK ACTIVITY & DISPATCH',
-      targetSection: 'activity',
+      targetSection: 'messages',
       icon: Icons.notifications_active_outlined,
     ),
   ];
