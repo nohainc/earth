@@ -43,10 +43,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = $1 OR negotiated_contracts.counterparty_id = $1 ORDER BY negotiated_contracts.created_at DESC LIMIT 30", [viewerId]),
     repository.query("SELECT si.*, sim.status AS member_status FROM social_initiatives si LEFT JOIN social_initiative_members sim ON sim.initiative_id = si.id AND sim.human_id = $1 WHERE si.creator_human_id = $1 OR si.target_human_id = $1 OR sim.human_id = $1 ORDER BY si.updated_at DESC LIMIT 30", [viewerId]),
   ]);
-  const dynastyProgress = await repository.query<{ generation: number }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation
+  const dynastyProgress = await repository.query<{ generation: number; dynasty_name: string | null }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation, MAX(d.dynasty_name) AS dynasty_name
     FROM dynasty_lineage_records dlr
     JOIN dynasties d ON d.id = dlr.dynasty_id
-    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number }[] }));
+    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; dynasty_name: string | null }[] }));
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};
   const currentGameDay = Number(worldRow.game_day ?? 184);
@@ -116,7 +116,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     contracts: contracts.rows as Array<{ id: string; title?: string; status?: string; delivery_tick?: unknown; terms?: string }>,
     proposals: proposals.rows as Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>,
     technology: { progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), is_funding_open: true },
-    dynasty: { successor_id: succession.rows[0]?.id ?? null },
+    dynasty: { successor_id: succession.rows[0]?.successor_human_id ?? null },
     business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100 },
     finance: { unpaid_tax: 0, status: personalFinance.rows[0]?.status ?? 'active' },
     social: social.rows,
@@ -157,7 +157,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 60 },
     world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, economicStartIndex: startIndex, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
     human: { id: humanRow.id, name: humanRow.display_name, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
-    life: { generation: Number(dynastyProgress.rows[0]?.generation ?? 1), status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
+    life: { generation: Number(dynastyProgress.rows[0]?.generation ?? 1), dynastyName: dynastyProgress.rows[0]?.dynasty_name ?? null, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
     membership: membership.rows[0] ?? null,
     institutions: { ouc: mapByKind(institutions.rows, 'OUC'), corporation: { ...mapByKind(institutions.rows, 'CORPORATION'), ...corporation }, city: { ...mapByKind(institutions.rows, 'CITY'), ...city }, business: mapByKind(institutions.rows, 'BUSINESS') },
     resources: resourceMap,
