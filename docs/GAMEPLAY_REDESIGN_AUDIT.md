@@ -28,7 +28,7 @@ direction exists but gameplay or backend support is incomplete.
 
 | Requirement | Status | Evidence / remaining work |
 | --- | --- | --- |
-| Technology owns research and patents | Implemented | Technology page is framed around research, patents, licensing, and capability focus. |
+| Technology owns research and patents | Implemented | Technology page is framed around research, patents, licensing, and capability focus; research, patenting, and adoption require city jurisdiction, while adoption additionally requires ownership, an active license, or corporation sharing. Private technology records are scoped to the current player. |
 | Machines removed from Technology | Implemented | Machines are rendered in Business only. |
 | Technology affects business outcomes | Implemented | Research focus is applied server-side to production wear/output behavior, while the Technology and Business surfaces explain the capability impact. |
 | AI is operational and bounded | Implemented | AI panels render under Business and the AI guide requires explicit approval and authoritative commands. |
