@@ -238,6 +238,13 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final connectRatio =
         formatPercent(state.world['serviceRatios']?['connectivity']);
     final healthRatio = formatPercent(state.world['serviceRatios']?['health']);
+    final cityMembers = state.json['cityMembers'] is List
+        ? List<dynamic>.from(state.json['cityMembers'] as List)
+        : const <dynamic>[];
+    final playerId = state.human['id']?.toString();
+    final playerRank = cityMembers.indexWhere(
+            (raw) => raw is Map && raw['id']?.toString() == playerId) +
+        1;
 
     return EarthPanel(
       key: panelKey,
@@ -410,6 +417,32 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                     ),
                   ),
                 ),
+
+                if (isCityResident && cityMembers.isNotEmpty) ...[
+                  const SizedBox(height: 14),
+                  const Text('CITY STANDING',
+                      style: TextStyle(color: inkColor, fontSize: 10, fontWeight: FontWeight.w800)),
+                  const SizedBox(height: 5),
+                  Text(
+                    playerRank > 0
+                        ? 'You rank #$playerRank among active residents by civic standing.'
+                        : 'Resident standings are being established for this city.',
+                    style: const TextStyle(color: mutedColor, fontSize: 10.5),
+                  ),
+                  const SizedBox(height: 6),
+                  ...cityMembers.take(5).toList().asMap().entries.map((entry) {
+                    final member = Map<String, dynamic>.from(entry.value as Map);
+                    final isPlayer = member['id']?.toString() == playerId;
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 2),
+                      child: Row(children: [
+                        SizedBox(width: 24, child: Text('#${entry.key + 1}', style: const TextStyle(color: cyanAccentColor, fontSize: 10))),
+                        Expanded(child: Text(member['display_name']?.toString() ?? member['id']?.toString() ?? 'Resident', style: TextStyle(fontSize: 10.5, fontWeight: isPlayer ? FontWeight.w800 : FontWeight.w500, color: isPlayer ? inkColor : mutedColor))),
+                        Text('${member['standing'] ?? 0}', style: const TextStyle(color: mutedColor, fontSize: 10)),
+                      ]),
+                    );
+                  }),
+                ],
 
                 const SizedBox(height: 12),
 
