@@ -443,11 +443,11 @@ class CorporationOverviewPanel extends StatelessWidget {
     final id = corporation['id']?.toString() ?? '—';
     final memberCount = asIntOr(corporation['member_count'], 0);
     final treasury = asDouble(corporation['treasury']);
+    final cityId = membership['city_id']?.toString();
     final sharedPatents = state.technology['corporationSharedPatents'] is List
         ? state.technology['corporationSharedPatents'] as List
         : const <dynamic>[];
     final isMember = membership['corporation_id'] != null;
-    final cityId = membership['city_id']?.toString();
     final canAdoptCity = state.roles.any((raw) {
       if (raw is! Map) return false;
       final role = raw['role_name'] ?? raw['name'] ?? raw['role'];
@@ -487,6 +487,16 @@ class CorporationOverviewPanel extends StatelessWidget {
       infoDescription:
           '• Corporation membership determines which shared rules, cities, technologies, contracts, and services are available to you.\n\n• A city belongs to a corporation: moving between cities changes your local services and opportunities while preserving corporation membership.\n\n• Independent people use Earth default rules and do not participate in corporation decisions.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Center(
+          child: Text(name.toUpperCase(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                  color: cyanAccentColor,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w900,
+                  letterSpacing: .8)),
+        ),
+        const SizedBox(height: 12),
         Text(
             isMember
                 ? 'You belong to $name.'
@@ -496,11 +506,8 @@ class CorporationOverviewPanel extends StatelessWidget {
                 fontSize: 13,
                 fontWeight: FontWeight.w800)),
         const SizedBox(height: 5),
-        Text(
-            isMember
-                ? 'Your current city: ${cityId ?? 'not assigned'}. Corporation rules apply across every city in this network.'
-                : 'Join a corporation to access shared cities, technologies, contracts, and civic influence.',
-            style: const TextStyle(color: mutedColor, fontSize: 11)),
+        const Text('Corporation rules apply across its city network.',
+            style: TextStyle(color: mutedColor, fontSize: 11)),
         const SizedBox(height: 14),
         Wrap(spacing: 10, runSpacing: 10, children: [
           _metric('CORPORATION', '$name\n$id', Icons.account_balance_outlined,

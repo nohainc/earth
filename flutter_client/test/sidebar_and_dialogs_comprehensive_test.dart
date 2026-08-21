@@ -68,7 +68,7 @@ void main() {
     expect(navigatedTo, 'finance');
   });
 
-  testWidgets('Sidebar falls back to City when unaffiliated', (tester) async {
+  testWidgets('Sidebar hides City when unaffiliated', (tester) async {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
@@ -100,7 +100,7 @@ void main() {
     expect(find.text('City & Services'), findsNothing);
     await tester.tap(find.text('CIVIC'));
     await tester.pumpAndSettle();
-    expect(find.text('City & Services'), findsOneWidget);
+    expect(find.text('City & Services'), findsNothing);
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',

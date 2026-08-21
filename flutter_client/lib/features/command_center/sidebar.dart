@@ -68,6 +68,15 @@ class _SidebarState extends State<Sidebar> {
 
   @override
   Widget build(BuildContext context) {
+    final isCorporationMember = widget.state.membership?['corporation_id'] != null;
+    final corporation = widget.state.institutions['corporation'];
+    final city = widget.state.institutions['city'];
+    final corporationName = isCorporationMember && corporation is Map
+        ? corporation['name']?.toString() ?? 'Corporation'
+        : 'Corporation';
+    final cityName = isCorporationMember && city is Map
+        ? city['name']?.toString() ?? 'City & Services'
+        : 'City & Services';
     final groups = [
       (
         'NOW',
@@ -100,8 +109,9 @@ class _SidebarState extends State<Sidebar> {
       (
         'CIVIC',
         [
-          ('corporation', 'Corporation', Icons.account_balance_outlined),
-          ('city', 'City & Services', Icons.location_city_outlined),
+          ('corporation', corporationName, Icons.account_balance_outlined),
+          if (isCorporationMember)
+            ('city', cityName, Icons.location_city_outlined),
           ('civic', 'Laws & Governance', Icons.account_balance_outlined),
           (
             'public-finance',
