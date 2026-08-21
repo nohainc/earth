@@ -13,6 +13,7 @@ direction exists but gameplay or backend support is incomplete.
 | Business is a primary destination | Implemented | `Businesses & Operations` is the main management entry. |
 | Market is supporting infrastructure | Implemented | Market is renamed `Trade & Supplies`; basic signals are primary, while order books, open orders, macro liquidity, and derivatives are behind advanced disclosure. |
 | Command Center prioritizes decisions | Implemented | Executive summary, objectives, decision queue, and management quadrant are rendered as the primary Command Center content; resource flows remain secondary context. |
+| Command Center provides quick direction | Implemented | A state-aware quick-actions rail routes the player directly to business, city services, research, dynasty continuity, and messages. |
 
 ## Phase 2 — Business and earning loop
 
@@ -38,6 +39,7 @@ direction exists but gameplay or backend support is incomplete.
 | Requirement | Status | Evidence / remaining work |
 | --- | --- | --- |
 | Life and legacy are visible domains | Implemented | Life & Legacy and Family & Dynasty are primary navigation areas with persistent lineage, perks, heirlooms, cemetery records, and succession choices. |
+| Historical context is separate from live alerts | Implemented | Historical Archive presents archived citizens, dynastic houses, and world milestones; live notifications remain in Messages. |
 | City affects the player and business | Implemented | City service pressure adds operating friction, generates crisis notifications and decisions, and presents voluntary migration opportunities rather than moving residents automatically. |
 | Corporation membership is strategic | Implemented | Membership remains optional, city and corporation affiliation stay consistent, and corporation membership provides server-authoritative revenue network benefits. |
 | Laws and taxes affect decisions | Implemented | Tax rules are applied by the scheduler and the Public Finance UI now explains their personal, business, property, and resource consequences before action. |
