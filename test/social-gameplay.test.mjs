@@ -26,7 +26,7 @@ test('social initiatives become actionable decision queue items', () => {
   const queue = generateDecisionQueue({ social: [{ id: 'social-1', title: 'Trade Compact', status: 'proposed', member_status: 'invited', deadline_game_day: 190 }] });
   const item = queue.find((entry) => entry.category === 'social');
   assert.ok(item);
-  assert.equal(item.targetSection, 'activity');
+  assert.equal(item.targetSection, 'messages');
 });
 
 test('social initiatives are scoped to the current human', async () => {
