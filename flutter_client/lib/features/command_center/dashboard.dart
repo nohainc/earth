@@ -347,6 +347,7 @@ class Dashboard extends StatelessWidget {
                 priceHistory: marketHistory,
                 action: action,
               );
+              final supplies = SuppliesTodayPanel(state: state);
               final orderBook = MarketOrderBookPanel(state: state);
               final orders =
                   MyMarketOrdersPanel(state: state, busy: busy, action: action);
@@ -354,6 +355,8 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  supplies,
+                  const SizedBox(height: 24),
                   signals,
                   const SizedBox(height: 24),
                   Theme(

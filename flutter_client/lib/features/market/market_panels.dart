@@ -5,6 +5,115 @@ import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
+class SuppliesTodayPanel extends StatelessWidget {
+  final EarthState state;
+
+  const SuppliesTodayPanel({super.key, required this.state});
+
+  static const _products = ['food', 'energy', 'material', 'compute'];
+
+  @override
+  Widget build(BuildContext context) {
+    final shortages = <String>[];
+    final cards = <Widget>[];
+    for (final product in _products) {
+      final quantity = asInt(state.resources[product]) ?? 0;
+      final reserved = _reserved(product);
+      final available = quantity - reserved;
+      final market = state.market[product] is Map
+          ? Map<String, dynamic>.from(state.market[product] as Map)
+          : const <String, dynamic>{};
+      final price = asDouble(market['price']);
+      if (available <= 0) shortages.add(product);
+      final meta = CommodityMeta.forProduct(product);
+      cards.add(Container(
+        width: 150,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: (available <= 0 ? Colors.orangeAccent : meta.color)
+                  .withValues(alpha: .3)),
+        ),
+        child: Row(children: [
+          Icon(meta.icon,
+              size: 16,
+              color: available <= 0 ? Colors.orangeAccent : meta.color),
+          const SizedBox(width: 7),
+          Expanded(
+              child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                Text(meta.name.toUpperCase(),
+                    style: const TextStyle(
+                        color: mutedColor,
+                        fontSize: 8.5,
+                        fontWeight: FontWeight.w800)),
+                const SizedBox(height: 3),
+                Text('$available available',
+                    style: TextStyle(
+                        color: available <= 0 ? Colors.orangeAccent : inkColor,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w800)),
+                Text(
+                    price == null
+                        ? 'Price unavailable'
+                        : '${price.toStringAsFixed(2)} C each',
+                    style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+              ])),
+        ]),
+      ));
+    }
+    final contractCount = state.contracts.length;
+    return EarthPanel(
+      title: 'SUPPLIES TODAY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Your available stock after currently reserved quantities.\n\n• A shortage means your life, business, or contract may need attention; compare buying, producing, contracting, or waiting.\n\n• Orders can remain open and fill later, partially or completely, at the market clearing event.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(
+            shortages.isEmpty
+                ? 'No immediate commodity shortage is visible.'
+                : 'Needs attention: ${shortages.map((p) => CommodityMeta.forProduct(p).name).join(' · ')}',
+            style: TextStyle(
+                color:
+                    shortages.isEmpty ? Colors.tealAccent : Colors.orangeAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(
+            '$contractCount active or recent supply commitment${contractCount == 1 ? '' : 's'} · Reserved stock is excluded from available quantities.',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 12),
+        Wrap(spacing: 10, runSpacing: 10, children: cards),
+        const SizedBox(height: 12),
+        const Text(
+            'Decision: buy from the market · sign a supply contract · produce internally · reduce or delay consumption.',
+            style: TextStyle(color: mutedColor, fontSize: 10.5)),
+      ]),
+    );
+  }
+
+  int _reserved(String product) {
+    return state.marketOrders.whereType<Map>().where((order) {
+      final side = (order['side']?.toString() ?? '').toLowerCase();
+      final status = (order['status']?.toString() ?? '').toLowerCase();
+      return side == 'sell' &&
+          (status == 'open' || status == 'partial') &&
+          order['product']?.toString() == product;
+    }).fold<int>(
+        0,
+        (sum, order) =>
+            sum +
+            (asInt(order['quantity']) ?? 0) -
+            (asInt(order['filled_quantity'] ?? order['filled']) ?? 0));
+  }
+}
+
 Widget _marketTopicHeading(BuildContext context, String title,
     {required String description}) {
   return Padding(
@@ -516,7 +625,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
     return EarthPanel(
       key: widget.panelKey,
-      title: 'CENTRAL MARKET / LIVE SIGNALS',
+      title: 'MARKET ACTION / BUY & SELL',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -527,7 +636,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           _marketTopicHeading(
             context,
-            'CENTRAL MARKET / LIVE SIGNALS',
+            'MARKET ACTION / BUY & SELL',
             description:
                 '• Periodic Batch Auction Architecture: major commodities clear every 4 simulation hours at one uniform price.\n\n• Commodity Selector: choose Food, Materials, Energy, Components, or Compute to review price, change, and liquidity.\n\n• Liquidity Pressure Gauge: compares aggregated sell volume against buy volume.\n\n• Execution Terminal: submit limit buy or sell orders with explicit quantity and price controls.',
           ),
@@ -804,11 +913,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                 const SizedBox(width: 8),
                                 Expanded(
                                   flex: 1,
-                                  child: _orderValue(
-                                      'FEE',
-                                      isBuy
-                                          ? fee.toStringAsFixed(2)
-                                          : '—'),
+                                  child: _orderValue('FEE',
+                                      isBuy ? fee.toStringAsFixed(2) : '—'),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(

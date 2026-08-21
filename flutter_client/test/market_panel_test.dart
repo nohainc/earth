@@ -62,7 +62,7 @@ void main() {
       ),
     );
 
-    expect(find.text('CENTRAL MARKET / LIVE SIGNALS'), findsOneWidget);
+    expect(find.text('MARKET ACTION / BUY & SELL'), findsOneWidget);
     expect(find.text('ENERGY'), findsOneWidget);
     expect(find.text('12.50 C'), findsOneWidget);
     expect(find.text('SUPPLY HIGH'), findsOneWidget);
@@ -247,5 +247,33 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(cancelledOrderId, 'ORD-01');
+  });
+
+  testWidgets(
+      'SuppliesTodayPanel shows available stock and market decision context',
+      (tester) async {
+    const state = EarthState({
+      'human': {},
+      'resources': {'food': 0, 'energy': 20, 'material': 80, 'compute': 4},
+      'market': {
+        'products': {
+          'food': {'price': 12.0},
+          'energy': {'price': 8.0},
+          'material': {'price': 20.0},
+          'compute': {'price': 30.0},
+        },
+        'orders': [],
+      },
+      'contracts': [],
+    });
+
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: SuppliesTodayPanel(state: state)),
+    ));
+
+    expect(find.text('SUPPLIES TODAY'), findsOneWidget);
+    expect(find.textContaining('Needs attention'), findsOneWidget);
+    expect(find.text('0 available'), findsOneWidget);
+    expect(find.textContaining('sign a supply contract'), findsOneWidget);
   });
 }
