@@ -4,7 +4,8 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
 
 void main() {
-  testWidgets('InstitutionsCapacityPanel renders city residency, pressure ratios, and proposes budget',
+  testWidgets(
+      'InstitutionsCapacityPanel renders city residency, pressure ratios, and proposes budget',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -65,9 +66,14 @@ void main() {
     );
 
     expect(find.text('INSTITUTIONS / CITY & CORP'), findsOneWidget);
-    expect(find.textContaining('CITY: NEW CARTHAGE (CITY-0084)'), findsOneWidget);
-    expect(find.textContaining('142 residents · Housing cap: 200 · Energy cap: 300'), findsOneWidget);
-    expect(find.textContaining('CORPORATION: CARTHAGE DYNAMICS (CORP-001)'), findsOneWidget);
+    expect(
+        find.textContaining('CITY: NEW CARTHAGE (CITY-0084)'), findsOneWidget);
+    expect(
+        find.textContaining(
+            '142 residents · Housing cap: 200 · Energy cap: 300'),
+        findsOneWidget);
+    expect(find.textContaining('CORPORATION: CARTHAGE DYNAMICS (CORP-001)'),
+        findsOneWidget);
     expect(find.text('LEAVE CITY'), findsOneWidget);
     expect(find.text('PROPOSE BUDGET'), findsOneWidget);
     expect(find.text('TAX CHARTER'), findsOneWidget);
@@ -77,7 +83,8 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Municipal & Corporate Institutions'), findsOneWidget);
+    expect(find.textContaining('Municipal & Corporate Institutions'),
+        findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
@@ -85,5 +92,38 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(budgetProposed, isTrue);
+  });
+  testWidgets('CityImpactPanel explains city pressure and service conditions',
+      (tester) async {
+    const state = EarthState({
+      'world': {
+        'serviceRatios': {
+          'housing': 0.85,
+          'energy': 0.60,
+          'connectivity': 0.95,
+          'health': 0.90,
+        },
+      },
+      'institutions': {
+        'city': {
+          'name': 'New Carthage',
+          'service_pressure': 62,
+          'tax_rate': 4.5
+        },
+      },
+      'business': {'city_operating_modifier': 3.5},
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(child: CityImpactPanel(state: state)),
+      ),
+    ));
+
+    expect(find.text('CITY EFFECTS / LIFE & BUSINESS'), findsOneWidget);
+    expect(find.text('CITY PRESSURE'), findsOneWidget);
+    expect(find.text('BUSINESS EFFECT'), findsOneWidget);
+    expect(find.text('SERVICE CONDITIONS'), findsOneWidget);
+    expect(find.text('HOUSING · 85%'), findsOneWidget);
   });
 }

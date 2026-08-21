@@ -26,8 +26,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
         ? (state.institutions['city'] as Map<String, dynamic>)
         : <String, dynamic>{};
     final cityId = city['id']?.toString() ?? 'CITY-0084';
-    final cityName =
-        (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
+    final cityName = (city['name']?.toString() ?? 'NEW CARTHAGE').toUpperCase();
     final residents = asIntOr(city['residents'], 100);
     final housingCap = asIntOr(city['housing_capacity'], 120);
     final energyCap = asIntOr(city['energy_capacity'], 200);
@@ -97,7 +96,9 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                             ? 'Residency gives you access to services and a civic voice. Service pressure affects living costs, staff quality of life, and the businesses you can operate.'
                             : 'Joining a city gives you services and a civic voice. Staying independent preserves flexibility but leaves you outside municipal decisions.',
                         style: const TextStyle(
-                            fontSize: 11.5, height: 1.35, fontWeight: FontWeight.w600),
+                            fontSize: 11.5,
+                            height: 1.35,
+                            fontWeight: FontWeight.w600),
                       ),
                       const SizedBox(height: 6),
                       Text(
@@ -360,10 +361,9 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 8, vertical: 3),
                                 decoration: BoxDecoration(
-                                  color: (isCorpMember
-                                          ? violetColor
-                                          : mutedColor)
-                                      .withValues(alpha: .15),
+                                  color:
+                                      (isCorpMember ? violetColor : mutedColor)
+                                          .withValues(alpha: .15),
                                   borderRadius: BorderRadius.circular(4),
                                   border: Border.all(
                                     color: (isCorpMember
@@ -378,9 +378,8 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                                     fontSize: 9.5,
                                     fontWeight: FontWeight.w800,
                                     letterSpacing: .8,
-                                    color: isCorpMember
-                                        ? violetColor
-                                        : mutedColor,
+                                    color:
+                                        isCorpMember ? violetColor : mutedColor,
                                   ),
                                 ),
                               ),
@@ -410,14 +409,12 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                   children: [
                     OutlinedButton(
                       style: OutlinedButton.styleFrom(
-                        foregroundColor: isCorpMember
-                            ? Colors.orangeAccent
-                            : violetColor,
+                        foregroundColor:
+                            isCorpMember ? Colors.orangeAccent : violetColor,
                         side: BorderSide(
-                          color: (isCorpMember
-                                  ? Colors.orangeAccent
-                                  : violetColor)
-                              .withValues(alpha: .35),
+                          color:
+                              (isCorpMember ? Colors.orangeAccent : violetColor)
+                                  .withValues(alpha: .35),
                         ),
                       ),
                       onPressed: busy
@@ -483,8 +480,8 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                                   city: false,
                                   cityId: cityId,
                                 ),
-                        icon: const Icon(Icons.corporate_fare_outlined,
-                            size: 14),
+                        icon:
+                            const Icon(Icons.corporate_fare_outlined, size: 14),
                         label: const Text(
                           'FORM CORP',
                           style: TextStyle(
@@ -495,6 +492,173 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class CityImpactPanel extends StatelessWidget {
+  final EarthState state;
+
+  const CityImpactPanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final city = state.institutions['city'] is Map
+        ? Map<String, dynamic>.from(state.institutions['city'] as Map)
+        : const <String, dynamic>{};
+    final ratios = state.world['serviceRatios'] is Map
+        ? Map<String, dynamic>.from(state.world['serviceRatios'] as Map)
+        : const <String, dynamic>{};
+    final pressure =
+        asDouble(city['service_pressure'] ?? city['servicePressure']);
+    final taxRate = asDouble(city['tax_rate'] ?? city['taxRate']);
+    final business = state.business;
+    final operatingEffect = asDouble(business['city_operating_modifier'] ??
+        business['cityOperatingModifier']);
+    final metrics = <(String, String, String, IconData, Color)>[
+      (
+        'CITY PRESSURE',
+        pressure == null ? 'UNAVAILABLE' : '${pressure.toStringAsFixed(0)}%',
+        pressure == null
+            ? 'Pressure data unavailable'
+            : pressure > 70
+                ? 'Costs and services under strain'
+                : 'Services within normal load',
+        Icons.speed_outlined,
+        pressure != null && pressure > 70
+            ? Colors.orangeAccent
+            : cyanAccentColor,
+      ),
+      (
+        'BUSINESS EFFECT',
+        operatingEffect == null
+            ? 'UNAVAILABLE'
+            : '${operatingEffect >= 0 ? '+' : ''}${operatingEffect.toStringAsFixed(1)}%',
+        operatingEffect == null
+            ? 'No business modifier reported'
+            : 'Operating cost modifier',
+        Icons.storefront_outlined,
+        operatingEffect != null && operatingEffect > 0
+            ? Colors.orangeAccent
+            : Colors.lightGreenAccent,
+      ),
+      (
+        'CITY TAX',
+        taxRate == null ? 'UNAVAILABLE' : '${taxRate.toStringAsFixed(1)}%',
+        taxRate == null ? 'Tax rate unavailable' : 'Current resident rate',
+        Icons.receipt_long_outlined,
+        violetColor,
+      ),
+    ];
+    final services = [
+      ('HOUSING', ratios['housing']),
+      ('ENERGY', ratios['energy']),
+      ('CONNECTIVITY', ratios['connectivity']),
+      ('HEALTH', ratios['health']),
+    ];
+
+    return EarthPanel(
+      title: 'CITY EFFECTS / LIFE & BUSINESS',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• City conditions affect your life and businesses through services, taxes, workforce quality, and operating costs.\n\n• Pressure above the city baseline can increase friction and reduce service reliability.\n\n• Values marked unavailable require current city or business data; they are not estimates.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(
+            city['name'] == null
+                ? 'No city effect is currently reported.'
+                : 'Living in ${city['name']} changes your services, costs, and opportunities.',
+            style: const TextStyle(
+                color: inkColor, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: metrics.map((metric) {
+              return SizedBox(
+                width: 180,
+                child: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: surfaceColor.withValues(alpha: .75),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: metric.$5.withValues(alpha: .28)),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(children: [
+                        Icon(metric.$4, size: 14, color: metric.$5),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(metric.$1,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                  color: mutedColor,
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w800)),
+                        ),
+                      ]),
+                      const SizedBox(height: 5),
+                      Text(metric.$2,
+                          style: TextStyle(
+                              color: metric.$5,
+                              fontSize: 16,
+                              fontWeight: FontWeight.w800)),
+                      const SizedBox(height: 2),
+                      Text(metric.$3,
+                          style:
+                              const TextStyle(color: mutedColor, fontSize: 9.5),
+                          maxLines: 2,
+                          overflow: TextOverflow.ellipsis),
+                    ],
+                  ),
+                ),
+              );
+            }).toList(),
+          ),
+          const SizedBox(height: 12),
+          const Text('SERVICE CONDITIONS',
+              style: TextStyle(
+                  color: mutedColor,
+                  fontSize: 9.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8)),
+          const SizedBox(height: 7),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: services.map((service) {
+              final value = asDouble(service.$2);
+              final color = value == null
+                  ? mutedColor
+                  : value < .5
+                      ? Colors.redAccent
+                      : value < .75
+                          ? Colors.orangeAccent
+                          : Colors.tealAccent;
+              return Container(
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                decoration: BoxDecoration(
+                    color: color.withValues(alpha: .1),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: color.withValues(alpha: .28))),
+                child: Text(
+                    '${service.$1} · ${value == null ? 'UNAVAILABLE' : '${(value * 100).round()}%'}',
+                    style: TextStyle(
+                        color: color,
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700)),
+              );
+            }).toList(),
           ),
         ],
       ),
@@ -544,15 +708,14 @@ class CommunitiesPanel extends StatelessWidget {
               OutlinedButton.icon(
                 style: OutlinedButton.styleFrom(
                   foregroundColor: cyanAccentColor,
-                  side: BorderSide(
-                      color: cyanAccentColor.withValues(alpha: .35)),
+                  side:
+                      BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
                   padding:
                       const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   visualDensity: VisualDensity.compact,
                 ),
-                onPressed: busy
-                    ? null
-                    : () => showCommunityComposer(context, action),
+                onPressed:
+                    busy ? null : () => showCommunityComposer(context, action),
                 icon: const Icon(Icons.add_rounded, size: 14),
                 label: const Text('FOUND COMMUNITY',
                     style:

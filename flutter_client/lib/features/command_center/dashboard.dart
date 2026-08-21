@@ -593,9 +593,7 @@ class Dashboard extends StatelessWidget {
               );
               final communities =
                   CommunitiesPanel(state: state, busy: busy, action: action);
-              final solvency = InstitutionSolvencyPanel(
-                  state: state, busy: busy, action: action);
-              final rankings = WorldRankingsPanel(state: state);
+              final cityImpact = CityImpactPanel(state: state);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -617,9 +615,7 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          solvency,
-                          const SizedBox(height: 34),
-                          rankings,
+                          cityImpact,
                         ],
                       ),
                     ),
@@ -633,11 +629,9 @@ class Dashboard extends StatelessWidget {
                   const SizedBox(height: 34),
                   institutions,
                   const SizedBox(height: 34),
+                  cityImpact,
+                  const SizedBox(height: 34),
                   communities,
-                  const SizedBox(height: 34),
-                  solvency,
-                  const SizedBox(height: 34),
-                  rankings,
                 ],
               );
             },
