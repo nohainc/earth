@@ -76,6 +76,33 @@ class FinancialOutlookPanel extends StatelessWidget {
             .whereType<String>()
             .toList()
         : const <String>[];
+    final incomeSources = personalFinanceData['incomeSources'] is List
+        ? (personalFinanceData['incomeSources'] as List)
+            .whereType<Map>()
+            .map((item) =>
+                item['name']?.toString() ?? item['source']?.toString())
+            .whereType<String>()
+            .toList()
+        : const <String>[];
+    final liabilities = personalFinanceData['liabilities'] is List
+        ? (personalFinanceData['liabilities'] as List)
+            .whereType<Map>()
+            .map(
+                (item) => item['name']?.toString() ?? item['title']?.toString())
+            .whereType<String>()
+            .toList()
+        : const <String>[];
+    final reserveTarget = asDouble(
+        finState['reserve_target'] ?? finState['emergency_reserve_target']);
+    final forecast = net == null
+        ? 'Future risk is unavailable until current income and expense data are reported.'
+        : net < 0
+            ? 'Cash flow is negative. Reduce outflow, add income, or review obligations.'
+            : reserveTarget != null &&
+                    balance != null &&
+                    balance < reserveTarget
+                ? 'Cash flow is positive, but the balance is below the reserve target.'
+                : 'Cash flow is positive. Decide how much to save, invest, or support.';
 
     return EarthPanel(
       title: 'FINANCIAL OUTLOOK',
@@ -122,6 +149,24 @@ class FinancialOutlookPanel extends StatelessWidget {
                 : 'Assets: ${assets.join(' · ')}',
             style: const TextStyle(color: mutedColor, fontSize: 10.5)),
         const SizedBox(height: 10),
+        Text(
+            incomeSources.isEmpty
+                ? 'Income sources are not itemized in the current financial record.'
+                : 'Income: ${incomeSources.join(' · ')}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 6),
+        Text(
+            liabilities.isEmpty
+                ? 'No liabilities are recorded.'
+                : 'Liabilities: ${liabilities.join(' · ')}',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 10),
+        Text('OUTLOOK: $forecast',
+            style: TextStyle(
+                color: net != null && net < 0 ? Colors.orangeAccent : inkColor,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700)),
+        const SizedBox(height: 8),
         const Text(
             'Plan before acting: save · invest · pay · borrow · transfer · support family.',
             style: TextStyle(
@@ -222,7 +267,7 @@ class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
                   const TextInputType.numberWithOptions(decimal: true),
               style: const TextStyle(fontSize: 13, color: inkColor),
               decoration: InputDecoration(
-                labelText: 'Taxable Assessment Base (C)',
+                labelText: 'Assessed Amount to Pay (C)',
                 labelStyle: const TextStyle(fontSize: 11, color: mutedColor),
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: .04),

@@ -135,6 +135,12 @@ void main() {
       'assets': [
         {'name': 'Workshop shares'}
       ],
+      'incomeSources': [
+        {'name': 'Business dividends'}
+      ],
+      'liabilities': [
+        {'name': 'Tax assessment'}
+      ],
     };
 
     await tester.pumpWidget(MaterialApp(
@@ -145,6 +151,9 @@ void main() {
     expect(find.text('FINANCIAL OUTLOOK'), findsOneWidget);
     expect(find.textContaining('Emergency reserve'), findsOneWidget);
     expect(find.textContaining('Workshop shares'), findsOneWidget);
+    expect(find.textContaining('Business dividends'), findsOneWidget);
+    expect(find.textContaining('Tax assessment'), findsWidgets);
+    expect(find.textContaining('OUTLOOK:'), findsOneWidget);
     expect(find.textContaining('+50 C'), findsOneWidget);
   });
 }
