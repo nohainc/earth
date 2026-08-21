@@ -218,7 +218,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             ),
             _situationPill(
               width: itemWidth,
-              label: 'BUSINESS HEALTH',
+              label: 'ENTERPRISE HEALTH',
               value: profit == null
                   ? 'UNAVAILABLE'
                   : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
