@@ -743,7 +743,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                           fontSize: 12,
                           fontWeight: FontWeight.bold)),
                   content: const Text(
-                      'Your family identity is shaped by the work, values, and choices you pass forward. It should influence future relationships and opportunities, not only provide passive bonuses.',
+                      'Your family identity is shaped by the work, values, and choices you pass forward. It influences the practical advantages, heirlooms, and opportunities available to later generations.',
                       style: TextStyle(color: Colors.white70, fontSize: 11)),
                   actions: [
                     TextButton(
@@ -1335,7 +1335,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                       ),
                     ),
                     content: const Text(
-                      '• Heirlooms are part of the family story, not ordinary equipment.\n\n• Each item records who created it, why it matters, and who currently carries its responsibility.\n\n• Future family systems should allow heirlooms to be inherited, gifted, lost, or disputed.',
+                      '• Heirlooms are part of the family story, not ordinary equipment.\n\n• Each item records who created it, why it matters, and who currently carries its responsibility.\n\n• Equipped heirlooms transfer to the next generation through succession or Civic Rebirth and continue providing their gameplay benefit.',
                       style: TextStyle(fontSize: 11, color: Colors.white70),
                     ),
                     actions: [
