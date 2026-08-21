@@ -111,6 +111,9 @@ export async function distributeDividends(repository: PostgresRepository, input:
     if (!shares.rows.length) throw new Error('No shareholders registered');
     const totalShares = shares.rows.reduce((sum, row) => sum + BigInt(row.shares), 0n);
     if (totalShares <= 0n) throw new Error('Total shares count is invalid');
+    const financialDynasties = await tx.query<{ human_id: string }>("SELECT ac.human_id FROM auth_credentials ac JOIN dynasties d ON d.email = ac.email JOIN dynasty_perks dp ON dp.dynasty_id = d.id WHERE dp.perk_key = 'financial_magnate' AND ac.human_id = ANY($1::text[])", [shares.rows.map((row) => row.holder_id)]);
+    const financialHolders = new Set(financialDynasties.rows.map((row) => row.human_id));
+    const weightedShares = shares.rows.reduce((sum, row) => sum + BigInt(row.shares) * (financialHolders.has(row.holder_id) ? 108n : 100n), 0n);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     let distributedCents = 0n;
@@ -118,7 +121,8 @@ export async function distributeDividends(repository: PostgresRepository, input:
     for (let i = 0; i < shares.rows.length; i++) {
       const row = shares.rows[i];
       const rowShares = BigInt(row.shares);
-      const holderCents = i === shares.rows.length - 1 ? totalCents - distributedCents : (totalCents * rowShares) / totalShares;
+      const adjustedShares = rowShares * (financialHolders.has(row.holder_id) ? 108n : 100n);
+      const holderCents = i === shares.rows.length - 1 ? totalCents - distributedCents : (totalCents * adjustedShares) / weightedShares;
       if (holderCents <= 0n) continue;
       distributedCents += holderCents;
       const holderAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [row.holder_id]);
