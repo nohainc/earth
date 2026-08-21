@@ -412,6 +412,14 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 Text(
                     'Escrow: ${i['escrow_amount'] ?? terms['creditAmount'] ?? 0} credits · target ${terms['contributionTarget'] ?? 100}%',
                     style: const TextStyle(fontSize: 10, color: mutedColor)),
+                if (i['kind']?.toString() == 'shared_project' &&
+                    terms['institutionId'] != null) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    'Institution effect: ${terms['projectEffect'] ?? 'development'} +${terms['projectAmount'] ?? 0}',
+                    style: const TextStyle(fontSize: 10, color: cyanAccentColor),
+                  ),
+                ],
               ],
             ),
           ),
