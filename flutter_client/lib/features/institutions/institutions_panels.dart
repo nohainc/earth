@@ -546,10 +546,10 @@ class CorporationOverviewPanel extends StatelessWidget {
         const SizedBox(height: 16),
         const Text('CORPORATION DECISIONS',
             style: TextStyle(
-                color: inkColor,
+                color: mutedColor,
                 fontSize: 10,
                 fontWeight: FontWeight.w800,
-                letterSpacing: .7)),
+                letterSpacing: 1.0)),
         const SizedBox(height: 5),
         const Text(
             'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
@@ -596,12 +596,15 @@ class CorporationOverviewPanel extends StatelessWidget {
             state.rankings['cities'] is List &&
             (state.rankings['cities'] as List).isNotEmpty) ...[
           const SizedBox(height: 16),
-          const Text('CORPORATION CITY NETWORK / RULES APPLY ACROSS NETWORK',
+          const Text('CORPORATION CITY NETWORK',
               style: TextStyle(
-                  color: inkColor,
+                  color: mutedColor,
                   fontSize: 10,
                   fontWeight: FontWeight.w800,
-                  letterSpacing: .55)),
+                  letterSpacing: 1.0)),
+          const SizedBox(height: 6),
+          const Text('Rules apply across the corporation network.',
+              style: TextStyle(color: mutedColor, fontSize: 10.5)),
           const SizedBox(height: 6),
           ...(state.rankings['cities'] as List).take(8).map((raw) {
             final row = Map<String, dynamic>.from(raw as Map);
