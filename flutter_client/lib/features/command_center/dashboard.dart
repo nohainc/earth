@@ -820,6 +820,10 @@ class Dashboard extends StatelessWidget {
                 isPageMode: true,
                 onNavigate: onNavigate,
               );
+              final revenueOverview = ContractRevenueOverviewPanel(
+                state: state,
+                contracts: contracts,
+              );
               final contractsPanel = ContractsPanel(
                 panelKey: sectionKeys['contracts'],
                 state: state,
@@ -833,7 +837,16 @@ class Dashboard extends StatelessWidget {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: supply),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          revenueOverview,
+                          const SizedBox(height: 34),
+                          supply
+                        ],
+                      ),
+                    ),
                     const SizedBox(width: 56),
                     Expanded(
                       child: Column(
@@ -851,6 +864,8 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  revenueOverview,
+                  const SizedBox(height: 34),
                   supply,
                   const SizedBox(height: 34),
                   contractsPanel,

@@ -4,11 +4,17 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/contracts/contracts_panel.dart';
 
 void main() {
-  testWidgets('ContractsPanel renders parties, terms, amounts, and dispute actions',
+  testWidgets(
+      'ContractsPanel renders parties, terms, amounts, and dispute actions',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
-      'human': {'id': 'H-0044', 'credits': 18420, 'standing': 742, 'legacy': 31},
+      'human': {
+        'id': 'H-0044',
+        'credits': 18420,
+        'standing': 742,
+        'legacy': 31
+      },
       'world': {'health': 100},
       'resources': {},
       'business': {},
@@ -17,7 +23,11 @@ void main() {
       'life': {},
       'governance': {},
       'roles': [
-        {'id': 'ROLE-OUC-DELEGATE', 'human_id': 'H-0044', 'assignment_status': 'active'}
+        {
+          'id': 'ROLE-OUC-DELEGATE',
+          'human_id': 'H-0044',
+          'assignment_status': 'active'
+        }
       ],
     });
 
@@ -69,7 +79,7 @@ void main() {
       ),
     );
 
-    expect(find.text('NEGOTIATED CONTRACTS & ARBITRATION'), findsOneWidget);
+    expect(find.text('ACTIVE AGREEMENTS / DELIVERY & PAYMENT'), findsOneWidget);
     expect(find.text('ACTIVE AGREEMENTS'), findsOneWidget);
     expect(find.text('COMMITTED ESCROWS'), findsOneWidget);
     expect(find.text('OPEN DISPUTES'), findsOneWidget);
@@ -88,7 +98,8 @@ void main() {
     expect(find.byIcon(Icons.info_outline), findsWidgets);
     await tester.tap(find.byIcon(Icons.info_outline).first);
     await tester.pumpAndSettle();
-    expect(find.textContaining('Bilateral Agreements & Escrow'), findsOneWidget);
+    expect(
+        find.textContaining('Bilateral Agreements & Escrow'), findsOneWidget);
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
@@ -97,5 +108,31 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(actionTriggered, isTrue);
+  });
+  testWidgets('ContractRevenueOverviewPanel separates revenue from commitments',
+      (tester) async {
+    const state = EarthState({
+      'human': {'id': 'H-1'},
+      'contracts': [
+        {'amount': 1200, 'kind': 'service', 'status': 'accepted'},
+        {'amount': 400, 'kind': 'supply', 'status': 'accepted'},
+        {
+          'amount': 300,
+          'kind': 'service',
+          'status': 'disputed',
+          'dispute_id': 'D-1'
+        },
+      ],
+    });
+
+    await tester.pumpWidget(const MaterialApp(
+      home: Scaffold(body: ContractRevenueOverviewPanel(state: state)),
+    ));
+
+    expect(find.text('REVENUE & COMMITMENTS'), findsOneWidget);
+    expect(find.text('1500 C'), findsOneWidget);
+    expect(find.text('400 C'), findsOneWidget);
+    expect(find.textContaining('VALUE AT RISK'), findsOneWidget);
+    expect(find.textContaining('check delivery capacity'), findsOneWidget);
   });
 }
