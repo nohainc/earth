@@ -46,13 +46,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT si.*, sim.status AS member_status FROM social_initiatives si LEFT JOIN social_initiative_members sim ON sim.initiative_id = si.id AND sim.human_id = $1 WHERE si.creator_human_id = $1 OR si.target_human_id = $1 OR sim.human_id = $1 ORDER BY si.updated_at DESC LIMIT 30", [viewerId]),
     repository.query("SELECT bta.business_id, bta.technology_id, bta.adopted_game_day, b.name AS business_name, t.name AS technology_name FROM business_technology_adoptions bta JOIN businesses b ON b.id = bta.business_id JOIN technologies t ON t.id = bta.technology_id WHERE b.owner_id = $1 OR EXISTS (SELECT 1 FROM business_management bm WHERE bm.business_id = b.id AND bm.manager_id = $1) OR EXISTS (SELECT 1 FROM business_shares bs WHERE bs.business_id = b.id AND bs.holder_id = $1) ORDER BY bta.adopted_game_day DESC", [viewerId]),
   ]);
-  const dynastyProgress = await repository.query<{ generation: number; dynasty_name: string | null; perks_count: number; heirlooms_count: number }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation, MAX(d.dynasty_name) AS dynasty_name,
-      COUNT(DISTINCT dp.id)::integer AS perks_count, COUNT(DISTINCT dh.id)::integer AS heirlooms_count
+  const dynastyProgress = await repository.query<{ generation: number; dynasty_name: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }>(`SELECT COALESCE(MAX(dlr.generation), 1)::integer AS generation, MAX(d.dynasty_name) AS dynasty_name,
+      COUNT(DISTINCT dp.id)::integer AS perks_count, COUNT(DISTINCT dh.id)::integer AS heirlooms_count, COALESCE(MAX(d.legacy_points), 0)::integer AS legacy_points
     FROM dynasties d
     LEFT JOIN dynasty_lineage_records dlr ON dlr.dynasty_id = d.id
     LEFT JOIN dynasty_perks dp ON dp.dynasty_id = d.id
     LEFT JOIN dynasty_heirlooms dh ON dh.dynasty_id = d.id
-    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; dynasty_name: string | null; perks_count: number; heirlooms_count: number }[] }));
+    WHERE d.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; dynasty_name: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }[] }));
   const corporationSharedTechnology = await repository.query(
     `SELECT share.patent_id, patents.technology_id, technologies.name, share.shared_game_day
      FROM corporation_technology_shares share
@@ -132,7 +132,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     contracts: contracts.rows as Array<{ id: string; title?: string; status?: string; delivery_tick?: unknown; terms?: string }>,
     proposals: proposals.rows as Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>,
     technology: { progress: technology.rows[0]?.progress ?? 0, active_patents: Number(patents.rows[0]?.count ?? 0), is_funding_open: true },
-    dynasty: { successor_id: succession.rows[0]?.successor_human_id ?? null },
+    dynasty: { successor_id: succession.rows[0]?.successor_human_id ?? null, perks_available: Number(dynastyProgress.rows[0]?.legacy_points ?? 0) >= 100 && Number(dynastyProgress.rows[0]?.perks_count ?? 0) < 5 },
     business: { id: businessRow.id, name: businessRow.name, profit: businessRow.profit ?? 0, net_income: businessRow.net_income ?? 0, condition: businessRow.condition ?? 100, business_count: business.rows.length, service_business_count: business.rows.filter((row) => ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(String(row.sector))).length },
     finance: { unpaid_tax: 0, status: personalFinance.rows[0]?.status ?? 'active' },
     social: social.rows,

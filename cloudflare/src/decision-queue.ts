@@ -193,6 +193,20 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
       urgencyScore: 78,
     });
   }
+  if (input.dynasty?.perks_available) {
+    items.push({
+      id: 'decision-dynasty-perk-available',
+      category: 'dynasty',
+      title: 'Legacy points can unlock a family trait',
+      whyItMatters: 'A dynasty perk creates a lasting advantage for every future generation.',
+      deadline: 'When legacy points are available',
+      expectedImpact: 'Improve production, research, finance, or civic influence across the lineage.',
+      riskLevel: 'low',
+      primaryActionLabel: 'Open Dynasty',
+      targetSection: 'dynasty',
+      urgencyScore: 48,
+    });
+  }
 
   // 7. Finance & Outstanding Tax Settlement
   const unpaidTax = num(input.finance?.unpaid_tax ?? 0);
