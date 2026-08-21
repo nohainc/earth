@@ -64,6 +64,7 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> businessOwnership = const {};
   Map<String, dynamic> businessFinancials = const {};
   Map<String, dynamic> businessProfile = const {};
+  String? selectedBusinessId;
   List<dynamic> productionCatalog = const [];
   Map<String, dynamic> marketHistory = const {};
   Map<String, dynamic> pantheon = const {};
@@ -366,7 +367,11 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   Future<void> _loadSecondaryPanels(EarthState value) async {
-    final businessId = value.business['id'] as String?;
+    final available = value.businesses.whereType<Map>().toList();
+    if (selectedBusinessId == null || !available.any((item) => item['id']?.toString() == selectedBusinessId)) {
+      selectedBusinessId = value.business['id']?.toString();
+    }
+    final businessId = selectedBusinessId;
     if (businessId != null && businessId.isNotEmpty) {
       _loadPanel('business', () async {
         final results = await Future.wait<dynamic>([
@@ -397,6 +402,31 @@ class _CommandCenterState extends State<CommandCenter> {
         if (mounted) setState(() => pantheon = data);
       });
     }
+  }
+
+  Future<void> _selectBusiness(String businessId) async {
+    if (businessId == selectedBusinessId) return;
+    setState(() => selectedBusinessId = businessId);
+    final results = await Future.wait<dynamic>([
+      api.businessProfile(businessId),
+      api.businessOwnership(businessId),
+      api.businessFinancials(businessId),
+    ]);
+    if (!mounted || selectedBusinessId != businessId) return;
+    setState(() {
+      businessProfile = results[0];
+      businessOwnership = results[1];
+      businessFinancials = results[2];
+    });
+  }
+
+  Map<String, dynamic>? _activeBusiness(EarthState current) {
+    for (final raw in current.businesses) {
+      if (raw is Map && raw['id']?.toString() == selectedBusinessId) {
+        return Map<String, dynamic>.from(raw);
+      }
+    }
+    return null;
   }
 
   Future<void> _loadPanel(String panel, Future<void> Function() action) async {
@@ -614,6 +644,8 @@ class _CommandCenterState extends State<CommandCenter> {
                                       businessOwnership: businessOwnership,
                                       businessFinancials: businessFinancials,
                                       businessProfile: businessProfile,
+                                      activeBusiness: _activeBusiness(current),
+                                      onSelectBusiness: _selectBusiness,
                                       membershipEvents: membershipEvents,
                                       authorityEvents: authorityEvents,
                                       productionCatalog: productionCatalog,

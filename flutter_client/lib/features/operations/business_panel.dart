@@ -175,6 +175,8 @@ class BusinessPanel extends StatelessWidget {
   final Map<String, dynamic> businessOwnership;
   final Map<String, dynamic> businessFinancials;
   final Map<String, dynamic> businessProfile;
+  final Map<String, dynamic>? activeBusiness;
+  final ValueChanged<String>? onSelectBusiness;
   final Future<void> Function(Future<EarthState> Function()) action;
   final Key? panelKey;
 
@@ -186,12 +188,14 @@ class BusinessPanel extends StatelessWidget {
     required this.businessOwnership,
     required this.businessFinancials,
     required this.businessProfile,
+    this.activeBusiness,
+    this.onSelectBusiness,
     required this.action,
   });
 
   @override
   Widget build(BuildContext context) {
-    final business = state.business;
+    final business = activeBusiness ?? state.business;
     final businessId = business['id']?.toString() ?? 'B-1048';
     final businessName =
         (business['name'] as String?)?.toUpperCase() ?? 'KLINE WORKS';
@@ -1366,9 +1370,14 @@ class BusinessPanel extends StatelessWidget {
           final name = item['name']?.toString() ?? 'Unnamed operation';
           final status = (item['status']?.toString() ?? 'active').toUpperCase();
           final profit = item['profit'];
-          return Padding(
+          final businessId = item['id']?.toString();
+          return InkWell(
+            onTap: businessId == null || onSelectBusiness == null ? null : () => onSelectBusiness!(businessId),
+            child: Padding(
             padding: const EdgeInsets.only(bottom: 4),
             child: Row(children: [
+              Icon(item['id']?.toString() == activeBusiness?['id']?.toString() ? Icons.radio_button_checked : Icons.radio_button_unchecked, size: 12, color: cyanAccentColor),
+              const SizedBox(width: 5),
               Expanded(child: Text(name, style: const TextStyle(fontSize: 10))),
               Text(status, style: const TextStyle(fontSize: 9, color: mutedColor)),
               if (profit != null) ...[
@@ -1376,7 +1385,7 @@ class BusinessPanel extends StatelessWidget {
                 Text('${formatWholeNumber(asDoubleOr(profit, 0))} C', style: const TextStyle(fontSize: 10, color: Colors.tealAccent)),
               ],
             ]),
-          );
+          ));
         }),
       ]),
     );

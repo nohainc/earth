@@ -57,6 +57,8 @@ class Dashboard extends StatelessWidget {
   final Map<String, dynamic> businessOwnership;
   final Map<String, dynamic> businessFinancials;
   final Map<String, dynamic> businessProfile;
+  final Map<String, dynamic>? activeBusiness;
+  final ValueChanged<String>? onSelectBusiness;
   final List<dynamic> membershipEvents;
   final List<dynamic> authorityEvents;
   final List<dynamic> productionCatalog;
@@ -87,6 +89,8 @@ class Dashboard extends StatelessWidget {
     required this.businessOwnership,
     required this.businessFinancials,
     required this.businessProfile,
+    this.activeBusiness,
+    this.onSelectBusiness,
     required this.membershipEvents,
     required this.authorityEvents,
     required this.productionCatalog,
@@ -479,6 +483,8 @@ class Dashboard extends StatelessWidget {
                 businessOwnership: businessOwnership,
                 businessFinancials: businessFinancials,
                 businessProfile: businessProfile,
+                activeBusiness: activeBusiness,
+                onSelectBusiness: onSelectBusiness,
                 action: action,
               );
               final managerOverview = BusinessManagerOverviewPanel(
