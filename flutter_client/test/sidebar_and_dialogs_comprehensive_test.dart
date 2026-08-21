@@ -43,19 +43,19 @@ void main() {
 
     expect(find.text('OVERVIEW'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Command Center'), findsOneWidget);
-    expect(find.text('Executive Briefing'), findsOneWidget);
+    expect(find.text('Daily Priorities'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Activity & Events'), findsOneWidget);
-    expect(find.text('Market'), findsOneWidget);
-    expect(find.text('Business'), findsOneWidget);
-    expect(find.text('Finance'), findsOneWidget);
-    expect(find.text('Governance'), findsOneWidget);
-    expect(find.text('My City'), findsOneWidget);
-    expect(find.text('Contracts'), findsOneWidget);
-    expect(find.text('Technology'), findsOneWidget);
+    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('Trade & Supplies'), findsOneWidget);
+    expect(find.text('Businesses & Operations'), findsOneWidget);
+    expect(find.text('Personal Finance'), findsOneWidget);
+    expect(find.text('Laws & Governance'), findsOneWidget);
+    expect(find.text('City & Services'), findsOneWidget);
+    expect(find.text('Contracts & Revenue'), findsOneWidget);
+    expect(find.text('Research & Technology'), findsOneWidget);
     expect(find.text('Life & Legacy'), findsOneWidget);
 
-    final financeButton = find.text('Finance');
+    final financeButton = find.text('Personal Finance');
     expect(financeButton, findsOneWidget);
     await tester.tap(financeButton);
     await tester.pumpAndSettle();
@@ -92,7 +92,7 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('My City'), findsOneWidget);
+    expect(find.text('City & Services'), findsOneWidget);
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',

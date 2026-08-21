@@ -98,9 +98,9 @@ void main() {
       );
 
       // Verify Header and Global Ambition Gauge
-      expect(find.text('LONG-TERM STRATEGIC OBJECTIVES'), findsOneWidget);
-      expect(find.textContaining('OBJECTIVES MASTERED'), findsOneWidget);
-      expect(find.textContaining('TOTAL AMBITION'), findsOneWidget);
+      expect(find.text('CURRENT DIRECTION'), findsOneWidget);
+      expect(find.textContaining('DIRECTIONS COMPLETED'), findsOneWidget);
+      expect(find.textContaining('OVERALL PROGRESS'), findsOneWidget);
 
       // Verify Filter Pills
       expect(find.textContaining('ALL (6)'), findsOneWidget);
@@ -113,9 +113,9 @@ void main() {
       expect(find.text('Build the Most Valuable Corporation'), findsOneWidget);
       expect(find.text('Become a Major Civic Delegate'), findsOneWidget);
       expect(find.text('Create a Dynasty with Sovereign Traits'), findsOneWidget);
-      expect(find.text('Become a Leading Technology Licensor'), findsOneWidget);
-      expect(find.text('Reach Financial Independence'), findsOneWidget);
-      expect(find.text('Maintain the Highest Public-Service Score'), findsOneWidget);
+      expect(find.text('Become a Leading Technology Licensor'), findsNothing);
+      expect(find.text('Reach Financial Independence'), findsNothing);
+      expect(find.text('Maintain the Highest Public-Service Score'), findsNothing);
 
       // Verify Rewards preview text
       expect(find.textContaining('Industrial Titan'), findsOneWidget);
