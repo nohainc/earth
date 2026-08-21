@@ -37,7 +37,7 @@ class ReincarnationDialog extends StatefulWidget {
 
 class _ReincarnationDialogState extends State<ReincarnationDialog> {
   final _nameController = TextEditingController();
-  final _dynastyController = TextEditingController(text: 'Founding Dynasty');
+  late final TextEditingController _dynastyController;
   String _selectedCity = 'CITY-0084';
   bool _submitting = false;
   String? _error;
@@ -47,6 +47,17 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
     _nameController.dispose();
     _dynastyController.dispose();
     super.dispose();
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    final existingDynasty = widget.deceasedHuman['dynasty_name']?.toString().trim();
+    _dynastyController = TextEditingController(
+      text: existingDynasty == null || existingDynasty.isEmpty
+          ? 'Founding Dynasty'
+          : existingDynasty,
+    );
   }
 
   Future<void> _submitRebirth() async {
