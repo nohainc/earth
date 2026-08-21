@@ -342,7 +342,10 @@ const worker = {
       return Response.json({ ok: true, initiatives: initiatives ?? [] });
     }
     if (url.pathname === '/api/social/directory' && request.method === 'GET') {
-      const human = await currentHuman(request, env);
+      // Succession planning is a read-only directory action and must remain
+      // available while the authenticated predecessor is in Estate/Deceased
+      // state, so the player can choose a real active successor.
+      const human = await currentHuman(request, env, true);
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const directory = await withRepository(env, repo => listSocialDirectory(repo, human.id, url.searchParams.get('q') ?? ''));
       return Response.json({ ok: true, ...directory });
