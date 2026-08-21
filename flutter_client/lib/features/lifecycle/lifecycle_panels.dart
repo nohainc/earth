@@ -187,6 +187,9 @@ class SuccessionPanel extends StatelessWidget {
         .toLowerCase();
     final age = asIntOr(
         life['ageYears'] ?? human['age_years'] ?? human['ageYears'], 31);
+    final dynastyName = (life['dynastyName'] ?? life['dynasty_name'])?.toString();
+    final dynastyGeneration = asIntOr(
+        life['generation'] ?? human['generation'], 1);
     final rawSuccessor = life['successor'];
     final successor =
         rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
@@ -303,6 +306,27 @@ class SuccessionPanel extends StatelessWidget {
                     ),
                   ],
                 ),
+                if (dynastyName != null && dynastyName.trim().isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.account_tree_outlined,
+                          size: 14, color: violetColor),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Text(
+                          'HOUSE ${dynastyName.toUpperCase()} · GENERATION $dynastyGeneration',
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .7,
+                            color: violetColor,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 8),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(3),
