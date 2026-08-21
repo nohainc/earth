@@ -23,7 +23,8 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
     const nameConflict = await tx.query('SELECT id FROM institutions WHERE name = $1', [input.name]);
     if (nameConflict.rows[0]) throw new Error('Business name already exists');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
-    const feeCents = 25000n;
+    const dynastyPerk = await tx.query<{ perk_key: string }>("SELECT dp.perk_key FROM auth_credentials ac JOIN dynasties d ON d.email = ac.email JOIN dynasty_perks dp ON dp.dynasty_id = d.id WHERE ac.human_id = $1 AND dp.perk_key = 'industrialist_lineage' LIMIT 1", [input.ownerId]);
+    const feeCents = dynastyPerk.rows[0] ? 21250n : 25000n;
     const fee = centsToMoney(feeCents);
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < feeCents) throw new Error('Business registration requires 250 Credits');
     const businessId = `B-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
