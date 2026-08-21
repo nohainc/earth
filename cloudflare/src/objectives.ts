@@ -153,7 +153,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
 
   // 3. Create a dynasty with specific traits
   const dynastyGen = num(input.dynasty?.generation, 1);
-  const perksCount = num(input.dynasty?.perks_count, 0) + (input.dynasty?.successor_id ? 1 : 0);
+  const perksCount = num(input.dynasty?.perks_count, 0) + num(input.dynasty?.heirlooms_count, 0) + (input.dynasty?.successor_id ? 1 : 0);
   const targetDynastyPerks = 3;
   const dynastyProgress = Math.min(
     100,
