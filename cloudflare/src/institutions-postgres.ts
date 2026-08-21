@@ -146,9 +146,11 @@ export async function changeCorporationMembership(repository: PostgresRepository
     } else {
       if (current.corporation_id && current.corporation_id !== input.corporationId) throw new Error('Human already belongs to another corporation');
       const city = await tx.query<{ city_id: string }>('SELECT city_id FROM memberships WHERE corporation_id = $1 AND city_id IS NOT NULL LIMIT 1', [input.corporationId]);
-      const cityId = current.city_id ?? city.rows[0]?.city_id ?? null;
-      await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = COALESCE(memberships.city_id, excluded.city_id)', [input.humanId, input.corporationId, cityId, gameDay]);
-      await refreshPopulation(tx, input.corporationId, [cityId]);
+      const cityId = city.rows[0]?.city_id ?? null;
+      if (!cityId) throw new Error('Corporation has no affiliated city to receive a new member');
+      await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = excluded.city_id, joined_game_day = excluded.joined_game_day', [input.humanId, input.corporationId, cityId, gameDay]);
+      await refreshPopulation(tx, input.corporationId, [current.city_id, cityId]);
+      if (current.city_id && current.city_id !== cityId) await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CITY',$3,'left',$4,'corporation_affiliation')", [crypto.randomUUID(), input.humanId, current.city_id, gameDay]);
       await tx.query("INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,'CORPORATION',$3,'joined',$4,'voluntary_membership')", [crypto.randomUUID(), input.humanId, input.corporationId, gameDay]);
       await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [`CORP-JOINED-${input.humanId}-${input.corporationId}-${gameDay}`, input.humanId, 'institution', 'Corporation joined', `You joined corporation ${input.corporationId}.`, input.corporationId]);
     }
