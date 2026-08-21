@@ -249,8 +249,13 @@ export async function dismissEmployee(repository: PostgresRepository, input: { h
     await managedBusiness(tx, input.humanId, input.businessId);
     const employee = await tx.query<{ id: string; name: string }>('SELECT id, name FROM business_employees WHERE id = $1 AND business_id = $2 FOR UPDATE', [input.employeeId, input.businessId]);
     if (!employee.rows[0]) throw new Error('Employee not found');
+    const eventId = `WORKFORCE-DISMISS-${input.correlationId}`;
+    const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [eventId]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, employeeId: input.employeeId, correlationId: input.correlationId };
+    const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
     await tx.query("UPDATE business_employees SET status = 'dismissed', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [input.employeeId]);
-    return { ok: true, employeeId: input.employeeId, name: employee.rows[0].name, correlationId: input.correlationId };
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [eventId, day, 'business.employee_dismissed', `${employee.rows[0].name} left the business`, toNanoMarkup({ businessId: input.businessId, employeeId: input.employeeId, correlationId: input.correlationId })]);
+    return { ok: true, employeeId: input.employeeId, name: employee.rows[0].name, day, correlationId: input.correlationId };
   });
 }
 
