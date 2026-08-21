@@ -130,19 +130,11 @@ void main() {
             '142 residents · Housing cap: 200 · Energy cap: 300'),
         findsOneWidget);
     expect(find.textContaining('CORPORATION: CARTHAGE DYNAMICS (CORP-001)'),
-        findsOneWidget);
-    expect(find.text('LEAVE CITY'), findsOneWidget);
+        findsNothing);
+    expect(find.text('CHANGE CITY'), findsOneWidget);
     expect(find.text('PROPOSE BUDGET'), findsOneWidget);
     expect(find.text('TAX CHARTER'), findsOneWidget);
-    expect(find.text('FUND SERVICES · 100 C'), findsOneWidget);
 
-    // Verify info dialog
-    expect(find.byIcon(Icons.info_outline), findsWidgets);
-    await tester.tap(find.byIcon(Icons.info_outline).first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Municipal & Corporate Institutions'),
-        findsOneWidget);
-    await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('PROPOSE BUDGET'));

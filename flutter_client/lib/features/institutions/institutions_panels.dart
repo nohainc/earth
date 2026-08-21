@@ -784,65 +784,10 @@ class InstitutionsCapacityPanel extends StatelessWidget {
       title: 'INSTITUTIONS / CITY & CORP',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
       titleColor: mutedColor,
-      infoDescription:
-          '• Municipal & Corporate Institutions: Legal entities established under the Planetary Constitution to manage collective urban infrastructure and private commercial enterprises.\n\n• Municipal Operations:\n  - Residency: Citizens affiliated with a city gain access to subsidized public services and municipal voting.\n  - Housing & Energy Capacity: Physical limits on municipal residency and industrial manufacturing.\n  - Service Pressure Ratios: Real-time telemetry monitoring municipal infrastructure load across housing, power, connectivity, and health.\n\n• Corporate Enterprises:\n  - Limited Liability Charters: Registered corporate entities providing shared commercial treasury funds and specialized manufacturing capabilities.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  cyanAccentColor.withValues(alpha: .12),
-                  surfaceColor.withValues(alpha: .78),
-                ],
-              ),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: cyanAccentColor.withValues(alpha: .28)),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Icon(Icons.alt_route_outlined, color: cyanAccentColor),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text('YOUR PLACE IN THE CITY',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 1,
-                              color: cyanAccentColor)),
-                      const SizedBox(height: 5),
-                      Text(
-                        isCityResident
-                            ? 'Residency gives you access to services and a civic voice. Service pressure affects living costs, staff quality of life, and the businesses you can operate.'
-                            : 'Joining a city gives you services and a civic voice. Staying independent preserves flexibility but leaves you outside municipal decisions.',
-                        style: const TextStyle(
-                            fontSize: 11.5,
-                            height: 1.35,
-                            fontWeight: FontWeight.w600),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        isCorpMember
-                            ? 'Corporation membership gives access to shared contracts and influence, with obligations under its charter.'
-                            : 'Corporation membership is optional: trade independence for shared contracts, technology access, and institutional influence.',
-                        style: const TextStyle(fontSize: 10, color: mutedColor),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
           // 1. CITY ADMINISTRATION COCKPIT CARD
           Container(
             width: double.infinity,
@@ -1018,11 +963,10 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                       ),
                       onPressed: busy
                           ? null
-                          : () => action(() => isCityResident
-                              ? const EarthApi().leaveCity(cityId: cityId)
-                              : const EarthApi().joinCity(cityId: cityId)),
-                      child: Text(
-                        isCityResident ? 'LEAVE CITY' : 'JOIN CITY',
+                          : () => showCityChangeDialog(
+                              context, state, cityId, action),
+                      child: const Text(
+                        'CHANGE CITY',
                         style: const TextStyle(
                             fontSize: 10.5, fontWeight: FontWeight.w700),
                       ),
@@ -1090,6 +1034,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
 
           const SizedBox(height: 16),
 
+          if (false) ...[
           // 2. CORPORATION ENTERPRISE COCKPIT CARD
           Container(
             width: double.infinity,
@@ -1268,6 +1213,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
               ],
             ),
           ),
+          ],
         ],
       ),
     );

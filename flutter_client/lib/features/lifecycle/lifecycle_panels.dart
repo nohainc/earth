@@ -2312,9 +2312,9 @@ class HumanServicesPanel extends StatelessWidget {
 
     return EarthPanel(
       key: panelKey,
-      title: 'HUMAN SERVICES / CURRENT ACCESS',
-      infoDescription:
-          '• Universal Human Services: Baseline public services guaranteed under the Planetary Constitution.\n\n• Service Access Tiers:\n  - NORMAL: Fully funded public service running at peak capacity with no citizen access restrictions.\n  - BASIC: Operating under standard municipal baseline; minor rationing on heavy load.\n  - DEGRADED: Strained municipal budget; requires public finance appropriation by City Mayor or Planner.',
+      title: 'HUMAN SERVICES',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
       child: services.isEmpty
           ? const Text(
               'Public service status data is currently synchronizing.',

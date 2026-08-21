@@ -4,6 +4,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
 import '../../shared/widgets/consequence_preview_card.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 Future<void> showFormationComposer(BuildContext context,
     Future<void> Function(Future<EarthState> Function()) action,
@@ -308,6 +309,71 @@ Future<void> showCorporationWithCapitalDialog(
           },
           child: const Text('FOUND CORPORATION'),
         ),
+      ],
+    ),
+  );
+}
+
+Future<void> showCityChangeDialog(
+  BuildContext context,
+  EarthState state,
+  String currentCityId,
+  Future<void> Function(Future<EarthState> Function()) action,
+) async {
+  final corporationId = state.membership?['corporation_id']?.toString();
+  final cities = (state.rankings['cities'] is List
+          ? state.rankings['cities'] as List
+          : const <dynamic>[])
+      .whereType<Map>()
+      .map((row) => Map<String, dynamic>.from(row))
+      .where((row) => corporationId == null ||
+          row['corporation_id']?.toString() == corporationId)
+      .toList();
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      title: const Text('Change city'),
+      content: SizedBox(
+        width: 520,
+        child: cities.isEmpty
+            ? const Text('No cities in your current corporation network are available.')
+            : ListView.separated(
+                shrinkWrap: true,
+                itemCount: cities.length,
+                separatorBuilder: (_, __) => const Divider(height: 1),
+                itemBuilder: (context, index) {
+                  final city = cities[index];
+                  final id = city['id']?.toString() ?? '';
+                  final rules = city['rules'] is Map
+                      ? Map<String, dynamic>.from(city['rules'] as Map)
+                      : const <String, dynamic>{};
+                  final income = asDouble(rules['incomeTaxBps']);
+                  final tax = income == null
+                      ? 'taxes: default'
+                      : 'income tax: ${(income / 100).toStringAsFixed(2)}%';
+                  return ListTile(
+                    title: Text(city['name']?.toString() ?? id),
+                    subtitle: Text(
+                        '${city['residents'] ?? 0} residents · $tax'),
+                    trailing: id == currentCityId
+                        ? const Text('CURRENT',
+                            style: TextStyle(color: mutedColor, fontSize: 9))
+                        : FilledButton(
+                            onPressed: () async {
+                              Navigator.pop(dialogContext);
+                              await action(() =>
+                                  const EarthApi().joinCity(cityId: id));
+                            },
+                            child: const Text('MOVE'),
+                          ),
+                  );
+                },
+              ),
+      ),
+      actions: [
+        TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('CLOSE')),
       ],
     ),
   );

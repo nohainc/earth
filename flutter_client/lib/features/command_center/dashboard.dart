@@ -632,9 +632,9 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          humanServices,
-                          const SizedBox(height: 34),
                           institutions,
+                          const SizedBox(height: 34),
+                          humanServices,
                           const SizedBox(height: 34),
                           communities,
                         ],
@@ -655,9 +655,9 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  humanServices,
-                  const SizedBox(height: 34),
                   institutions,
+                  const SizedBox(height: 34),
+                  humanServices,
                   const SizedBox(height: 34),
                   cityImpact,
                   const SizedBox(height: 34),
