@@ -439,9 +439,11 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
     const res = Math.max(1, Number(city.residents));
     if (Number(city.energy_capacity) < res) {
       await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING', [`BROWNOUT-${city.id}-${day}`, day, 'city.brownout', `Power grid deficit in ${city.id}`, toNanoMarkup({ cityId: city.id, capacity: city.energy_capacity, demand: city.residents })]);
+      await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) SELECT 'BROWNOUT-NOTICE-' || $1 || '-' || human_id, human_id, 'institution', 'City power shortage', $2, $1 FROM memberships WHERE city_id = $1 ON CONFLICT DO NOTHING", [city.id, `Your city has a power deficit (${city.energy_capacity}/${city.residents} capacity). Support an energy project or secure supplies before production is disrupted.`]);
     }
     if (Number(city.health_capacity) < res * 0.5) {
       await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING', [`HEALTH-CRISIS-${city.id}-${day}`, day, 'city.healthcare_crisis', `Hospital capacity deficit in ${city.id}`, toNanoMarkup({ cityId: city.id, healthCapacity: city.health_capacity, residents: city.residents })]);
+      await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) SELECT 'HEALTH-NOTICE-' || $1 || '-' || human_id, human_id, 'institution', 'City health crisis', $2, $1 FROM memberships WHERE city_id = $1 ON CONFLICT DO NOTHING", [city.id, `Health capacity is critically low in your city (${city.health_capacity}/100). Fund a health project or help move resources before services deteriorate further.`]);
     }
   }
   if (cities.rows.length >= 2) {
