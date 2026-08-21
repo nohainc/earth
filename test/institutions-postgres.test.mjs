@@ -8,6 +8,7 @@ import {
   changeCityResidency,
   changeCorporationMembership,
   setCorporationTaxCharter,
+  adoptCityForCorporation,
 } from '../cloudflare/src/institutions-postgres.ts';
 
 class MockDbClient {
@@ -145,4 +146,25 @@ test('corporation executives can update the corporation tax charter', async () =
   });
   assert.equal(result.ok, true);
   assert.equal(result.charter.corporateTaxBps, 750);
+});
+
+test('corporation executives can adopt an unclaimed city', async () => {
+  const client = new MockDbClient({
+    'SELECT role_assignments.id': { rows: [{ id: 'ROLE-ASSIGNMENT-01' }], rowCount: 1 },
+    'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
+    'SELECT id, corporation_id FROM cities': { rows: [{ id: 'CITY-02', corporation_id: null }], rowCount: 1 },
+    'SELECT human_id FROM memberships WHERE city_id': { rows: [], rowCount: 0 },
+    'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
+    'UPDATE cities SET corporation_id': { rows: [], rowCount: 1 },
+    'UPDATE memberships SET corporation_id': { rows: [], rowCount: 1 },
+    'UPDATE corporations SET member_count': { rows: [], rowCount: 1 },
+    'UPDATE cities SET residents': { rows: [], rowCount: 1 },
+    'INSERT INTO world_events': { rows: [], rowCount: 1 },
+    'SELECT * FROM memberships WHERE human_id = $1': { rows: [{ human_id: 'H-01', corporation_id: 'CORP-01', city_id: 'CITY-02' }], rowCount: 1 },
+  });
+  const result = await adoptCityForCorporation(new PostgresRepository(client), {
+    humanId: 'H-01', corporationId: 'CORP-01', cityId: 'CITY-02',
+  });
+  assert.equal(result.ok, true);
+  assert.equal(result.cityId, 'CITY-02');
 });

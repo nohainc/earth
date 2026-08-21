@@ -96,6 +96,29 @@ export async function corporationQualification(repository: PostgresRepository, c
   return { ok: true, corporation: row, city: city.rows[0] ?? null, requirements, qualified: Object.values(requirements).every(Boolean) };
 }
 
+export async function adoptCityForCorporation(repository: PostgresRepository, input: { humanId: string; corporationId: string; cityId: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    if (!(await hasRole(tx, input.humanId, input.corporationId, ['Corporation Executive']))) {
+      throw new Error('An active Corporation Executive term is required');
+    }
+    const corporation = await tx.query<{ id: string }>('SELECT id FROM corporations WHERE id = $1 FOR UPDATE', [input.corporationId]);
+    const city = await tx.query<{ id: string; corporation_id: string | null }>('SELECT id, corporation_id FROM cities WHERE id = $1 FOR UPDATE', [input.cityId]);
+    if (!corporation.rows[0]) throw new Error('Corporation not found');
+    if (!city.rows[0]) throw new Error('City not found');
+    if (city.rows[0].corporation_id && city.rows[0].corporation_id !== input.corporationId) {
+      throw new Error('City already belongs to another corporation');
+    }
+    const conflicting = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 AND corporation_id IS NOT NULL AND corporation_id <> $2 LIMIT 1', [input.cityId, input.corporationId]);
+    if (conflicting.rows[0]) throw new Error('City residents include members of another corporation');
+    const gameDay = await day(tx);
+    await tx.query('UPDATE cities SET corporation_id = $1 WHERE id = $2', [input.corporationId, input.cityId]);
+    await tx.query('UPDATE memberships SET corporation_id = $1 WHERE city_id = $2 AND corporation_id IS NULL', [input.corporationId, input.cityId]);
+    await refreshPopulation(tx, input.corporationId, [input.cityId]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), gameDay, 'corporation.city_adopted', `Corporation ${input.corporationId} adopted city ${input.cityId}`, toNanoMarkup({ corporationId: input.corporationId, cityId: input.cityId, humanId: input.humanId })]);
+    return { ok: true, corporationId: input.corporationId, cityId: input.cityId, membership: (await tx.query('SELECT * FROM memberships WHERE human_id = $1', [input.humanId])).rows[0] ?? null };
+  });
+}
+
 async function refreshPopulation(tx: PostgresRepository, corporationId: string | null, cityIds: Array<string | null>): Promise<void> {
   if (corporationId) await tx.query('UPDATE corporations SET member_count = (SELECT COUNT(*) FROM memberships WHERE corporation_id = $1) WHERE id = $1', [corporationId]);
   for (const cityId of [...new Set(cityIds.filter((value): value is string => Boolean(value)))]) {

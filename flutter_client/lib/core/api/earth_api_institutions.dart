@@ -143,4 +143,13 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
+  Future<EarthState> adoptCityForCorporation({
+    required String corporationId,
+    required String cityId,
+  }) async {
+    await _request('/api/corporations/$corporationId/cities/$cityId',
+        method: 'POST');
+    return world();
+  }
+
 }

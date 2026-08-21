@@ -16,7 +16,7 @@ import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as upda
 import { changeDelegation as changeDelegationPostgres, changeRole as changeRolePostgres, listRoles as listRolesPostgres } from './roles-postgres';
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
-import { changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
+import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
@@ -694,6 +694,19 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Corporation tax charter update failed';
         return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : 400 });
+      }
+    }
+    const corporationCityMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/cities\/([^/]+)$/);
+    if (corporationCityMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      try {
+        const result = await withRepository(env, (repository) => adoptCityForCorporationPostgres(repository, { humanId: viewer.id, corporationId: corporationCityMatch[1], cityId: corporationCityMatch[2] }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : 'Corporation city adoption failed';
+        return Response.json({ ok: false, error: message }, { status: /required|another corporation|include members/i.test(message) ? 403 : /not found/i.test(message) ? 404 : 400 });
       }
     }
     const corporationMembershipMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/membership$/);
