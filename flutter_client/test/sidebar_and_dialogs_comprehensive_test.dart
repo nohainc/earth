@@ -47,14 +47,14 @@ void main() {
     expect(find.text('Messages'), findsOneWidget);
     expect(find.text('Trade & Supplies'), findsNothing);
 
-    await tester.tap(find.text('ENTERPRISE & ECONOMY'));
+    await tester.tap(find.text('BUSINESS'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('NOW'));
     await tester.pumpAndSettle();
     expect(find.text('Daily Priorities'), findsOneWidget);
     expect(find.text('Command Center'), findsOneWidget);
 
-    await tester.tap(find.text('ENTERPRISE & ECONOMY'));
+    await tester.tap(find.text('BUSINESS'));
     await tester.pumpAndSettle();
     expect(find.text('Trade & Supplies'), findsOneWidget);
     expect(find.text('Personal Finance'), findsOneWidget);
@@ -98,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('City & Services'), findsNothing);
-    await tester.tap(find.text('CIVIC INSTITUTIONS'));
+    await tester.tap(find.text('CIVIC'));
     await tester.pumpAndSettle();
     expect(find.text('City & Services'), findsOneWidget);
   });

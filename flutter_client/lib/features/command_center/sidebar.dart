@@ -78,7 +78,7 @@ class _SidebarState extends State<Sidebar> {
         ]
       ),
       (
-        'ENTERPRISE & ECONOMY',
+        'BUSINESS',
         [
           ('business', 'Businesses & Operations', Icons.storefront_outlined),
           (
@@ -98,7 +98,7 @@ class _SidebarState extends State<Sidebar> {
         ]
       ),
       (
-        'CIVIC INSTITUTIONS',
+        'CIVIC',
         [
           ('corporation', 'Corporation', Icons.account_balance_outlined),
           ('city', 'City & Services', Icons.location_city_outlined),
@@ -111,7 +111,7 @@ class _SidebarState extends State<Sidebar> {
         ]
       ),
       (
-        'LIFE & DYNASTY',
+        'LIFE',
         [
           ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
           ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
