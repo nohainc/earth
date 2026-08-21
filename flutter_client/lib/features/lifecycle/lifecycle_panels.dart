@@ -36,6 +36,135 @@ Widget _lifecycleTopicHeading(BuildContext context, String title,
   );
 }
 
+class LifeTodayPanel extends StatelessWidget {
+  final EarthState state;
+
+  const LifeTodayPanel({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final human = state.human;
+    final life = state.life;
+    final city = state.institutions['city'];
+    final cityMap = city is Map
+        ? Map<String, dynamic>.from(city)
+        : const <String, dynamic>{};
+    final health = asDouble(human['health'] ?? human['vitality']);
+    final energy = asDouble(human['energy'] ?? human['stamina']);
+    final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
+    final legacy = asDouble(human['legacy'] ?? life['legacy']);
+    final businessName = state.business['name']?.toString();
+    final membership = state.membership;
+    final cityName = cityMap['name']?.toString();
+    final lifeStatus =
+        life['status']?.toString() ?? human['life_status']?.toString();
+
+    final cards = <(String, String, String, IconData, Color)>[
+      (
+        'HEALTH',
+        health == null ? 'UNAVAILABLE' : '${health.toStringAsFixed(0)}%',
+        'Personal wellbeing',
+        Icons.favorite_outline,
+        health != null && health < 40 ? Colors.orangeAccent : Colors.tealAccent
+      ),
+      (
+        'ENERGY',
+        energy == null ? 'UNAVAILABLE' : '${energy.toStringAsFixed(0)}%',
+        'Daily capacity',
+        Icons.bolt_outlined,
+        Colors.amberAccent
+      ),
+      (
+        'RESIDENCE',
+        cityName?.toUpperCase() ?? 'INDEPENDENT',
+        cityName == null ? 'No city affiliation' : 'Current city',
+        Icons.location_city_outlined,
+        cyanAccentColor
+      ),
+      (
+        'LEGACY',
+        legacy == null ? 'UNAVAILABLE' : formatWholeNumber(legacy),
+        'Lifetime contribution',
+        Icons.auto_awesome_outlined,
+        violetColor
+      ),
+    ];
+
+    return EarthPanel(
+      title: 'MY LIFE TODAY',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Your current personal situation: health, energy, residence, work, and legacy.\n\n• Values marked unavailable require current personal data; they are not estimates.\n\n• Detailed financial and asset records remain in Finance and Business.',
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            age == null
+                ? 'Your current life stage is unavailable.'
+                : 'Age $age · ${lifeStatus?.toUpperCase() ?? 'ACTIVE'}${businessName == null ? '' : ' · $businessName'}',
+            style: const TextStyle(
+                color: inkColor, fontSize: 12, fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            membership == null || membership.isEmpty
+                ? 'You are currently living independently of a recorded city or corporation membership.'
+                : 'Your current affiliations shape your services, opportunities, and obligations.',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5),
+          ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 10,
+            runSpacing: 10,
+            children: cards
+                .map((card) => SizedBox(
+                      width: 165,
+                      child: Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                            color: surfaceColor.withValues(alpha: .75),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                                color: card.$5.withValues(alpha: .28))),
+                        child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(children: [
+                                Icon(card.$4, size: 14, color: card.$5),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                    child: Text(card.$1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: const TextStyle(
+                                            color: mutedColor,
+                                            fontSize: 9,
+                                            fontWeight: FontWeight.w800)))
+                              ]),
+                              const SizedBox(height: 5),
+                              Text(card.$2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: TextStyle(
+                                      color: card.$5,
+                                      fontSize: 15,
+                                      fontWeight: FontWeight.w800)),
+                              const SizedBox(height: 2),
+                              Text(card.$3,
+                                  style: const TextStyle(
+                                      color: mutedColor, fontSize: 9.5)),
+                            ]),
+                      ),
+                    ))
+                .toList(),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class SuccessionPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -58,11 +187,6 @@ class SuccessionPanel extends StatelessWidget {
         .toLowerCase();
     final age = asIntOr(
         life['ageYears'] ?? human['age_years'] ?? human['ageYears'], 31);
-    final politicalEligibleDay = asIntOr(life['politicalEligibilityDay'], 180);
-    final currentDay = asIntOr(state.clock['day'], 184);
-    final isPoliticallyEligible =
-        currentDay >= politicalEligibleDay || age >= 25;
-
     final rawSuccessor = life['successor'];
     final successor =
         rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
@@ -102,13 +226,13 @@ class SuccessionPanel extends StatelessWidget {
     final estimatedNet = (credits - estimatedTax).clamp(0.0, double.infinity);
 
     return EarthPanel(
-      title: 'LIFE / BIOLOGICAL AGING & SUCCESSION',
+      title: 'LIFE & LEGACY / SUCCESSION PLAN',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Biological Aging & Generational Succession (Spec §1.4, §1.5):\n  - Simulation Time Dilation (1:60): 1 Real Second = 1 Game Minute (24 Real Minutes = 1 Game Day; 6 Real Days = 1 Simulation Year).\n  - Biological Lifespan: Characters enter at legal adulthood (Age 20) and reach natural mortality around 75–90+ simulation years (~1 Real Calendar Year of active play).\n  - Generational Wisdom Shift: Past age 65, physical labor efficiency gently declines while governance influence and political wisdom bonuses increase (+25%).\n\n• Biometric Health & Stochastic Mortality (Spec §1.4.1):\n  - Health Impact: Governs physical labor throughput, machine maintenance efficiency, and healthcare expenses. Sub-optimal health does not mean instant death; mortality past retirement age follows an actuarial hazard curve.\n\n• Testamentary Will & Estate Probate (Spec §1.4.2):\n  - Multi-Beneficiary Testament: Designate custom asset distributions across Primary Heirs, Municipal Public Trusts, and Dynastic Family Reserves.\n  - Progressive Estate Tax: Deducted automatically upon probate (10% standard, 20% late estate settlement).',
+          '• Your succession plan keeps your work, assets, and responsibilities moving forward.\n\n• Choose a trusted successor when you are ready. The current eligibility rules and estate timing are shown here.\n\n• Detailed ownership and financial records belong in Business and Finance; this page focuses on the person and their legacy.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -191,7 +315,7 @@ class SuccessionPanel extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Lifespan Expectancy ~90y · ${isPoliticallyEligible ? 'Politically mature' : 'Political lock (Day $politicalEligibleDay)'}',
+                  'Life stage and succession readiness are based on your current profile',
                   style: const TextStyle(fontSize: 9.5, color: mutedColor),
                 ),
               ],
@@ -671,8 +795,9 @@ class LedgerPanel extends StatelessWidget {
                 children: entries.take(10).indexed.map((indexed) {
                   final entry = indexed.$2 as Map<String, dynamic>;
                   final isLast = indexed.$1 == entries.take(10).length - 1;
-                  final reason = (entry['reason_type']?.toString() ?? 'TRANSFER')
-                      .toUpperCase();
+                  final reason =
+                      (entry['reason_type']?.toString() ?? 'TRANSFER')
+                          .toUpperCase();
                   final amount = entry['amount'] ?? 0;
                   final currency =
                       (entry['currency']?.toString() ?? 'C').toUpperCase();
@@ -909,20 +1034,19 @@ class OwnershipTimelinePanel extends StatelessWidget {
                       ? 'ACQUIRED'
                       : 'TRANSFERRED';
                   final isAcquired = direction == 'ACQUIRED';
-                  final assetType =
-                      (event['asset_type']?.toString() ?? 'ASSET')
-                          .toUpperCase();
+                  final assetType = (event['asset_type']?.toString() ?? 'ASSET')
+                      .toUpperCase();
                   final assetId = event['asset_id']?.toString() ?? '—';
                   final qty = event['quantity'] ?? 1;
                   final gameDay = event['game_day'] ?? '—';
-                  final fromOwner = event['from_owner_id']?.toString() ??
-                      'ORIGIN_TREASURY';
+                  final fromOwner =
+                      event['from_owner_id']?.toString() ?? 'ORIGIN_TREASURY';
                   final toOwner =
                       event['to_owner_id']?.toString() ?? 'CURRENT_HOLDER';
 
                   return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       border: Border(
                         bottom: isLast
@@ -959,7 +1083,8 @@ class OwnershipTimelinePanel extends StatelessWidget {
                                     padding: const EdgeInsets.symmetric(
                                         horizontal: 5, vertical: 1.5),
                                     decoration: BoxDecoration(
-                                      color: Colors.white.withValues(alpha: .06),
+                                      color:
+                                          Colors.white.withValues(alpha: .06),
                                       borderRadius: BorderRadius.circular(3),
                                     ),
                                     child: Text(
@@ -1005,8 +1130,9 @@ class OwnershipTimelinePanel extends StatelessWidget {
                                 .withValues(alpha: .12),
                             borderRadius: BorderRadius.circular(4),
                             border: Border.all(
-                              color: (isAcquired ? cyanAccentColor : violetColor)
-                                  .withValues(alpha: .3),
+                              color:
+                                  (isAcquired ? cyanAccentColor : violetColor)
+                                      .withValues(alpha: .3),
                             ),
                           ),
                           child: Text(
@@ -1042,7 +1168,8 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
     const infoText =
         '• Civic & Corporate Affiliation Journal: Chronological record of citizenship declarations, municipal registrations, and corporate charters.\n\n• Affiliation Records:\n  - JOIN_CITY / RESIDE: Residential affiliation establishing eligibility for municipal services and local voting.\n  - FOUND_ENTERPRISE / INCORPORATE: Corporate legal registration establishing commercial limited liability.\n  - JOIN_COMMUNITY: Collective civic association membership.';
 
-    final eventsToDisplay = membershipEvents.take(8).whereType<Map<String, dynamic>>().toList();
+    final eventsToDisplay =
+        membershipEvents.take(8).whereType<Map<String, dynamic>>().toList();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1120,18 +1247,21 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
                     final event = indexed.$2;
                     final isLast = indexed.$1 == eventsToDisplay.length - 1;
                     final day = event['game_day']?.toString() ?? '-';
-                    final type = (event['institution_type']?.toString() ?? 'CIVIC')
-                        .toUpperCase();
+                    final type =
+                        (event['institution_type']?.toString() ?? 'CIVIC')
+                            .toUpperCase();
                     final id = event['institution_id']?.toString() ?? '';
                     final action =
                         (event['action']?.toString() ?? 'JOIN').toUpperCase();
 
                     Color typeColor = cyanAccentColor;
                     if (type.contains('CORP')) typeColor = violetColor;
-                    if (type.contains('COMMUNITY')) typeColor = Colors.tealAccent;
+                    if (type.contains('COMMUNITY'))
+                      typeColor = Colors.tealAccent;
 
                     return Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 8),
                       decoration: BoxDecoration(
                         border: Border(
                           bottom: isLast
@@ -1696,8 +1826,7 @@ class PantheonPanel extends StatelessWidget {
                             ?.toString() ??
                         'Lysander Vance'
                     : 'Lysander Vance',
-                details:
-                    'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
+                details: 'Day 1–72 · Founded New Kyoto · Authored UC Treaty 01',
                 score: deceased.isNotEmpty
                     ? '${(deceased.first as Map<String, dynamic>)['final_legacy'] ?? 84}'
                     : '84',
@@ -1728,8 +1857,7 @@ class PantheonPanel extends StatelessWidget {
                             ?.toString() ??
                         'Amara Kline'
                     : 'Amara Kline',
-                details:
-                    'Active · Mayor of New Kyoto · Managing 4 Enterprises',
+                details: 'Active · Mayor of New Kyoto · Managing 4 Enterprises',
                 score: living.isNotEmpty
                     ? '${(living.first as Map<String, dynamic>)['composite_legacy_score'] ?? 145}'
                     : '145',
@@ -1769,8 +1897,8 @@ class PantheonPanel extends StatelessWidget {
                   final legacy = entry['final_legacy'] ?? 0;
                   final day = entry['death_game_day'] ?? 0;
                   return Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 8),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
                       border: Border(
                         bottom: isLast

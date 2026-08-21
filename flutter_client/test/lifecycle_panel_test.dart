@@ -4,7 +4,8 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/lifecycle/lifecycle_panels.dart';
 
 void main() {
-  testWidgets('SuccessionPanel renders active human life, political status, and registered successor',
+  testWidgets(
+      'SuccessionPanel renders active human life, political status, and registered successor',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -54,11 +55,15 @@ void main() {
       ),
     );
 
-    expect(find.text('LIFE / BIOLOGICAL AGING & SUCCESSION'), findsOneWidget);
+    expect(find.text('LIFE & LEGACY / SUCCESSION PLAN'), findsOneWidget);
     expect(find.text('ACTIVE'), findsOneWidget);
-    expect(find.textContaining('Lifespan Expectancy ~90y'), findsOneWidget);
-    expect(find.textContaining('SUCCESSOR: Mira Kline (H-0088)'), findsOneWidget);
-    expect(find.textContaining('Registered on Day 180 · Estate buffer: 30 days'), findsOneWidget);
+    expect(find.textContaining('Life stage and succession readiness'),
+        findsOneWidget);
+    expect(
+        find.textContaining('SUCCESSOR: Mira Kline (H-0088)'), findsOneWidget);
+    expect(
+        find.textContaining('Registered on Day 180 · Estate buffer: 30 days'),
+        findsOneWidget);
     expect(find.textContaining('Estate state: PENDING'), findsOneWidget);
     expect(find.text('UPDATE WILL & SUCCESSOR'), findsOneWidget);
 
@@ -76,7 +81,8 @@ void main() {
     expect(planTriggered, isTrue);
   });
 
-  testWidgets('SuccessionPanel renders estate period and enables inheritance settlement',
+  testWidgets(
+      'SuccessionPanel renders estate period and enables inheritance settlement',
       (tester) async {
     const estateState = EarthState({
       'clock': {'day': 200, 'minute': 100},
@@ -127,7 +133,8 @@ void main() {
     );
 
     expect(find.text('ESTATE'), findsOneWidget);
-    expect(find.textContaining('Estate state: ACTIVE ESTATE PERIOD'), findsOneWidget);
+    expect(find.textContaining('Estate state: ACTIVE ESTATE PERIOD'),
+        findsOneWidget);
     expect(find.text('SETTLE ESTATE INHERITANCE'), findsOneWidget);
 
     // Open settle inheritance dialog

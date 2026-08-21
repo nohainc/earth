@@ -762,10 +762,7 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final ledger = LedgerPanel(state: state);
-              final ownership =
-                  OwnershipTimelinePanel(ownershipEvents: ownershipEvents);
-              final history = HistoryArchivePanel(state: state);
+              final lifeToday = LifeTodayPanel(state: state);
               final pantheonPanel = PantheonPanel(pantheon: pantheon);
               if (constraints.maxWidth > 1000) {
                 return Row(
@@ -775,11 +772,9 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
+                          lifeToday,
+                          const SizedBox(height: 34),
                           succession,
-                          const SizedBox(height: 34),
-                          ledger,
-                          const SizedBox(height: 34),
-                          ownership,
                         ],
                       ),
                     ),
@@ -788,8 +783,6 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          history,
-                          const SizedBox(height: 34),
                           pantheonPanel,
                         ],
                       ),
@@ -800,13 +793,9 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  lifeToday,
+                  const SizedBox(height: 34),
                   succession,
-                  const SizedBox(height: 34),
-                  ledger,
-                  const SizedBox(height: 34),
-                  ownership,
-                  const SizedBox(height: 34),
-                  history,
                   const SizedBox(height: 34),
                   pantheonPanel,
                 ],
