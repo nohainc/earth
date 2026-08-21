@@ -65,7 +65,7 @@ class TechnologyPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Research Laboratory: Choose and fund capabilities that improve the player\'s businesses and future options.\n\n• Focus Specialization:\n  - EFFICIENCY: More output from existing capacity.\n  - DURABILITY: Lower wear and maintenance cost.\n  - SAFETY: Less risk during demanding operations.\n  - COST: Better margins from lower input requirements.\n\n• Intellectual Property: Completed research can become a patent, generate licensing income, or enter the public domain. Physical machines and production decisions belong in Businesses & Operations.',
+          '• Collaborative R&D Laboratory: Choose and fund capabilities that improve the player\'s businesses and future options.\n\n• Focus Specialization:\n  - EFFICIENCY: More output from existing capacity.\n  - DURABILITY: Lower wear and maintenance cost.\n  - SAFETY: Less risk during demanding operations.\n  - COST: Better margins from lower input requirements.\n\n• Intellectual Property: Completed research can become a patent, generate licensing income, or enter the public domain. Physical machines and production decisions belong in Businesses & Operations.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
