@@ -59,7 +59,7 @@ async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Prom
 
 async function settleServiceBusinessRevenue(tx: PostgresRepository, day: number): Promise<void> {
   const serviceBusinesses = await tx.query<{ business_id: string; revenue: string }>(
-    "SELECT b.id AS business_id, COALESCE(SUM(e.skill * e.morale * 160), 0) AS revenue FROM businesses b JOIN business_employees e ON e.business_id = b.id AND e.status = 'active' WHERE b.status = 'active' AND b.sector IN ('it-services', 'consulting', 'logistics', 'healthcare', 'education') GROUP BY b.id",
+    "SELECT b.id AS business_id, COALESCE(SUM(e.skill * e.morale * 160 * CASE WHEN b.sector = 'it-services' AND lower(e.role) ~ '(engineer|developer|architect)' THEN 1.25 WHEN b.sector = 'consulting' AND lower(e.role) ~ '(consultant|advisor|analyst)' THEN 1.25 WHEN b.sector = 'logistics' AND lower(e.role) ~ '(dispatcher|coordinator|planner)' THEN 1.25 WHEN b.sector = 'healthcare' AND lower(e.role) ~ '(caregiver|nurse|doctor)' THEN 1.25 WHEN b.sector = 'education' AND lower(e.role) ~ '(teacher|mentor|instructor)' THEN 1.25 ELSE 1 END), 0) AS revenue FROM businesses b JOIN business_employees e ON e.business_id = b.id AND e.status = 'active' WHERE b.status = 'active' AND b.sector IN ('it-services', 'consulting', 'logistics', 'healthcare', 'education') GROUP BY b.id",
   );
   for (const row of serviceBusinesses.rows) {
     const revenue = Number(row.revenue ?? 0);
