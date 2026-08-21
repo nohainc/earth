@@ -27,6 +27,9 @@ class ContractRevenueOverviewPanel extends StatelessWidget {
     var atRisk = 0.0;
     var active = 0;
     var disputed = 0;
+    var pipeline = 0;
+    var recurring = 0;
+    var milestonesDue = 0;
     for (final raw in list) {
       if (raw is! Map) continue;
       final amount =
@@ -44,6 +47,10 @@ class ContractRevenueOverviewPanel extends StatelessWidget {
       }
       if (status == 'accepted' || status == 'active' || status == 'proposed')
         active++;
+      if (status == 'proposed' || status == 'negotiating') pipeline++;
+      if (kind.contains('recurring') || raw['recurring'] == true) recurring++;
+      final progress = asDouble(raw['progress'] ?? raw['delivery_progress']);
+      if (progress != null && progress < 100 && progress > 0) milestonesDue++;
       if (raw['dispute_id'] != null ||
           raw['disputeId'] != null ||
           status == 'disputed') {
@@ -75,6 +82,10 @@ class ContractRevenueOverviewPanel extends StatelessWidget {
               disputed == 0 ? Colors.tealAccent : Colors.orangeAccent),
         ]),
         const SizedBox(height: 12),
+        Text(
+            'PIPELINE: $pipeline awaiting decision · $recurring recurring revenue stream${recurring == 1 ? '' : 's'} · $milestonesDue delivery milestone${milestonesDue == 1 ? '' : 's'} in progress.',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 8),
         const Text(
             'Before accepting: check delivery capacity, required supplies, deadline risk, cancellation penalties, and expected margin.',
             style: TextStyle(
