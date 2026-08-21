@@ -30,13 +30,32 @@ class ContractRevenueOverviewPanel extends StatelessWidget {
     var pipeline = 0;
     var recurring = 0;
     var milestonesDue = 0;
+    var expectedProfit = 0.0;
+    var profitKnown = false;
+    final counterparties = <String>{};
+    var riskyCounterparties = 0;
     for (final raw in list) {
       if (raw is! Map) continue;
       final amount =
           asDouble(raw['amount'] ?? raw['value'] ?? raw['total']) ?? 0;
+      final cost = asDouble(
+          raw['cost'] ?? raw['estimated_cost'] ?? raw['delivery_cost']);
+      if (cost != null) {
+        expectedProfit += amount - cost;
+        profitKnown = true;
+      }
       final status = (raw['status']?.toString() ?? 'proposed').toLowerCase();
       final kind = (raw['kind']?.toString() ?? raw['type']?.toString() ?? '')
           .toLowerCase();
+      final counterparty = (raw['counterparty_name'] ??
+              raw['counterparty'] ??
+              raw['counterparty_id'])
+          ?.toString();
+      if (counterparty != null && counterparty.isNotEmpty)
+        counterparties.add(counterparty);
+      final reliability =
+          asDouble(raw['counterparty_reliability'] ?? raw['reliability']);
+      if (reliability != null && reliability < 50) riskyCounterparties++;
       final outgoingContract = kind.contains('supply') ||
           kind.contains('purchase') ||
           kind.contains('buy');
@@ -84,6 +103,21 @@ class ContractRevenueOverviewPanel extends StatelessWidget {
         const SizedBox(height: 12),
         Text(
             'PIPELINE: $pipeline awaiting decision · $recurring recurring revenue stream${recurring == 1 ? '' : 's'} · $milestonesDue delivery milestone${milestonesDue == 1 ? '' : 's'} in progress.',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 8),
+        Text(
+            profitKnown
+                ? 'EXPECTED PROFIT: ${formatWholeNumber(expectedProfit)} C after recorded delivery costs.'
+                : 'PROFITABILITY: unavailable until delivery costs are recorded.',
+            style: TextStyle(
+                color: profitKnown && expectedProfit < 0
+                    ? Colors.orangeAccent
+                    : mutedColor,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w700)),
+        const SizedBox(height: 6),
+        Text(
+            'COUNTERPARTIES: ${counterparties.isEmpty ? 'not itemized' : counterparties.join(' · ')} · ${riskyCounterparties == 0 ? 'no recorded high-risk relationship' : '$riskyCounterparties high-risk relationship${riskyCounterparties == 1 ? '' : 's'}'}',
             style: const TextStyle(color: mutedColor, fontSize: 10.5)),
         const SizedBox(height: 8),
         const Text(
