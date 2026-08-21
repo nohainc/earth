@@ -128,7 +128,25 @@ Future<void> showMachineAcquisitionDialog(
   Future<void> Function(Future<EarthState> Function()) action,
   List<dynamic> productionCatalog,
 ) async {
-  String selectedType = 'fabrication-rig';
+  final catalogOptions = productionCatalog
+      .whereType<Map>()
+      .expand((sector) => (sector['machineTypes'] is List ? sector['machineTypes'] as List : const []).map((type) {
+        final machineType = type.toString();
+        final acquisition = sector['acquisition'] is Map ? Map<String, dynamic>.from(sector['acquisition'] as Map) : const <String, dynamic>{};
+        return {'type': machineType, 'output': sector['output']?.toString() ?? 'resource', ...acquisition};
+      }))
+      .where((option) => option['credit'] != null)
+      .toList();
+  final options = catalogOptions.isNotEmpty
+      ? catalogOptions
+      : [
+          {'type': 'fabrication-rig', 'output': 'components', 'credit': 850, 'material': 50},
+          {'type': 'extraction-unit', 'output': 'material', 'credit': 600, 'material': 40},
+          {'type': 'refining-matrix', 'output': 'material', 'credit': 1200, 'material': 80},
+          {'type': 'compute-cluster', 'output': 'compute', 'credit': 950, 'material': 30},
+          {'type': 'food-synthesizer', 'output': 'food', 'credit': 4400, 'material': 75},
+        ];
+  String selectedType = options.first['type'].toString();
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
@@ -149,24 +167,10 @@ Future<void> showMachineAcquisitionDialog(
               DropdownButtonFormField<String>(
                 isExpanded: true,
                 initialValue: selectedType,
-                items: const [
-                  DropdownMenuItem(
-                    value: 'fabrication-rig',
-                    child: Text('Fabrication Rig · 850 C + 50 Material'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'extraction-unit',
-                    child: Text('Extraction Unit · 600 C + 40 Material'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'refining-matrix',
-                    child: Text('Refining Matrix · 1200 C + 80 Material'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'compute-cluster',
-                    child: Text('Compute Cluster · 950 C + 30 Material'),
-                  ),
-                ],
+                items: options.map((option) => DropdownMenuItem<String>(
+                  value: option['type'].toString(),
+                  child: Text('${option['type'].toString().replaceAll('-', ' ').toUpperCase()} · ${option['credit']} C + ${option['material']} Material'),
+                )).toList(),
                 onChanged: (val) {
                   if (val != null) setState(() => selectedType = val);
                 },
@@ -175,20 +179,8 @@ Future<void> showMachineAcquisitionDialog(
               ConsequencePreviewCard(
                 consequence: DecisionConsequence.machineAcquisition(
                   machineName: selectedType.replaceAll('-', ' ').toUpperCase(),
-                  costCredits: selectedType == 'refining-matrix'
-                      ? 1200
-                      : selectedType == 'compute-cluster'
-                          ? 950
-                          : selectedType == 'fabrication-rig'
-                              ? 850
-                              : 600,
-                  outputYield: selectedType == 'fabrication-rig'
-                      ? '45 Components'
-                      : selectedType == 'compute-cluster'
-                          ? '60 Compute'
-                          : selectedType == 'refining-matrix'
-                              ? '80 Refined Material'
-                              : '120 Raw Material',
+                  costCredits: (options.firstWhere((option) => option['type'].toString() == selectedType)['credit'] as num).toDouble(),
+                  outputYield: '${options.firstWhere((option) => option['type'].toString() == selectedType)['output']} production capacity',
                   businessName: 'Primary Enterprise',
                 ),
               ),
