@@ -154,7 +154,21 @@ export async function contributeToSocialInitiative(repo: PostgresRepository, hum
     if (!initiative || initiative.status !== 'active') throw new Error('This initiative is not accepting contributions');
     const currentDay = Number((await tx.query<any>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? initiative.game_day);
     if (initiative.deadline_game_day != null && currentDay > Number(initiative.deadline_game_day)) throw new Error('This initiative has expired');
-    const member = (await tx.query<any>('SELECT * FROM social_initiative_members WHERE initiative_id = $1 AND human_id = $2 FOR UPDATE', [initiativeId, humanId])).rows[0];
+    let member = (await tx.query<any>('SELECT * FROM social_initiative_members WHERE initiative_id = $1 AND human_id = $2 FOR UPDATE', [initiativeId, humanId])).rows[0];
+    if (!member && initiative.kind === 'shared_project') {
+      const terms = projectTerms(initiative.terms);
+      const institutionId = String(terms.institutionId ?? '').trim();
+      const institution = (await tx.query<{ kind: string }>('SELECT kind FROM institutions WHERE id = $1 AND status = \'active\'', [institutionId])).rows[0];
+      const eligible = institution?.kind === 'CITY'
+        ? await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND city_id = $2', [humanId, institutionId])
+        : institution?.kind === 'CORPORATION'
+          ? await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND corporation_id = $2', [humanId, institutionId])
+          : { rows: [] };
+      if (eligible.rows[0]) {
+        await tx.query("INSERT INTO social_initiative_members (initiative_id, human_id, role, status) VALUES ($1,$2,'institution_member','accepted') ON CONFLICT DO NOTHING", [initiativeId, humanId]);
+        member = (await tx.query<any>('SELECT * FROM social_initiative_members WHERE initiative_id = $1 AND human_id = $2 FOR UPDATE', [initiativeId, humanId])).rows[0];
+      }
+    }
     if (!member || member.status !== 'accepted') throw new Error('Accept the initiative before contributing');
     await tx.query('UPDATE social_initiative_members SET contribution = contribution + $1 WHERE initiative_id = $2 AND human_id = $3', [contribution, initiativeId, humanId]);
     const remaining = Math.max(0, Number(initiative.terms?.contributionTarget ?? 100) - Number(initiative.progress));
