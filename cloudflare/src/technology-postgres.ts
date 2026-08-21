@@ -10,12 +10,20 @@ export const TECHNOLOGY_CATALOG = [
   'Civic Network Infrastructure',
 ] as const;
 
+export const TECHNOLOGY_CATALOG_DETAILS = TECHNOLOGY_CATALOG.map((name) => ({
+  name,
+  kind: 'approved_capability',
+  tradeable: false,
+  playerCreated: false,
+}));
+
 export async function adoptTechnology(repository: PostgresRepository, input: { humanId: string; businessId: string; technologyId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const business = await tx.query<{ id: string }>('SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.id = $1 AND b.status = \'active\' AND (b.owner_id = $2 OR bm.manager_id = $2)', [input.businessId, input.humanId]);
     if (!business.rows[0]) throw new Error('Business not found or not managed by this Human');
     const technology = await tx.query<{ id: string; name: string; progress: string }>('SELECT id, name, progress FROM technologies WHERE id = $1 AND progress >= 100', [input.technologyId]);
     if (!technology.rows[0]) throw new Error('Technology must be fully researched before adoption');
+    if (!(TECHNOLOGY_CATALOG as readonly string[]).includes(technology.rows[0].name)) throw new Error('Technology is outside the approved research catalogue');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     await tx.query("INSERT INTO business_technology_adoptions (business_id, technology_id, adopted_by, adopted_game_day, status) VALUES ($1,$2,$3,$4,'active') ON CONFLICT (business_id, technology_id) DO UPDATE SET adopted_by = excluded.adopted_by, adopted_game_day = excluded.adopted_game_day, status = 'active'", [input.businessId, input.technologyId, input.humanId, day]);

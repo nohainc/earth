@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
 
 export async function listEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
   const [ledger, trades, maintenance, production, proposals] = await Promise.all([
@@ -222,7 +223,7 @@ export async function listTechnology(repository: PostgresRepository): Promise<Re
     repository.query('SELECT * FROM patents ORDER BY id'),
     repository.query('SELECT * FROM technology_licenses ORDER BY id'),
   ]);
-  return { projects: projects.rows, patents: patents.rows, licenses: licenses.rows };
+  return { catalog: TECHNOLOGY_CATALOG_DETAILS, projects: projects.rows, patents: patents.rows, licenses: licenses.rows };
 }
 
 export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {
