@@ -20,6 +20,7 @@ export async function listSocialInitiatives(repo: PostgresRepository, humanId: s
     FROM social_initiatives si
     LEFT JOIN social_initiative_members sim ON sim.initiative_id = si.id AND sim.human_id = $1
     WHERE si.creator_human_id = $1 OR si.target_human_id = $1 OR sim.human_id = $1
+      OR EXISTS (SELECT 1 FROM memberships m WHERE m.human_id = $1 AND (m.city_id = si.terms->>'institutionId' OR m.corporation_id = si.terms->>'institutionId'))
     ORDER BY si.updated_at DESC LIMIT 100`, [humanId]);
   return result.rows;
 }
@@ -30,7 +31,7 @@ export async function listSocialTimeline(repo: PostgresRepository, humanId: stri
     FROM world_events we
     LEFT JOIN social_initiatives si ON si.id = we.details::jsonb->>'initiativeId'
     WHERE we.event_type LIKE 'social.%'
-      AND (si.kind IN ('announcement','campaign') OR si.creator_human_id = $1 OR si.target_human_id = $1 OR EXISTS (SELECT 1 FROM social_initiative_members sim WHERE sim.initiative_id = si.id AND sim.human_id = $1))
+      AND (si.kind IN ('announcement','campaign') OR si.creator_human_id = $1 OR si.target_human_id = $1 OR EXISTS (SELECT 1 FROM social_initiative_members sim WHERE sim.initiative_id = si.id AND sim.human_id = $1) OR EXISTS (SELECT 1 FROM memberships m WHERE m.human_id = $1 AND (m.city_id = si.terms->>'institutionId' OR m.corporation_id = si.terms->>'institutionId')))
     ORDER BY game_day DESC, created_at DESC LIMIT $2`, [humanId, Math.min(100, Math.max(1, limit))]);
   return result.rows;
 }
