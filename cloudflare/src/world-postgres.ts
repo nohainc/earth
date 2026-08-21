@@ -83,8 +83,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const feeRate = Number(await marketFeeRate(repository, viewerId));
   const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees] = await Promise.all([
     Promise.all([
-      repository.query('SELECT id, name, corporation_id, residents, treasury, housing_capacity, energy_capacity FROM cities ORDER BY treasury DESC LIMIT 20'),
-      repository.query('SELECT id, member_count, treasury FROM corporations ORDER BY member_count DESC, treasury DESC LIMIT 10'),
+      repository.query(`SELECT id, name, corporation_id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity
+        FROM cities
+        ORDER BY (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
+          + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
+          + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
+          + LEAST(1, health_capacity / 100.0) * 20
+          + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) DESC, residents DESC, id LIMIT 20`),
+      repository.query(`SELECT c.id, c.member_count, c.treasury,
+          (LEAST(1, GREATEST(0, c.member_count::numeric) / 100.0) * 55
+           + LEAST(1, GREATEST(0, c.treasury::numeric) / 25000.0) * 25
+           + LEAST(1, (SELECT COUNT(*)::numeric FROM businesses b WHERE b.owner_id IN (SELECT human_id FROM memberships m WHERE m.corporation_id = c.id) AND b.status = 'active') / 10.0) * 20) AS development_score
+        FROM corporations c ORDER BY development_score DESC, member_count DESC, id LIMIT 10`),
       repository.query("SELECT humans.id, humans.display_name, humans.standing, humans.legacy, memberships.city_id FROM humans JOIN memberships ON memberships.human_id = humans.id WHERE humans.life_status = 'active' AND memberships.city_id = (SELECT city_id FROM memberships WHERE human_id = $1) ORDER BY humans.standing DESC, humans.legacy DESC, humans.id LIMIT 20", [viewerId]),
     ]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
