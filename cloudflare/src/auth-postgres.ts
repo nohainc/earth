@@ -84,6 +84,9 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
     if (!cred) throw new Error('Account not found');
     const prevHuman = (await tx.query<{ id: string; display_name: string; legacy: number; standing: number; life_status: string }>('SELECT id, display_name, legacy, standing, life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
+    if (!prevHuman || !['deceased', 'estate'].includes(prevHuman.life_status)) {
+      throw new Error('Civic Rebirth is available only after mortality or during an estate period');
+    }
     const existingDynasty = (await tx.query<{ dynasty_name: string }>('SELECT dynasty_name FROM dynasties WHERE email = $1', [input.email])).rows[0];
 
     const world = await tx.query<{ game_day: number; living_cost_index: string }>("SELECT game_day, living_cost_index FROM world_state WHERE id = 'WORLD'");
