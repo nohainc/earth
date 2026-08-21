@@ -132,12 +132,12 @@ class _ActivityPanelState extends State<ActivityPanel>
 
     return EarthPanel(
       key: widget.panelKey,
-      title: 'ACTIVITY & NOTIFICATIONS CENTER',
+      title: 'EVENT HISTORY & ARCHIVE',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Real-Time Operations Telemetry: Unified stream of private executive alerts and macroscopic planetary simulation events.\n\n• Stream Channels:\n  - PERSONAL ALERTS: Directed high-priority notices including tax assessments, contract proposals, filled trade orders, and enterprise dividends.\n  - PUBLIC FEED: Live global ledger updates, market batch settlement cycles, research milestones, and governance ballots.\n\n• Connection Status: Real-time telemetry pulse displaying WebSocket / SSE streaming health with automatic reconnection and event replay.\n\n• Acknowledgment: Mark individual alerts or batch acknowledge all pending notifications.',
+          '• Secondary archive for reviewing events after they leave Daily Priorities.\n\n• Use domain pages for current decisions: Businesses for operations, Contracts for commitments, Trade for orders, Governance for civic actions, and Family for personal events.\n\n• Personal alerts and public events remain available here for history, audit, and context; this page is not an additional task queue.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -517,7 +517,7 @@ class _ActivityPanelState extends State<ActivityPanel>
         children: [
           const Flexible(
             child: Text(
-              'ACTIVITY & NOTIFICATIONS CENTER',
+              'EVENT HISTORY & ARCHIVE',
               style: TextStyle(
                 color: mutedColor,
                 fontSize: 10,
@@ -535,7 +535,7 @@ class _ActivityPanelState extends State<ActivityPanel>
                 size: 14, color: mutedColor.withValues(alpha: .8)),
             onPressed: () => showEarthInfoDialog(
               context,
-              title: 'ACTIVITY & NOTIFICATIONS CENTER',
+              title: 'EVENT HISTORY & ARCHIVE',
               description:
                   '• Real-Time Operations Telemetry: review personal alerts and public simulation activity.\n\n'
                   '• Mark notifications as read and refresh the event stream.\n\n'

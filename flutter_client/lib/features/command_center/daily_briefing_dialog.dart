@@ -336,7 +336,18 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
               ...left,
               ...right,
             ],
-            const SizedBox(height: 16),
+            const SizedBox(height: 22),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => widget.onNavigate('activity'),
+                icon: const Icon(Icons.history_outlined, size: 14),
+                label: const Text(
+                  'OPEN COMPLETE EVENT HISTORY',
+                  style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700),
+                ),
+              ),
+            ),
           ],
         );
       },
