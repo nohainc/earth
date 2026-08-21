@@ -157,7 +157,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 60 },
     world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, economicStartIndex: startIndex, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
     human: { id: humanRow.id, name: humanRow.display_name, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
-    life: { generation: 1, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
+    life: { generation: Number(dynastyProgress.rows[0]?.generation ?? 1), status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
     membership: membership.rows[0] ?? null,
     institutions: { ouc: mapByKind(institutions.rows, 'OUC'), corporation: { ...mapByKind(institutions.rows, 'CORPORATION'), ...corporation }, city: { ...mapByKind(institutions.rows, 'CITY'), ...city }, business: mapByKind(institutions.rows, 'BUSINESS') },
     resources: resourceMap,
