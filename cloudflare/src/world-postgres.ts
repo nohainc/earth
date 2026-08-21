@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { projectGameDeadline } from './game-clock.ts';
 import { rankOpportunities } from './opportunities.ts';
-import { marketFeeRate } from './market-postgres.ts';
+import { marketFeeRate } from './market-rules.ts';
 import { generateDecisionQueue } from './decision-queue.ts';
 import { evaluatePlayerObjectives } from './objectives.ts';
 import { economicStartIndex } from './starter-package.ts';
