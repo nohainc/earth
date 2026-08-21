@@ -266,7 +266,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                           ),
                           SizedBox(height: 2),
                           Text(
-                            'Take command of the heir designated in your testamentary will with transferred estate assets.',
+                            'Continue as the designated heir. The estate, productive assets, resources, and registered responsibilities transfer according to the will.',
                             style: TextStyle(
                                 color: EarthColors.textMuted, fontSize: 11),
                           ),
@@ -309,8 +309,8 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                         Icon(Icons.auto_awesome,
                             color: EarthColors.goldMetallic, size: 22),
                         SizedBox(width: 10),
-                        Text(
-                          'Forge New Character (Civic Rebirth)',
+                          Text(
+                          'Create New Adult (Civic Rebirth)',
                           style: TextStyle(
                               color: Colors.white,
                               fontWeight: FontWeight.bold,
@@ -320,7 +320,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Begin the next generation at legal adulthood (Age 20) with an indexed starter package. Your selected city determines your initial civic affiliation: if it belongs to a corporation, the new character joins that corporation. A 500 Credit naturalization fee is allocated between the central and city treasuries.',
+                      'Begin a new generation at legal adulthood (Age 20) with an indexed starter package. The new character carries dynasty legacy forward but does not directly claim the predecessor’s estate. Your selected city determines initial civic affiliation: if it belongs to a corporation, the new character joins that corporation. A 500 Credit naturalization fee is allocated between the central and city treasuries.',
                       style:
                           TextStyle(color: EarthColors.textMuted, fontSize: 11),
                     ),
