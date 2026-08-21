@@ -2315,6 +2315,7 @@ class HumanServicesPanel extends StatelessWidget {
       title: 'HUMAN SERVICES',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
+      titleColor: mutedColor,
       child: services.isEmpty
           ? const Text(
               'Public service status data is currently synchronizing.',
