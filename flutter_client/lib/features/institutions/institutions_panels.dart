@@ -30,6 +30,12 @@ class CorporationOverviewPanel extends StatelessWidget {
           .compareTo(asInt((a as Map)['member_count']) ?? 0));
     final isMember = membership['corporation_id'] != null;
     final cityId = membership['city_id']?.toString();
+    final canAdoptCity = state.roles.any((raw) {
+      if (raw is! Map) return false;
+      final role = raw['role_name'] ?? raw['name'] ?? raw['role'];
+      return raw['status']?.toString() == 'active' &&
+          role?.toString().toLowerCase() == 'corporation executive';
+    });
 
     return EarthPanel(
       title: 'CORPORATION / MEMBERSHIP & DIRECTION',
@@ -139,7 +145,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                   '${row['name'] ?? city} · ${row['residents'] ?? 0} residents',
                   style: const TextStyle(fontSize: 10.5),
                 )),
-                if (isMember && unclaimed)
+                if (isMember && unclaimed && canAdoptCity)
                   TextButton(
                     onPressed: busy
                         ? null
