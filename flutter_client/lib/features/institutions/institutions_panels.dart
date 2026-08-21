@@ -145,7 +145,15 @@ class CorporationOverviewPanel extends StatelessWidget {
                   '${row['name'] ?? city} · ${row['residents'] ?? 0} residents',
                   style: const TextStyle(fontSize: 10.5),
                 )),
-                if (isMember && unclaimed && canAdoptCity)
+                if (isMember && belongsToUs && city != cityId)
+                  TextButton(
+                    onPressed: busy
+                        ? null
+                        : () => action?.call(() => const EarthApi()
+                            .joinCity(cityId: city)),
+                    child: const Text('MOVE', style: TextStyle(fontSize: 9)),
+                  )
+                else if (isMember && unclaimed && canAdoptCity)
                   TextButton(
                     onPressed: busy
                         ? null
