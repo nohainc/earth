@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 46,
+  "migrationVersion": 47,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -243,7 +243,8 @@
     "institutions": [
       "id",
       "kind",
-      "status"
+      "status",
+      "charter_rules"
     ],
     "ledger_entries": [
       "id",
