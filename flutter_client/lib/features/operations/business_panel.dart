@@ -344,7 +344,7 @@ class BusinessPanel extends StatelessWidget {
                 context,
                 'WORKFORCE / OPERATING CAPACITY',
                 description:
-                    '• Staff are part of the business, not abstract analytics. Their skills and morale affect the organization\'s ability to deliver work.\n• Payroll is a recurring operating cost.\n• Future management actions will include hiring, training, compensation, and role assignment.',
+                    '• Staff are part of the business, not abstract analytics. Their skills and morale affect the organization\'s ability to deliver work.\n• Payroll is a recurring operating cost.\n• Hire for a role, train valuable staff, or dismiss underperformers as the business changes.',
               ),
               Container(
                 width: double.infinity,

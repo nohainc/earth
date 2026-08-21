@@ -28,9 +28,7 @@ class TechnologyPortfolioPanel extends StatelessWidget {
         technology['capabilities']);
     final available =
         _names(technology['available'] ?? technology['availableTechnologies']);
-    final applied = adopted.isNotEmpty
-        ? adopted
-        : (progress == '100' ? [name] : <String>[]);
+    final applied = adopted;
 
     return EarthPanel(
       title: 'TECHNOLOGY PORTFOLIO',
