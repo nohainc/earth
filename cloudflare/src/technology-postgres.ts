@@ -10,8 +10,14 @@ export const TECHNOLOGY_CATALOG = [
   'Civic Network Infrastructure',
 ] as const;
 
-export const TECHNOLOGY_CATALOG_DETAILS = TECHNOLOGY_CATALOG.map((name) => ({
-  name,
+export const TECHNOLOGY_CATALOG_DETAILS = [
+  { name: 'Automated Assembly', description: 'Improves machine throughput for component and manufactured-goods production.', researchCost: 240, prerequisites: [], effect: 'assembly_output_bonus' },
+  { name: 'Clean Energy Systems', description: 'Reduces the operating burden of energy-intensive workplaces and infrastructure.', researchCost: 320, prerequisites: [], effect: 'energy_efficiency' },
+  { name: 'Food Synthesis', description: 'Enables high-yield food production for resilient local supply.', researchCost: 280, prerequisites: [], effect: 'food_output_bonus' },
+  { name: 'Predictive Maintenance', description: 'Reduces machine wear when actively adopted by a workplace.', researchCost: 300, prerequisites: [], effect: 'maintenance_reduction' },
+  { name: 'Civic Network Infrastructure', description: 'Improves the coordination capacity of city services and civic institutions.', researchCost: 360, prerequisites: [], effect: 'civic_capacity_bonus' },
+].map((technology) => ({
+  ...technology,
   kind: 'approved_capability',
   tradeable: false,
   playerCreated: false,
@@ -44,6 +50,10 @@ export async function createResearchProject(repository: PostgresRepository, inpu
     await requireResearchJurisdiction(tx, input.ownerId);
     if (!(TECHNOLOGY_CATALOG as readonly string[]).includes(input.name)) {
       throw new Error('Technology must be selected from the approved research catalogue');
+    }
+    const catalogEntry = TECHNOLOGY_CATALOG_DETAILS.find((technology) => technology.name === input.name);
+    if (!catalogEntry || input.budget < catalogEntry.researchCost) {
+      throw new Error(`Research funding for ${input.name} must be at least ${catalogEntry?.researchCost ?? 240} Credits`);
     }
     const prior = await tx.query<{ reason_id: string }>("SELECT reason_id FROM ledger_entries WHERE reason_type = 'research_project_funding' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, project: (await tx.query('SELECT * FROM research_projects WHERE id = $1', [prior.rows[0].reason_id])).rows[0], correlationId: input.correlationId };
