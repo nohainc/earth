@@ -7,8 +7,6 @@ class Sidebar extends StatefulWidget {
   final String selectedSection;
   final ValueChanged<String> onNavigate;
   final bool busy;
-  final bool canAdvanceDay;
-  final VoidCallback? onAdvanceDay;
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
 
@@ -18,8 +16,6 @@ class Sidebar extends StatefulWidget {
     this.selectedSection = 'command',
     required this.onNavigate,
     this.busy = false,
-    this.canAdvanceDay = false,
-    this.onAdvanceDay,
     this.onLogout,
     this.onSecurity,
   });
@@ -252,29 +248,6 @@ class _SidebarState extends State<Sidebar> {
             ),
           ),
 
-          // 2. FOOTER ADVANCE DAY (IF APPLICABLE)
-          if (widget.canAdvanceDay) ...[
-            const SizedBox(height: 12),
-            const Divider(color: Colors.white12, height: 1, thickness: 1),
-            const SizedBox(height: 12),
-            SizedBox(
-              width: double.infinity,
-              child: OutlinedButton.icon(
-                onPressed: widget.busy ? null : widget.onAdvanceDay,
-                icon: const Icon(Icons.fast_forward, size: 14),
-                label: const Text('ADVANCE DAY',
-                    style: TextStyle(fontSize: 10.5, letterSpacing: 1.3)),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: violetColor,
-                  side: const BorderSide(color: violetColor),
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                ),
-              ),
-            ),
-          ],
         ],
       ),
     );

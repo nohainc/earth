@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'dart:convert';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import '../../app/theme.dart';
@@ -487,7 +486,6 @@ class _CommandCenterState extends State<CommandCenter> {
   @override
   Widget build(BuildContext context) {
     final current = state;
-    final canAdvanceDay = kDebugMode && current != null;
 
     return LayoutBuilder(builder: (context, viewport) {
       final compact = viewport.maxWidth < 800;
@@ -501,8 +499,6 @@ class _CommandCenterState extends State<CommandCenter> {
                     state: current,
                     selectedSection: selectedSection,
                     busy: busy,
-                    canAdvanceDay: canAdvanceDay,
-                    onAdvanceDay: () => _run(api.advanceDay),
                     onLogout: () async {
                       await api.logout();
                       if (mounted) widget.onLogout();
@@ -573,8 +569,6 @@ class _CommandCenterState extends State<CommandCenter> {
                                 state: current,
                                 selectedSection: selectedSection,
                                 busy: busy,
-                                canAdvanceDay: canAdvanceDay,
-                                onAdvanceDay: () => _run(api.advanceDay),
                                 onLogout: () async {
                                   await api.logout();
                                   if (mounted) widget.onLogout();
