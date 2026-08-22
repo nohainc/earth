@@ -59,10 +59,11 @@ class LifeTodayPanel extends StatelessWidget {
         actions: [
           TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
           FilledButton(
-            onPressed: busy || controller.text.trim().length < 2 || action == null
+            onPressed: busy || action == null
                 ? null
                 : () async {
                     final name = controller.text.trim();
+                    if (name.length < 2) return;
                     Navigator.pop(dialogContext);
                     await action!(() => const EarthApi().updateDisplayName(name));
                   },
