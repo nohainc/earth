@@ -119,10 +119,10 @@ class _SidebarState extends State<Sidebar> {
       (
         'LIFE',
         [
-          ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
-          ('pantheon', 'Pantheon & Memorial', Icons.account_balance_outlined),
-          ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
-          ('history', 'Historical Archive', Icons.history_outlined),
+          ('life', 'Life', Icons.hourglass_empty_outlined),
+          ('dynasty', 'Family', Icons.account_tree_outlined),
+          ('pantheon', 'Memorial', Icons.account_balance_outlined),
+          ('history', 'Archive', Icons.history_outlined),
         ]
       ),
     ];

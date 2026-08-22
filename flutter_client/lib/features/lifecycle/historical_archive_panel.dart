@@ -40,14 +40,8 @@ class HistoricalArchivePanel extends StatelessWidget {
           Icons.account_box_outlined,
           deceased.isEmpty
               ? _empty('No citizens have entered the public archive yet.')
-              : Column(children: deceased.take(12).map(_personRow).toList())),
-      const SizedBox(height: 24),
-      _section(
-          'DYNASTIC HOUSES',
-          Icons.account_tree_outlined,
-          dynasties.isEmpty
-              ? _empty('No dynasty records are available yet.')
-              : Column(children: dynasties.take(12).map(_dynastyRow).toList())),
+              : Column(children: deceased.take(12).map(_personRow).toList()),
+          showInnerTitle: false),
       const SizedBox(height: 24),
       _section(
           'WORLD MILESTONES',
@@ -55,26 +49,28 @@ class HistoricalArchivePanel extends StatelessWidget {
           milestones.isEmpty
               ? _empty(
                   'World milestones will appear as the persistent world advances.')
-              : Column(children: milestones.map(_eventRow).toList())),
+              : Column(children: milestones.map(_eventRow).toList()),
+          showInnerTitle: false),
     ]);
   }
 
   List<dynamic> _list(dynamic value) => value is List ? value : const [];
 
-  Widget _section(String title, IconData icon, Widget child) => EarthPanel(
+  Widget _section(String title, IconData icon, Widget child,
+          {bool showInnerTitle = true}) => EarthPanel(
       title: title,
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       titleColor: mutedColor,
       child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        Row(children: [
+        if (showInnerTitle) Row(children: [
           Icon(icon, size: 16, color: cyanAccentColor),
           const SizedBox(width: 7),
           Text(title,
               style: const TextStyle(
                   color: inkColor, fontSize: 11, fontWeight: FontWeight.w800))
         ]),
-        const SizedBox(height: 10),
+        if (showInnerTitle) const SizedBox(height: 10),
         child,
       ]));
 
@@ -156,4 +152,49 @@ class HistoricalArchivePanel extends StatelessWidget {
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Text(text,
           style: const TextStyle(color: mutedColor, fontSize: 10.5)));
+}
+
+class HistoricalDynastiesPanel extends StatelessWidget {
+  final Map<String, dynamic> pantheon;
+  const HistoricalDynastiesPanel({super.key, required this.pantheon});
+
+  @override
+  Widget build(BuildContext context) {
+    final rows = pantheon['dynasties'] ?? pantheon['dynasticHouses'];
+    final dynasties = rows is List ? rows : const <dynamic>[];
+    return EarthPanel(
+      title: 'DYNASTIES',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      titleColor: mutedColor,
+      child: dynasties.isEmpty
+          ? const Text('No dynasty records are available yet.',
+              style: TextStyle(color: mutedColor, fontSize: 10.5))
+          : Column(
+              children: dynasties.take(12).map((raw) {
+                final row = raw is Map
+                    ? Map<String, dynamic>.from(raw)
+                    : const <String, dynamic>{};
+                return Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 6),
+                  child: Row(children: [
+                    const Icon(Icons.account_tree_outlined,
+                        size: 16, color: violetColor),
+                    const SizedBox(width: 9),
+                    Expanded(
+                        child: Text(
+                            (row['dynasty_name'] ?? row['name'] ??
+                                    'Dynastic house')
+                                .toString(),
+                            style: const TextStyle(
+                                fontSize: 11, fontWeight: FontWeight.w700))),
+                    Text(
+                        '${row['deceased_count'] ?? row['generations'] ?? row['generation'] ?? '—'} records',
+                        style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                  ]),
+                );
+              }).toList(),
+            ),
+    );
+  }
 }

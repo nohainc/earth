@@ -41,15 +41,15 @@ String dashboardSectionTitle(String section) => switch (section) {
       'civic' => 'PUBLIC',
       'corporation' => 'CORPORATION',
       'city' => 'MY CITY',
-      'dynasty' => 'DYNASTY TREE',
+      'dynasty' => 'FAMILY',
       'technology' => 'TECHNOLOGY',
       'patents' => 'PATENTS & LICENSING',
       'machines' => 'MACHINES & PRODUCTION',
       'public-finance' => 'PUBLIC FINANCE',
       'civic-rankings' => 'CIVIC RANKINGS',
-      'history' => 'HISTORICAL ARCHIVE',
-      'life' => 'LEGACY',
-      'pantheon' => 'PANTHEON & MEMORIAL',
+      'history' => 'ARCHIVE',
+      'life' => 'LIFE',
+      'pantheon' => 'MEMORIAL',
       'contracts' => 'CONTRACTS',
       'finance' => 'FINANCE',
       'activity' => 'ACTIVITY & EVENTS',
@@ -462,12 +462,16 @@ class Dashboard extends StatelessWidget {
         ];
       case 'dynasty':
         return [
-          DynastyTreeDialog(
-            api: const EarthApi(),
-            state: state,
-            isPageMode: true,
-            onNavigate: onNavigate,
-          ),
+          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            DynastyTreeDialog(
+              api: const EarthApi(),
+              state: state,
+              isPageMode: true,
+              onNavigate: onNavigate,
+            ),
+            const SizedBox(height: 34),
+            HistoricalDynastiesPanel(pantheon: pantheon),
+          ]),
         ];
       case 'business':
         return [

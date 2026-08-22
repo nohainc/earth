@@ -10,7 +10,7 @@ void main() {
     expect(dashboardSectionTitle('civic'), 'PUBLIC');
     expect(dashboardSectionTitle('city'), 'MY CITY');
     expect(dashboardSectionTitle('technology'), 'TECHNOLOGY');
-    expect(dashboardSectionTitle('life'), 'LEGACY');
+    expect(dashboardSectionTitle('life'), 'LIFE');
     expect(dashboardSectionTitle('contracts'), 'CONTRACTS');
     expect(dashboardSectionTitle('finance'), 'FINANCE');
     expect(dashboardSectionTitle('activity'), 'ACTIVITY & EVENTS');

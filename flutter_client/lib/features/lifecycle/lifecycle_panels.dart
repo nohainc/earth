@@ -50,7 +50,6 @@ class LifeTodayPanel extends StatelessWidget {
     final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
     final legacy = asDouble(human['legacy'] ?? life['legacy']);
     final businessName = state.business['name']?.toString();
-    final membership = state.membership;
     final lifeStatus =
         life['status']?.toString() ?? human['life_status']?.toString();
 
@@ -81,6 +80,7 @@ class LifeTodayPanel extends StatelessWidget {
     return EarthPanel(
       title: 'MY LIFE TODAY',
       showSurface: false,
+      showTitle: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
       titleColor: mutedColor,
@@ -89,19 +89,27 @@ class LifeTodayPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          Center(
+            child: Text(
+              (human['display_name'] ?? human['name'] ?? 'YOUR LIFE')
+                  .toString()
+                  .toUpperCase(),
+              textAlign: TextAlign.center,
+              style: const TextStyle(
+                color: cyanAccentColor,
+                fontSize: 16,
+                fontWeight: FontWeight.w900,
+                letterSpacing: .8,
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
           Text(
             age == null
                 ? 'Your current life stage is unavailable.'
                 : 'Age $age · ${lifeStatus?.toUpperCase() ?? 'ACTIVE'}${businessName == null ? '' : ' · $businessName'}',
             style: const TextStyle(
                 color: inkColor, fontSize: 12, fontWeight: FontWeight.w700),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            membership == null || membership.isEmpty
-                ? 'You are currently living independently of a recorded city or corporation membership.'
-                : 'Your current affiliations shape your services, opportunities, and obligations.',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5),
           ),
           const SizedBox(height: 12),
           Wrap(
