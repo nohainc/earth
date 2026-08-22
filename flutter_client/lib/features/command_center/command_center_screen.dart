@@ -497,6 +497,7 @@ class _CommandCenterState extends State<CommandCenter> {
                 child: SafeArea(
                   child: Sidebar(
                     state: current,
+                    activeBusiness: activeBusiness,
                     selectedSection: selectedSection,
                     busy: busy,
                     onLogout: () async {
@@ -567,6 +568,7 @@ class _CommandCenterState extends State<CommandCenter> {
                             if (!compact)
                               Sidebar(
                                 state: current,
+                                activeBusiness: activeBusiness,
                                 selectedSection: selectedSection,
                                 busy: busy,
                                 onLogout: () async {

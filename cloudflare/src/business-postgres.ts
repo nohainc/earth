@@ -42,6 +42,18 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
   });
 }
 
+export async function renameBusiness(repository: PostgresRepository, input: { ownerId: string; businessId: string; name: string }): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const business = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE id = $1 AND owner_id = $2', [input.businessId, input.ownerId]);
+    if (!business.rows[0]) throw new Error('Only the business owner can rename this business');
+    const conflict = await tx.query('SELECT id FROM institutions WHERE name = $1 AND id <> $2', [input.name, input.businessId]);
+    if (conflict.rows[0]) throw new Error('Business name already exists');
+    await tx.query('UPDATE businesses SET name = $1 WHERE id = $2', [input.name, input.businessId]);
+    await tx.query('UPDATE institutions SET name = $1 WHERE id = $2', [input.name, input.businessId]);
+    return { ok: true, businessId: input.businessId, name: input.name };
+  });
+}
+
 export async function transferShares(repository: PostgresRepository, input: { holderId: string; businessId: string | null; recipientId: string; shares: number; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ business_id: string; quantity: string }>("SELECT asset_id AS business_id, quantity FROM ownership_events WHERE reason_type = 'share_transfer' AND reason_id = $1", [input.correlationId]);

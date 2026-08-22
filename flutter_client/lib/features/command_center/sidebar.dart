@@ -4,6 +4,7 @@ import '../../core/models/earth_state.dart';
 
 class Sidebar extends StatefulWidget {
   final EarthState state;
+  final Map<String, dynamic>? activeBusiness;
   final String selectedSection;
   final ValueChanged<String> onNavigate;
   final bool busy;
@@ -15,6 +16,7 @@ class Sidebar extends StatefulWidget {
     required this.state,
     this.selectedSection = 'command',
     required this.onNavigate,
+    this.activeBusiness,
     this.busy = false,
     this.onLogout,
     this.onSecurity,
@@ -93,7 +95,9 @@ class _SidebarState extends State<Sidebar> {
       (
         'BUSINESS',
         [
-          ('business', 'Businesses & Operations', Icons.storefront_outlined),
+          ('business',
+              (widget.activeBusiness?['name'] ?? 'Business').toString(),
+              Icons.storefront_outlined),
           (
             'machines',
             'Machines & Production',

@@ -52,7 +52,7 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
     if (profit != null && profit < 0) bottlenecks.add('cost control');
 
     return EarthPanel(
-        title: 'MANAGER\'S BRIEF / $name',
+        title: 'MANAGER\'S BRIEF',
         showSurface: false,
         contentPadding: EdgeInsets.zero,
         helpAfterTitle: true,
@@ -196,6 +196,24 @@ class BusinessPanel extends StatelessWidget {
     required this.action,
   });
 
+  Future<void> _rename(BuildContext context, String businessId, String currentName) async {
+    final controller = TextEditingController(text: currentName);
+    await showDialog<void>(context: context, builder: (dialogContext) => AlertDialog(
+      title: const Text('Rename business'),
+      content: TextField(controller: controller, maxLength: 80, decoration: const InputDecoration(labelText: 'Business name')),
+      actions: [
+        TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
+        FilledButton(onPressed: () async {
+          final name = controller.text.trim();
+          if (name.length < 2) return;
+          Navigator.pop(dialogContext);
+          await action(() => const EarthApi().renameBusiness(businessId, name));
+        }, child: const Text('SAVE')),
+      ],
+    ));
+    controller.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final business = activeBusiness ?? state.business;
@@ -261,7 +279,7 @@ class BusinessPanel extends StatelessWidget {
 
     return EarthPanel(
       key: panelKey,
-      title: 'ENTERPRISE OPERATIONS / $businessName',
+      title: 'ENTERPRISE OPERATIONS',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -275,12 +293,16 @@ class BusinessPanel extends StatelessWidget {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _businessTopicHeading(
-                context,
-                'ENTERPRISE OPERATIONS / $businessName',
-                description:
-                    '• Decide what this business should improve next: income, reliability, capacity, or ownership.',
-              ),
+              Center(child: Row(mainAxisSize: MainAxisSize.min, children: [
+                Text(businessName, textAlign: TextAlign.center,
+                    style: const TextStyle(color: cyanAccentColor, fontSize: 16,
+                        fontWeight: FontWeight.w900, letterSpacing: .8)),
+                const SizedBox(width: 6),
+                IconButton(icon: const Icon(Icons.edit_outlined, size: 15, color: mutedColor),
+                    tooltip: 'Rename business',
+                    onPressed: busy ? null : () => _rename(context, businessId, businessName)),
+              ])),
+              const SizedBox(height: 12),
               if (portfolio.length > 1) ...[
                 _businessPortfolio(portfolio),
                 const SizedBox(height: 12),
