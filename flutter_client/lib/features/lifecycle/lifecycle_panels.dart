@@ -49,7 +49,6 @@ class LifeTodayPanel extends StatelessWidget {
     final energy = asDouble(human['energy'] ?? human['stamina']);
     final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
     final legacy = asDouble(human['legacy'] ?? life['legacy']);
-    final businessName = state.business['name']?.toString();
     final fullName =
         (human['display_name'] ?? human['name'] ?? 'YOUR LIFE').toString().trim();
     final lifeStatus =
@@ -107,7 +106,7 @@ class LifeTodayPanel extends StatelessWidget {
           Text(
             age == null
                 ? 'Your current life stage is unavailable.'
-                : 'Age $age · ${lifeStatus?.toUpperCase() ?? 'ACTIVE'}${businessName == null ? '' : ' · $businessName'}',
+                : 'Age $age · ${lifeStatus?.toUpperCase() ?? 'ACTIVE'}',
             style: const TextStyle(
                 color: inkColor, fontSize: 12, fontWeight: FontWeight.w700),
           ),
