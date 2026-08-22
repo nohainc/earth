@@ -77,10 +77,11 @@ class _SidebarState extends State<Sidebar> {
     final cityName = isCorporationMember && city is Map
         ? city['name']?.toString() ?? 'City & Services'
         : 'City & Services';
-    final userName = (widget.state.human['display_name'] ??
+    final fullUserName = (widget.state.human['display_name'] ??
             widget.state.human['name'] ??
             'Life')
         .toString();
+    final userName = fullUserName.split(RegExp(r'\s+')).first;
     final groups = [
       (
         'NOW',
