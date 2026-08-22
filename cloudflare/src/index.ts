@@ -273,7 +273,7 @@ const worker = {
     const origin = request.headers.get('Origin') ?? '*';
     const corsHeaders = {
       'Access-Control-Allow-Origin': origin,
-      'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+      'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With, X-Request-ID, X-Earth-API-Version, Accept',
       'Access-Control-Expose-Headers': 'X-Earth-API-Version, X-Request-ID',
       'Access-Control-Allow-Credentials': 'true',
@@ -2090,7 +2090,7 @@ export default {
         status: 204,
         headers: {
           'Access-Control-Allow-Origin': origin ?? '*',
-          'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
+          'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, X-Requested-With, X-Earth-API-Version, Accept',
           'Access-Control-Expose-Headers': 'X-Request-ID, X-EARTH-API-Version',
           'Access-Control-Allow-Credentials': 'true',
@@ -2151,7 +2151,7 @@ export default {
     } else {
       headers.set('Access-Control-Allow-Origin', '*');
     }
-    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, X-Requested-With, X-Earth-API-Version, Accept');
     headers.set('Access-Control-Expose-Headers', 'X-Request-ID, X-EARTH-API-Version');
     headers.set('X-Request-ID', requestId);
