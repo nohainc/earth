@@ -47,7 +47,6 @@ String dashboardSectionTitle(String section) => switch (section) {
       'machines' => 'MACHINES & PRODUCTION',
       'public-finance' => 'PUBLIC FINANCE',
       'civic-rankings' => 'CIVIC RANKINGS',
-      'succession' => 'SUCCESSION & ESTATE',
       'history' => 'HISTORICAL ARCHIVE',
       'life' => 'LEGACY',
       'pantheon' => 'PANTHEON & MEMORIAL',
@@ -747,8 +746,6 @@ class Dashboard extends StatelessWidget {
         ];
       case 'civic-rankings':
         return [CivicRankingsPanel(state: state)];
-      case 'succession':
-        return [SuccessionPanel(state: state, busy: busy, action: action)];
       case 'history':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
       case 'life':

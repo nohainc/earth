@@ -58,7 +58,7 @@ class _SidebarState extends State<Sidebar> {
         'patents'
       ],
       ['corporation', 'city', 'civic', 'public-finance', 'civic-rankings'],
-      ['life', 'pantheon', 'dynasty', 'succession', 'history'],
+      ['life', 'pantheon', 'dynasty', 'history'],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -122,7 +122,6 @@ class _SidebarState extends State<Sidebar> {
           ('life', 'Life & Legacy', Icons.hourglass_empty_outlined),
           ('pantheon', 'Pantheon & Memorial', Icons.account_balance_outlined),
           ('dynasty', 'Family & Dynasty', Icons.account_tree_outlined),
-          ('succession', 'Succession & Estate', Icons.fork_right_outlined),
           ('history', 'Historical Archive', Icons.history_outlined),
         ]
       ),
