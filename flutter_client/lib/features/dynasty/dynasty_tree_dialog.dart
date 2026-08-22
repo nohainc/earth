@@ -27,6 +27,7 @@ class DynastyTreeDialog extends StatefulWidget {
   final String? initialMemberId;
   final bool isPageMode;
   final ValueChanged<String>? onNavigate;
+  final Future<void> Function()? onRefresh;
 
   const DynastyTreeDialog({
     super.key,
@@ -35,6 +36,7 @@ class DynastyTreeDialog extends StatefulWidget {
     this.initialMemberId,
     this.isPageMode = false,
     this.onNavigate,
+    this.onRefresh,
   });
 
   @override
@@ -244,6 +246,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                   setState(() =>
                       _successMessage = 'Dynasty creed updated successfully.');
                   await _loadDynastyData();
+                  await widget.onRefresh?.call();
                 }
               } catch (e) {
                 if (mounted)

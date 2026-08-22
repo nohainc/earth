@@ -468,6 +468,7 @@ class Dashboard extends StatelessWidget {
               state: state,
               isPageMode: true,
               onNavigate: onNavigate,
+              onRefresh: () => action(() => const EarthApi().world()),
             ),
             const SizedBox(height: 34),
             HistoricalDynastiesPanel(pantheon: pantheon),
