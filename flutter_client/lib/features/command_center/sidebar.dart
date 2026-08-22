@@ -77,6 +77,10 @@ class _SidebarState extends State<Sidebar> {
     final cityName = isCorporationMember && city is Map
         ? city['name']?.toString() ?? 'City & Services'
         : 'City & Services';
+    final userName = (widget.state.human['display_name'] ??
+            widget.state.human['name'] ??
+            'Life')
+        .toString();
     final groups = [
       (
         'NOW',
@@ -119,7 +123,7 @@ class _SidebarState extends State<Sidebar> {
       (
         'LIFE',
         [
-          ('life', 'Life', Icons.hourglass_empty_outlined),
+          ('life', userName, Icons.hourglass_empty_outlined),
           ('dynasty', 'Family', Icons.account_tree_outlined),
           ('pantheon', 'Memorial', Icons.account_balance_outlined),
           ('history', 'Archive', Icons.history_outlined),
