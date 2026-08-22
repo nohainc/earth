@@ -423,14 +423,6 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             mainAxisAlignment: MainAxisAlignment.center,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(
-                Icons.account_tree_outlined,
-                color: widget.isPageMode
-                    ? EarthColors.textMuted
-                    : EarthColors.goldMetallic,
-                size: 22,
-              ),
-              const SizedBox(width: 8),
               Flexible(
                 child: Text(
                   dynastyName.toUpperCase(),

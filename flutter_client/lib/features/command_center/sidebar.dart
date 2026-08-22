@@ -82,6 +82,7 @@ class _SidebarState extends State<Sidebar> {
             'Life')
         .toString();
     final userName = fullUserName.split(RegExp(r'\s+')).first;
+    final dynastyName = widget.state.life['dynastyName']?.toString();
     final groups = [
       (
         'NOW',
@@ -125,7 +126,8 @@ class _SidebarState extends State<Sidebar> {
         'LIFE',
         [
           ('life', userName, Icons.person_outline),
-          ('dynasty', 'Family', Icons.account_tree_outlined),
+          ('dynasty', dynastyName?.isNotEmpty == true ? dynastyName! : 'Dynasty',
+              Icons.account_tree_outlined),
           ('pantheon', 'Memorial', Icons.account_balance_outlined),
           ('history', 'Archive', Icons.history_outlined),
         ]
