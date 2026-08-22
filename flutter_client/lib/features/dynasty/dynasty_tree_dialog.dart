@@ -217,7 +217,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             TextField(
               controller: mottoCtrl,
               decoration: const InputDecoration(
-                labelText: 'House Motto / Creed',
+                  labelText: 'Dynasty Motto / Creed',
                 labelStyle:
                     TextStyle(color: EarthColors.textMuted, fontSize: 11),
               ),
@@ -268,7 +268,9 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
     final dialogWidth = math.min(1060.0, screenSize.width - 24);
     final dialogHeight = math.min(740.0, screenSize.height - 24);
 
-    final dynastyName = (_dynasty['dynasty_name'] ?? 'House Vance').toString();
+    final dynastyName = (_dynasty['dynasty_name'] ?? 'Dynasty')
+        .toString()
+        .replaceFirst(RegExp(r'^house\s+', caseSensitive: false), '');
     final motto =
         (_dynasty['motto'] ?? 'From the Red Dust We Build Eternity').toString();
     final legacyPoints = _dynasty['legacy_points'] ?? 0;
@@ -422,7 +424,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             mainAxisSize: MainAxisSize.min,
             children: [
               Icon(
-                Icons.shield_outlined,
+                Icons.account_tree_outlined,
                 color: widget.isPageMode
                     ? EarthColors.textMuted
                     : EarthColors.goldMetallic,

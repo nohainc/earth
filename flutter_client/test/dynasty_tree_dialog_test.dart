@@ -135,7 +135,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('HOUSE VANCE'), findsOneWidget);
+    expect(find.text('VANCE'), findsOneWidget);
     expect(find.text('"From the Red Dust We Build Eternity"'), findsOneWidget);
     expect(find.text('Cassian Vance I'), findsWidgets);
     expect(find.text('Amara Vance'), findsOneWidget);
