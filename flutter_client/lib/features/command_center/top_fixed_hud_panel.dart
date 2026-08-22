@@ -357,7 +357,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                 elevation: _menuElevation,
                 shape: _menuShape,
                 onSelected: (value) {
-                  if (value == 'security') {
+                  if (value == 'life') {
+                    widget.onNavigate?.call('life');
+                  } else if (value == 'security') {
                     widget.onSecurity?.call();
                   } else if (value == 'theme') {
                     showThemeCustomizerDialog(context);
@@ -380,7 +382,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                 },
                 itemBuilder: (context) => [
                   PopupMenuItem(
-                    enabled: false,
+                    value: 'life',
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
