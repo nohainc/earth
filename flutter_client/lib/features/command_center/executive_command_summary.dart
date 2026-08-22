@@ -551,7 +551,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _filterChip('ALL', 'ALL (${decisionItems.length})'),
+                  _filterChip(
+                      'ALL', 'ALL (${decisionItems.length + opportunities.length})'),
                   const SizedBox(width: 6),
                   _filterChip('CRITICAL', 'CRITICAL',
                       color: Colors.orangeAccent),
@@ -619,7 +620,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             ],
           ),
           const SizedBox(height: 8),
-          ...opportunities.take(2).map((opp) {
+          ...opportunities.map((opp) {
             final mapOpp = Map<String, dynamic>.from(opp as Map);
             return _buildOpportunityStrip(mapOpp);
           }),
