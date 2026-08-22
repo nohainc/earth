@@ -1254,6 +1254,7 @@ const worker = {
       if (!parsed.ok) return parsed.response;
       const motto = parsed.value.motto?.trim() ?? '';
       const dynastyName = parsed.value.dynastyName?.trim();
+      if (dynastyName !== undefined && dynastyName.length < 2) return Response.json({ ok: false, error: 'Dynasty name must be at least 2 characters' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => updateDynastyMotto(repository, viewer.email || 'amara@earth.local', motto, dynastyName, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

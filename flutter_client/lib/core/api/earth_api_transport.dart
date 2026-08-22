@@ -47,7 +47,7 @@ class EarthApiTransport {
       headers['authorization'] = 'Bearer $token';
     }
     final correlationId = body?['correlationId']?.toString().trim();
-    if (method == 'POST' || method == 'DELETE') {
+    if (method == 'POST' || method == 'DELETE' || method == 'PATCH') {
       headers['Idempotency-Key'] =
           correlationId != null && correlationId.isNotEmpty
               ? correlationId
@@ -58,7 +58,9 @@ class EarthApiTransport {
         ? await client.post(uri, headers: headers, body: encodedBody)
         : method == 'DELETE'
             ? await client.delete(uri, headers: headers)
-            : await client.get(uri, headers: headers);
+            : method == 'PATCH'
+                ? await client.patch(uri, headers: headers, body: encodedBody)
+                : await client.get(uri, headers: headers);
     final apiVersion = response.headers['x-earth-api-version'];
     if (apiVersion != null && apiVersion != _apiVersion) {
       throw EarthApiException(

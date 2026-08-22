@@ -236,6 +236,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
           ElevatedButton(
             key: const Key('btn-save-motto'),
             onPressed: () async {
+              if (nameCtrl.text.trim().length < 2) return;
               Navigator.of(ctx).pop();
               try {
                 await widget.api.updateDynastyMotto(
