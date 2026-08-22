@@ -38,8 +38,41 @@ Widget _lifecycleTopicHeading(BuildContext context, String title,
 
 class LifeTodayPanel extends StatelessWidget {
   final EarthState state;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function())? action;
 
-  const LifeTodayPanel({super.key, required this.state});
+  const LifeTodayPanel({super.key, required this.state, this.busy = false, this.action});
+
+  Future<void> _editName(BuildContext context) async {
+    final controller = TextEditingController(
+        text: (state.human['display_name'] ?? state.human['name'] ?? '').toString());
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit your name'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 80,
+          decoration: const InputDecoration(labelText: 'Name and surname'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
+          FilledButton(
+            onPressed: busy || controller.text.trim().length < 2 || action == null
+                ? null
+                : () async {
+                    final name = controller.text.trim();
+                    Navigator.pop(dialogContext);
+                    await action!(() => const EarthApi().updateDisplayName(name));
+                  },
+            child: const Text('SAVE'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -98,16 +131,19 @@ class LifeTodayPanel extends StatelessWidget {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Center(
-            child: Text(
-              fullName.toUpperCase(),
-              textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: cyanAccentColor,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .8,
-              ),
-            ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Text(fullName.toUpperCase(), textAlign: TextAlign.center,
+                  style: const TextStyle(color: cyanAccentColor, fontSize: 16,
+                      fontWeight: FontWeight.w900, letterSpacing: .8)),
+              if (action != null) ...[
+                const SizedBox(width: 7),
+                IconButton(
+                  tooltip: 'Edit name',
+                  icon: const Icon(Icons.edit_outlined, size: 15, color: mutedColor),
+                  onPressed: busy ? null : () => _editName(context),
+                ),
+              ],
+            ]),
           ),
           const SizedBox(height: 12),
           Wrap(

@@ -761,7 +761,8 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-                  final lifeToday = LifeTodayPanel(state: state);
+              final lifeToday = LifeTodayPanel(
+                  state: state, busy: busy, action: action);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,

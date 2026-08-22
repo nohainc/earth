@@ -6,6 +6,13 @@ extension EarthApiAuth on EarthApi {
   Future<Map<String, dynamic>> session() async =>
       (await _request('/api/auth/me')) as Map<String, dynamic>;
 
+  Future<EarthState> updateDisplayName(String displayName) async {
+    await _request('/api/auth/profile', method: 'PATCH', body: {
+      'displayName': displayName.trim(),
+    });
+    return world();
+  }
+
   Future<Map<String, dynamic>> login(String email, String password,
       {String? otp}) async {
     final response = (await _request('/api/auth/login', method: 'POST', body: {

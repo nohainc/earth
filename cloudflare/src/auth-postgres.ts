@@ -56,6 +56,14 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
   });
 }
 
+export async function updateDisplayName(repository: PostgresRepository, input: { humanId: string; displayName: string }): Promise<Record<string, unknown>> {
+  const result = await repository.query<{ id: string; display_name: string }>(
+    'UPDATE humans SET display_name = $1 WHERE id = $2 RETURNING id, display_name',
+    [input.displayName, input.humanId]);
+  if (!result.rows[0]) throw new Error('Human not found');
+  return { ok: true, human: result.rows[0] };
+}
+
 export async function loginIdentity(repository: PostgresRepository, input: { email: string; password: string; otp: string; validTotp: (secret: string, code: string) => Promise<boolean> }): Promise<Record<string, unknown>> {
   const attempt = (await repository.query<{ window_started_at: string; attempt_count: number; blocked_until: string | null }>('SELECT window_started_at, attempt_count, blocked_until FROM auth_login_attempts WHERE email = $1', [input.email])).rows[0];
   if (attempt?.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) throw new Error('Too many login attempts. Try again later.');

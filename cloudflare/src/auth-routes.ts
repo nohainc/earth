@@ -2,12 +2,22 @@ import { bytesToBase32, validTotp, digest } from './auth-crypto';
 import { cookieValue, extractToken, currentHuman, sessionCookie } from './auth-session';
 import { parseJsonBody } from './request-validation';
 import { withRepository } from './repository';
-import { rebornIdentity, claimHeirIdentity } from './auth-postgres';
+import { rebornIdentity, claimHeirIdentity, updateDisplayName } from './auth-postgres';
 
 export async function authenticatedAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
     const human = await currentHuman(request, env);
     return Response.json({ authenticated: Boolean(human), human, persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/auth/profile' && request.method === 'PATCH') {
+    const human = await currentHuman(request, env);
+    if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ displayName?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const displayName = parsed.value.displayName?.trim() ?? '';
+    if (displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Name must be 2–80 characters' }, { status: 400 });
+    const result = await withRepository(env, (repository) => updateDisplayName(repository, { humanId: human.id, displayName }));
+    return Response.json(result);
   }
   if (url.pathname === '/api/auth/mfa/enroll' && request.method === 'POST') {
     const human = await currentHuman(request, env);
