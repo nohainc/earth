@@ -303,6 +303,23 @@ class BusinessPanel extends StatelessWidget {
                     onPressed: busy ? null : () => _rename(context, businessId, businessName)),
               ])),
               const SizedBox(height: 12),
+              if (isDistressed || isInsolvent || profit < 0) ...[
+                Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orangeAccent.withValues(alpha: .12),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orangeAccent.withValues(alpha: .4)),
+                  ),
+                  child: const Row(children: [
+                    Icon(Icons.warning_amber_outlined, color: Colors.orangeAccent, size: 18),
+                    SizedBox(width: 8),
+                    Expanded(child: Text('FINANCIAL DISTRESS', style: TextStyle(color: Colors.orangeAccent, fontWeight: FontWeight.w800, fontSize: 11))),
+                  ]),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (portfolio.length > 1) ...[
                 _businessPortfolio(portfolio),
                 const SizedBox(height: 12),

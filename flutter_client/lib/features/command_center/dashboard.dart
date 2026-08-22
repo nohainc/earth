@@ -505,9 +505,9 @@ class Dashboard extends StatelessWidget {
                         child: Column(
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
-                          managerOverview,
+                          business,
                           const SizedBox(height: 34),
-                          business
+                          managerOverview
                         ])),
                     const SizedBox(width: 56),
                     Expanded(
@@ -526,9 +526,9 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  managerOverview,
-                  const SizedBox(height: 34),
                   business,
+                  const SizedBox(height: 34),
+                  managerOverview,
                   const SizedBox(height: 34),
                   aiAssistant,
                   const SizedBox(height: 34),
