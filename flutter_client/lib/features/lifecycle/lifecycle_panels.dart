@@ -56,6 +56,13 @@ class LifeTodayPanel extends StatelessWidget {
 
     final cards = <(String, String, String, IconData, Color)>[
       (
+        'AGE / STATUS',
+        age == null ? 'UNAVAILABLE' : '$age',
+        lifeStatus?.toUpperCase() ?? 'ACTIVE',
+        Icons.person_outline,
+        cyanAccentColor
+      ),
+      (
         'HEALTH',
         health == null ? 'UNAVAILABLE' : '${health.toStringAsFixed(0)}%',
         'Personal wellbeing',
@@ -101,14 +108,6 @@ class LifeTodayPanel extends StatelessWidget {
                 letterSpacing: .8,
               ),
             ),
-          ),
-          const SizedBox(height: 12),
-          Text(
-            age == null
-                ? 'Your current life stage is unavailable.'
-                : 'Age $age · ${lifeStatus?.toUpperCase() ?? 'ACTIVE'}',
-            style: const TextStyle(
-                color: inkColor, fontSize: 12, fontWeight: FontWeight.w700),
           ),
           const SizedBox(height: 12),
           Wrap(
