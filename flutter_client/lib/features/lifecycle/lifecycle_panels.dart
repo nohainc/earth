@@ -50,6 +50,9 @@ class LifeTodayPanel extends StatelessWidget {
     final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
     final legacy = asDouble(human['legacy'] ?? life['legacy']);
     final businessName = state.business['name']?.toString();
+    final fullName =
+        (human['display_name'] ?? human['name'] ?? 'YOUR LIFE').toString().trim();
+    final firstName = fullName.split(RegExp(r'\s+')).first;
     final lifeStatus =
         life['status']?.toString() ?? human['life_status']?.toString();
 
@@ -91,9 +94,7 @@ class LifeTodayPanel extends StatelessWidget {
         children: [
           Center(
             child: Text(
-              (human['display_name'] ?? human['name'] ?? 'YOUR LIFE')
-                  .toString()
-                  .toUpperCase(),
+              firstName.toUpperCase(),
               textAlign: TextAlign.center,
               style: const TextStyle(
                 color: cyanAccentColor,
