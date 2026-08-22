@@ -50,6 +50,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'succession' => 'SUCCESSION & ESTATE',
       'history' => 'HISTORICAL ARCHIVE',
       'life' => 'LEGACY',
+      'pantheon' => 'PANTHEON & MEMORIAL',
       'contracts' => 'CONTRACTS',
       'finance' => 'FINANCE',
       'activity' => 'ACTIVITY & EVENTS',
@@ -759,8 +760,7 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final lifeToday = LifeTodayPanel(state: state);
-              final pantheonPanel = PantheonPanel(pantheon: pantheon);
+                  final lifeToday = LifeTodayPanel(state: state);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -780,7 +780,6 @@ class Dashboard extends StatelessWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          pantheonPanel,
                         ],
                       ),
                     ),
@@ -794,12 +793,13 @@ class Dashboard extends StatelessWidget {
                   const SizedBox(height: 34),
                   succession,
                   const SizedBox(height: 34),
-                  pantheonPanel,
                 ],
               );
             },
           ),
         ];
+      case 'pantheon':
+        return [PantheonPanel(pantheon: pantheon)];
       case 'contracts':
         return [
           LayoutBuilder(

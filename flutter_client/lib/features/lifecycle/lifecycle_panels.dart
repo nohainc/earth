@@ -45,17 +45,12 @@ class LifeTodayPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final human = state.human;
     final life = state.life;
-    final city = state.institutions['city'];
-    final cityMap = city is Map
-        ? Map<String, dynamic>.from(city)
-        : const <String, dynamic>{};
     final health = asDouble(human['health'] ?? human['vitality']);
     final energy = asDouble(human['energy'] ?? human['stamina']);
     final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
     final legacy = asDouble(human['legacy'] ?? life['legacy']);
     final businessName = state.business['name']?.toString();
     final membership = state.membership;
-    final cityName = cityMap['name']?.toString();
     final lifeStatus =
         life['status']?.toString() ?? human['life_status']?.toString();
 
@@ -68,18 +63,11 @@ class LifeTodayPanel extends StatelessWidget {
         health != null && health < 40 ? Colors.orangeAccent : Colors.tealAccent
       ),
       (
-        'ENERGY',
+        'LIFE ENERGY',
         energy == null ? 'UNAVAILABLE' : '${energy.toStringAsFixed(0)}%',
         'Daily capacity',
         Icons.bolt_outlined,
         Colors.amberAccent
-      ),
-      (
-        'RESIDENCE',
-        cityName?.toUpperCase() ?? 'INDEPENDENT',
-        cityName == null ? 'No city affiliation' : 'Current city',
-        Icons.location_city_outlined,
-        cyanAccentColor
       ),
       (
         'LEGACY',
@@ -229,7 +217,7 @@ class SuccessionPanel extends StatelessWidget {
     final estimatedNet = (credits - estimatedTax).clamp(0.0, double.infinity);
 
     return EarthPanel(
-      title: 'LIFE & LEGACY / SUCCESSION PLAN',
+      title: 'SUCCESSION PLAN',
       showSurface: false,
       contentPadding: EdgeInsets.zero,
       helpAfterTitle: true,
