@@ -82,7 +82,9 @@ class _SidebarState extends State<Sidebar> {
             'Life')
         .toString();
     final userName = fullUserName.split(RegExp(r'\s+')).first;
-    final dynastyName = widget.state.life['dynastyName']?.toString();
+    final dynastyName = widget.state.life['dynastyName']
+        ?.toString()
+        .replaceFirst(RegExp(r'^house\s+', caseSensitive: false), '');
     final groups = [
       (
         'NOW',

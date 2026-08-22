@@ -438,6 +438,16 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                 ),
               ),
               const SizedBox(width: 6),
+              const Text(
+                'DYNASTY',
+                style: TextStyle(
+                  color: EarthColors.textMuted,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 12,
+                  letterSpacing: 1.0,
+                ),
+              ),
+              const SizedBox(width: 6),
               InkWell(
                 key: const Key('btn-edit-motto-dialog'),
                 onTap: _showEditMottoDialog,
