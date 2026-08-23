@@ -14,7 +14,6 @@ import '../operations/ai_panel.dart';
 import '../operations/business_panel.dart';
 import '../operations/machines_panel.dart';
 import '../operations/technology_panel.dart';
-import '../operations/real_estate_panel.dart';
 import '../operations/buildings_hub_screen.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
@@ -648,7 +647,7 @@ class Dashboard extends StatelessWidget {
                           const SizedBox(height: 34),
                           humanServices,
                           const SizedBox(height: 34),
-                          RealEstateDistrictPanel(state: state, busy: busy, action: action),
+                          BuildingsHubScreen(state: state, busy: busy, action: action),
                         ],
                       ),
                     ),
@@ -684,7 +683,7 @@ class Dashboard extends StatelessWidget {
                   const SizedBox(height: 34),
                   humanServices,
                   const SizedBox(height: 34),
-                  RealEstateDistrictPanel(state: state, busy: busy, action: action),
+                  BuildingsHubScreen(state: state, busy: busy, action: action),
                   const SizedBox(height: 34),
                   cityImpact,
                 ],

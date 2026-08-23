@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/core/models/earth_state.dart';
-import 'package:earth_client/features/operations/real_estate_panel.dart';
 import 'package:earth_client/features/operations/real_estate_dialogs.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 import 'package:earth_client/features/operations/building_detail_upgrade_dialog.dart';
@@ -152,56 +151,6 @@ void main() {
         'description': 'Solar array field.',
       },
     ],
-  });
-
-  testWidgets('RealEstateDistrictPanel renders zoning visualizer, self-contained buildings, and civic dividends', (tester) async {
-    tester.view.physicalSize = const Size(1200, 900);
-    tester.view.devicePixelRatio = 1.0;
-    addTearDown(() {
-      tester.view.resetPhysicalSize();
-      tester.view.resetDevicePixelRatio();
-    });
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: RealEstateDistrictPanel(
-              state: state,
-              busy: false,
-              action: (cb) async {},
-            ),
-          ),
-        ),
-      ),
-    );
-
-    // Verify Title & Metrics
-    expect(find.text('URBAN DISTRICT & REAL ESTATE INFRASTRUCTURE'), findsOneWidget);
-    expect(find.textContaining('1 SITES'), findsOneWidget);
-    expect(find.text('+560 CRD'), findsOneWidget); // 620 - 60 net yield
-    expect(find.textContaining('10 SHARES'), findsOneWidget);
-
-    // Verify Zoning Visualizer
-    expect(find.text('CITY DISTRICT LAND ZONING & FOOTPRINT MAP'), findsOneWidget);
-    expect(find.textContaining('Formula: 8 + ⌊Pop/5⌋'), findsOneWidget);
-
-    // Verify Building Cards
-    expect(find.text('Nova Molecular Bistro'), findsOneWidget);
-    expect(find.text('PRIVATE ESTATE'), findsOneWidget);
-    expect(find.text('CIVIC UTILITY'), findsOneWidget);
-    expect(find.text('PUBLIC INVESTMENT'), findsOneWidget);
-
-    // Verify Policy Selectors & Buttons
-    expect(find.text('Balanced (1.0x)'), findsNWidgets(1));
-    expect(find.text('UPGRADE (TIER 2)'), findsOneWidget);
-    expect(find.text('DEMOLISH / RECYCLE'), findsOneWidget);
-
-    // Verify Civic Dividends Section
-    expect(find.text('CIVIC DIVIDENDS & PUBLIC MEGAPROJECT SHARES'), findsOneWidget);
-    expect(find.text('GAME DAY 183 PAYOUT'), findsOneWidget);
-    expect(find.text('TOTAL SURPLUS: +12000 CRD'), findsOneWidget);
-    expect(find.text('BASE UBI: +560 CRD'), findsOneWidget);
   });
 
   testWidgets('BuildingsHubScreen renders 3 tabs and switches between Estates, Planner, and Catalog', (tester) async {
