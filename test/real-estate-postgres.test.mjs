@@ -34,9 +34,9 @@ test('getCityDistrictZoning calculates total slots, occupancy, and 30% civic quo
     if (sql.includes('FROM buildings')) {
       return {
         rows: [
-          { slot_footprint: 1, ownership_class: 'private', ownership_type: 'private' },
-          { slot_footprint: 2, ownership_class: 'private', ownership_type: 'private' },
-          { slot_footprint: 3, ownership_class: 'civic', ownership_type: 'municipal' },
+          { slot_footprint: 1, ownership_class: 'private' },
+          { slot_footprint: 2, ownership_class: 'private' },
+          { slot_footprint: 3, ownership_class: 'civic' },
         ],
         rowCount: 3,
       };

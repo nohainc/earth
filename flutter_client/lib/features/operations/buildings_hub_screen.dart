@@ -49,8 +49,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final population = asIntOr(zoning['population'], 12);
 
     final privateBuildings = buildings.where((b) => b['owner_id'] == viewerId && b['status'] != 'closed').toList();
-    final publicBuildings = buildings.where((b) => b['ownership_class'] == 'public_investment' || b['ownership_type'] == 'public_investment').toList();
-    final civicBuildings = buildings.where((b) => b['ownership_class'] == 'civic' || b['ownership_type'] == 'municipal').toList();
+    final publicBuildings = buildings.where((b) => b['ownership_class'] == 'public_investment').toList();
+    final civicBuildings = buildings.where((b) => b['ownership_class'] == 'civic').toList();
 
     final totalDailyPrivateYield = privateBuildings.fold<double>(
       0,
@@ -225,8 +225,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         : buildings.where((b) {
             if (b['status'] == 'closed') return false;
             final cat = b['category']?.toString() ?? '';
-            final oClass = b['ownership_class']?.toString() ?? b['ownership_type']?.toString() ?? '';
-            if (_selectedCategory == 'civic') return oClass == 'civic' || oClass == 'municipal' || oClass == 'public_investment';
+            final oClass = b['ownership_class']?.toString() ?? 'private';
+            if (_selectedCategory == 'civic') return oClass == 'civic' || oClass == 'public_investment';
             if (_selectedCategory == 'commercial') return cat == 'commercial';
             if (_selectedCategory == 'energy') return cat == 'energy';
             if (_selectedCategory == 'manufacturing') return cat == 'manufacturing' || cat == 'industrial';
@@ -826,10 +826,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final condition = asDoubleOr(b['condition'], 100);
     final footprint = asIntOr(b['slot_footprint'], 1);
     final policy = b['operating_policy']?.toString() ?? 'balanced';
-    final ownershipClass = b['ownership_class']?.toString() ?? b['ownership_type']?.toString() ?? 'private';
+    final ownershipClass = b['ownership_class']?.toString() ?? 'private';
     final isOwner = b['owner_id']?.toString() == viewerId;
     final isPublic = ownershipClass == 'public_investment';
-    final isCivic = ownershipClass == 'civic' || ownershipClass == 'municipal';
+    final isCivic = ownershipClass == 'civic';
 
     final baseRev = asDoubleOr(b['base_revenue_crd'], 0);
     final resOutType = b['resource_output_type']?.toString();

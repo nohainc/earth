@@ -121,24 +121,30 @@ export async function executeProposal(repository: PostgresRepository, input: { p
 
       await tx.query(
         `INSERT INTO buildings (
-          id, city_id, owner_id, ownership_type,
-          building_type, name, tier, condition, max_staff_slots,
+          id, city_id, owner_id, ownership_type, ownership_class,
+          building_type, name, tier, condition, slot_footprint,
+          operating_policy, auto_repair_enabled,
           upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
-          base_revenue_crd, status, created_game_day
-        ) VALUES ($1, $2, $2, 'municipal', $3, $4, $5, 100, $6, $7, $8, $9, $10, $11, $12, 'active', $13)`,
+          daily_operating_credits, base_revenue_crd,
+          resource_output_type, resource_output_amount,
+          patent_license_status, status, created_game_day
+        ) VALUES ($1, $2, $2, 'municipal', 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, 'active', 'active', $16)`,
         [
           buildingId,
           current.institution_id,
           spec.type,
           current.title || spec.name,
           spec.tier,
-          spec.maxStaffSlots,
-          spec.upkeepEnergy,
-          spec.upkeepFood,
-          spec.upkeepMaterials,
-          spec.upkeepComponents,
-          spec.upkeepCompute,
-          spec.baseDailyRevenueCrd,
+          spec.slotFootprint ?? 2,
+          spec.dailyEnergyUpkeep ?? 0,
+          spec.dailyFoodUpkeep ?? 0,
+          spec.dailyMaterialsUpkeep ?? 0,
+          spec.dailyComponentsUpkeep ?? 0,
+          spec.dailyComputeUpkeep ?? 0,
+          spec.dailyStaffingCredits ?? 0,
+          spec.dailyCreditRevenue ?? 0,
+          spec.resourceOutputType ?? 'credits',
+          spec.resourceOutputAmount ?? 0,
           day,
         ],
       );

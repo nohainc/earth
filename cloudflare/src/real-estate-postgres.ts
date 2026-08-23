@@ -112,9 +112,8 @@ export async function getCityDistrictZoning(
   const bldRes = await repository.query<{
     slot_footprint: number;
     ownership_class: string;
-    ownership_type: string;
   }>(
-    "SELECT slot_footprint, ownership_class, ownership_type FROM buildings WHERE city_id = $1 AND status NOT IN ('closed', 'foreclosed')",
+    "SELECT slot_footprint, ownership_class FROM buildings WHERE city_id = $1 AND status NOT IN ('closed', 'foreclosed')",
     [cityId],
   );
 
@@ -123,7 +122,7 @@ export async function getCityDistrictZoning(
 
   for (const row of bldRes.rows) {
     const footprint = Math.max(1, Number(row.slot_footprint || 1));
-    const oClass = (row.ownership_class || row.ownership_type || 'private').toLowerCase();
+    const oClass = (row.ownership_class || 'private').toLowerCase();
     if (oClass === 'private') {
       usedPrivateSlots += footprint;
     } else {

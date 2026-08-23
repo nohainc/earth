@@ -164,7 +164,7 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
   }>("SELECT * FROM buildings WHERE status NOT IN ('closed', 'foreclosed')");
 
   for (const bld of bldQuery.rows) {
-    const oClass = (bld.ownership_class || bld.ownership_type || 'private').toLowerCase();
+    const oClass = (bld.ownership_class || 'private').toLowerCase();
     const policy = (bld.operating_policy || 'balanced').toLowerCase();
     const condition = Number(bld.condition || 100);
 
@@ -333,7 +333,7 @@ async function settleCivicDividends(tx: PostgresRepository, day: number): Promis
 
     // Calculate total civic surplus from municipal buildings
     const civicBldQuery = await tx.query<{ total_rev: string }>(
-      "SELECT COALESCE(SUM(base_revenue_crd), 0) AS total_rev FROM buildings WHERE city_id = $1 AND (ownership_class = 'civic' OR ownership_type = 'municipal') AND status = 'active'",
+      "SELECT COALESCE(SUM(COALESCE(resource_output_amount, base_revenue_crd)), 0) AS total_rev FROM buildings WHERE city_id = $1 AND ownership_class = 'civic' AND status = 'active'",
       [cityId],
     );
     const totalCivicSurplus = Number(civicBldQuery.rows[0]?.total_rev ?? 0);
