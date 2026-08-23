@@ -97,10 +97,8 @@ void main() {
   });
 
   group('ActivityPanel keeps connection status out of the workspace', () {
-    testWidgets('shows the activity stream frame and refresh action',
+    testWidgets('shows the direct alerts title and no polling banner',
         (tester) async {
-      var refreshed = false;
-
       await tester.pumpWidget(
         MaterialApp(
           home: Scaffold(
@@ -109,7 +107,7 @@ void main() {
                 events: const [],
                 notifications: const [],
                 connectionStatus: LiveConnectionStatus.polling,
-                onRefresh: () => refreshed = true,
+                onRefresh: () {},
                 onMarkRead: (_) async {},
                 onMarkAllRead: () async {},
               ),
@@ -120,9 +118,6 @@ void main() {
 
       expect(find.text('DIRECT ALERTS & NOTIFICATIONS'), findsOneWidget);
       expect(find.text('POLLING MODE (PERIODIC SYNC)'), findsNothing);
-
-      await tester.tap(find.byTooltip('Refresh alerts'));
-      expect(refreshed, isTrue);
     });
 
     testWidgets('does not show an offline banner inside Activity',

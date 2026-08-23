@@ -71,12 +71,11 @@ void main() {
     expect(find.text('Notification #1'), findsOneWidget);
 
     // 6. Mark all read
-    await tester.tap(find.text('MARK ALL READ'));
+    await tester.tap(find.text('MARK ALL AS READ'));
     await tester.pumpAndSettle();
     expect(markedAllRead, isTrue);
 
-    // 7. Refresh action
-    await tester.tap(find.byTooltip('Refresh alerts'));
-    expect(refreshed, isTrue);
+    // 7. Refresh button is deleted
+    expect(find.byTooltip('Refresh alerts'), findsNothing);
   });
 }

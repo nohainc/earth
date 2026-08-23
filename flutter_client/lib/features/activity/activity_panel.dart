@@ -65,38 +65,23 @@ class _ActivityPanelState extends State<ActivityPanel> {
           ? 'DIRECT ALERTS & NOTIFICATIONS ($displayUnread)'
           : 'DIRECT ALERTS & NOTIFICATIONS',
       showSurface: false,
-      trailing: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          if (validNotifications.isNotEmpty && displayUnread > 0) ...[
-            TextButton.icon(
-              onPressed: () async {
-                for (final n in validNotifications) {
-                  if (n['id'] != null) {
-                    _locallyReadIds.add(n['id'].toString());
-                  }
-                }
-                setState(() {});
-                await widget.onMarkAllRead();
-              },
-              icon: Icon(Icons.done_all_rounded, size: 13, color: context.primaryColor),
-              label: Text(
-                'MARK ALL READ',
-                style: context.controlStyle.copyWith(color: context.primaryColor),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          Tooltip(
-            message: 'Refresh alerts',
-            child: EarthButton(
-              label: 'REFRESH',
-              icon: Icons.refresh_rounded,
-              onPressed: widget.onRefresh,
-            ),
-          ),
-        ],
-      ),
+      trailing: validNotifications.isNotEmpty
+          ? EarthButton(
+              label: 'MARK ALL AS READ',
+              icon: Icons.done_all_rounded,
+              onPressed: displayUnread > 0
+                  ? () async {
+                      for (final n in validNotifications) {
+                        if (n['id'] != null) {
+                          _locallyReadIds.add(n['id'].toString());
+                        }
+                      }
+                      setState(() {});
+                      await widget.onMarkAllRead();
+                    }
+                  : null,
+            )
+          : null,
       child: validNotifications.isEmpty
           ? const EarthEmptyState(
               message: 'No pending notifications. All personal systems nominal.',
