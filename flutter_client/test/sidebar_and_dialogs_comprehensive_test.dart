@@ -117,7 +117,7 @@ void main() {
     expect(find.text('Communities'), findsOneWidget);
   });
 
-  testWidgets('Sidebar displays active community name in CIVIC group when affiliated', (tester) async {
+  testWidgets('Sidebar displays all joined community names in CIVIC group when affiliated', (tester) async {
     const state = EarthState({
       'clock': {'day': 185, 'minute': 720},
       'human': {'name': 'Amara Vance'},
@@ -128,7 +128,12 @@ void main() {
           'id': 'COM-001',
           'name': 'Carthage Artisans',
           'my_role': 'founder',
-        }
+        },
+        {
+          'id': 'COM-002',
+          'name': 'Solar Engineers',
+          'my_role': 'member',
+        },
       ],
       'business': {},
       'technology': {'research': {}},
@@ -159,12 +164,13 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Carthage Artisans'), findsOneWidget);
+    expect(find.text('Solar Engineers'), findsOneWidget);
     expect(find.text('All Communities'), findsOneWidget);
 
-    await tester.tap(find.text('Carthage Artisans'));
+    await tester.tap(find.text('Solar Engineers'));
     await tester.pumpAndSettle();
 
-    expect(navigatedTo, 'my-community');
+    expect(navigatedTo, 'my-community:COM-002');
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',

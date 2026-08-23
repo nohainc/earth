@@ -45,7 +45,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'civic' => 'PUBLIC',
       'corporation' => 'CORPORATIONS',
       'city' => 'MY CITY',
-      'my-community' => 'MY COMMUNITY',
+      String s when s.startsWith('my-community') => 'MY COMMUNITY',
       'communities' => 'COMMUNITIES',
       'dynasty' => 'FAMILY',
       'technology' => 'TECHNOLOGY',
@@ -684,10 +684,12 @@ class Dashboard extends StatelessWidget {
             },
           ),
         ];
-      case 'my-community':
+      case String s when s.startsWith('my-community'):
+        final targetId = s.contains(':') ? s.split(':').last : null;
         return [
           MyCommunityPanel(
-            panelKey: sectionKeys['my-community'],
+            panelKey: sectionKeys[s] ?? sectionKeys['my-community'],
+            communityId: targetId,
             state: state,
             busy: busy,
             action: action,

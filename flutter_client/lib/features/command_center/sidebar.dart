@@ -91,8 +91,7 @@ class _SidebarState extends State<Sidebar> {
         ? city['name']?.toString() ?? 'City & Services'
         : 'City & Services';
 
-    final myCommunity = widget.state.myCommunity;
-    final communityName = myCommunity?['name']?.toString() ?? 'Community';
+    final myCommunities = widget.state.myCommunities;
 
     final fullUserName = (widget.state.human['name'] ??
             widget.state.human['display_name'] ??
@@ -213,16 +212,16 @@ class _SidebarState extends State<Sidebar> {
               Icons.location_city_outlined,
               null,
             ),
-          if (myCommunity != null)
+          for (final comm in myCommunities)
             (
-              'my-community',
-              communityName,
+              'my-community:${comm['id']}',
+              comm['name']?.toString() ?? 'Community',
               Icons.diversity_3_outlined,
               null,
             ),
           (
             'communities',
-            myCommunity != null ? 'All Communities' : 'Communities',
+            myCommunities.isNotEmpty ? 'All Communities' : 'Communities',
             Icons.groups_outlined,
             null,
           ),

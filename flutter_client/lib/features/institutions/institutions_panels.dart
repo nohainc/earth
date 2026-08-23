@@ -1402,6 +1402,7 @@ class CommunitiesPanel extends StatelessWidget {
 /// Dedicated management and activity panel for the player's active community.
 class MyCommunityPanel extends StatefulWidget {
   final Key? panelKey;
+  final String? communityId;
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
@@ -1410,6 +1411,7 @@ class MyCommunityPanel extends StatefulWidget {
   const MyCommunityPanel({
     super.key,
     this.panelKey,
+    this.communityId,
     required this.state,
     required this.busy,
     required this.action,
@@ -1426,6 +1428,17 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
   bool _loading = false;
   String? _loadedCommunityId;
 
+  Map<String, dynamic>? get _community {
+    if (widget.communityId != null) {
+      for (final c in widget.state.communities) {
+        if (c is Map && c['id']?.toString() == widget.communityId) {
+          return Map<String, dynamic>.from(c as Map);
+        }
+      }
+    }
+    return widget.state.myCommunity;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -1435,15 +1448,15 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
   @override
   void didUpdateWidget(covariant MyCommunityPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final myComm = widget.state.myCommunity;
-    final currentId = myComm?['id']?.toString();
-    if (currentId != _loadedCommunityId) {
+    final comm = _community;
+    final currentId = comm?['id']?.toString();
+    if (currentId != _loadedCommunityId || oldWidget.communityId != widget.communityId) {
       _fetchDetails();
     }
   }
 
   Future<void> _fetchDetails() async {
-    final myComm = widget.state.myCommunity;
+    final myComm = _community;
     if (myComm == null) return;
     final id = myComm['id']?.toString();
     if (id == null) return;
@@ -1458,26 +1471,26 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       _members = memRes['members'] as List<dynamic>? ?? [];
       final admissionPolicy = (myComm['admission_policy']?.toString() ?? 'open').toLowerCase();
       final myRole = myComm['my_role']?.toString();
-      final isFounderOrAdmin = myRole == 'founder' || myRole == 'admin';
+      final isElevated = myRole == 'founder' || myRole == 'admin';
 
-      if (admissionPolicy == 'approval' && isFounderOrAdmin) {
+      if (isElevated && admissionPolicy == 'approval') {
         final reqRes = await const EarthApi().listCommunityRequests(id);
         _requests = reqRes['requests'] as List<dynamic>? ?? [];
       } else {
         _requests = [];
       }
-    } catch (_) {}
-
-    if (mounted) {
-      setState(() {
-        _loading = false;
-      });
+    } catch (_) {
+      // Ignored
+    } finally {
+      if (mounted) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final myComm = widget.state.myCommunity;
+    final myComm = _community;
     if (myComm == null) {
       return EarthSection(
         key: widget.panelKey,

@@ -57,12 +57,18 @@ class EarthState {
   List<dynamic> get roles => _toList(json['roles']);
   Map<String, dynamic>? get membership =>
       json['membership'] is Map ? Map<String, dynamic>.from(json['membership'] as Map) : null;
-  Map<String, dynamic>? get myCommunity {
+  List<Map<String, dynamic>> get myCommunities {
+    final list = <Map<String, dynamic>>[];
     for (final c in communities) {
-      if (c is Map<String, dynamic> && c['my_role'] != null) {
-        return c;
+      if (c is Map && c['my_role'] != null) {
+        list.add(Map<String, dynamic>.from(c as Map));
       }
     }
-    return null;
+    return list;
+  }
+
+  Map<String, dynamic>? get myCommunity {
+    final list = myCommunities;
+    return list.isNotEmpty ? list.first : null;
   }
 }
