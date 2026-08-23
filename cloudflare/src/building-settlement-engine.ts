@@ -497,6 +497,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             [bld.id],
           );
 
+          let totalShareholderPayoutCents = 0n;
           for (const s of sharesQuery.rows) {
             const payout = (netDistributableSurplus * s.shares_owned) / Math.max(1, s.total_shares_issued);
             if (payout > 0) {
@@ -522,8 +523,28 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
                   'UPDATE building_investment_shares SET accumulated_dividends_crd = accumulated_dividends_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE building_id = $2 AND investor_id = $3',
                   [payout, bld.id, s.investor_id],
                 );
+                totalShareholderPayoutCents += payoutCents;
               }
             }
+          }
+
+          // Any funded surplus not allocated to a valid shareholder remains
+          // owned by the city as a building reserve, rather than stranded in
+          // the clearing account.
+          const surplusCents = BigInt(Math.round(netDistributableSurplus * 100));
+          const reserveCents = surplusCents - totalShareholderPayoutCents;
+          if (reserveCents > 0n) {
+            await transferCredits(tx, {
+              ledgerId: crypto.randomUUID(),
+              gameDay: day,
+              debitAccount: 'account-market-clearing',
+              creditAccount: `account-city-${bld.city_id}`,
+              amount: centsToMoney(reserveCents),
+              reasonType: 'public_building_reserve',
+              reasonId: bld.id,
+              ruleVersion: 'real-estate-v2',
+              correlationId: `PUB-RESERVE-${bld.id}-${day}`,
+            });
           }
         }
       }

@@ -1432,7 +1432,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
     if (widget.communityId != null) {
       for (final c in widget.state.communities) {
         if (c is Map && c['id']?.toString() == widget.communityId) {
-          return Map<String, dynamic>.from(c as Map);
+          return Map<String, dynamic>.from(c);
         }
       }
     }

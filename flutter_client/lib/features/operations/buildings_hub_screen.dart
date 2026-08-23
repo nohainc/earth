@@ -435,7 +435,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   ],
                 ),
                 const SizedBox(height: 4),
-                Text('Primary Purpose: $purpose', style: context.widgetFooterStyle),
+                Text('Category: ${category.toUpperCase()} • Primary Purpose: $purpose', style: context.widgetFooterStyle),
                 const Divider(height: 20),
 
                 // Strategic Metric Grid
@@ -628,7 +628,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         Column(
           children: list.map((item) {
             final name = item['name']?.toString() ?? 'Blueprint';
-            final type = (item['type']?.toString() ?? '').toUpperCase();
             final category = (item['category']?.toString() ?? 'commercial').toUpperCase();
             final footprint = asIntOr(item['slotFootprint'], 1);
             final creditCost = asIntOr(item['baseCreditCost'], 8500);

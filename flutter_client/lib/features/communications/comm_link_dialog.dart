@@ -4,7 +4,6 @@ import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../contracts/supply_contracts_dialog.dart';
 
@@ -56,9 +55,6 @@ class CommLinkDialog extends StatefulWidget {
 }
 
 class _CommLinkDialogState extends State<CommLinkDialog> {
-  // Top view mode: 'channels' vs 'dispatches'
-  String _activeMode = 'channels';
-
   Color get _groupSurface => EarthThemeController.instance.cardSurface;
 
   // Channels State
@@ -95,7 +91,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
   void initState() {
     super.initState();
     if (widget.initialDispatchMode) {
-      _activeMode = 'dispatches';
+      _dispatchFolder = 'inbox';
     }
     if (widget.initialChannelId != null) {
       _selectedChannelId = widget.initialChannelId!;
@@ -278,7 +274,6 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final replySubject = subject.startsWith('RE:') ? subject : 'RE: $subject';
 
     setState(() {
-      _activeMode = 'dispatches';
       _dispatchFolder = 'compose';
       _composeRecipientController.text = senderId;
       _composeSubjectController.text = replySubject;
@@ -292,6 +287,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
       await widget.api.archiveCommDispatch(dispatch['id'] as String);
       if (!mounted) return;
       await _fetchDispatches('inbox');
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Dispatch archived.')),
       );

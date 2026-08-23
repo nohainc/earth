@@ -96,7 +96,6 @@ void main() {
     ];
 
     String? markedReadId;
-    bool markedAllRead = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -106,7 +105,7 @@ void main() {
               notifications: notifications,
               onRefresh: () {},
               onMarkRead: (id) async => markedReadId = id,
-              onMarkAllRead: () async => markedAllRead = true,
+              onMarkAllRead: () async {},
             ),
           ),
         ),

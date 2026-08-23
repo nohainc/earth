@@ -54,27 +54,41 @@ export async function settleCivicDividends(tx: PostgresRepository, day: number):
     );
     if (!cityAccount.rows[0]) continue;
 
-    // Distribute to residents with weighted participation
-    for (const rp of residentParticipation) {
+    // Calculate the complete payout before mutating any balances. A partial
+    // payout must never be recorded as completed because the idempotency check
+    // would prevent the unpaid residents from receiving their share later.
+    const payouts = residentParticipation.map((rp) => {
       const participationDividend = (participationPool * rp.score) / Math.max(1, totalParticipationScore);
       const totalResidentDividend = baseDividendPerResident + participationDividend;
       const payoutCents = BigInt(Math.round(totalResidentDividend * 100));
+      return { ...rp, payoutCents };
+    });
+    const totalPayoutCents = payouts.reduce((sum, payout) => sum + payout.payoutCents, 0n);
+    if (moneyToCents(cityAccount.rows[0].balance) < totalPayoutCents) {
+      throw new Error(`Insufficient city treasury for civic dividend payout: ${cityId} day ${day}`);
+    }
 
-      if (moneyToCents(cityAccount.rows[0].balance) < payoutCents) break;
-
+    const residentAccounts = new Map<string, string>();
+    for (const payout of payouts) {
       const humanAccount = await tx.query<{ account_id: string }>(
-        "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
-        [rp.human_id],
+        "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [payout.human_id],
       );
-      if (!humanAccount.rows[0]) continue;
+      if (!humanAccount.rows[0]) {
+        throw new Error(`Missing resident credit account for civic dividend: ${payout.human_id}`);
+      }
+      residentAccounts.set(payout.human_id, humanAccount.rows[0].account_id);
+    }
 
-      const correlationId = `CIVIC-DIV-${cityId}-${rp.human_id}-${day}`;
+    // Distribute only after the full payout is known to be fundable.
+    for (const payout of payouts) {
+      const correlationId = `CIVIC-DIV-${cityId}-${payout.human_id}-${day}`;
       await transferCredits(tx, {
         ledgerId: crypto.randomUUID(),
         gameDay: day,
         debitAccount: cityAccount.rows[0].account_id,
-        creditAccount: humanAccount.rows[0].account_id,
-        amount: centsToMoney(payoutCents),
+        creditAccount: residentAccounts.get(payout.human_id)!,
+        amount: centsToMoney(payout.payoutCents),
         reasonType: 'civic_dividend_payout',
         reasonId: `CIVIC-${cityId}-${day}`,
         ruleVersion: 'civic-dividends-v2',

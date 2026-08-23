@@ -753,7 +753,7 @@ Future<void> showMachineAcquisitionDialog(
                     consequence: DecisionConsequence.machineAcquisition(
                       machineName: machineName.toUpperCase(),
                       costCredits: creditCost,
-                      outputYield: '$outputResource yield ($capacity x scaling)',
+                      outputYield: '$outputResource yield (${capacity}x scaling) · Requires $materialCost Mat',
                       businessName: 'Personal Inventory & Enterprises',
                     ),
                   ),

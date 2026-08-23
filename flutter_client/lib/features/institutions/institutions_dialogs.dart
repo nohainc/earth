@@ -1214,6 +1214,12 @@ Future<void> showCorporationCharterDialog(
                     subtitle: 'Chartered Territories',
                     icon: Icons.hub_outlined,
                   ),
+                  EarthMetricTile(
+                    label: 'ADMISSION POLICY',
+                    value: admissionPolicy,
+                    subtitle: 'Membership Rule',
+                    icon: Icons.shield_outlined,
+                  ),
                 ],
               ),
               const SizedBox(height: 20),

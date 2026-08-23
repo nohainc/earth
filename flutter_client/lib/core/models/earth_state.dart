@@ -68,7 +68,7 @@ class EarthState {
     final list = <Map<String, dynamic>>[];
     for (final c in communities) {
       if (c is Map && c['my_role'] != null) {
-        list.add(Map<String, dynamic>.from(c as Map));
+        list.add(Map<String, dynamic>.from(c));
       }
     }
     return list;

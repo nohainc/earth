@@ -114,6 +114,31 @@ test('settleCivicDividends: duplicate city/day payouts are skipped idempotently'
   assert.equal(transferCalled, false);
 });
 
+test('settleCivicDividends: insufficient treasury aborts before partial payout or completion record', async () => {
+  let transferCalled = false;
+  let payoutInserted = false;
+
+  const client = new MockDbClient((sql) => {
+    if (sql.includes('SELECT id FROM cities')) return { rows: [{ id: 'CITY-0084' }], rowCount: 1 };
+    if (sql.includes('SELECT id FROM civic_dividend_payouts WHERE city_id')) return { rows: [], rowCount: 0 };
+    if (sql.includes('total_surplus FROM building_settlement_journals')) return { rows: [{ total_surplus: '1000' }], rowCount: 1 };
+    if (sql.includes('FROM memberships WHERE city_id')) return { rows: [{ human_id: 'H-001' }, { human_id: 'H-002' }], rowCount: 2 };
+    if (sql.includes('FROM ballots WHERE human_id')) return { rows: [{ count: '0' }], rowCount: 1 };
+    if (sql.includes('FROM account_balances WHERE account_id')) return { rows: [{ account_id: 'account-city-CITY-0084', balance: '500' }], rowCount: 1 };
+    if (sql.includes('earth_transfer_credits')) {
+      transferCalled = true;
+      return { rows: [{ status: 'applied', ledger_id: 'LED-DIV', amount: '0', already_processed: false }], rowCount: 1 };
+    }
+    if (sql.includes('INSERT INTO civic_dividend_payouts')) payoutInserted = true;
+    return { rows: [], rowCount: 0 };
+  });
+
+  const repo = new PostgresRepository(client);
+  await assert.rejects(() => settleCivicDividends(repo, 184), /Insufficient city treasury/);
+  assert.equal(transferCalled, false);
+  assert.equal(payoutInserted, false);
+});
+
 test('settleBuildingUpkeepAndRevenue: public investment distributes pro-rata shares reliably', async () => {
   const transfers = [];
   const shareUpdates = [];

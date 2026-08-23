@@ -980,3 +980,18 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
     ],
   },
 };
+
+export const PATENT_CATALOG: Record<string, RequiredPatentSpec> = Object.values(BUILDING_CATALOG).reduce(
+  (acc, bld) => {
+    if (bld.requiredPatent) {
+      acc[bld.requiredPatent.patentId] = bld.requiredPatent;
+    }
+    for (const tier of bld.tiers) {
+      if (tier.requiredPatent) {
+        acc[tier.requiredPatent.patentId] = tier.requiredPatent;
+      }
+    }
+    return acc;
+  },
+  {} as Record<string, RequiredPatentSpec>,
+);
