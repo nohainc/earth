@@ -251,14 +251,14 @@ export async function purchasePrivatePlotAndConstruct(
     // Insert Self-Contained Building
     await tx.query(
       `INSERT INTO buildings (
-        id, city_id, owner_id, ownership_type, ownership_class, business_id,
+        id, city_id, owner_id, ownership_class, business_id,
         building_type, name, tier, condition, slot_footprint,
         operating_policy, auto_repair_enabled,
         upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
-        daily_operating_credits, base_revenue_crd,
+        daily_operating_credits,
         resource_output_type, resource_output_amount,
         status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'active', $18)`,
+      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, 'active', $17)`,
       [
         buildingId,
         citizenCityId,
@@ -274,7 +274,6 @@ export async function purchasePrivatePlotAndConstruct(
         spec.dailyComponentsUpkeep,
         spec.dailyComputeUpkeep,
         spec.dailyStaffingCredits,
-        spec.dailyCreditRevenue,
         spec.resourceOutputType,
         spec.resourceOutputAmount,
         day,
@@ -751,6 +750,49 @@ export async function acquireBuildingPatentLicense(
     const day = Number(world.rows[0]?.game_day ?? 1);
 
     const isCivic = input.licenseType === 'city_civic';
+    let licenseeId = input.humanId;
+
+    if (isCivic) {
+      const targetCityId = input.cityId;
+      if (!targetCityId) throw new Error('City ID is required for civic patent licensing');
+      const mem = await tx.query(
+        "SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2 AND status = 'active'",
+        [targetCityId, input.humanId],
+      );
+      if (!mem.rows[0]) throw new Error('Caller is not authorized for city civic licensing');
+
+      const existingCivic = await tx.query(
+        "SELECT 1 FROM building_patent_licenses WHERE city_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window') AND license_type = 'city_civic'",
+        [targetCityId, patentSpec.patentId],
+      );
+      if (existingCivic.rows[0]) throw new Error('An active city-wide civic license already exists for this patent');
+
+      if (input.buildingId) {
+        const bldCheck = await tx.query<{ city_id: string }>(
+          'SELECT city_id FROM buildings WHERE id = $1',
+          [input.buildingId],
+        );
+        if (!bldCheck.rows[0]) throw new Error('Target building not found');
+        if (bldCheck.rows[0].city_id !== targetCityId) throw new Error('Building does not belong to the specified city');
+      }
+      licenseeId = targetCityId;
+    } else {
+      if (input.buildingId) {
+        const bldCheck = await tx.query<{ owner_id: string }>(
+          'SELECT owner_id FROM buildings WHERE id = $1',
+          [input.buildingId],
+        );
+        if (!bldCheck.rows[0]) throw new Error('Target building not found');
+        if (bldCheck.rows[0].owner_id !== input.humanId) throw new Error('Only the property owner can license this building');
+
+        const existingPrivate = await tx.query(
+          "SELECT 1 FROM building_patent_licenses WHERE building_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window')",
+          [input.buildingId, patentSpec.patentId],
+        );
+        if (existingPrivate.rows[0]) throw new Error('An active patent license already exists for this building');
+      }
+    }
+
     const costCrd = isCivic
       ? (input.isPermanent ? patentSpec.cityCivicLicenseCostCrd * 3 : patentSpec.cityCivicLicenseCostCrd)
       : patentSpec.privateLicenseCostCrd;
@@ -760,7 +802,27 @@ export async function acquireBuildingPatentLicense(
     const creditCostCents = BigInt(Math.round(costCrd * 100));
     const licenseId = `LIC-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
-    if (!isCivic) {
+    if (isCivic) {
+      const cityAccount = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+        [`account-city-${input.cityId}`],
+      );
+      if (!cityAccount.rows[0] || moneyToCents(cityAccount.rows[0].balance) < creditCostCents) {
+        throw new Error(`Insufficient city treasury for civic patent license (Requires ${costCrd} CRD)`);
+      }
+
+      await transferCredits(tx, {
+        ledgerId: crypto.randomUUID(),
+        gameDay: day,
+        debitAccount: cityAccount.rows[0].account_id,
+        creditAccount: `account-corporation-${patentSpec.owningCorporationId}`,
+        amount: centsToMoney(creditCostCents),
+        reasonType: 'patent_license_purchase',
+        reasonId: licenseId,
+        ruleVersion: 'patent-licensing-v1',
+        correlationId: input.correlationId,
+      });
+    } else {
       const account = await tx.query<{ account_id: string; balance: string }>(
         "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
         [input.humanId],
@@ -793,7 +855,7 @@ export async function acquireBuildingPatentLicense(
         patentSpec.patentId,
         patentSpec.patentName,
         input.licenseType,
-        input.humanId,
+        licenseeId,
         patentSpec.owningCorporationId,
         input.buildingId ?? null,
         input.cityId ?? null,
@@ -842,39 +904,75 @@ export async function renewBuildingPatentLicense(
       licensor_corporation_id: string;
       building_id: string | null;
       city_id: string | null;
+      is_permanent: boolean;
       expiry_game_day: string;
     }>('SELECT * FROM building_patent_licenses WHERE id = $1 FOR UPDATE', [input.licenseId]);
     const lic = licRes.rows[0];
     if (!lic) throw new Error('Patent license not found');
-    if (lic.licensee_id !== input.humanId) throw new Error('Unauthorized');
+    if (lic.is_permanent) throw new Error('Permanent licenses do not require renewal');
+
+    const isCivic = lic.license_type === 'city_civic';
+    if (isCivic) {
+      const mem = await tx.query(
+        "SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2 AND status = 'active'",
+        [lic.city_id, input.humanId],
+      );
+      if (!mem.rows[0]) throw new Error('Caller is not authorized to renew city license');
+    } else {
+      if (lic.licensee_id !== input.humanId) throw new Error('Unauthorized');
+    }
 
     const patentSpec = findPatentSpecInCatalog(lic.patent_id);
-    const costCrd = patentSpec ? patentSpec.privateLicenseCostCrd : 5000;
+    const costCrd = isCivic
+      ? (patentSpec ? patentSpec.cityCivicLicenseCostCrd : 8000)
+      : (patentSpec ? patentSpec.privateLicenseCostCrd : 5000);
     const termDays = patentSpec ? patentSpec.termDays : 30;
     const creditCostCents = BigInt(Math.round(costCrd * 100));
 
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 1);
 
-    const account = await tx.query<{ account_id: string; balance: string }>(
-      "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
-      [input.humanId],
-    );
-    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
-      throw new Error(`Insufficient Credits for license renewal (Requires ${costCrd} CRD)`);
-    }
+    if (isCivic) {
+      const cityAccount = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+        [`account-city-${lic.city_id}`],
+      );
+      if (!cityAccount.rows[0] || moneyToCents(cityAccount.rows[0].balance) < creditCostCents) {
+        throw new Error(`Insufficient city treasury for license renewal (Requires ${costCrd} CRD)`);
+      }
 
-    await transferCredits(tx, {
-      ledgerId: crypto.randomUUID(),
-      gameDay: day,
-      debitAccount: account.rows[0].account_id,
-      creditAccount: `account-corporation-${lic.licensor_corporation_id}`,
-      amount: centsToMoney(creditCostCents),
-      reasonType: 'patent_license_renewal',
-      reasonId: lic.id,
-      ruleVersion: 'patent-licensing-v1',
-      correlationId: input.correlationId,
-    });
+      await transferCredits(tx, {
+        ledgerId: crypto.randomUUID(),
+        gameDay: day,
+        debitAccount: cityAccount.rows[0].account_id,
+        creditAccount: `account-corporation-${lic.licensor_corporation_id}`,
+        amount: centsToMoney(creditCostCents),
+        reasonType: 'patent_license_renewal',
+        reasonId: lic.id,
+        ruleVersion: 'patent-licensing-v1',
+        correlationId: input.correlationId,
+      });
+    } else {
+      const account = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [input.humanId],
+      );
+      if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
+        throw new Error(`Insufficient Credits for license renewal (Requires ${costCrd} CRD)`);
+      }
+
+      await transferCredits(tx, {
+        ledgerId: crypto.randomUUID(),
+        gameDay: day,
+        debitAccount: account.rows[0].account_id,
+        creditAccount: `account-corporation-${lic.licensor_corporation_id}`,
+        amount: centsToMoney(creditCostCents),
+        reasonType: 'patent_license_renewal',
+        reasonId: lic.id,
+        ruleVersion: 'patent-licensing-v1',
+        correlationId: input.correlationId,
+      });
+    }
 
     const newExpiry = Math.max(day, Number(lic.expiry_game_day)) + termDays;
     await tx.query(

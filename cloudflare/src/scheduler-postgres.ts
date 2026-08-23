@@ -257,7 +257,8 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
         }
 
         // Produce Credit Revenue if applicable
-        const rev = Number(bld.base_revenue_crd) * effectiveYield;
+        const isCreditOutput = !bld.resource_output_type || bld.resource_output_type === 'credits';
+        const rev = (isCreditOutput ? (Number(bld.resource_output_amount || 0) || Number(bld.base_revenue_crd || 0)) : 0) * effectiveYield;
         if (rev > 0) {
           const revCents = BigInt(Math.round(rev * 100));
           const ownerAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [bld.owner_id]);
@@ -272,7 +273,7 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
               reasonId: bld.id,
               ruleVersion: 'real-estate-v2',
               correlationId: `BLD-REV-${bld.id}-${day}`,
-            }).catch(() => undefined);
+            });
           }
           if (bld.business_id) {
             await tx.query("UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3", [rev, day, bld.business_id]);
@@ -288,7 +289,8 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
       }
     } else if (oClass === 'public_investment') {
       // Distribute public investment shares pro-rata
-      const rev = Number(bld.base_revenue_crd) * effectiveYield;
+      const isCreditOutput = !bld.resource_output_type || bld.resource_output_type === 'credits';
+      const rev = (isCreditOutput ? (Number(bld.resource_output_amount || 0) || Number(bld.base_revenue_crd || 0)) : 0) * effectiveYield;
       if (rev > 0) {
         const sharesQuery = await tx.query<{
           investor_id: string;
@@ -312,7 +314,7 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
                 reasonId: bld.id,
                 ruleVersion: 'real-estate-v2',
                 correlationId: `PUB-DIV-${bld.id}-${s.investor_id}-${day}`,
-              }).catch(() => undefined);
+              });
 
               await tx.query(
                 'UPDATE building_investment_shares SET accumulated_dividends_crd = accumulated_dividends_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE building_id = $2 AND investor_id = $3',
@@ -331,9 +333,9 @@ async function settleCivicDividends(tx: PostgresRepository, day: number): Promis
   for (const c of cities.rows) {
     const cityId = c.id;
 
-    // Calculate total civic surplus from municipal buildings
+    // Calculate total civic surplus from municipal buildings (only cash credit outputs)
     const civicBldQuery = await tx.query<{ total_rev: string }>(
-      "SELECT COALESCE(SUM(COALESCE(resource_output_amount, base_revenue_crd)), 0) AS total_rev FROM buildings WHERE city_id = $1 AND ownership_class = 'civic' AND status = 'active'",
+      "SELECT COALESCE(SUM(COALESCE(resource_output_amount, base_revenue_crd)), 0) AS total_rev FROM buildings WHERE city_id = $1 AND ownership_class = 'civic' AND (resource_output_type = 'credits' OR resource_output_type IS NULL) AND status = 'active'",
       [cityId],
     );
     const totalCivicSurplus = Number(civicBldQuery.rows[0]?.total_rev ?? 0);
@@ -347,14 +349,23 @@ async function settleCivicDividends(tx: PostgresRepository, day: number): Promis
     if (residents.rows.length === 0) continue;
 
     const residentCount = residents.rows.length;
-    // 70/30 Hybrid Formula: 70% Base Equal UBI + 30% Participation
+    // 70/30 Hybrid Formula: 70% Base Equal UBI + 30% Weighted Participation
     const baseDividendPool = totalCivicSurplus * 0.70;
     const baseDividendPerResident = baseDividendPool / residentCount;
     const participationPool = totalCivicSurplus * 0.30;
-    const participationPerResident = participationPool / residentCount;
 
-    const totalPerResident = baseDividendPerResident + participationPerResident;
-    const payoutCents = BigInt(Math.round(totalPerResident * 100));
+    // Calculate participation weighting based on civic engagement
+    const residentParticipation: { human_id: string; score: number }[] = [];
+    let totalParticipationScore = 0;
+    for (const res of residents.rows) {
+      const partQuery = await tx.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM ballots WHERE human_id = $1',
+        [res.human_id],
+      );
+      const score = 1 + Number(partQuery.rows[0]?.count ?? 0);
+      residentParticipation.push({ human_id: res.human_id, score });
+      totalParticipationScore += score;
+    }
 
     const cityAccount = await tx.query<{ account_id: string; balance: string }>(
       "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
@@ -362,36 +373,50 @@ async function settleCivicDividends(tx: PostgresRepository, day: number): Promis
     );
     if (!cityAccount.rows[0]) continue;
 
-    // Distribute to residents
-    for (const res of residents.rows) {
+    // Distribute to residents with weighted participation
+    for (const rp of residentParticipation) {
+      const participationDividend = (participationPool * rp.score) / Math.max(1, totalParticipationScore);
+      const totalResidentDividend = baseDividendPerResident + participationDividend;
+      const payoutCents = BigInt(Math.round(totalResidentDividend * 100));
+
       if (moneyToCents(cityAccount.rows[0].balance) < payoutCents) break;
 
       const humanAccount = await tx.query<{ account_id: string }>(
         "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
-        [res.human_id],
+        [rp.human_id],
       );
       if (!humanAccount.rows[0]) continue;
 
-      const correlationId = `CIVIC-DIV-${cityId}-${res.human_id}-${day}`;
+      const correlationId = `CIVIC-DIV-${cityId}-${rp.human_id}-${day}`;
       await transferCredits(tx, {
         ledgerId: crypto.randomUUID(),
         gameDay: day,
         debitAccount: cityAccount.rows[0].account_id,
         creditAccount: humanAccount.rows[0].account_id,
         amount: centsToMoney(payoutCents),
-        reasonType: 'civic_resident_dividend',
-        reasonId: cityId,
-        ruleVersion: 'civic-dividend-v2',
+        reasonType: 'civic_dividend_payout',
+        reasonId: `CIVIC-${cityId}-${day}`,
+        ruleVersion: 'civic-dividends-v2',
         correlationId,
-      }).catch(() => undefined);
+      });
     }
 
-    // Log in civic_dividend_payouts
-    const payoutLogId = `CDIV-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    // Record payout summary
     await tx.query(
-      `INSERT INTO civic_dividend_payouts (id, city_id, day, total_civic_surplus, base_dividend_per_resident, participation_dividend_pool, eligible_residents_count)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [payoutLogId, cityId, day, totalCivicSurplus, baseDividendPerResident, participationPool, residentCount],
+      `INSERT INTO civic_dividend_payouts (
+        id, city_id, day, total_civic_surplus,
+        base_dividend_per_resident, participation_dividend_pool,
+        eligible_residents_count
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [
+        `PAYOUT-${cityId}-${day}`,
+        cityId,
+        day,
+        totalCivicSurplus,
+        baseDividendPerResident,
+        participationPool,
+        residentCount,
+      ],
     );
   }
 }

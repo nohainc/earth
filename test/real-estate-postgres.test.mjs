@@ -396,6 +396,7 @@ test('renewBuildingPatentLicense extends expiry and transfers renewal fee', asyn
             license_type: 'private_building',
             licensee_id: 'H-001',
             licensor_corporation_id: 'CORP-001',
+            is_permanent: false,
             expiry_game_day: '184',
           },
         ],
@@ -431,4 +432,45 @@ test('renewBuildingPatentLicense extends expiry and transfers renewal fee', asyn
   assert.equal(res.license.expiry_game_day, '214');
   assert.equal(res.license.status, 'active');
 });
+
+test('acquireBuildingPatentLicense supports city civic licensing debited to city account', async () => {
+  const client = new MockDbClient((sql) => {
+    if (sql.includes('SELECT reason_id FROM ledger_entries')) return { rows: [], rowCount: 0 };
+    if (sql.includes('FROM memberships WHERE city_id')) return { rows: [{ 1: 1 }], rowCount: 1 };
+    if (sql.includes('FROM building_patent_licenses WHERE city_id')) return { rows: [], rowCount: 0 };
+    if (sql.includes('SELECT game_day')) return { rows: [{ game_day: 184 }], rowCount: 1 };
+    if (sql.includes('earth_transfer_credits')) return { rows: [{ status: 'applied', ledger_id: 'LED-01', amount: '100', already_processed: false }], rowCount: 1 };
+    if (sql.includes('FROM account_balances')) return { rows: [{ account_id: 'account-city-CITY-0084', balance: '100000' }], rowCount: 1 };
+    if (sql.includes('UPDATE account_balances')) return { rows: [{ balance: '85000' }], rowCount: 1 };
+    if (sql.includes('SELECT * FROM building_patent_licenses WHERE id = $1')) {
+      return {
+        rows: [
+          {
+            id: 'LIC-CIVIC-01',
+            patent_id: 'PAT-DAT-02',
+            license_type: 'city_civic',
+            licensee_id: 'CITY-0084',
+            status: 'active',
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    return { rows: [], rowCount: 1 };
+  });
+  const repo = new PostgresRepository(client);
+
+  const res = await acquireBuildingPatentLicense(repo, {
+    humanId: 'H-001',
+    patentId: 'PAT-DAT-02',
+    licenseType: 'city_civic',
+    cityId: 'CITY-0084',
+    correlationId: 'test-civic-lic-1',
+  });
+
+  assert.equal(res.ok, true);
+  assert.equal(res.license.licensee_id, 'CITY-0084');
+  assert.equal(res.license.license_type, 'city_civic');
+});
+
 

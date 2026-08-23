@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 49,
+  "migrationVersion": 53,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -65,6 +65,41 @@
       "institution_id",
       "amount"
     ],
+    "building_investment_shares": [
+      "id",
+      "building_id",
+      "investor_id",
+      "shares_owned",
+      "total_shares_issued",
+      "invested_credits",
+      "accumulated_dividends_crd"
+    ],
+    "building_patent_licenses": [
+      "id",
+      "patent_id",
+      "patent_name",
+      "license_type",
+      "licensee_id",
+      "licensor_corporation_id",
+      "status"
+    ],
+    "buildings": [
+      "id",
+      "city_id",
+      "owner_id",
+      "building_type",
+      "name",
+      "tier",
+      "condition",
+      "slot_footprint",
+      "ownership_class",
+      "operating_policy",
+      "auto_repair_enabled",
+      "daily_operating_credits",
+      "resource_output_amount",
+      "resource_output_type",
+      "status"
+    ],
     "business_assets": [
       "business_id",
       "machine_id"
@@ -121,6 +156,15 @@
       "institution_id",
       "treasury",
       "status"
+    ],
+    "civic_dividend_payouts": [
+      "id",
+      "city_id",
+      "day",
+      "total_civic_surplus",
+      "base_dividend_per_resident",
+      "participation_dividend_pool",
+      "eligible_residents_count"
     ],
     "comm_channels": [
       "id",
@@ -566,9 +610,20 @@
       "resource_balances",
       "owner_id",
       "resource"
+    ],
+    [
+      "building_investment_shares",
+      "building_id",
+      "investor_id"
     ]
   ],
   "requiredIndexes": [
+    "building_shares_building_idx",
+    "building_shares_investor_idx",
+    "civic_dividends_city_day_idx",
+    "idx_bld_patent_lic_licensee",
+    "idx_bld_patent_lic_building",
+    "idx_bld_patent_lic_city",
     "ledger_game_day_idx",
     "market_orders_book_idx",
     "ownership_history_idx",
