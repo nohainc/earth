@@ -48,7 +48,12 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
   // 1. Advance active construction pipelines first
   await advanceBuildingConstruction(tx, day);
 
-  // 2. Fetch all active buildings
+  // 2. Ensure clearing account exists
+  await tx.query(
+    "INSERT INTO account_balances (account_id, owner_id, currency, balance) VALUES ('account-market-clearing', 'SYSTEM', 'CREDIT', 0.00) ON CONFLICT (account_id) DO NOTHING",
+  );
+
+  // 3. Fetch all active buildings
   const bldQuery = await tx.query<{
     id: string;
     owner_id: string;
@@ -72,7 +77,18 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
   for (const bld of bldQuery.rows) {
     const oClass = (bld.ownership_class || 'private').toLowerCase();
     const policy = (bld.operating_policy || 'balanced').toLowerCase();
-    let condition = Number(bld.condition || 100);
+    const initialCondition = Number(bld.condition || 100);
+    let condition = initialCondition;
+    let autoRepaired = false;
+    let actualGrossRevenueCrd = 0;
+    let actualOperatingCostsCrd = 0;
+
+    // Ensure dedicated city operations account exists for this city
+    const opsAccount = `account-city-operations-${bld.city_id}`;
+    await tx.query(
+      'INSERT INTO account_balances (account_id, owner_id, currency, balance) VALUES ($1, $2, $3, 0.00) ON CONFLICT (account_id) DO NOTHING',
+      [opsAccount, bld.city_id, 'CREDIT'],
+    );
 
     // Automatic Building Repair check (restores condition before daily run)
     if (bld.auto_repair_enabled && condition < 80) {
@@ -88,6 +104,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
           [repairAccountOwner, repairResource],
         );
         condition = 100.0;
+        autoRepaired = true;
         await tx.query(
           'UPDATE buildings SET condition = 100.0, updated_at = CURRENT_TIMESTAMP WHERE id = $1',
           [bld.id],
@@ -134,7 +151,6 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
     if (opCostCrd > 0) {
       const opCostCents = BigInt(Math.round(opCostCrd * 100));
-      const opsAccount = `account-city-operations-${bld.city_id}`;
       if (oClass === 'civic') {
         const cityAccount = await tx.query<{ account_id: string; balance: string }>(
           "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
@@ -154,6 +170,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             ruleVersion: 'real-estate-v2',
             correlationId: `BLD-OP-${bld.id}-${day}`,
           });
+          actualOperatingCostsCrd = opCostCrd;
         }
       } else {
         const ownerAccount = await tx.query<{ account_id: string; balance: string }>(
@@ -174,6 +191,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             ruleVersion: 'real-estate-v2',
             correlationId: `BLD-OP-${bld.id}-${day}`,
           });
+          actualOperatingCostsCrd = opCostCrd;
           if (bld.business_id) {
             await tx.query(
               'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2 WHERE business_id = $3',
@@ -186,9 +204,31 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
     if (!operatingPaid) {
       // Operating funds shortage: heavy wear and zero output
+      const finalCond = Math.max(0, condition - 6);
       await tx.query(
-        'UPDATE buildings SET condition = GREATEST(0, condition - 6), updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-        [bld.id],
+        'UPDATE buildings SET condition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [finalCond, bld.id],
+      );
+      await tx.query(
+        `INSERT INTO building_settlement_journals (
+          id, building_id, city_id, day, ownership_class,
+          gross_revenue_crd, operating_costs_crd, net_surplus_crd,
+          condition_start, condition_end, auto_repaired
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+        ON CONFLICT (id) DO NOTHING`,
+        [
+          `JOURNAL-${bld.id}-${day}`,
+          bld.id,
+          bld.city_id,
+          day,
+          oClass,
+          0,
+          0,
+          0,
+          initialCondition,
+          finalCond,
+          autoRepaired,
+        ],
       );
       continue;
     }
@@ -215,6 +255,8 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
       }
     }
 
+    let endCondition = condition;
+
     if (oClass === 'private' || oClass === 'civic') {
       if (hasAllUpkeep) {
         for (const u of upkeeps) {
@@ -231,6 +273,8 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
         if (isCreditOutput && outAmt > 0) {
           const revCents = BigInt(Math.round(outAmt * 100));
+          actualGrossRevenueCrd = outAmt;
+
           if (oClass === 'private') {
             const ownerAccount = await tx.query<{ account_id: string }>(
               "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
@@ -240,7 +284,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
-                debitAccount: 'account-market-settlement',
+                debitAccount: 'account-market-clearing',
                 creditAccount: ownerAccount.rows[0].account_id,
                 amount: centsToMoney(revCents),
                 reasonType: 'building_commercial_revenue',
@@ -256,7 +300,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               );
             }
           } else if (oClass === 'civic') {
-            // Civic municipal facility generates utility revenue for city treasury
+            // Civic municipal facility generates utility revenue deposited into city treasury
             const cityAccount = await tx.query<{ account_id: string }>(
               "SELECT account_id FROM account_balances WHERE account_id = $1",
               [`account-city-${bld.city_id}`],
@@ -265,7 +309,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
-                debitAccount: 'account-market-settlement',
+                debitAccount: 'account-market-clearing',
                 creditAccount: `account-city-${bld.city_id}`,
                 amount: centsToMoney(revCents),
                 reasonType: 'civic_utility_revenue',
@@ -284,22 +328,25 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
         // Daily operational wear
         const wear = 1.0 * policyDecay;
+        endCondition = Math.max(0, condition - wear);
         await tx.query(
-          'UPDATE buildings SET condition = GREATEST(0, condition - $1), updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-          [wear, bld.id],
+          'UPDATE buildings SET condition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [endCondition, bld.id],
         );
       } else {
         // Upkeep shortage: heavy decay
+        endCondition = Math.max(0, condition - 8);
         await tx.query(
-          'UPDATE buildings SET condition = GREATEST(0, condition - 8), updated_at = CURRENT_TIMESTAMP WHERE id = $1',
-          [bld.id],
+          'UPDATE buildings SET condition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+          [endCondition, bld.id],
         );
       }
     } else if (oClass === 'public_investment') {
-      // Distribute public investment shares pro-rata from market settlement
+      // Distribute public investment shares pro-rata from market clearing
       const isCreditOutput = bld.resource_output_type === 'credits';
       const rev = (isCreditOutput ? Number(bld.resource_output_amount || 0) : 0) * effectiveYield;
       if (rev > 0) {
+        actualGrossRevenueCrd = rev;
         const sharesQuery = await tx.query<{
           investor_id: string;
           shares_owned: number;
@@ -321,7 +368,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
-                debitAccount: 'account-market-settlement',
+                debitAccount: 'account-market-clearing',
                 creditAccount: invAccount.rows[0].account_id,
                 amount: centsToMoney(payoutCents),
                 reasonType: 'public_share_dividend',
@@ -338,6 +385,34 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
           }
         }
       }
+      endCondition = Math.max(0, condition - 1.0);
+      await tx.query(
+        'UPDATE buildings SET condition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+        [endCondition, bld.id],
+      );
     }
+
+    const netSurplus = Math.max(0, actualGrossRevenueCrd - actualOperatingCostsCrd);
+    await tx.query(
+      `INSERT INTO building_settlement_journals (
+        id, building_id, city_id, day, ownership_class,
+        gross_revenue_crd, operating_costs_crd, net_surplus_crd,
+        condition_start, condition_end, auto_repaired
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT (id) DO NOTHING`,
+      [
+        `JOURNAL-${bld.id}-${day}`,
+        bld.id,
+        bld.city_id,
+        day,
+        oClass,
+        actualGrossRevenueCrd,
+        actualOperatingCostsCrd,
+        netSurplus,
+        initialCondition,
+        endCondition,
+        autoRepaired,
+      ],
+    );
   }
 }

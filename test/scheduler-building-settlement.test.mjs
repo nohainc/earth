@@ -26,11 +26,10 @@ test('settleCivicDividends: only Credit outputs generate cash surplus and distri
     if (sql.includes('SELECT id FROM civic_dividend_payouts WHERE city_id')) {
       return { rows: [], rowCount: 0 };
     }
-    if (sql.includes('SELECT COALESCE(SUM(resource_output_amount), 0) AS total_rev')) {
-      // Proves that only resource_output_type = 'credits' is queried
-      assert.ok(sql.includes("resource_output_type = 'credits'"));
+    if (sql.includes('SELECT COALESCE(SUM(net_surplus_crd), 0) AS total_surplus FROM building_settlement_journals')) {
+      // Proves that dividends are calculated strictly from recorded civic settlement journals
       assert.ok(sql.includes("ownership_class = 'civic'"));
-      return { rows: [{ total_rev: '1000', total_op: '0' }], rowCount: 1 };
+      return { rows: [{ total_surplus: '1000' }], rowCount: 1 };
     }
     if (sql.includes('FROM memberships WHERE city_id')) {
       return {
@@ -173,7 +172,7 @@ test('settleBuildingUpkeepAndRevenue: public investment distributes pro-rata sha
   // H-INV-1 (60%): 1200 CRD
   // H-INV-2 (40%): 800 CRD
   assert.equal(transfers.length, 2);
-  assert.equal(transfers[0].debit, 'account-market-settlement');
+  assert.equal(transfers[0].debit, 'account-market-clearing');
   assert.equal(transfers[0].credit, 'acc-H-INV-1');
   assert.equal(shareUpdates.length, 2);
   assert.equal(shareUpdates[0][0], 1200);
@@ -190,9 +189,9 @@ test('settleCivicDividends: non-credit civic facilities produce 0 cash dividend 
     if (sql.includes('SELECT id FROM civic_dividend_payouts WHERE city_id')) {
       return { rows: [], rowCount: 0 };
     }
-    if (sql.includes('SELECT COALESCE(SUM(resource_output_amount), 0) AS total_rev')) {
-      // Non-credit outputs return 0 for credit output query
-      return { rows: [{ total_rev: '0', total_op: '0' }], rowCount: 1 };
+    if (sql.includes('SELECT COALESCE(SUM(net_surplus_crd), 0) AS total_surplus FROM building_settlement_journals')) {
+      // Non-credit outputs produce 0 cash surplus in settlement journals
+      return { rows: [{ total_surplus: '0' }], rowCount: 1 };
     }
     if (sql.includes('earth_transfer_credits')) {
       transferCalled = true;
@@ -377,7 +376,7 @@ test('settleBuildingUpkeepAndRevenue: debits daily operating credits and execute
   assert.equal(transfers[0].amount, '50.00');
 
   assert.equal(transfers[1].reason, 'building_commercial_revenue');
-  assert.equal(transfers[1].debit, 'account-market-settlement');
+  assert.equal(transfers[1].debit, 'account-market-clearing');
   assert.equal(transfers[1].credit, 'acc-H-001');
   assert.equal(transfers[1].amount, '500.00');
 });

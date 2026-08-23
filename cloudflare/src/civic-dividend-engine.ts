@@ -14,14 +14,12 @@ export async function settleCivicDividends(tx: PostgresRepository, day: number):
     );
     if (priorPayout.rows[0]) continue;
 
-    // Calculate net civic surplus from municipal buildings (cash credit outputs minus operating expenses)
-    const civicBldQuery = await tx.query<{ total_rev: string; total_op: string }>(
-      "SELECT COALESCE(SUM(resource_output_amount), 0) AS total_rev, COALESCE(SUM(daily_operating_credits), 0) AS total_op FROM buildings WHERE city_id = $1 AND ownership_class = 'civic' AND resource_output_type = 'credits' AND status = 'active'",
-      [cityId],
+    // Query actual recorded net surplus from daily building settlement journals
+    const journalQuery = await tx.query<{ total_surplus: string }>(
+      "SELECT COALESCE(SUM(net_surplus_crd), 0) AS total_surplus FROM building_settlement_journals WHERE city_id = $1 AND day = $2 AND ownership_class = 'civic'",
+      [cityId, day],
     );
-    const totalCivicRevenue = Number(civicBldQuery.rows[0]?.total_rev ?? 0);
-    const totalCivicOp = Number(civicBldQuery.rows[0]?.total_op ?? 0);
-    const totalCivicSurplus = Math.max(0, totalCivicRevenue - totalCivicOp);
+    const totalCivicSurplus = Number(journalQuery.rows[0]?.total_surplus ?? 0);
     if (totalCivicSurplus <= 0) continue;
 
     // Find eligible residents (registered in city)

@@ -38,7 +38,7 @@
     "qa:patents": "node --test test/patents-page-api.test.mjs && sh -c 'cd flutter_client && flutter test test/technology_panel_test.dart test/sidebar_and_dialogs_comprehensive_test.dart'",
     "qa:constitution": "node --test test/constitution-page-api.test.mjs && sh -c 'cd flutter_client && flutter test test/constitution_panel_test.dart'",
     "qa:communities": "node --experimental-strip-types --test test/communities-postgres.test.mjs test/read-postgres.test.mjs && sh -c 'cd flutter_client && flutter test test/communities_panel_test.dart test/institutions_dialogs_comprehensive_test.dart'",
-    "qa:real-estate": "node --test test/real-estate-postgres.test.mjs test/scheduler-building-settlement.test.mjs && sh -c 'cd flutter_client && flutter test test/real_estate_panel_test.dart'",
+    "qa:real-estate": "node --test test/migrations-integrity.test.mjs test/real-estate-postgres.test.mjs test/scheduler-building-settlement.test.mjs && sh -c 'cd flutter_client && flutter test test/real_estate_panel_test.dart'",
     "qa:tier3": "node --test test/economic-simulation-invariants.test.mjs test/qa-tier3-chaos.test.mjs",
     "qa:tier4": "sh -c 'cd flutter_client && flutter test test/accessibility_resilience_test.dart'",
     "qa:tier5": "node --test test/browser.e2e.test.mjs test/server.smoke.test.js",

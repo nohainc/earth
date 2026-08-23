@@ -109,6 +109,19 @@
       "construction_progress",
       "status"
     ],
+    "building_settlement_journals": [
+      "id",
+      "building_id",
+      "city_id",
+      "day",
+      "ownership_class",
+      "gross_revenue_crd",
+      "operating_costs_crd",
+      "net_surplus_crd",
+      "condition_start",
+      "condition_end",
+      "auto_repaired"
+    ],
     "business_assets": [
       "business_id",
       "machine_id"
