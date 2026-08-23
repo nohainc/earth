@@ -55,6 +55,7 @@ class _SidebarState extends State<Sidebar> {
       ['command', 'briefing', 'messages', 'notifications'],
       [
         'business',
+        'buildings',
         'machines',
         'contracts',
         'projects',
@@ -151,6 +152,12 @@ class _SidebarState extends State<Sidebar> {
             'business',
             (widget.activeBusiness?['name'] ?? 'Business').toString(),
             Icons.storefront_outlined,
+            null,
+          ),
+          (
+            'buildings',
+            'Buildings & Estates',
+            Icons.domain_outlined,
             null,
           ),
           (

@@ -15,6 +15,7 @@ import '../operations/business_panel.dart';
 import '../operations/machines_panel.dart';
 import '../operations/technology_panel.dart';
 import '../operations/real_estate_panel.dart';
+import '../operations/buildings_hub_screen.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
@@ -43,7 +44,8 @@ String dashboardSectionTitle(String section) => switch (section) {
       'messages' => 'MESSAGES',
       'notifications' => 'NOTIFICATIONS',
       'business' => 'BUSINESS',
-      'real_estate' => 'REAL ESTATE & DISTRICT',
+      'buildings' => 'BUILDINGS & URBAN INFRASTRUCTURE',
+      'real_estate' => 'BUILDINGS & DISTRICT',
       'civic' => 'PUBLIC',
       'corporation' => 'CORPORATIONS',
       'city' => 'MY CITY',
@@ -690,9 +692,10 @@ class Dashboard extends StatelessWidget {
             },
           ),
         ];
+      case 'buildings':
       case 'real_estate':
         return [
-          RealEstateDistrictPanel(state: state, busy: busy, action: action),
+          BuildingsHubScreen(state: state, busy: busy, action: action),
         ];
       case String s when s.startsWith('my-community'):
         final targetId = s.contains(':') ? s.split(':').last : null;

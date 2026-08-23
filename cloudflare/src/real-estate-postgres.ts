@@ -243,9 +243,22 @@ export async function upgradeBuilding(
     if (bld.owner_id !== input.humanId) throw new Error('Only the property owner can upgrade this facility');
     if (bld.tier >= 4) throw new Error('Building is already at maximum engineering tier (Tier 4)');
 
-    const nextTier = bld.tier + 1;
-    const upgradeCreditCost = 4800 * nextTier;
-    const upgradeCompCost = 25 * nextTier;
+    const spec = BUILDING_CATALOG[bld.building_type];
+    const tierSpec = spec?.tiers?.find((t) => t.tier === nextTier);
+
+    if (tierSpec?.requiredCityPopulation) {
+      const popRes = await tx.query<{ count: string }>(
+        'SELECT COUNT(*)::text AS count FROM memberships WHERE city_id = $1',
+        [bld.city_id],
+      );
+      const population = Number(popRes.rows[0]?.count ?? 0);
+      if (population < tierSpec.requiredCityPopulation) {
+        throw new Error(`Tier ${nextTier} requires City Population of at least ${tierSpec.requiredCityPopulation} (Current: ${population})`);
+      }
+    }
+
+    const upgradeCreditCost = tierSpec?.upgradeCreditCost || 4800 * nextTier;
+    const upgradeCompCost = tierSpec?.upgradeComponentsCost || 20 * nextTier;
 
     const creditCostCents = BigInt(upgradeCreditCost * 100);
     const account = await tx.query<{ account_id: string; balance: string }>(
@@ -256,12 +269,19 @@ export async function upgradeBuilding(
       throw new Error(`Upgrade requires ${upgradeCreditCost} Credits`);
     }
 
-    const compBal = await tx.query<{ amount: string }>(
-      "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE",
-      [input.humanId],
-    );
-    if (Number(compBal.rows[0]?.amount ?? 0) < upgradeCompCost) {
-      throw new Error(`Upgrade requires ${upgradeCompCost} Components`);
+    if (upgradeCompCost > 0) {
+      const compBal = await tx.query<{ amount: string }>(
+        "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE",
+        [input.humanId],
+      );
+      if (Number(compBal.rows[0]?.amount ?? 0) < upgradeCompCost) {
+        throw new Error(`Upgrade requires ${upgradeCompCost} Components`);
+      }
+
+      await tx.query(
+        "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components'",
+        [upgradeCompCost, input.humanId],
+      );
     }
 
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -279,23 +299,20 @@ export async function upgradeBuilding(
       correlationId: input.correlationId,
     });
 
-    await tx.query(
-      "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components'",
-      [upgradeCompCost, input.humanId],
-    );
-
-    const newRevenue = Number(bld.base_revenue_crd) * 1.30;
-    const newOutputAmount = Number(bld.resource_output_amount || 0) * 1.30;
+    const newRevenue = tierSpec?.dailyCreditRevenue ?? (Number(bld.base_revenue_crd) * 1.30);
+    const newOutputAmount = tierSpec?.resourceOutputAmount ?? (Number(bld.resource_output_amount || 0) * 1.30);
+    const newOpCredits = tierSpec?.dailyOperatingCredits ?? Number(bld.daily_operating_credits || 0);
 
     await tx.query(
       `UPDATE buildings SET
         tier = $1,
         base_revenue_crd = $2,
         resource_output_amount = $3,
-        condition = LEAST(100, condition + 20),
+        daily_operating_credits = $4,
+        condition = 100.0,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $4`,
-      [nextTier, newRevenue, newOutputAmount, bld.id],
+      WHERE id = $5`,
+      [nextTier, newRevenue, newOutputAmount, newOpCredits, bld.id],
     );
 
     const updated = await tx.query('SELECT * FROM buildings WHERE id = $1', [bld.id]);
