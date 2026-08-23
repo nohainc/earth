@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 53,
+  "migrationVersion": 54,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -104,6 +104,9 @@
       "daily_operating_credits",
       "resource_output_amount",
       "resource_output_type",
+      "construction_started_game_day",
+      "construction_complete_game_day",
+      "construction_progress",
       "status"
     ],
     "business_assets": [

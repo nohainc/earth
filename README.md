@@ -91,38 +91,29 @@ The implementation checklist for the management-first redesign is in
 
 ## Repository map
 
-- `server.js` — non-production reference API and event stream
-- `database.js` — optional PostgreSQL write-through adapter
-- `db/migrations/001_initial.sql` — relational world schema
+- `cloudflare/` — authoritative production Cloudflare Worker API & settlement engine
+- `flutter_client/` — multiplatform production client (Web, macOS, iOS, Android, Linux, Windows)
+- `db/migrations/` — relational PostgreSQL schema and versioned migrations (001–054)
 - `db/seed.sql` — initial United Corporations / City / Corporation / Human world
-- `prototype3.html` — selected futuristic web client
-- `flutter_client/` — shared Flutter client foundation
-- `test/server.smoke.test.js` — end-to-end command and invariant checks
+- `server.js` — non-production local reference API
+- `test/` — comprehensive automated test suites (Node.js test runner)
 
 ## Verification
 
 ```bash
 npm run check
 npm test
-# Optional developer-only balance/invariant scenarios; this is not a player mode.
-npm run simulate:scenarios
+npm run qa
 ```
 
 ## Current playable systems
 
-- world pulse and health signals
-- Credit, Standing, Legacy, and market-batch status
-- Central Market pressure signals and order intent
-- business operating state
-- civic proposal review and ballot recording
-- Technology Registry research funding
-- parameterized R&D focus with production and wear trade-offs
-- machine lifecycle: acquisition, maintenance, upgrade, resale, recycling
-- bounded Basic/Business AI assistants and explainable recommendations
-- macro liquidity corridor reporting and essential-service lifecycle effects
-- persistent world-clock advancement and scheduled production settlement
-- authoritative prototype API with ledger entries and auditable command outcomes
-- aurora/night futuristic visual system with a consistent command-center UI
+- **Building-Centric Urban Economy**: Self-contained private estates, civic infrastructure, and public investment megaprojects with multi-day construction pipelines, daily operating credit ledgers, auto-repair, and 70/30 weighted citizen dividends.
+- **Corporate Technology & Patent Licensing**: Foundational open technology + corporate patent IP licensing (private, city-wide civic, permanent).
+- **Industrial Machine Operations**: Independent tradable manufacturing assets for specialized commodity fabrication, research facilities, and logistics.
+- **Civic Governance & Quadratic Ballots**: Sovereign city charters, taxation policies, municipal megaproject procurement, and diplomatic dispatches.
+- **Central Commodity Market**: Live liquidity corridors, order books, OHLC data tracking, and futures delivery contracts.
+- **Persistent World Simulation**: Atomic financial ledger transfers, scheduled maintenance, and deterministic daily settlements.
 
 ## PostgreSQL and Flutter verification
 

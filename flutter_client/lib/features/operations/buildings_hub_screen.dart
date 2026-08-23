@@ -857,9 +857,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final licId = matchingLicense['id']?.toString();
     final isMember = myCorpId != null && reqPatent != null && myCorpId == reqPatent['owningCorporationId'];
 
+    final status = b['status']?.toString() ?? 'active';
+    final isUnderConstruction = status == 'under_construction';
+    final constructionProgress = asDoubleOr(b['construction_progress'], 100);
+
     String condStatus = '100% OPTIMAL';
     Color condColor = context.successColor;
-    if (condition < 20) {
+    if (isUnderConstruction) {
+      condStatus = 'UNDER CONSTRUCTION (${constructionProgress.toStringAsFixed(0)}%)';
+      condColor = context.warningColor;
+    } else if (condition < 20) {
       condStatus = 'OFFLINE (0% YIELD)';
       condColor = context.dangerColor;
     } else if (condition < 50) {
@@ -901,7 +908,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         EarthBadge(label: '$footprint SLOT${footprint > 1 ? 'S' : ''}', variant: EarthBadgeVariant.neutral),
                         const SizedBox(width: 4),
                         EarthBadge(label: 'TIER $tier', variant: EarthBadgeVariant.primary),
-                        if (isMember) ...[
+                        if (isUnderConstruction) ...[
+                          const SizedBox(width: 4),
+                          EarthBadge(label: 'CONSTRUCTION', variant: EarthBadgeVariant.warning),
+                        ] else if (isMember) ...[
                           const SizedBox(width: 4),
                           EarthBadge(label: 'CORP MEMBER', variant: EarthBadgeVariant.success),
                         ] else if (licStatus == 'active') ...[
@@ -918,7 +928,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '$type · District Blueprint · Condition: ${condition.toStringAsFixed(0)}% ($condStatus)',
+                      isUnderConstruction
+                          ? '$type · Commissioning in progress (${constructionProgress.toStringAsFixed(0)}%)'
+                          : '$type · District Blueprint · Condition: ${condition.toStringAsFixed(0)}% ($condStatus)',
                       style: context.widgetFooterStyle,
                     ),
                   ],

@@ -248,6 +248,10 @@ export async function purchasePrivatePlotAndConstruct(
       [materialCost, input.ownerId],
     );
 
+    // Calculate construction timeline
+    const constructionDays = Math.max(1, spec.slotFootprint);
+    const completeDay = day + constructionDays;
+
     // Insert Self-Contained Building
     await tx.query(
       `INSERT INTO buildings (
@@ -257,8 +261,9 @@ export async function purchasePrivatePlotAndConstruct(
         upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
         daily_operating_credits,
         resource_output_type, resource_output_amount,
+        construction_started_game_day, construction_complete_game_day, construction_progress,
         status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, 'active', $17)`,
+      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0.0, 'under_construction', $19)`,
       [
         buildingId,
         citizenCityId,
@@ -276,6 +281,8 @@ export async function purchasePrivatePlotAndConstruct(
         spec.dailyStaffingCredits,
         spec.resourceOutputType,
         spec.resourceOutputAmount,
+        day,
+        completeDay,
         day,
       ],
     );

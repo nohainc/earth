@@ -119,6 +119,9 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       const buildingId = `BLD-MUNI-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
       const day = Number(world.rows[0]?.game_day ?? 0);
 
+      const constructionDays = Math.max(2, (spec.slotFootprint ?? 2) * 2);
+      const completeDay = day + constructionDays;
+
       await tx.query(
         `INSERT INTO buildings (
           id, city_id, owner_id, ownership_class,
@@ -127,8 +130,9 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
           daily_operating_credits,
           resource_output_type, resource_output_amount,
+          construction_started_game_day, construction_complete_game_day, construction_progress,
           patent_license_status, status, created_game_day
-        ) VALUES ($1, $2, $2, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, 'active', 'active', $15)`,
+        ) VALUES ($1, $2, $2, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 0.0, 'active', 'under_construction', $17)`,
         [
           buildingId,
           current.institution_id,
@@ -144,6 +148,8 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           spec.dailyStaffingCredits ?? 0,
           spec.resourceOutputType ?? 'credits',
           spec.resourceOutputAmount ?? 0,
+          day,
+          completeDay,
           day,
         ],
       );

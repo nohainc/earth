@@ -32,8 +32,8 @@ import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { createSocialInitiative, listSocialInitiatives, listSocialDirectory, listSocialTimeline, listSocialRelationships, respondToSocialInitiative, contributeToSocialInitiative, type SocialKind } from './social-gameplay-postgres.ts';
 import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
-import { toNanoMarkup } from './nano-markup.ts';
 import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
+import { BUILDING_CATALOG, PATENT_CATALOG } from './real-estate-catalog.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -1049,6 +1049,13 @@ const worker = {
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Demolition failed' }, { status: 409 });
       }
+    }
+    if ((url.pathname === '/api/real-estate/catalog' || url.pathname === '/api/buildings/catalog') && request.method === 'GET') {
+      return Response.json({
+        ok: true,
+        catalog: Object.values(BUILDING_CATALOG),
+        patents: Object.values(PATENT_CATALOG),
+      });
     }
     if (url.pathname === '/api/real-estate/zoning' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);

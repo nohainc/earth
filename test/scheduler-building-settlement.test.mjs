@@ -119,7 +119,8 @@ test('settleBuildingUpkeepAndRevenue: public investment distributes pro-rata sha
   const shareUpdates = [];
 
   const client = new MockDbClient((sql, params) => {
-    if (sql.includes('SELECT * FROM buildings WHERE status NOT IN')) {
+    if (sql.includes('SELECT id, name, city_id')) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT * FROM buildings WHERE status = 'active'")) {
       return {
         rows: [
           {
@@ -209,7 +210,8 @@ test('settleBuildingUpkeepAndRevenue: failed ledger transfer aborts without upda
   let shareUpdateCalled = false;
 
   const client = new MockDbClient((sql) => {
-    if (sql.includes('SELECT * FROM buildings WHERE status NOT IN')) {
+    if (sql.includes('SELECT id, name, city_id')) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT * FROM buildings WHERE status = 'active'")) {
       return {
         rows: [
           {
@@ -234,7 +236,7 @@ test('settleBuildingUpkeepAndRevenue: failed ledger transfer aborts without upda
       };
     }
     if (sql.includes('FROM account_balances WHERE owner_id')) {
-      return { rows: [{ account_id: 'acc-H-INV-1' }], rowCount: 1 };
+      return { rows: [{ account_id: 'acc-H-INV-1', balance: '50000' }], rowCount: 1 };
     }
     if (sql.includes('earth_transfer_credits')) {
       throw new Error('Ledger transfer failed: insufficient city treasury');
@@ -254,4 +256,125 @@ test('settleBuildingUpkeepAndRevenue: failed ledger transfer aborts without upda
 
   assert.equal(shareUpdateCalled, false);
 });
+
+test('advanceBuildingConstruction: activates completed facilities and updates progress', async () => {
+  const updatedStatus = [];
+  const progressUpdates = [];
+
+  const client = new MockDbClient((sql, params) => {
+    if (sql.includes("SELECT id, name, city_id, owner_id, construction_started_game_day, construction_complete_game_day FROM buildings WHERE status = 'under_construction'")) {
+      return {
+        rows: [
+          {
+            id: 'BLD-DONE',
+            name: 'Completed Core',
+            city_id: 'CITY-0084',
+            owner_id: 'H-001',
+            construction_started_game_day: 180,
+            construction_complete_game_day: 184,
+          },
+          {
+            id: 'BLD-INPROG',
+            name: 'Midway Tower',
+            city_id: 'CITY-0084',
+            owner_id: 'H-002',
+            construction_started_game_day: 182,
+            construction_complete_game_day: 186,
+          },
+        ],
+        rowCount: 2,
+      };
+    }
+    if (sql.includes("UPDATE buildings SET status = 'active'")) {
+      updatedStatus.push(params[0]);
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE buildings SET construction_progress')) {
+      progressUpdates.push({ id: params[1], progress: params[0] });
+      return { rows: [], rowCount: 1 };
+    }
+    if (sql.includes("SELECT * FROM buildings WHERE status = 'active'")) {
+      return { rows: [], rowCount: 0 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const repo = new PostgresRepository(client);
+  await settleBuildingUpkeepAndRevenue(repo, 184);
+
+  assert.equal(updatedStatus.length, 1);
+  assert.equal(updatedStatus[0], 'BLD-DONE');
+
+  assert.equal(progressUpdates.length, 1);
+  assert.equal(progressUpdates[0].id, 'BLD-INPROG');
+  // Started 182, completes 186 (4 days total), at day 184 (2 days elapsed) -> 50%
+  assert.equal(progressUpdates[0].progress, 50.0);
+});
+
+test('settleBuildingUpkeepAndRevenue: debits daily operating credits and executes auto-repair', async () => {
+  const transfers = [];
+  const resourceDeductions = [];
+
+  const client = new MockDbClient((sql, params) => {
+    if (sql.includes("SELECT id, name, city_id")) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT * FROM buildings WHERE status = 'active'")) {
+      return {
+        rows: [
+          {
+            id: 'BLD-COMM-01',
+            owner_id: 'H-001',
+            city_id: 'CITY-0084',
+            ownership_class: 'private',
+            business_id: null,
+            operating_policy: 'balanced',
+            condition: '70', // Condition < 80 triggers auto-repair
+            auto_repair_enabled: true,
+            daily_operating_credits: '50',
+            resource_output_type: 'credits',
+            resource_output_amount: '500',
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes("FROM resource_balances WHERE owner_id = $1 AND resource = $2")) {
+      // 10 components available
+      return { rows: [{ amount: '10' }], rowCount: 1 };
+    }
+    if (sql.includes("FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'")) {
+      return { rows: [{ account_id: 'acc-H-001', balance: '20000' }], rowCount: 1 };
+    }
+    if (sql.includes("earth_transfer_credits")) {
+      transfers.push({
+        debit: params[2],
+        credit: params[3],
+        amount: params[4],
+        reason: params[5],
+      });
+      return { rows: [{ status: 'applied', ledger_id: 'LED-OP', amount: params[4], already_processed: false }], rowCount: 1 };
+    }
+    if (sql.includes("UPDATE resource_balances SET amount = amount - 1")) {
+      resourceDeductions.push(params);
+      return { rows: [], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const repo = new PostgresRepository(client);
+  await settleBuildingUpkeepAndRevenue(repo, 184);
+
+  // Auto repair deducted 1 component
+  assert.equal(resourceDeductions.length, 1);
+  assert.equal(resourceDeductions[0][0], 'H-001');
+  assert.equal(resourceDeductions[0][1], 'components');
+
+  // Operating costs debited 50 CRD, then output credited 500 CRD
+  assert.equal(transfers.length, 2);
+  assert.equal(transfers[0].reason, 'building_operating_cost');
+  assert.equal(transfers[0].amount, '50.00');
+
+  assert.equal(transfers[1].reason, 'building_commercial_revenue');
+  assert.equal(transfers[1].amount, '500.00');
+});
+
 
