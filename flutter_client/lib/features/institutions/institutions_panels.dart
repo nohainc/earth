@@ -1598,6 +1598,17 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                     ),
                   ],
                 ),
+                if (description.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Text(
+                    description,
+                    style: context.bodyStyle.copyWith(
+                      color: context.inkColor,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                ],
                 const SizedBox(height: 14),
                 Wrap(
                   spacing: 8,
@@ -1671,67 +1682,6 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                 icon: Icons.policy_outlined,
               ),
             ],
-          ),
-          const SizedBox(height: 24),
-
-          // 2. Manifesto & Purpose Section
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'GUILD MANIFESTO & PURPOSE',
-                      style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
-                    ),
-                    if (isOwner || isAdmin)
-                      EarthButton(
-                        label: 'EDIT MANIFESTO',
-                        icon: Icons.edit_outlined,
-                        variant: EarthButtonVariant.ghost,
-                        onPressed: widget.busy
-                            ? null
-                            : () async {
-                                await showCommunityManageDialog(
-                                  context,
-                                  myComm,
-                                  widget.state,
-                                  widget.action,
-                                );
-                                _fetchDetails();
-                              },
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                Container(
-                  padding: const EdgeInsets.all(14),
-                  decoration: BoxDecoration(
-                    color: context.panelColor,
-                    borderRadius: BorderRadius.circular(context.radiusControl),
-                    border: Border.all(color: context.subtleBorderColor),
-                  ),
-                  child: Text(
-                    description.isNotEmpty
-                        ? description
-                        : 'No custom manifesto established for this community yet. The founder or administrators can update the guild declaration at any time.',
-                    style: context.bodyStyle.copyWith(
-                      color: context.inkColor,
-                      fontSize: 13,
-                      height: 1.5,
-                    ),
-                  ),
-                ),
-              ],
-            ),
           ),
           const SizedBox(height: 24),
 

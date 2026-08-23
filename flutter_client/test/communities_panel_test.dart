@@ -196,7 +196,7 @@ void main() {
     expect(find.textContaining('Guild ID: COM-002'), findsOneWidget);
     expect(find.text('OWNER / FOUNDER'), findsOneWidget);
     expect(find.text('1250.00 C'), findsOneWidget);
-    expect(find.text('GUILD MANIFESTO & PURPOSE'), findsOneWidget);
+    expect(find.text('GUILD MANIFESTO & PURPOSE'), findsNothing);
     expect(find.text('Pioneering clean renewable energy across the quadrant.'), findsOneWidget);
     expect(find.text('CONTRIBUTE TO GUILD TREASURY'), findsOneWidget);
     expect(find.text('+100 C'), findsOneWidget);

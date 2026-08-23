@@ -114,6 +114,11 @@ void main() {
     await tester.tap(find.text('CIVIC'));
     await tester.pumpAndSettle();
     expect(find.text('City & Services'), findsNothing);
+    expect(find.text('Public Governance'), findsOneWidget);
+    expect(find.text('Corporations'), findsOneWidget);
+
+    await tester.tap(find.text('EARTH'));
+    await tester.pumpAndSettle();
     expect(find.text('Communities'), findsOneWidget);
   });
 
@@ -165,7 +170,6 @@ void main() {
 
     expect(find.text('Carthage Artisans'), findsOneWidget);
     expect(find.text('Solar Engineers'), findsOneWidget);
-    expect(find.text('All Communities'), findsOneWidget);
 
     await tester.tap(find.text('Solar Engineers'));
     await tester.pumpAndSettle();

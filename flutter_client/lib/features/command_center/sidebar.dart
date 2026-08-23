@@ -62,9 +62,9 @@ class _SidebarState extends State<Sidebar> {
         'technology',
         'patents',
       ],
-      ['corporation', 'city', 'my-community', 'communities', 'civic', 'public-finance'],
+      ['corporation', 'city', 'my-community', 'civic', 'public-finance'],
       ['life', 'dynasty'],
-      ['civic-rankings', 'pantheon', 'history', 'constitution'],
+      ['communities', 'civic-rankings', 'pantheon', 'history', 'constitution'],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -165,21 +165,15 @@ class _SidebarState extends State<Sidebar> {
             null,
           ),
           (
-            'contracts',
-            'Contracts',
-            Icons.handshake_outlined,
+            'finance',
+            'Personal Finance',
+            Icons.account_balance_wallet_outlined,
             null,
           ),
           (
             'projects',
             'Projects',
             Icons.assignment_turned_in_outlined,
-            null,
-          ),
-          (
-            'finance',
-            'Personal Finance',
-            Icons.account_balance_wallet_outlined,
             null,
           ),
           (
@@ -221,12 +215,6 @@ class _SidebarState extends State<Sidebar> {
               null,
             ),
           (
-            'communities',
-            myCommunities.isNotEmpty ? 'All Communities' : 'Communities',
-            Icons.groups_outlined,
-            null,
-          ),
-          (
             'civic',
             'Public Governance',
             Icons.public_outlined,
@@ -256,6 +244,12 @@ class _SidebarState extends State<Sidebar> {
         'EARTH',
         Icons.public_rounded,
         [
+          (
+            'communities',
+            'Communities',
+            Icons.groups_outlined,
+            null,
+          ),
           (
             'civic-rankings',
             'Rankings',
