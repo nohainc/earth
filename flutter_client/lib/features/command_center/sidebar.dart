@@ -455,26 +455,31 @@ class _SidebarState extends State<Sidebar> {
           ),
           child: Row(
             children: [
-              // Active Luminous Bar
-              if (isSelected)
-                Container(
-                  width: 3.2,
-                  height: 16,
-                  margin: const EdgeInsets.only(right: 8),
-                  decoration: BoxDecoration(
-                    color: context.primaryColor,
-                    borderRadius: BorderRadius.circular(2),
-                    boxShadow: [
-                      BoxShadow(
-                        color: context.primaryColor.withValues(alpha: 0.65),
-                        blurRadius: 6,
-                        spreadRadius: 0.5,
-                      ),
-                    ],
-                  ),
-                )
-              else
-                const SizedBox(width: 4),
+              // Fixed-width Indicator Slot (preserves exact horizontal alignment across all items)
+              SizedBox(
+                width: 10,
+                child: isSelected
+                    ? Align(
+                        alignment: Alignment.centerLeft,
+                        child: Container(
+                          width: 3.2,
+                          height: 16,
+                          decoration: BoxDecoration(
+                            color: context.primaryColor,
+                            borderRadius: BorderRadius.circular(2),
+                            boxShadow: [
+                              BoxShadow(
+                                color: context.primaryColor.withValues(alpha: 0.65),
+                                blurRadius: 6,
+                                spreadRadius: 0.5,
+                              ),
+                            ],
+                          ),
+                        ),
+                      )
+                    : null,
+              ),
+              const SizedBox(width: 6),
 
               // Item Icon
               Icon(
