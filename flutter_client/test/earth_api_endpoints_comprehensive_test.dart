@@ -132,9 +132,15 @@ void main() {
     await api.resignRole('ROLE-1');
     await api.delegateRole('ROLE-1', 'H-3');
 
-    await api.createCommunity();
+    await api.createCommunity(name: 'Carthage Guild', description: 'Artisanal guild');
+    await api.updateCommunity(communityId: 'COM-1', description: 'Updated guild');
     await api.joinCommunity('COM-1');
     await api.leaveCommunity('COM-1');
+    await api.listCommunityMembers('COM-1');
+    await api.listCommunityRequests('COM-1');
+    await api.decideCommunityRequest(communityId: 'COM-1', requestId: 'REQ-1', action: 'approve');
+    await api.setCommunityMemberRole(communityId: 'COM-1', targetHumanId: 'H-2', role: 'admin');
+    await api.disbandCommunity('COM-1');
     await api.createCity('New Kyoto', 'COM-1');
     await api.setCityBudget('energy');
     await api.setCityTaxCharter(incomeTaxBps: 300, salesTaxBps: 200);
@@ -145,6 +151,8 @@ void main() {
     expect(recordedCalls.contains('POST /api/governance/proposals'), true);
     expect(recordedCalls.contains('POST /api/governance/proposals/P-1/vote'), true);
     expect(recordedCalls.contains('POST /api/communities'), true);
+    expect(recordedCalls.contains('PATCH /api/communities/COM-1'), true);
+    expect(recordedCalls.contains('DELETE /api/communities/COM-1'), true);
     expect(recordedCalls.contains('POST /api/cities'), true);
   });
 

@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 48,
+  "migrationVersion": 49,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -142,6 +142,12 @@
       "community_id",
       "human_id",
       "role"
+    ],
+    "community_membership_requests": [
+      "id",
+      "community_id",
+      "human_id",
+      "status"
     ],
     "contract_delivery_ticks": [
       "id",

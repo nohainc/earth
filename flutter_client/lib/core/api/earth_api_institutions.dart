@@ -112,11 +112,66 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<EarthState> createCommunity() async {
+  Future<EarthState> createCommunity({
+    required String name,
+    String? description,
+    String admissionPolicy = 'open',
+  }) async {
     await _request('/api/communities', method: 'POST', body: {
-      'name': 'Carthage Makers',
+      'name': name,
+      if (description != null && description.isNotEmpty) 'description': description,
+      'admissionPolicy': admissionPolicy,
       'correlationId':
           'community-formation-${DateTime.now().microsecondsSinceEpoch}',
+    });
+    return world();
+  }
+
+  Future<EarthState> updateCommunity({
+    required String communityId,
+    String? description,
+    String? admissionPolicy,
+  }) async {
+    await _request('/api/communities/$communityId', method: 'PATCH', body: {
+      if (description != null) 'description': description,
+      if (admissionPolicy != null) 'admissionPolicy': admissionPolicy,
+    });
+    return world();
+  }
+
+  Future<EarthState> disbandCommunity(String communityId) async {
+    await _request('/api/communities/$communityId', method: 'DELETE');
+    return world();
+  }
+
+  Future<Map<String, dynamic>> listCommunityMembers(String communityId) async {
+    final res = await _request('/api/communities/$communityId/members', method: 'GET');
+    return res as Map<String, dynamic>;
+  }
+
+  Future<Map<String, dynamic>> listCommunityRequests(String communityId) async {
+    final res = await _request('/api/communities/$communityId/requests', method: 'GET');
+    return res as Map<String, dynamic>;
+  }
+
+  Future<EarthState> decideCommunityRequest({
+    required String communityId,
+    required String requestId,
+    required String action,
+  }) async {
+    await _request('/api/communities/$communityId/requests/$requestId', method: 'POST', body: {
+      'action': action,
+    });
+    return world();
+  }
+
+  Future<EarthState> setCommunityMemberRole({
+    required String communityId,
+    required String targetHumanId,
+    required String role,
+  }) async {
+    await _request('/api/communities/$communityId/members/$targetHumanId/role', method: 'POST', body: {
+      'role': role,
     });
     return world();
   }

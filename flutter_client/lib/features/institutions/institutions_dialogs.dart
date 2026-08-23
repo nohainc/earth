@@ -61,6 +61,181 @@ Future<void> showCommunityComposer(
   Future<void> Function(Future<EarthState> Function()) action,
 ) async {
   final name = TextEditingController(text: 'Carthage Makers');
+  final description = TextEditingController(
+    text: 'A cooperative of artisans and technicians dedicated to mutual aid and shared innovation.',
+  );
+  String admissionPolicy = 'open';
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) => AlertDialog(
+        backgroundColor: context.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.radiusPanel),
+          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+        ),
+        title: Text(
+          'Found New Community',
+          style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+        ),
+        content: SizedBox(
+          width: 480,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                TextField(
+                  controller: name,
+                  autofocus: true,
+                  style: context.bodyStyle.copyWith(color: context.inkColor),
+                  decoration: InputDecoration(
+                    labelText: 'Community Name',
+                    labelStyle: context.widgetFooterStyle,
+                    hintText: 'e.g. Carthage Makers Guild',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: description,
+                  maxLines: 3,
+                  style: context.bodyStyle.copyWith(color: context.inkColor),
+                  decoration: InputDecoration(
+                    labelText: 'Manifesto & Purpose',
+                    labelStyle: context.widgetFooterStyle,
+                    hintText: 'What is the goal of this community?',
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'ADMISSION POLICY',
+                  style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setDialogState(() => admissionPolicy = 'open'),
+                        borderRadius: BorderRadius.circular(context.radiusControl),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(context.radiusControl),
+                            border: Border.all(
+                              color: admissionPolicy == 'open'
+                                  ? context.primaryColor
+                                  : context.subtleBorderColor,
+                              width: admissionPolicy == 'open' ? 2 : 1,
+                            ),
+                            color: admissionPolicy == 'open'
+                                ? context.primaryColor.withValues(alpha: 0.1)
+                                : Colors.transparent,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('OPEN ACCESS',
+                                  style: context.captionStyle.copyWith(
+                                      color: context.primaryColor,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              Text('Instant Join',
+                                  style: context.widgetFooterStyle
+                                      .copyWith(color: context.mutedColor)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: InkWell(
+                        onTap: () => setDialogState(() => admissionPolicy = 'approval'),
+                        borderRadius: BorderRadius.circular(context.radiusControl),
+                        child: Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            borderRadius: BorderRadius.circular(context.radiusControl),
+                            border: Border.all(
+                              color: admissionPolicy == 'approval'
+                                  ? context.primaryColor
+                                  : context.subtleBorderColor,
+                              width: admissionPolicy == 'approval' ? 2 : 1,
+                            ),
+                            color: admissionPolicy == 'approval'
+                                ? context.primaryColor.withValues(alpha: 0.1)
+                                : Colors.transparent,
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('APPROVAL REQUIRED',
+                                  style: context.captionStyle.copyWith(
+                                      color: context.primaryColor,
+                                      fontWeight: FontWeight.bold)),
+                              const SizedBox(height: 2),
+                              Text('Review Applicants',
+                                  style: context.widgetFooterStyle
+                                      .copyWith(color: context.mutedColor)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+          ),
+          EarthButton(
+            label: 'Found Community',
+            variant: EarthButtonVariant.primary,
+            onPressed: () async {
+              final selectedName = name.text.trim();
+              if (selectedName.length < 3) return;
+              final selectedDesc = description.text.trim();
+              Navigator.pop(dialogContext);
+              await action(() => const EarthApi().createCommunity(
+                    name: selectedName,
+                    description: selectedDesc,
+                    admissionPolicy: admissionPolicy,
+                  ));
+            },
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
+Future<void> showCommunityDetailsDialog(
+  BuildContext context,
+  Map<String, dynamic> community,
+  EarthState state,
+  bool busy,
+  Future<void> Function(Future<EarthState> Function()) action,
+) async {
+  final id = community['id']?.toString() ?? 'COM-001';
+  final name = community['name']?.toString() ?? 'Community';
+  final founderName = community['founder_name']?.toString() ?? 'Founder';
+  final description = community['description']?.toString() ?? '';
+  final admissionPolicy = (community['admission_policy']?.toString() ?? 'open').toUpperCase();
+  final myRole = community['my_role']?.toString();
+  final isPending = community['my_request_status'] == 'pending';
+  final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
+  final members = asIntOr(community['member_count'], 12);
+  final isOwner = myRole == 'founder';
+  final isAdmin = myRole == 'admin';
+  final isMember = isOwner || isAdmin || myRole == 'member';
+
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -69,34 +244,461 @@ Future<void> showCommunityComposer(
         borderRadius: BorderRadius.circular(context.radiusPanel),
         side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
       ),
-      title: Text(
-        'Found New Community',
-        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+      title: Row(
+        children: [
+          Icon(Icons.groups_rounded, color: context.primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$name ($id)',
+              style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+            ),
+          ),
+        ],
       ),
-      content: TextField(
-        controller: name,
-        autofocus: true,
-        style: context.bodyStyle.copyWith(color: context.inkColor),
-        decoration: InputDecoration(
-          labelText: 'Community Name',
-          labelStyle: context.widgetFooterStyle,
+      content: SizedBox(
+        width: 500,
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                children: [
+                  if (isOwner)
+                    const EarthBadge(label: 'YOUR ROLE: OWNER / FOUNDER', variant: EarthBadgeVariant.primary)
+                  else if (isAdmin)
+                    const EarthBadge(label: 'YOUR ROLE: ADMIN', variant: EarthBadgeVariant.primary)
+                  else if (isMember)
+                    const EarthBadge(label: 'YOUR ROLE: MEMBER', variant: EarthBadgeVariant.success)
+                  else if (isPending)
+                    const EarthBadge(label: 'MEMBERSHIP PENDING REVIEW', variant: EarthBadgeVariant.warning)
+                  else
+                    const EarthBadge(label: 'NOT A MEMBER', variant: EarthBadgeVariant.neutral),
+                  EarthBadge(
+                    label: admissionPolicy == 'APPROVAL' ? 'APPROVAL REQ' : 'OPEN ACCESS',
+                    variant: EarthBadgeVariant.neutral,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'MANIFESTO & PURPOSE',
+                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(context.radiusCard),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Text(
+                  description.isNotEmpty ? description : 'No specific manifesto provided for this community.',
+                  style: context.bodyStyle.copyWith(color: context.inkColor),
+                ),
+              ),
+              const SizedBox(height: 16),
+              EarthMetricGrid(
+                metrics: [
+                  EarthMetricTile(
+                    label: 'FOUNDED BY',
+                    value: founderName,
+                    subtitle: 'Community Creator',
+                    icon: Icons.person_outline_rounded,
+                  ),
+                  EarthMetricTile(
+                    label: 'MEMBERS',
+                    value: '$members',
+                    subtitle: 'Citizens active',
+                    icon: Icons.groups_outlined,
+                  ),
+                  EarthMetricTile(
+                    label: 'SHARED TREASURY',
+                    value: '${sharedCredits.toStringAsFixed(0)} C',
+                    subtitle: 'Voluntary pool',
+                    icon: Icons.savings_outlined,
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
       actions: [
         TextButton(
           onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+          child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
         ),
-        EarthButton(
-          label: 'Found Community',
-          onPressed: () async {
-            final selectedName = name.text.trim();
-            if (selectedName.length < 3) return;
-            Navigator.pop(dialogContext);
-            await action(() => const EarthApi().createCommunity());
-          },
-        ),
+        if (isOwner || isAdmin) ...[
+          EarthButton(
+            label: 'MANAGE COMMUNITY',
+            icon: Icons.settings_outlined,
+            variant: EarthButtonVariant.primary,
+            onPressed: busy
+                ? null
+                : () {
+                    Navigator.pop(dialogContext);
+                    showCommunityManageDialog(context, community, state, action);
+                  },
+          ),
+        ] else if (isMember) ...[
+          EarthButton(
+            label: 'LEAVE',
+            variant: EarthButtonVariant.danger,
+            onPressed: busy
+                ? null
+                : () async {
+                    Navigator.pop(dialogContext);
+                    await action(() => const EarthApi().leaveCommunity(id));
+                  },
+          ),
+        ] else if (isPending) ...[
+          const EarthButton(
+            label: 'PENDING REVIEW',
+            variant: EarthButtonVariant.neutral,
+            onPressed: null,
+          ),
+        ] else ...[
+          EarthButton(
+            label: admissionPolicy == 'APPROVAL' ? 'APPLY TO JOIN' : 'JOIN COMMUNITY',
+            variant: EarthButtonVariant.primary,
+            onPressed: busy
+                ? null
+                : () async {
+                    Navigator.pop(dialogContext);
+                    await action(() => const EarthApi().joinCommunity(id));
+                  },
+          ),
+        ],
       ],
+    ),
+  );
+}
+
+Future<void> showCommunityManageDialog(
+  BuildContext context,
+  Map<String, dynamic> community,
+  EarthState state,
+  Future<void> Function(Future<EarthState> Function()) action,
+) async {
+  final id = community['id']?.toString() ?? 'COM-001';
+  final name = community['name']?.toString() ?? 'Community';
+  final myRole = community['my_role']?.toString();
+  final isOwner = myRole == 'founder';
+  final descController = TextEditingController(text: community['description']?.toString() ?? '');
+  String admissionPolicy = community['admission_policy']?.toString() ?? 'open';
+  final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
+
+  List<dynamic> members = [];
+  List<dynamic> requests = [];
+  bool loading = true;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => StatefulBuilder(
+      builder: (context, setDialogState) {
+        if (loading) {
+          Future.microtask(() async {
+            try {
+              final memRes = await const EarthApi().listCommunityMembers(id);
+              members = memRes['members'] as List<dynamic>? ?? [];
+              if (admissionPolicy == 'approval') {
+                final reqRes = await const EarthApi().listCommunityRequests(id);
+                requests = reqRes['requests'] as List<dynamic>? ?? [];
+              }
+            } catch (_) {}
+            setDialogState(() => loading = false);
+          });
+        }
+
+        return DefaultTabController(
+          length: isOwner ? 4 : 3,
+          child: AlertDialog(
+            backgroundColor: context.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(context.radiusPanel),
+              side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+            ),
+            title: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.settings_outlined, color: context.primaryColor),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Manage $name ($id)',
+                        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                TabBar(
+                  isScrollable: true,
+                  indicatorColor: context.primaryColor,
+                  labelColor: context.primaryColor,
+                  unselectedLabelColor: context.mutedColor,
+                  tabs: [
+                    const Tab(text: 'SETTINGS'),
+                    Tab(text: 'MEMBERS (${members.length})'),
+                    Tab(text: 'REQUESTS (${requests.length})'),
+                    if (isOwner) const Tab(text: 'DANGER ZONE'),
+                  ],
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 520,
+              height: 380,
+              child: loading
+                  ? const Center(child: CircularProgressIndicator())
+                  : TabBarView(
+                      children: [
+                        // Tab 1: Settings
+                        SingleChildScrollView(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              TextField(
+                                controller: descController,
+                                maxLines: 4,
+                                style: context.bodyStyle.copyWith(color: context.inkColor),
+                                decoration: InputDecoration(
+                                  labelText: 'Manifesto & Description',
+                                  labelStyle: context.widgetFooterStyle,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text('ADMISSION POLICY',
+                                  style: context.widgetTitleStyle.copyWith(color: context.mutedColor)),
+                              const SizedBox(height: 8),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () => setDialogState(() => admissionPolicy = 'open'),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: admissionPolicy == 'open'
+                                                ? context.primaryColor
+                                                : context.subtleBorderColor,
+                                            width: admissionPolicy == 'open' ? 2 : 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(context.radiusControl),
+                                        ),
+                                        child: Text('OPEN ACCESS',
+                                            textAlign: TextAlign.center,
+                                            style: context.captionStyle.copyWith(
+                                                color: context.primaryColor,
+                                                fontWeight: FontWeight.bold)),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: InkWell(
+                                      onTap: () => setDialogState(() => admissionPolicy = 'approval'),
+                                      child: Container(
+                                        padding: const EdgeInsets.all(8),
+                                        decoration: BoxDecoration(
+                                          border: Border.all(
+                                            color: admissionPolicy == 'approval'
+                                                ? context.primaryColor
+                                                : context.subtleBorderColor,
+                                            width: admissionPolicy == 'approval' ? 2 : 1,
+                                          ),
+                                          borderRadius: BorderRadius.circular(context.radiusControl),
+                                        ),
+                                        child: Text('APPROVAL REQ',
+                                            textAlign: TextAlign.center,
+                                            style: context.captionStyle.copyWith(
+                                                color: context.primaryColor,
+                                                fontWeight: FontWeight.bold)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 20),
+                              EarthButton(
+                                label: 'SAVE SETTINGS',
+                                variant: EarthButtonVariant.primary,
+                                onPressed: () async {
+                                  Navigator.pop(dialogContext);
+                                  await action(() => const EarthApi().updateCommunity(
+                                        communityId: id,
+                                        description: descController.text.trim(),
+                                        admissionPolicy: admissionPolicy,
+                                      ));
+                                },
+                              ),
+                            ],
+                          ),
+                        ),
+                        // Tab 2: Members
+                        members.isEmpty
+                            ? const Center(child: Text('No members found.'))
+                            : ListView.builder(
+                                itemCount: members.length,
+                                itemBuilder: (context, idx) {
+                                  final m = members[idx] as Map<String, dynamic>;
+                                  final hId = m['human_id']?.toString() ?? '';
+                                  final hName = m['human_name']?.toString() ?? hId;
+                                  final role = (m['role']?.toString() ?? 'member').toUpperCase();
+                                  final isMFounder = role == 'FOUNDER';
+
+                                  return ListTile(
+                                    title: Text(hName, style: context.bodyStyle),
+                                    subtitle: Text('$hId · Joined Day ${m['joined_game_day']}',
+                                        style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                    trailing: Wrap(
+                                      spacing: 6,
+                                      crossAxisAlignment: WrapCrossAlignment.center,
+                                      children: [
+                                        EarthBadge(
+                                          label: role,
+                                          variant: isMFounder
+                                              ? EarthBadgeVariant.primary
+                                              : role == 'ADMIN'
+                                                  ? EarthBadgeVariant.secondary
+                                                  : EarthBadgeVariant.neutral,
+                                        ),
+                                        if (isOwner && !isMFounder) ...[
+                                          if (role == 'ADMIN')
+                                            EarthButton(
+                                              label: 'DEMOTE',
+                                              variant: EarthButtonVariant.ghost,
+                                              onPressed: () async {
+                                                await const EarthApi().setCommunityMemberRole(
+                                                  communityId: id,
+                                                  targetHumanId: hId,
+                                                  role: 'member',
+                                                );
+                                                setDialogState(() => loading = true);
+                                              },
+                                            )
+                                          else
+                                            EarthButton(
+                                              label: 'MAKE ADMIN',
+                                              variant: EarthButtonVariant.secondary,
+                                              onPressed: () async {
+                                                await const EarthApi().setCommunityMemberRole(
+                                                  communityId: id,
+                                                  targetHumanId: hId,
+                                                  role: 'admin',
+                                                );
+                                                setDialogState(() => loading = true);
+                                              },
+                                            ),
+                                        ],
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                        // Tab 3: Requests
+                        requests.isEmpty
+                            ? const Center(child: Text('No pending membership requests.'))
+                            : ListView.builder(
+                                itemCount: requests.length,
+                                itemBuilder: (context, idx) {
+                                  final req = requests[idx] as Map<String, dynamic>;
+                                  final reqId = req['id']?.toString() ?? '';
+                                  final applicant = req['human_name']?.toString() ?? req['human_id']?.toString() ?? '';
+
+                                  return ListTile(
+                                    title: Text(applicant, style: context.bodyStyle),
+                                    subtitle: Text('Requested on Day ${req['requested_game_day']}',
+                                        style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                    trailing: Wrap(
+                                      spacing: 6,
+                                      children: [
+                                        EarthButton(
+                                          label: 'APPROVE',
+                                          variant: EarthButtonVariant.primary,
+                                          onPressed: () async {
+                                            await const EarthApi().decideCommunityRequest(
+                                              communityId: id,
+                                              requestId: reqId,
+                                              action: 'approve',
+                                            );
+                                            setDialogState(() => loading = true);
+                                          },
+                                        ),
+                                        EarthButton(
+                                          label: 'REJECT',
+                                          variant: EarthButtonVariant.danger,
+                                          onPressed: () async {
+                                            await const EarthApi().decideCommunityRequest(
+                                              communityId: id,
+                                              requestId: reqId,
+                                              action: 'reject',
+                                            );
+                                            setDialogState(() => loading = true);
+                                          },
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
+                        // Tab 4: Danger Zone
+                        if (isOwner)
+                          Padding(
+                            padding: const EdgeInsets.all(8.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(Icons.warning_amber_rounded, size: 48, color: context.dangerColor),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Disband Community',
+                                  textAlign: TextAlign.center,
+                                  style: context.topicTitleStyle.copyWith(color: context.dangerColor),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  sharedCredits > 0
+                                      ? 'Treasury contains ${sharedCredits.toStringAsFixed(2)} Credits. You cannot delete a community with existing funds. Disburse or transfer funds first.'
+                                      : 'Disbanding is irreversible. All community records and memberships will be dissolved permanently.',
+                                  textAlign: TextAlign.center,
+                                  style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
+                                ),
+                                const SizedBox(height: 24),
+                                EarthButton(
+                                  label: 'DISBAND COMMUNITY',
+                                  variant: EarthButtonVariant.danger,
+                                  onPressed: sharedCredits > 0
+                                      ? null
+                                      : () async {
+                                          Navigator.pop(dialogContext);
+                                          await action(() => const EarthApi().disbandCommunity(id));
+                                        },
+                                ),
+                              ],
+                            ),
+                          ),
+                      ],
+                    ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
+              ),
+            ],
+          ),
+        );
+      },
     ),
   );
 }

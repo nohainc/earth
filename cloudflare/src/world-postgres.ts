@@ -103,7 +103,24 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = $1 AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50", [viewerId]),
     repository.query('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = $1 ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT 30', [viewerId]),
     repository.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE owner_id = $1 ORDER BY id', [viewerId]),
-    repository.query('SELECT id, name, status FROM communities ORDER BY name LIMIT 20'),
+    repository.query(`
+      SELECT 
+        c.id, 
+        c.name, 
+        COALESCE(c.description, '') AS description, 
+        c.founder_id, 
+        COALESCE(h.display_name, h.name, 'Citizen') AS founder_name, 
+        c.status, 
+        COALESCE(c.admission_policy, 'open') AS admission_policy, 
+        COALESCE(c.shared_credits, 0) AS shared_credits,
+        (SELECT COUNT(*)::integer FROM community_members cm WHERE cm.community_id = c.id) AS member_count,
+        (SELECT cm.role FROM community_members cm WHERE cm.community_id = c.id AND cm.human_id = $1) AS my_role,
+        (SELECT cmr.status FROM community_membership_requests cmr WHERE cmr.community_id = c.id AND cmr.human_id = $1 AND cmr.status = 'pending' LIMIT 1) AS my_request_status
+      FROM communities c
+      LEFT JOIN humans h ON h.id = c.founder_id
+      ORDER BY c.name
+      LIMIT 50
+    `, [viewerId]),
     repository.query("SELECT COUNT(*)::integer AS count FROM patents WHERE technology_id = $1 AND status = 'active'", [technology.rows[0]?.id ?? '']),
     repository.query("SELECT COUNT(*)::integer AS count FROM technology_licenses WHERE patent_id IN (SELECT id FROM patents WHERE technology_id = $1) AND status = 'active'", [technology.rows[0]?.id ?? '']),
     repository.query('SELECT scope, category, rate, version FROM tax_rules WHERE active = true ORDER BY id'),

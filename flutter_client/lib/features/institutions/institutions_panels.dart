@@ -1165,42 +1165,118 @@ class CommunitiesPanel extends StatelessWidget {
                       final community = raw as Map<String, dynamic>;
                       final id = community['id']?.toString() ?? 'COM-001';
                       final name = community['name']?.toString() ?? 'Community';
+                      final founderName = community['founder_name']?.toString() ?? 'Citizen';
+                      final description = community['description']?.toString() ?? '';
                       final status = (community['status']?.toString() ?? 'active').toUpperCase();
+                      final admissionPolicy = (community['admission_policy']?.toString() ?? 'open').toUpperCase();
+                      final myRole = community['my_role']?.toString();
+                      final myRequestStatus = community['my_request_status']?.toString();
+                      final isOwner = myRole == 'founder';
+                      final isAdmin = myRole == 'admin';
+                      final isMember = isOwner || isAdmin || myRole == 'member';
+                      final isPending = myRequestStatus == 'pending';
                       final members = asIntOr(community['member_count'], 12);
                       final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
 
+                      final subtitle = description.isNotEmpty
+                          ? 'Founded by $founderName · $members members · ${sharedCredits.toStringAsFixed(0)} C treasury\n"$description"'
+                          : 'Founded by $founderName · $members members · ${sharedCredits.toStringAsFixed(0)} C in communal treasury';
+
                       return EarthDataRow(
                         title: '$name ($id)',
-                        subtitle: '$members members · ${sharedCredits.toStringAsFixed(0)} C in communal treasury',
+                        subtitle: subtitle,
                         leading: Icon(
                           Icons.groups_outlined,
                           size: context.iconSize,
                           color: context.primaryColor,
                         ),
                         badges: [
+                          if (isOwner)
+                            const EarthBadge(
+                              label: 'OWNER / FOUNDER',
+                              variant: EarthBadgeVariant.primary,
+                            )
+                          else if (isAdmin)
+                            const EarthBadge(
+                              label: 'ADMIN',
+                              variant: EarthBadgeVariant.primary,
+                            )
+                          else if (isMember)
+                            const EarthBadge(
+                              label: 'MEMBER',
+                              variant: EarthBadgeVariant.success,
+                            )
+                          else if (isPending)
+                            const EarthBadge(
+                              label: 'PENDING REVIEW',
+                              variant: EarthBadgeVariant.warning,
+                            ),
+                          EarthBadge(
+                            label: admissionPolicy == 'APPROVAL' ? 'APPROVAL REQ' : 'OPEN ACCESS',
+                            variant: EarthBadgeVariant.neutral,
+                          ),
                           EarthBadge(
                             label: status,
-                            variant: status == 'ACTIVE' ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
+                            variant: status == 'ACTIVE' ? EarthBadgeVariant.neutral : EarthBadgeVariant.neutral,
                           ),
                         ],
                         trailing: Wrap(
                           spacing: 6,
                           runSpacing: 4,
                           children: [
+                            if (isOwner || isAdmin) ...[
+                              EarthButton(
+                                label: 'MANAGE',
+                                icon: Icons.settings_outlined,
+                                variant: EarthButtonVariant.primary,
+                                onPressed: busy
+                                    ? null
+                                    : () => showCommunityManageDialog(
+                                          context,
+                                          community,
+                                          state,
+                                          action,
+                                        ),
+                              ),
+                              EarthButton(
+                                label: 'CONTRIBUTE',
+                                variant: EarthButtonVariant.secondary,
+                                onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
+                              ),
+                            ] else if (isMember) ...[
+                              EarthButton(
+                                label: 'CONTRIBUTE',
+                                variant: EarthButtonVariant.primary,
+                                onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
+                              ),
+                              EarthButton(
+                                label: 'LEAVE',
+                                variant: EarthButtonVariant.danger,
+                                onPressed: busy ? null : () => action(() => const EarthApi().leaveCommunity(id)),
+                              ),
+                            ] else if (isPending) ...[
+                              const EarthButton(
+                                label: 'PENDING',
+                                variant: EarthButtonVariant.neutral,
+                                onPressed: null,
+                              ),
+                            ] else ...[
+                              EarthButton(
+                                label: admissionPolicy == 'APPROVAL' ? 'APPLY' : 'JOIN',
+                                variant: EarthButtonVariant.primary,
+                                onPressed: busy ? null : () => action(() => const EarthApi().joinCommunity(id)),
+                              ),
+                            ],
                             EarthButton(
-                              label: 'JOIN',
-                              variant: EarthButtonVariant.primary,
-                              onPressed: busy ? null : () => action(() => const EarthApi().joinCommunity(id)),
-                            ),
-                            EarthButton(
-                              label: 'LEAVE',
-                              variant: EarthButtonVariant.danger,
-                              onPressed: busy ? null : () => action(() => const EarthApi().leaveCommunity(id)),
-                            ),
-                            EarthButton(
-                              label: 'CONTRIBUTE',
-                              variant: EarthButtonVariant.secondary,
-                              onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
+                              label: 'DETAILS',
+                              variant: EarthButtonVariant.ghost,
+                              onPressed: () => showCommunityDetailsDialog(
+                                context,
+                                community,
+                                state,
+                                busy,
+                                action,
+                              ),
                             ),
                           ],
                         ),

@@ -14,7 +14,7 @@ import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
 import { changeDelegation as changeDelegationPostgres, changeRole as changeRolePostgres, listRoles as listRolesPostgres } from './roles-postgres';
-import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres } from './communities-postgres';
+import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, decideCommunityMembershipRequest as decideCommunityMembershipRequestPostgres, disbandCommunity as disbandCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres, listCommunityMembershipRequests as listCommunityMembershipRequestsPostgres, setCommunityMemberRole as setCommunityMemberRolePostgres, updateCommunity as updateCommunityPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
 import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, createCorporationWithCapital as createCorporationWithCapitalPostgres, decideCorporationMembershipRequest as decideCorporationMembershipRequestPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationAdmissionPolicy as setCorporationAdmissionPolicyPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
@@ -510,7 +510,7 @@ const worker = {
     if (url.pathname === '/api/communities' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ name?: string; founderId?: string; correlationId?: string }>(request);
+      const parsed = await parseJsonBody<{ name?: string; description?: string; admissionPolicy?: 'open' | 'approval'; founderId?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const name = body.name?.trim();
@@ -519,12 +519,86 @@ const worker = {
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => createCommunityPostgres(repository, { founderId, name, correlationId }));
+        const result = await withRepository(env, (repository) => createCommunityPostgres(repository, { founderId, name, description: body.description, admissionPolicy: body.admissionPolicy, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Community formation failed';
         return Response.json({ ok: false, error: message }, { status: /already exists/i.test(message) ? 409 : /founder/i.test(message) ? 404 : 400 });
+      }
+    }
+    const communityMatch = url.pathname.match(/^\/api\/communities\/([^/]+)$/);
+    if (communityMatch && request.method === 'PATCH') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const communityId = communityMatch[1];
+      const parsed = await parseJsonBody<{ description?: string; admissionPolicy?: 'open' | 'approval' }>(request);
+      if (!parsed.ok) return parsed.response;
+      try {
+        const result = await withRepository(env, (repository) => updateCommunityPostgres(repository, { communityId, humanId: viewer.id, description: parsed.value.description, admissionPolicy: parsed.value.admissionPolicy }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community update failed' }, { status: 400 });
+      }
+    }
+    if (communityMatch && request.method === 'DELETE') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const communityId = communityMatch[1];
+      try {
+        const result = await withRepository(env, (repository) => disbandCommunityPostgres(repository, { communityId, humanId: viewer.id }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community disband failed' }, { status: 400 });
+      }
+    }
+    const communityRequestsMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/requests$/);
+    if (communityRequestsMatch && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const communityId = communityRequestsMatch[1];
+      try {
+        const result = await withRepository(env, (repository) => listCommunityMembershipRequestsPostgres(repository, communityId, viewer.id));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Community requests could not be loaded' }, { status: 403 });
+      }
+    }
+    const communityRequestDecisionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/requests\/([^/]+)$/);
+    if (communityRequestDecisionMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const communityId = communityRequestDecisionMatch[1];
+      const requestId = communityRequestDecisionMatch[2];
+      const parsed = await parseJsonBody<{ action?: 'approve' | 'reject' }>(request);
+      if (!parsed.ok) return parsed.response;
+      const action = parsed.value.action === 'reject' ? 'reject' : 'approve';
+      try {
+        const result = await withRepository(env, (repository) => decideCommunityMembershipRequestPostgres(repository, { communityId, deciderId: viewer.id, requestId, action }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Request decision failed' }, { status: 400 });
+      }
+    }
+    const communityMemberRoleMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members\/([^/]+)\/role$/);
+    if (communityMemberRoleMatch && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const communityId = communityMemberRoleMatch[1];
+      const targetHumanId = communityMemberRoleMatch[2];
+      const parsed = await parseJsonBody<{ role?: 'admin' | 'member' }>(request);
+      if (!parsed.ok) return parsed.response;
+      const role = parsed.value.role === 'admin' ? 'admin' : 'member';
+      try {
+        const result = await withRepository(env, (repository) => setCommunityMemberRolePostgres(repository, { communityId, actorId: viewer.id, targetHumanId, role }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Role change failed' }, { status: 400 });
       }
     }
     const communityMembersMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members$/);
