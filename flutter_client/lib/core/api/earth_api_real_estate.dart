@@ -105,4 +105,40 @@ extension EarthApiRealEstate on EarthApi {
     );
     return EarthState(res as Map<String, dynamic>);
   }
+
+  Future<EarthState> acquireBuildingPatentLicense({
+    required String patentId,
+    String licenseType = 'private_building',
+    String? buildingId,
+    String? cityId,
+    bool isPermanent = false,
+  }) async {
+    final res = await _request(
+      '/api/real-estate/license/acquire',
+      method: 'POST',
+      body: {
+        'patentId': patentId,
+        'licenseType': licenseType,
+        if (buildingId != null) 'buildingId': buildingId,
+        if (cityId != null) 'cityId': cityId,
+        'isPermanent': isPermanent,
+        'correlationId': 'ACQ-LIC-${DateTime.now().millisecondsSinceEpoch}',
+      },
+    );
+    return EarthState(res as Map<String, dynamic>);
+  }
+
+  Future<EarthState> renewBuildingPatentLicense({
+    required String licenseId,
+  }) async {
+    final res = await _request(
+      '/api/real-estate/license/renew',
+      method: 'POST',
+      body: {
+        'licenseId': licenseId,
+        'correlationId': 'RENEW-LIC-${DateTime.now().millisecondsSinceEpoch}',
+      },
+    );
+    return EarthState(res as Map<String, dynamic>);
+  }
 }

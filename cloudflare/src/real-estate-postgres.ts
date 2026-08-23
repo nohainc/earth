@@ -1,7 +1,74 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
-import { BUILDING_CATALOG, type OperatingPolicy, type OwnershipClass } from './real-estate-catalog.ts';
+import {
+  BUILDING_CATALOG,
+  type OperatingPolicy,
+  type OwnershipClass,
+  type RequiredPatentSpec,
+} from './real-estate-catalog.ts';
+
+export function findPatentSpecInCatalog(patentId: string): RequiredPatentSpec | null {
+  for (const item of Object.values(BUILDING_CATALOG)) {
+    if (item.requiredPatent && item.requiredPatent.patentId === patentId) {
+      return item.requiredPatent;
+    }
+    for (const tier of item.tiers || []) {
+      if (tier.requiredPatent && tier.requiredPatent.patentId === patentId) {
+        return tier.requiredPatent;
+      }
+    }
+  }
+  return null;
+}
+
+export async function checkBuildingPatentAccess(
+  tx: any,
+  input: {
+    humanId: string;
+    cityId: string;
+    requiredPatent?: RequiredPatentSpec | null;
+  },
+): Promise<{
+  hasAccess: boolean;
+  accessType: 'foundational' | 'corporate_member' | 'private_building' | 'city_civic' | 'none';
+  patent?: RequiredPatentSpec;
+}> {
+  if (!input.requiredPatent) {
+    return { hasAccess: true, accessType: 'foundational' };
+  }
+
+  const req = input.requiredPatent;
+
+  // 1. Check corporate membership
+  const memberRes = await tx.query(
+    "SELECT corporation_id FROM memberships WHERE human_id = $1 AND corporation_id = $2 AND status = 'active'",
+    [input.humanId, req.owningCorporationId],
+  );
+  if (memberRes.rows && memberRes.rows.length > 0) {
+    return { hasAccess: true, accessType: 'corporate_member', patent: req };
+  }
+
+  // 2. Check private building license
+  const privRes = await tx.query(
+    "SELECT * FROM building_patent_licenses WHERE licensee_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window')",
+    [input.humanId, req.patentId],
+  );
+  if (privRes.rows && privRes.rows.length > 0) {
+    return { hasAccess: true, accessType: 'private_building', patent: req };
+  }
+
+  // 3. Check city-wide civic license
+  const cityRes = await tx.query(
+    "SELECT * FROM building_patent_licenses WHERE city_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window')",
+    [input.cityId, req.patentId],
+  );
+  if (cityRes.rows && cityRes.rows.length > 0) {
+    return { hasAccess: true, accessType: 'city_civic', patent: req };
+  }
+
+  return { hasAccess: false, accessType: 'none', patent: req };
+}
 
 export interface DistrictZoningSummary {
   cityId: string;
@@ -114,6 +181,20 @@ export async function purchasePrivatePlotAndConstruct(
       [input.ownerId],
     );
     const citizenCityId = membership.rows[0]?.city_id ?? input.cityId;
+
+    // Check Corporate Patent Access (if required)
+    if (spec.requiredPatent) {
+      const patentAccess = await checkBuildingPatentAccess(tx, {
+        humanId: input.ownerId,
+        cityId: citizenCityId,
+        requiredPatent: spec.requiredPatent,
+      });
+      if (!patentAccess.hasAccess) {
+        throw new Error(
+          `Construction locked: Requires Patent "${spec.requiredPatent.patentName}". Join ${spec.requiredPatent.owningCorporationName}, acquire a private license (${spec.requiredPatent.privateLicenseCostCrd} CRD), or request city civic procurement.`,
+        );
+      }
+    }
 
     // Check District Zoning Capacity
     const zoning = await getCityDistrictZoning(repository, citizenCityId);
@@ -243,8 +324,22 @@ export async function upgradeBuilding(
     if (bld.owner_id !== input.humanId) throw new Error('Only the property owner can upgrade this facility');
     if (bld.tier >= 4) throw new Error('Building is already at maximum engineering tier (Tier 4)');
 
+    const nextTier = bld.tier + 1;
     const spec = BUILDING_CATALOG[bld.building_type];
     const tierSpec = spec?.tiers?.find((t) => t.tier === nextTier);
+
+    if (tierSpec?.requiredPatent) {
+      const patentAccess = await checkBuildingPatentAccess(tx, {
+        humanId: input.humanId,
+        cityId: bld.city_id,
+        requiredPatent: tierSpec.requiredPatent,
+      });
+      if (!patentAccess.hasAccess) {
+        throw new Error(
+          `Tier ${nextTier} upgrade locked: Requires Patent "${tierSpec.requiredPatent.patentName}". Join ${tierSpec.requiredPatent.owningCorporationName} or acquire a private building license (${tierSpec.requiredPatent.privateLicenseCostCrd} CRD).`,
+        );
+      }
+    }
 
     if (tierSpec?.requiredCityPopulation) {
       const popRes = await tx.query<{ count: string }>(
@@ -627,4 +722,177 @@ export async function contributeCorporateResearch(
     return { ok: true, pool: updated.rows[0], completed, correlationId: input.correlationId };
   });
 }
+
+export async function acquireBuildingPatentLicense(
+  repository: PostgresRepository,
+  input: {
+    humanId: string;
+    patentId: string;
+    licenseType: 'private_building' | 'city_civic';
+    buildingId?: string | null;
+    cityId?: string | null;
+    isPermanent?: boolean;
+    correlationId: string;
+  },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ reason_id: string }>(
+      "SELECT reason_id FROM ledger_entries WHERE reason_type = 'patent_license_purchase' AND correlation_id = $1",
+      [input.correlationId],
+    );
+    if (prior.rows[0]) {
+      const existing = await tx.query('SELECT * FROM building_patent_licenses WHERE id = $1', [prior.rows[0].reason_id]);
+      return { ok: true, alreadyProcessed: true, license: existing.rows[0], correlationId: input.correlationId };
+    }
+
+    const patentSpec = findPatentSpecInCatalog(input.patentId);
+    if (!patentSpec) throw new Error(`Patent "${input.patentId}" not found in catalog`);
+
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 1);
+
+    const isCivic = input.licenseType === 'city_civic';
+    const costCrd = isCivic
+      ? (input.isPermanent ? patentSpec.cityCivicLicenseCostCrd * 3 : patentSpec.cityCivicLicenseCostCrd)
+      : patentSpec.privateLicenseCostCrd;
+    const termDays = input.isPermanent ? 36500 : patentSpec.termDays;
+    const dailyRoyalty = input.isPermanent ? 0 : patentSpec.privateDailyRoyaltyCrd;
+
+    const creditCostCents = BigInt(Math.round(costCrd * 100));
+    const licenseId = `LIC-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+
+    if (!isCivic) {
+      const account = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [input.humanId],
+      );
+      if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
+        throw new Error(`Insufficient Credits for patent license (Requires ${costCrd} CRD)`);
+      }
+
+      await transferCredits(tx, {
+        ledgerId: crypto.randomUUID(),
+        gameDay: day,
+        debitAccount: account.rows[0].account_id,
+        creditAccount: `account-corporation-${patentSpec.owningCorporationId}`,
+        amount: centsToMoney(creditCostCents),
+        reasonType: 'patent_license_purchase',
+        reasonId: licenseId,
+        ruleVersion: 'patent-licensing-v1',
+        correlationId: input.correlationId,
+      });
+    }
+
+    await tx.query(
+      `INSERT INTO building_patent_licenses (
+        id, patent_id, patent_name, license_type, licensee_id,
+        licensor_corporation_id, building_id, city_id, is_permanent,
+        granted_game_day, expiry_game_day, royalty_per_day_crd, status
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, 'active')`,
+      [
+        licenseId,
+        patentSpec.patentId,
+        patentSpec.patentName,
+        input.licenseType,
+        input.humanId,
+        patentSpec.owningCorporationId,
+        input.buildingId ?? null,
+        input.cityId ?? null,
+        input.isPermanent ?? false,
+        day,
+        day + termDays,
+        dailyRoyalty,
+      ],
+    );
+
+    if (input.buildingId) {
+      await tx.query(
+        "UPDATE buildings SET patent_license_status = 'active', required_patent_id = $1 WHERE id = $2",
+        [patentSpec.patentId, input.buildingId],
+      );
+    }
+
+    const res = await tx.query('SELECT * FROM building_patent_licenses WHERE id = $1', [licenseId]);
+    return { ok: true, license: res.rows[0], correlationId: input.correlationId };
+  });
+}
+
+export async function renewBuildingPatentLicense(
+  repository: PostgresRepository,
+  input: {
+    humanId: string;
+    licenseId: string;
+    correlationId: string;
+  },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ reason_id: string }>(
+      "SELECT reason_id FROM ledger_entries WHERE reason_type = 'patent_license_renewal' AND correlation_id = $1",
+      [input.correlationId],
+    );
+    if (prior.rows[0]) {
+      const existing = await tx.query('SELECT * FROM building_patent_licenses WHERE id = $1', [input.licenseId]);
+      return { ok: true, alreadyProcessed: true, license: existing.rows[0], correlationId: input.correlationId };
+    }
+
+    const licRes = await tx.query<{
+      id: string;
+      patent_id: string;
+      license_type: string;
+      licensee_id: string;
+      licensor_corporation_id: string;
+      building_id: string | null;
+      city_id: string | null;
+      expiry_game_day: string;
+    }>('SELECT * FROM building_patent_licenses WHERE id = $1 FOR UPDATE', [input.licenseId]);
+    const lic = licRes.rows[0];
+    if (!lic) throw new Error('Patent license not found');
+    if (lic.licensee_id !== input.humanId) throw new Error('Unauthorized');
+
+    const patentSpec = findPatentSpecInCatalog(lic.patent_id);
+    const costCrd = patentSpec ? patentSpec.privateLicenseCostCrd : 5000;
+    const termDays = patentSpec ? patentSpec.termDays : 30;
+    const creditCostCents = BigInt(Math.round(costCrd * 100));
+
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 1);
+
+    const account = await tx.query<{ account_id: string; balance: string }>(
+      "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+      [input.humanId],
+    );
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
+      throw new Error(`Insufficient Credits for license renewal (Requires ${costCrd} CRD)`);
+    }
+
+    await transferCredits(tx, {
+      ledgerId: crypto.randomUUID(),
+      gameDay: day,
+      debitAccount: account.rows[0].account_id,
+      creditAccount: `account-corporation-${lic.licensor_corporation_id}`,
+      amount: centsToMoney(creditCostCents),
+      reasonType: 'patent_license_renewal',
+      reasonId: lic.id,
+      ruleVersion: 'patent-licensing-v1',
+      correlationId: input.correlationId,
+    });
+
+    const newExpiry = Math.max(day, Number(lic.expiry_game_day)) + termDays;
+    await tx.query(
+      "UPDATE building_patent_licenses SET expiry_game_day = $1, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+      [newExpiry, lic.id],
+    );
+
+    if (lic.building_id) {
+      await tx.query(
+        "UPDATE buildings SET patent_license_status = 'active' WHERE id = $1",
+        [lic.building_id],
+      );
+    }
+
+    const updated = await tx.query('SELECT * FROM building_patent_licenses WHERE id = $1', [lic.id]);
+    return { ok: true, license: updated.rows[0], correlationId: input.correlationId };
+  });
+}
+
 

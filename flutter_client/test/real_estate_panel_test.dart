@@ -5,6 +5,7 @@ import 'package:earth_client/features/operations/real_estate_panel.dart';
 import 'package:earth_client/features/operations/real_estate_dialogs.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 import 'package:earth_client/features/operations/building_detail_upgrade_dialog.dart';
+import 'package:earth_client/features/operations/patent_licensing_dialog.dart';
 
 void main() {
   const state = EarthState({
@@ -276,10 +277,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Multi-Tier Upgrade Tree'), findsOneWidget);
-    expect(find.text('MULTI-TIER UPGRADE PROGRESSION'), findsOneWidget);
+    expect(find.textContaining('MULTI-TIER UPGRADE PROGRESSION'), findsOneWidget);
     expect(find.text('TIER 1: Bistro & Molecular Diner'), findsOneWidget);
     expect(find.text('TIER 2: Gourmet Gastronomy Lounge'), findsOneWidget);
     expect(find.text('COMMENCE TIER 2 UPGRADE'), findsOneWidget);
+  });
+
+  testWidgets('showPatentLicensingDialog opens with private, civic, and permanent options', (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Builder(
+            builder: (context) => ElevatedButton(
+              onPressed: () => showPatentLicensingDialog(
+                context,
+                (cb) async => cb(),
+                const {
+                  'patentId': 'PAT-DAT-02',
+                  'patentName': 'Photonic Neural Architecture',
+                  'owningCorporationName': 'Aetheria Systems',
+                  'owningCorporationId': 'CORP-001',
+                  'privateLicenseCostCrd': 12000,
+                  'privateDailyRoyaltyCrd': 150,
+                  'cityCivicLicenseCostCrd': 45000,
+                  'description': 'Advanced optical interconnect architecture.',
+                },
+              ),
+              child: const Text('OPEN PATENT DIALOG'),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('OPEN PATENT DIALOG'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Procure Corporate Patent License'), findsOneWidget);
+    expect(find.text('Photonic Neural Architecture'), findsOneWidget);
+    expect(find.textContaining('Aetheria Systems'), findsOneWidget);
+    expect(find.text('30-Day Private Building License'), findsOneWidget);
+    expect(find.text('30-Day Municipal City-Wide Civic License'), findsOneWidget);
+    expect(find.text('Permanent Civic Sovereign License'), findsOneWidget);
+    expect(find.text('PURCHASE & AUTHORIZE'), findsOneWidget);
   });
 
   testWidgets('Real estate acquisition dialog opens and displays blueprint details', (tester) async {

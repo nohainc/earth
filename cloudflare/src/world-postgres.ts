@@ -83,7 +83,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
   const startIndex = economicStartIndex(referencePrice || 50);
   const feeRate = Number(await marketFeeRate(repository, viewerId));
-  const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees, buildings, investmentShares, civicDividends, corporateResearch, districtZoning] = await Promise.all([
+  const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees, buildings, investmentShares, civicDividends, corporateResearch, districtZoning, buildingPatentLicenses] = await Promise.all([
     Promise.all([
       repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
         FROM cities
@@ -160,11 +160,18 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
       availableCivicSlots: 4,
       buildingsCount: 3,
     })),
+    repository.query(
+      `SELECT * FROM building_patent_licenses 
+       WHERE licensee_id = $1 OR city_id = (SELECT city_id FROM memberships WHERE human_id = $1)
+       ORDER BY created_at DESC LIMIT 50`,
+      [viewerId],
+    ).catch(() => ({ rows: [] })),
   ]);
   const buildingsRows = buildings?.rows ?? [];
   const investmentSharesRows = investmentShares?.rows ?? [];
   const civicDividendsRows = civicDividends?.rows ?? [];
   const corporateResearchRows = corporateResearch?.rows ?? [];
+  const buildingPatentLicensesRows = buildingPatentLicenses?.rows ?? [];
   const districtZoningData = districtZoning ?? {
     cityId: city?.id ?? 'CITY-0084',
     cityName: 'New Carthage',
@@ -264,6 +271,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     investmentShares: investmentSharesRows,
     civicDividends: civicDividendsRows,
     corporateResearch: corporateResearchRows,
+    buildingPatentLicenses: buildingPatentLicensesRows,
     buildingCatalog: Object.values(BUILDING_CATALOG),
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },

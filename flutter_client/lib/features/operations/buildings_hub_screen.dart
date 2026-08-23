@@ -5,6 +5,7 @@ import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'building_detail_upgrade_dialog.dart';
+import 'patent_licensing_dialog.dart';
 import 'real_estate_dialogs.dart';
 
 class BuildingsHubScreen extends StatefulWidget {
@@ -33,9 +34,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final buildings = widget.state.buildings.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
     final shares = widget.state.investmentShares.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
     final dividends = widget.state.civicDividends.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
+    final licenses = widget.state.buildingPatentLicenses.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
     final catalog = widget.state.buildingCatalog;
     final zoning = widget.state.districtZoning;
     final cityId = widget.state.membership?['city_id']?.toString() ?? 'CITY-0084';
+    final myCorpId = widget.state.membership?['corporation_id']?.toString();
     final viewerId = widget.state.human['id']?.toString();
 
     final totalSlots = asIntOr(zoning['totalSlots'], 10);
@@ -64,8 +67,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       infoBulletPoints: const [
         'Core Economic Objects: Buildings own their physical footprint, daily operating expenses, maintenance buffers, condition wear, and commercial returns.',
         'Three-Layer System: Manage active District Estates, evaluate new investments in the Construction Planner, and browse the global EARTH Blueprint Catalog.',
-        'Multi-Tier Upgrade Trees: Expand facilities through multi-tier upgrade trees (Tier 1 → Tier 2 → Tier 3 → Tier 4) to unlock capacity and systemic perks.',
-        'Operating Policies: Switch between Balanced, High Output, Eco Reserve, and Overclock modes.',
+        'Corporate Patents & Licensing: Foundational tech is permanently available to all. Advanced facilities require patent licenses (included for corporate members, or available via private 30-day and municipal civic licenses).',
+        'Non-Punitive Expiration: When a patent license expires, buildings operate at reduced baseline efficiency (-30% output) with upgrades locked, and are never demolished.',
         'Civic Dividends & Public Megaprojects: Public utilities distribute 100% of net surplus revenue to citizens via 70/30 UBI + Participation bonuses.',
       ],
       trailing: EarthButton(
@@ -142,6 +145,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               civicBuildings: civicBuildings,
               shares: shares,
               dividends: dividends,
+              licenses: licenses,
               catalog: catalog,
               totalSlots: totalSlots,
               civicReserved: civicReservedSlots,
@@ -149,6 +153,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               usedCivic: usedCivicSlots,
               population: population,
               viewerId: viewerId,
+              myCorpId: myCorpId,
             )
           else if (_activeTab == 1)
             _buildPlannerTab(
@@ -156,6 +161,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               catalog: catalog,
               availablePrivateSlots: availablePrivateSlots,
               cityId: cityId,
+              licenses: licenses,
+              myCorpId: myCorpId,
+              population: population,
             )
           else
             _buildCatalogTab(
@@ -163,6 +171,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               catalog: catalog,
               publicBuildings: publicBuildings,
               shares: shares,
+              myCorpId: myCorpId,
             ),
         ],
       ),
@@ -201,6 +210,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required List<Map<String, dynamic>> civicBuildings,
     required List<Map<String, dynamic>> shares,
     required List<Map<String, dynamic>> dividends,
+    required List<Map<String, dynamic>> licenses,
     required List<dynamic> catalog,
     required int totalSlots,
     required int civicReserved,
@@ -208,6 +218,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required int usedCivic,
     required int population,
     required String? viewerId,
+    required String? myCorpId,
   }) {
     final filteredBuildings = _selectedCategory == 'all'
         ? buildings.where((b) => b['status'] != 'closed').toList()
@@ -281,7 +292,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         else
           Column(
             children: filteredBuildings
-                .map((b) => _buildBuildingCard(context, b, viewerId, catalog))
+                .map((b) => _buildBuildingCard(context, b, viewerId, catalog, licenses, myCorpId))
                 .toList(),
           ),
 
@@ -299,6 +310,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required List<dynamic> catalog,
     required int availablePrivateSlots,
     required String cityId,
+    required List<Map<String, dynamic>> licenses,
+    required String? myCorpId,
+    required int population,
   }) {
     final blueprints = catalog.whereType<Map>().where((b) => b['ownershipClass'] != 'civic' && b['ownershipClass'] != 'public_investment').toList();
     if (blueprints.isEmpty) {
@@ -326,8 +340,22 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final sensitivity = currentSpec['resourceSensitivity']?.toString().toUpperCase() ?? 'MEDIUM';
     final risk = currentSpec['maintenanceRisk']?.toString().toUpperCase() ?? 'LOW';
     final purpose = currentSpec['primaryEconomicPurpose']?.toString() ?? 'Economic Output';
+    final reqPop = asIntOr(currentSpec['minCityPopulation'], 0);
+    final reqPatent = currentSpec['requiredPatent'] as Map<String, dynamic>?;
 
     final hasEnoughSlots = availablePrivateSlots >= footprint;
+    final hasEnoughPop = reqPop == 0 || population >= reqPop;
+
+    bool hasPatentAccess = true;
+    if (reqPatent != null) {
+      final pId = reqPatent['patentId']?.toString();
+      final pCorp = reqPatent['owningCorporationId']?.toString();
+      final isMember = myCorpId != null && myCorpId == pCorp;
+      final isLicensed = licenses.any((l) => l['patent_id'] == pId && l['status'] != 'expired');
+      hasPatentAccess = isMember || isLicensed;
+    }
+
+    final canConstruct = hasEnoughSlots && hasEnoughPop && hasPatentAccess;
 
     return Container(
       padding: EdgeInsets.all(context.cardPadding),
@@ -348,7 +376,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ),
           const SizedBox(height: 6),
           Text(
-            'Select and compare physical building archetypes before allocating district plots and capital. Review payback velocity, resource sensitivity, and maintenance risks.',
+            'Select and compare physical building archetypes before allocating district plots and capital. Review payback velocity, resource sensitivity, patent requirements, and maintenance risks.',
             style: context.widgetFooterStyle,
           ),
           SizedBox(height: context.spacingControl),
@@ -437,37 +465,97 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 ),
                 const SizedBox(height: 14),
 
-                // Cost & Zoning Fit
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      'Capital Required: ${formatWholeNumber(creditCost)} CRD + $materialCost Materials',
-                      style: context.bodyStyle.copyWith(fontWeight: FontWeight.bold),
-                    ),
-                    EarthBadge(
-                      label: hasEnoughSlots ? 'ZONING FIT: SUFFICIENT' : 'ZONING FIT: INSUFFICIENT PLOTS',
-                      variant: hasEnoughSlots ? EarthBadgeVariant.success : EarthBadgeVariant.danger,
-                    ),
-                  ],
+                // Strategic Requirements Checklist Box
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: context.surfaceColor,
+                    borderRadius: BorderRadius.circular(context.radiusControl),
+                    border: Border.all(color: context.subtleBorderColor),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('CONSTRUCTION PREREQUISITES CHECKLIST:', style: context.captionStyle),
+                      const SizedBox(height: 6),
+                      Wrap(
+                        spacing: 12,
+                        runSpacing: 6,
+                        children: [
+                          _buildRequirementItem(
+                            context,
+                            'District Land Plots (Requires $footprint)',
+                            hasEnoughSlots,
+                          ),
+                          _buildRequirementItem(
+                            context,
+                            'Capital (${formatWholeNumber(creditCost)} CRD + $materialCost MAT)',
+                            true,
+                          ),
+                          if (reqPop > 0)
+                            _buildRequirementItem(
+                              context,
+                              'City Population ($population / $reqPop)',
+                              hasEnoughPop,
+                            ),
+                          if (reqPatent != null)
+                            _buildRequirementItem(
+                              context,
+                              'Patent: ${reqPatent['patentName']} (${reqPatent['owningCorporationName']})',
+                              hasPatentAccess,
+                            ),
+                          if (reqPatent == null)
+                            _buildRequirementItem(
+                              context,
+                              'Technology: Foundational EARTH (Open to all)',
+                              true,
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 14),
 
-                // Direct Build Action
-                EarthButton(
-                  label: 'COMMENCE CONSTRUCTION ON PLOT',
-                  icon: Icons.domain_add_outlined,
-                  variant: EarthButtonVariant.primary,
-                  onPressed: widget.busy || !hasEnoughSlots
-                      ? null
-                      : () async {
-                          EarthAudioEngine.instance.playClick();
-                          await widget.action(() => const EarthApi().purchaseBuilding(
-                                buildingType: _plannerSelectedBlueprint,
-                                name: name,
-                                cityId: cityId,
-                              ));
-                        },
+                // Direct Build / Licensing Actions
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    EarthButton(
+                      label: 'COMMENCE CONSTRUCTION ON PLOT',
+                      icon: Icons.domain_add_outlined,
+                      variant: EarthButtonVariant.primary,
+                      onPressed: widget.busy || !canConstruct
+                          ? null
+                          : () async {
+                              EarthAudioEngine.instance.playClick();
+                              await widget.action(() => const EarthApi().purchaseBuilding(
+                                    buildingType: _plannerSelectedBlueprint,
+                                    name: name,
+                                    cityId: cityId,
+                                  ));
+                            },
+                    ),
+                    if (reqPatent != null && !hasPatentAccess)
+                      EarthButton(
+                        label: 'PROCURE PATENT LICENSE',
+                        icon: Icons.workspace_premium_outlined,
+                        variant: EarthButtonVariant.secondary,
+                        onPressed: widget.busy
+                            ? null
+                            : () {
+                                EarthAudioEngine.instance.playClick();
+                                showPatentLicensingDialog(
+                                  context,
+                                  widget.action,
+                                  reqPatent,
+                                  cityId: cityId,
+                                  isMemberOfOwningCorp: myCorpId == reqPatent['owningCorporationId'],
+                                );
+                              },
+                      ),
+                  ],
                 ),
               ],
             ),
@@ -477,12 +565,34 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
   }
 
+  Widget _buildRequirementItem(BuildContext context, String title, bool isMet) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(
+          isMet ? Icons.check_circle : Icons.cancel,
+          color: isMet ? context.successColor : context.dangerColor,
+          size: 16,
+        ),
+        const SizedBox(width: 4),
+        Text(
+          title,
+          style: context.bodyStyle.copyWith(
+            color: isMet ? null : context.dangerColor,
+            fontWeight: isMet ? FontWeight.normal : FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   // ==================== TAB 3: GLOBAL BLUEPRINT CATALOG & TECH TREES ====================
   Widget _buildCatalogTab(
     BuildContext context, {
     required List<dynamic> catalog,
     required List<Map<String, dynamic>> publicBuildings,
     required List<Map<String, dynamic>> shares,
+    required String? myCorpId,
   }) {
     final list = catalog.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
 
@@ -502,7 +612,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               Text('EARTH AUTHORITATIVE BLUEPRINT SPECIFICATIONS', style: context.topicTitleStyle),
               const SizedBox(height: 4),
               Text(
-                'The global EARTH catalog defines all architectural archetypes, multi-tier engineering trees, resource flows, and civic utility rights across the planetary quadrant network.',
+                'The global EARTH catalog defines all architectural archetypes, multi-tier engineering trees, resource flows, and patent licensing rights across the planetary quadrant network.',
                 style: context.widgetFooterStyle,
               ),
             ],
@@ -522,6 +632,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             final purpose = item['primaryEconomicPurpose']?.toString() ?? 'Economic Production';
             final desc = item['description']?.toString() ?? '';
             final civicBenefit = item['civicBenefit']?.toString();
+            final reqPatent = item['requiredPatent'] as Map?;
             final rawTiers = item['tiers'] as List?;
             final tierCount = rawTiers != null ? rawTiers.length : 3;
 
@@ -555,6 +666,17 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   Text(desc, style: context.bodyStyle),
                   const SizedBox(height: 6),
                   Text('Economic Purpose: $purpose · Engineering Upgrades: $tierCount Tiers', style: context.widgetFooterStyle),
+                  if (reqPatent != null) ...[
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: context.warningColor.withValues(alpha: .1),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text('📜 Corporate Patent: ${reqPatent['patentName']} (${reqPatent['owningCorporationName']})', style: TextStyle(color: context.warningColor, fontSize: 11)),
+                    ),
+                  ],
                   if (civicBenefit != null) ...[
                     const SizedBox(height: 4),
                     Container(
@@ -693,10 +815,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     Map<String, dynamic> b,
     String? viewerId,
     List<dynamic> catalog,
+    List<Map<String, dynamic>> licenses,
+    String? myCorpId,
   ) {
     final id = b['id']?.toString() ?? '';
     final name = b['name']?.toString() ?? 'Facility';
     final type = (b['building_type']?.toString() ?? 'building').replaceAll('-', ' ').toUpperCase();
+    final bType = b['building_type']?.toString() ?? '';
     final tier = asIntOr(b['tier'], 1);
     final condition = asDoubleOr(b['condition'], 100);
     final footprint = asIntOr(b['slot_footprint'], 1);
@@ -716,6 +841,18 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final uMat = asDoubleOr(b['upkeep_materials'], 0);
     final uComp = asDoubleOr(b['upkeep_components'], 0);
     final uDat = asDoubleOr(b['upkeep_compute'], 0);
+
+    // Patent Status
+    final match = catalog.whereType<Map>().firstWhere((c) => c['type'] == bType, orElse: () => <String, dynamic>{});
+    final reqPatent = match['requiredPatent'] as Map?;
+    final reqPatentId = reqPatent?['patentId']?.toString() ?? b['required_patent_id']?.toString();
+    final matchingLicense = licenses.firstWhere(
+      (l) => l['patent_id'] == reqPatentId || l['building_id'] == id,
+      orElse: () => <String, dynamic>{},
+    );
+    final licStatus = matchingLicense['status']?.toString();
+    final licId = matchingLicense['id']?.toString();
+    final isMember = myCorpId != null && reqPatent != null && myCorpId == reqPatent['owningCorporationId'];
 
     String condStatus = '100% OPTIMAL';
     Color condColor = context.successColor;
@@ -761,6 +898,19 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         EarthBadge(label: '$footprint SLOT${footprint > 1 ? 'S' : ''}', variant: EarthBadgeVariant.neutral),
                         const SizedBox(width: 4),
                         EarthBadge(label: 'TIER $tier', variant: EarthBadgeVariant.primary),
+                        if (isMember) ...[
+                          const SizedBox(width: 4),
+                          EarthBadge(label: 'CORP MEMBER', variant: EarthBadgeVariant.success),
+                        ] else if (licStatus == 'active') ...[
+                          const SizedBox(width: 4),
+                          EarthBadge(label: 'LICENSED', variant: EarthBadgeVariant.primary),
+                        ] else if (licStatus == 'renewal_window') ...[
+                          const SizedBox(width: 4),
+                          EarthBadge(label: 'RENEWAL DUE', variant: EarthBadgeVariant.warning),
+                        ] else if (licStatus == 'expired') ...[
+                          const SizedBox(width: 4),
+                          EarthBadge(label: 'EXPIRED (-30%)', variant: EarthBadgeVariant.danger),
+                        ],
                       ],
                     ),
                     const SizedBox(height: 4),
@@ -927,9 +1077,28 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       ? null
                       : () {
                           EarthAudioEngine.instance.playClick();
-                          showBuildingDetailUpgradeDialog(context, widget.action, b, catalog);
+                          showBuildingDetailUpgradeDialog(
+                            context,
+                            widget.action,
+                            b,
+                            catalog,
+                            activeLicenses: licenses,
+                            myCorpId: myCorpId,
+                          );
                         },
                 ),
+                if ((licStatus == 'renewal_window' || licStatus == 'expired') && licId != null)
+                  EarthButton(
+                    label: 'RENEW PATENT LICENSE',
+                    icon: Icons.autorenew,
+                    variant: EarthButtonVariant.warning,
+                    onPressed: widget.busy
+                        ? null
+                        : () async {
+                            EarthAudioEngine.instance.playClick();
+                            await widget.action(() => const EarthApi().renewBuildingPatentLicense(licenseId: licId));
+                          },
+                  ),
                 EarthButton(
                   label: 'DEMOLISH / RECYCLE',
                   icon: Icons.delete_outline,

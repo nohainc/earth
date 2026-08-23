@@ -33,7 +33,7 @@ import { createSocialInitiative, listSocialInitiatives, listSocialDirectory, lis
 import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
-import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch } from './real-estate-postgres.ts';
+import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -1089,6 +1089,62 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'R&D contribution failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/license/acquire' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{
+        patentId?: string;
+        licenseType?: 'private_building' | 'city_civic';
+        buildingId?: string;
+        cityId?: string;
+        isPermanent?: boolean;
+        correlationId?: string;
+      }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const patentId = body.patentId?.trim() ?? '';
+      const licenseType = body.licenseType ?? 'private_building';
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!patentId || !correlationId) return Response.json({ ok: false, error: 'Patent ID and correlation ID are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) =>
+          acquireBuildingPatentLicense(repository, {
+            humanId: viewer.id,
+            patentId,
+            licenseType,
+            buildingId: body.buildingId,
+            cityId: body.cityId,
+            isPermanent: body.isPermanent,
+            correlationId,
+          }),
+        );
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'License acquisition failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/license/renew' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ licenseId?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const licenseId = body.licenseId?.trim() ?? '';
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!licenseId || !correlationId) return Response.json({ ok: false, error: 'License ID and correlation ID are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) =>
+          renewBuildingPatentLicense(repository, {
+            humanId: viewer.id,
+            licenseId,
+            correlationId,
+          }),
+        );
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'License renewal failed' }, { status: 409 });
       }
     }
     if (url.pathname === '/api/production/catalog' && request.method === 'GET') {

@@ -640,6 +640,103 @@ async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): P
   }
 }
 
+async function settleBuildingPatentLicenses(tx: PostgresRepository, day: number): Promise<void> {
+  const licenses = await tx.query<{
+    id: string;
+    patent_id: string;
+    patent_name: string;
+    license_type: string;
+    licensee_id: string;
+    licensor_corporation_id: string;
+    building_id: string | null;
+    city_id: string | null;
+    is_permanent: boolean;
+    expiry_game_day: string;
+    royalty_per_day_crd: string;
+    status: string;
+  }>("SELECT * FROM building_patent_licenses WHERE status NOT IN ('expired', 'suspended')");
+
+  for (const lic of licenses.rows) {
+    const expiry = Number(lic.expiry_game_day);
+    const royalty = Number(lic.royalty_per_day_crd || 0);
+
+    // Check expiry transitions
+    if (!lic.is_permanent && expiry <= day) {
+      await tx.query(
+        "UPDATE building_patent_licenses SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+        [lic.id],
+      );
+      if (lic.building_id) {
+        await tx.query(
+          "UPDATE buildings SET patent_license_status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+          [lic.building_id],
+        );
+      }
+      await tx.query(
+        `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
+         VALUES ($1, $2, 'technology', 'Patent License Expired', $3, $4)
+         ON CONFLICT DO NOTHING`,
+        [
+          crypto.randomUUID(),
+          lic.licensee_id,
+          `Your license for ${lic.patent_name} has expired. Facility operates at reduced baseline efficiency (-30% output) until renewed.`,
+          lic.id,
+        ],
+      );
+      continue;
+    } else if (!lic.is_permanent && expiry - day <= 3 && lic.status !== 'renewal_window') {
+      await tx.query(
+        "UPDATE building_patent_licenses SET status = 'renewal_window', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+        [lic.id],
+      );
+      if (lic.building_id) {
+        await tx.query(
+          "UPDATE buildings SET patent_license_status = 'renewal_window', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+          [lic.building_id],
+        );
+      }
+      await tx.query(
+        `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
+         VALUES ($1, $2, 'technology', 'Patent License Renewal Window Open', $3, $4)
+         ON CONFLICT DO NOTHING`,
+        [
+          crypto.randomUUID(),
+          lic.licensee_id,
+          `Your patent license for ${lic.patent_name} expires in ${expiry - day} game days. Renew now to maintain peak technological yields.`,
+          lic.id,
+        ],
+      );
+    }
+
+    // Settle daily royalties
+    if (royalty > 0) {
+      const royaltyCents = BigInt(Math.round(royalty * 100));
+      const correlationId = `BLD-PAT-ROYALTY-${lic.id}-${day}`;
+      const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1", [correlationId]);
+      if (prior.rows.length === 0) {
+        const isCivic = lic.license_type === 'city_civic' && lic.city_id;
+        const payerAccount = isCivic
+          ? `account-city-${lic.city_id}`
+          : (await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [lic.licensee_id])).rows[0]?.account_id;
+
+        if (payerAccount) {
+          await transferCredits(tx, {
+            ledgerId: crypto.randomUUID(),
+            gameDay: day,
+            debitAccount: payerAccount,
+            creditAccount: `account-corporation-${lic.licensor_corporation_id}`,
+            amount: centsToMoney(royaltyCents),
+            reasonType: 'building_patent_royalty',
+            reasonId: lic.id,
+            ruleVersion: 'patent-licensing-v1',
+            correlationId,
+          }).catch(() => undefined);
+        }
+      }
+    }
+  }
+}
+
 async function updateFinancialStates(tx: PostgresRepository, day: number): Promise<void> {
   const candidates = await tx.query<{ id: string; kind: string; value: string; profit: string | null; condition: string | null; current: string }>("SELECT businesses.id, 'BUSINESS' AS kind, business_financials.profit AS value, business_financials.profit, businesses.condition, businesses.status AS current FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id UNION ALL SELECT id, 'CITY', treasury, NULL, NULL, 'active' FROM cities UNION ALL SELECT id, 'CORPORATION', treasury, NULL, NULL, 'active' FROM corporations");
   for (const candidate of candidates.rows) {
@@ -832,6 +929,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
       await settleBuildingUpkeepAndRevenue(tx, day);
+      await settleBuildingPatentLicenses(tx, day);
       await settleCivicDividends(tx, day);
       await processCityDynamics(tx, day);
       await processPatentExpirations(tx, day);

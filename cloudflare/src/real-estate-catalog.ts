@@ -11,6 +11,18 @@ export type BuildingCategory =
 export type OwnershipClass = 'private' | 'civic' | 'public_investment';
 export type OperatingPolicy = 'balanced' | 'high_output' | 'eco_reserve' | 'overclock';
 
+export interface RequiredPatentSpec {
+  patentId: string;
+  patentName: string;
+  owningCorporationId: string;
+  owningCorporationName: string;
+  privateLicenseCostCrd: number;
+  privateDailyRoyaltyCrd: number;
+  cityCivicLicenseCostCrd: number;
+  termDays: number;
+  description: string;
+}
+
 export interface BuildingTierSpec {
   tier: number;
   name: string;
@@ -29,7 +41,7 @@ export interface BuildingTierSpec {
   resourceOutputAmount?: number;
   unlockedPerks: string[];
   requiredCityPopulation?: number;
-  requiredTechId?: string;
+  requiredPatent?: RequiredPatentSpec;
   description: string;
 }
 
@@ -57,7 +69,7 @@ export interface BuildingCatalogItem {
   primaryEconomicPurpose: string;
   description: string;
   civicBenefit?: string;
-  requiredTech?: string;
+  requiredPatent?: RequiredPatentSpec;
   minCityPopulation?: number;
   tiers: BuildingTierSpec[];
 }
@@ -67,6 +79,13 @@ export interface BuildingCatalogItem {
  * All buildings are fully self-contained economic units that consume
  * physical footprints (city slots), operating resources, and maintenance buffers,
  * producing credits, commodities, or municipal citizen dividends.
+ *
+ * Foundational EARTH technologies remain permanently open to all players.
+ * Advanced facilities and high-tier branches are regulated by Corporate Patents,
+ * supporting 3 licensing levels:
+ * 1. Corporate Member (Free with membership)
+ * 2. Private Building License (30-day term + royalties)
+ * 3. City-Wide Civic License (Municipal infrastructure access)
  */
 export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
   // ==================== 1. COMMERCIAL SECTOR (High Credit Yields) ====================
@@ -104,7 +123,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyEnergyUpkeep: 0.50,
         dailyFoodUpkeep: 0.30,
         unlockedPerks: ['Basic Molecular Dining', 'Resident Table Turnover'],
-        description: 'Cozy neighborhood molecular diner.',
+        description: 'Base foundational dining eatery (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -133,6 +152,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyFoodUpkeep: 1.10,
         unlockedPerks: ['District Franchise Rights', 'Tourism Influx Multiplier (+15%)'],
         requiredCityPopulation: 25,
+        requiredPatent: {
+          patentId: 'PAT-HOSP-01',
+          patentName: 'Automated Service & Molecular Gastronomy Protocol',
+          owningCorporationId: 'CORP-GENESIS',
+          owningCorporationName: 'Genesis Horizon Bio-Systems',
+          privateLicenseCostCrd: 4500,
+          privateDailyRoyaltyCrd: 60,
+          cityCivicLicenseCostCrd: 16000,
+          termDays: 30,
+          description: 'Proprietary robotic server arrays and molecular flavor synthesis algorithms.',
+        },
         description: 'Iconic planetary dining destination driving urban tourism.',
       },
     ],
@@ -172,7 +202,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyEnergyUpkeep: 0.40,
         dailyComponentsUpkeep: 0.15,
         unlockedPerks: ['Standard Consumer Hardware', 'Self-Checkout Automated Kiosks'],
-        description: 'Standard consumer outlet.',
+        description: 'Standard consumer outlet (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -201,6 +231,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyComponentsUpkeep: 0.60,
         unlockedPerks: ['Augmented Reality Mall Integration', 'Cross-District Logistics Streamlining'],
         requiredCityPopulation: 30,
+        requiredPatent: {
+          patentId: 'PAT-LOG-01',
+          patentName: 'Predictive Autonomous Supply Routing',
+          owningCorporationId: 'CORP-NEXUS',
+          owningCorporationName: 'Nexus Global Dynamics',
+          privateLicenseCostCrd: 5200,
+          privateDailyRoyaltyCrd: 75,
+          cityCivicLicenseCostCrd: 18000,
+          termDays: 30,
+          description: 'Predictive inventory caching and autonomous drone swarm routing matrix.',
+        },
         description: 'Flagship retail emporium generating massive merchant volume.',
       },
     ],
@@ -253,6 +294,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyEnergyUpkeep: 5.80,
         unlockedPerks: ['Luxury Brand Concessions', 'City Sales Tax Rebate (+10% Yield)'],
         requiredCityPopulation: 35,
+        requiredPatent: {
+          patentId: 'PAT-HOLO-01',
+          patentName: 'Volumetric Holographic Retail Projection',
+          owningCorporationId: 'CORP-TURING',
+          owningCorporationName: 'Turing Quantum Systems',
+          privateLicenseCostCrd: 8500,
+          privateDailyRoyaltyCrd: 120,
+          cityCivicLicenseCostCrd: 25000,
+          termDays: 30,
+          description: 'Multi-spectral volumetric lightfield projection for luxury mall displays.',
+        },
         description: 'Planetary shopping landmark with high shareholder dividends.',
       },
     ],
@@ -295,7 +347,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputType: 'components',
         resourceOutputAmount: 2.2,
         unlockedPerks: ['Automated 5-Axis Milling', 'Machine Component Stamping'],
-        description: 'Standard automated component manufacturing.',
+        description: 'Standard automated component manufacturing (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -328,6 +380,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 11.5,
         unlockedPerks: ['Molecular Reconfigurable Fabs', 'Corporate Machine Blueprint Integration'],
         requiredCityPopulation: 35,
+        requiredPatent: {
+          patentId: 'PAT-FAB-01',
+          patentName: 'Quantum Nano-Fabrication Protocol',
+          owningCorporationId: 'CORP-AXIOM',
+          owningCorporationName: 'Axiom Heavy Industries',
+          privateLicenseCostCrd: 7500,
+          privateDailyRoyaltyCrd: 110,
+          cityCivicLicenseCostCrd: 24000,
+          termDays: 30,
+          description: 'Sub-atomic precision laser etching and reconfigurable lattice assemblers.',
+        },
         description: 'State-of-the-art quantum nano-foundry.',
       },
     ],
@@ -368,7 +431,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputType: 'material',
         resourceOutputAmount: 4.8,
         unlockedPerks: ['Thermal Hydrocarbon Cracking', 'Structural Carbon Fiber Weaving'],
-        description: 'Standard material synthesis plant.',
+        description: 'Standard material synthesis plant (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -383,6 +446,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 10.5,
         unlockedPerks: ['Graphene Sheet Deposition', 'Continuous Smelting Loop'],
         requiredCityPopulation: 16,
+        requiredPatent: {
+          patentId: 'PAT-MAT-01',
+          patentName: 'CVD Graphene Lattice Synthesis',
+          owningCorporationId: 'CORP-AXIOM',
+          owningCorporationName: 'Axiom Heavy Industries',
+          privateLicenseCostCrd: 6200,
+          privateDailyRoyaltyCrd: 90,
+          cityCivicLicenseCostCrd: 20000,
+          termDays: 30,
+          description: 'Chemical vapor deposition reactor growing contiguous graphene sheets at scale.',
+        },
         description: 'High-volume graphene and composite material refinery.',
       },
     ],
@@ -424,7 +498,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputType: 'energy',
         resourceOutputAmount: 4.5,
         unlockedPerks: ['Multi-Junction Solar Cells', 'Automated Heliostat Tracking'],
-        description: 'Standard solar generation field.',
+        description: 'Standard solar generation field (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -455,6 +529,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 22.0,
         unlockedPerks: ['Orbital Mirror Microwave Downlink', 'Zero Transmission Loss Grid Linking'],
         requiredCityPopulation: 30,
+        requiredPatent: {
+          patentId: 'PAT-NRG-01',
+          patentName: 'Microwave Orbital Power Rectenna Protocol',
+          owningCorporationId: 'CORP-STELLAR',
+          owningCorporationName: 'Stellar Reach Aerospace',
+          privateLicenseCostCrd: 6800,
+          privateDailyRoyaltyCrd: 95,
+          cityCivicLicenseCostCrd: 22000,
+          termDays: 30,
+          description: 'Phased microwave receiver rectennas capturing continuous orbital solar beams.',
+        },
         description: 'High-density orbital beam collector generating massive power surpluses.',
       },
     ],
@@ -496,7 +581,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputType: 'energy',
         resourceOutputAmount: 14.0,
         unlockedPerks: ['Supercritical Steam Turbines', 'District Thermal Heating Grid'],
-        description: 'Standard municipal geothermal facility.',
+        description: 'Standard municipal geothermal facility (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -511,6 +596,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 32.0,
         unlockedPerks: ['Mantle Convection Siphoning', 'City Energy Cost Halved (-50%)'],
         requiredCityPopulation: 25,
+        requiredPatent: {
+          patentId: 'PAT-GEO-01',
+          patentName: 'Supercritical Mantle Heat Exchange Patent',
+          owningCorporationId: 'CORP-GENESIS',
+          owningCorporationName: 'Genesis Horizon Bio-Systems',
+          privateLicenseCostCrd: 9500,
+          privateDailyRoyaltyCrd: 150,
+          cityCivicLicenseCostCrd: 32000,
+          termDays: 30,
+          description: 'Direct deep-earth closed-loop heat exchangers tapping supercritical crust fluids.',
+        },
         description: 'Mantle generator fueling rapid regional industrial growth.',
       },
     ],
@@ -552,7 +648,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputType: 'food',
         resourceOutputAmount: 3.8,
         unlockedPerks: ['Optimized LED Wavelength Spectral Tuning', 'Closed-Loop Nutrient Mist Recycling'],
-        description: 'Standard urban vertical farm.',
+        description: 'Standard urban vertical farm (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -567,6 +663,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 8.5,
         unlockedPerks: ['Cellular Meat Synthesis Vats', 'High-Density Protein Blocks'],
         requiredCityPopulation: 12,
+        requiredPatent: {
+          patentId: 'PAT-BIO-01',
+          patentName: 'Cellular Myocyte Proliferation Patent',
+          owningCorporationId: 'CORP-GENESIS',
+          owningCorporationName: 'Genesis Horizon Bio-Systems',
+          privateLicenseCostCrd: 4800,
+          privateDailyRoyaltyCrd: 70,
+          cityCivicLicenseCostCrd: 16000,
+          termDays: 30,
+          description: 'High-density bioreactor tanks multiplying cultured cell structures at rapid scale.',
+        },
         description: 'High-volume bioreactor synthesizing cellular agriculture.',
       },
     ],
@@ -608,7 +715,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputType: 'compute',
         resourceOutputAmount: 5.0,
         unlockedPerks: ['Dielectric Fluid Immersion Cooling', 'Distributed Vector Crunching'],
-        description: 'Standard compute cluster.',
+        description: 'Standard compute cluster (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -624,6 +731,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 12.0,
         unlockedPerks: ['Cryogenic Superconducting Qubits', 'Corporate Research Speed Bonus (+25%)'],
         requiredCityPopulation: 18,
+        requiredPatent: {
+          patentId: 'PAT-DAT-01',
+          patentName: 'Cryogenic Superconducting Qubit Interconnect',
+          owningCorporationId: 'CORP-TURING',
+          owningCorporationName: 'Turing Quantum Systems',
+          privateLicenseCostCrd: 6900,
+          privateDailyRoyaltyCrd: 100,
+          cityCivicLicenseCostCrd: 22000,
+          termDays: 30,
+          description: 'Dilution refrigeration systems stabilizing 128-qubit quantum coherency gates.',
+        },
         description: 'Quantum qubit processor hub accelerating technology R&D.',
       },
       {
@@ -640,6 +758,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         resourceOutputAmount: 28.0,
         unlockedPerks: ['Optical Photonic Interconnects', 'Planetary AI Predictive Optimization'],
         requiredCityPopulation: 40,
+        requiredPatent: {
+          patentId: 'PAT-DAT-02',
+          patentName: 'Integrated Photonic Neural Processor Core',
+          owningCorporationId: 'CORP-TURING',
+          owningCorporationName: 'Turing Quantum Systems',
+          privateLicenseCostCrd: 12000,
+          privateDailyRoyaltyCrd: 180,
+          cityCivicLicenseCostCrd: 40000,
+          termDays: 30,
+          description: 'Laser-driven optical matrix multipliers achieving exaflop inference throughput.',
+        },
         description: 'Planetary-scale photonic supercluster powering advanced AI automation.',
       },
     ],
@@ -680,7 +809,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyOperatingCredits: 220,
         dailyEnergyUpkeep: 1.50,
         unlockedPerks: ['Trauma Stabilization Pods', 'Automated Cyber-Surgical Arms'],
-        description: 'Standard bionic medical clinic.',
+        description: 'Standard bionic medical clinic (EARTH Open Technology).',
       },
       {
         tier: 2,
@@ -694,6 +823,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyEnergyUpkeep: 2.80,
         unlockedPerks: ['Organ Cloning Vats', 'Epidemic Risk Inoculation (-80% Crisis Risk)'],
         requiredCityPopulation: 20,
+        requiredPatent: {
+          patentId: 'PAT-MED-01',
+          patentName: 'Autologous Organ Cloning & Telomere Repair',
+          owningCorporationId: 'CORP-GENESIS',
+          owningCorporationName: 'Genesis Horizon Bio-Systems',
+          privateLicenseCostCrd: 7200,
+          privateDailyRoyaltyCrd: 105,
+          cityCivicLicenseCostCrd: 26000,
+          termDays: 30,
+          description: 'Rapid pluripotent stem cell bioprinters creating immunocompatible replacement organs.',
+        },
         description: 'Comprehensive bio-hospital securing planetary health scores.',
       },
     ],
@@ -748,6 +888,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyEnergyUpkeep: 6.80,
         unlockedPerks: ['Heavy Cargo Freight Integration', 'Trade Tariff Rebate (-25%)'],
         requiredCityPopulation: 30,
+        requiredPatent: {
+          patentId: 'PAT-MAG-01',
+          patentName: 'Pneumatic Low-Pressure Maglev Propulsion',
+          owningCorporationId: 'CORP-NEXUS',
+          owningCorporationName: 'Nexus Global Dynamics',
+          privateLicenseCostCrd: 8500,
+          privateDailyRoyaltyCrd: 130,
+          cityCivicLicenseCostCrd: 30000,
+          termDays: 30,
+          description: 'Near-vacuum sealed tube depressurization and superconducting levitation tracks.',
+        },
         description: 'Massive trans-continental hub connecting major metropolitan trade corridors.',
       },
     ],
@@ -778,6 +929,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
     primaryEconomicPurpose: 'Orbital Shuttles, Off-World Mining Logistics & High Prestige',
     civicBenefit: 'Unlocks planetary asteroid mining routes, deep space telemetry, and planetary prestige.',
     description: 'Equatorial launch complex capable of sending heavy SSTO cargo shuttles into low Earth orbit and deep space transit trajectories.',
+    requiredPatent: {
+      patentId: 'PAT-SSTO-01',
+      patentName: 'Linear Aerospike SSTO Propulsion Protocol',
+      owningCorporationId: 'CORP-STELLAR',
+      owningCorporationName: 'Stellar Reach Aerospace',
+      privateLicenseCostCrd: 15000,
+      privateDailyRoyaltyCrd: 250,
+      cityCivicLicenseCostCrd: 55000,
+      termDays: 30,
+      description: 'Altitude-compensating linear aerospike engines enabling single-stage orbital ascent.',
+    },
     tiers: [
       {
         tier: 1,
@@ -802,6 +964,17 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
         dailyEnergyUpkeep: 16.00,
         unlockedPerks: ['Carbon Nanotube Tether Car', 'Zero-G Orbital Manufacturing Bonus (+40%)'],
         requiredCityPopulation: 50,
+        requiredPatent: {
+          patentId: 'PAT-ELEV-01',
+          patentName: 'Macroscopic Carbon Nanotube Ribbon Tether',
+          owningCorporationId: 'CORP-STELLAR',
+          owningCorporationName: 'Stellar Reach Aerospace',
+          privateLicenseCostCrd: 25000,
+          privateDailyRoyaltyCrd: 400,
+          cityCivicLicenseCostCrd: 85000,
+          termDays: 30,
+          description: 'Flawless 36,000 km carbon nanotube composite ribbon with magnetic climber rails.',
+        },
         description: 'Planetary space elevator anchor siphoning orbital commodities directly to earth surface.',
       },
     ],
