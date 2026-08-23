@@ -155,4 +155,29 @@ void main() {
     expect(find.text('YOUR CIVIC INFLUENCE'), findsOneWidget);
     expect(find.text('OFFICES HELD'), findsOneWidget);
   });
+
+  testWidgets('ProposalPanel renders clean empty state when no proposals exist',
+      (tester) async {
+    const state = EarthState({
+      'governance': {'proposals': []},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: ProposalPanel(
+            state: state,
+            busy: false,
+            action: (callback) async {},
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('UC PROPOSALS'), findsOneWidget);
+    expect(find.text('No active legislation is currently on the ballot.'), findsOneWidget);
+    expect(find.text('CREATE UC PROPOSAL'), findsOneWidget);
+    expect(find.text('No open proposal is currently available.'), findsNothing);
+    expect(find.text('Support 0  ·  Oppose 0  ·  Uncast 0'), findsNothing);
+  });
 }

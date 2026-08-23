@@ -157,19 +157,77 @@ class ProposalPanel extends StatelessWidget {
         .where((raw) =>
             raw is Map && (raw['institution_id'] ?? raw['institutionId'] ?? institutionId)?.toString() == institutionId)
         .toList();
-    final proposal = proposals.isEmpty
-        ? <String, dynamic>{
-            'id': '',
-            'title': 'No open proposal is currently available.',
-            'status': 'waiting',
-            'outcome': 'pending',
-            'execution_status': 'pending',
-            'votes': <String, dynamic>{'support': 0, 'oppose': 0, 'uncast': 0},
-          }
-        : Map<String, dynamic>.from(proposals.first as Map);
+
+    if (proposals.isEmpty) {
+      return EarthSection(
+        title: '$scopeLabel PROPOSALS',
+        showSurface: false,
+        trailing: EarthButton(
+          label: 'CREATE $scopeLabel PROPOSAL',
+          icon: Icons.note_add_outlined,
+          variant: EarthButtonVariant.primary,
+          onPressed: busy
+              ? null
+              : () => showProposalComposer(context, action,
+                  institutionId: institutionId, scopeLabel: scopeLabel),
+        ),
+        infoBulletPoints: const [
+          'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
+          'Quorum & Approval Thresholds: Quorum 25%, Approval 50% needed for enactment.',
+          'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
+          'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
+        ],
+        child: const EarthEmptyState(
+          message: 'No active legislation is currently on the ballot.',
+          icon: Icons.how_to_vote_outlined,
+        ),
+      );
+    }
+
+    final first = Map<String, dynamic>.from(proposals.first as Map);
+    final hasSingle = proposals.length == 1;
+    final sectionTitle = hasSingle
+        ? '$scopeLabel PROPOSAL ${first['id'] ?? ''}'
+        : '$scopeLabel PROPOSALS (${proposals.length})';
+
+    final quorumNum = asDoubleOr(first['quorum'], .25);
+    final approvalThresholdNum = asDoubleOr(first['approval_threshold'], .50);
+    final quorumPercent = (quorumNum * 100).round();
+    final approvalPercent = (approvalThresholdNum * 100).round();
+
+    return EarthSection(
+      title: sectionTitle,
+      showSurface: false,
+      trailing: EarthButton(
+        label: 'CREATE $scopeLabel PROPOSAL',
+        icon: Icons.note_add_outlined,
+        variant: EarthButtonVariant.secondary,
+        onPressed: busy
+            ? null
+            : () => showProposalComposer(context, action,
+                institutionId: institutionId, scopeLabel: scopeLabel),
+      ),
+      infoBulletPoints: [
+        'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
+        'Quorum & Approval Thresholds: Quorum $quorumPercent%, Approval $approvalPercent% needed for enactment.',
+        'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
+        'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          ...proposals.map((raw) {
+            final proposal = Map<String, dynamic>.from(raw as Map);
+            return _buildProposalItem(context, proposal);
+          }),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildProposalItem(BuildContext context, Map<String, dynamic> proposal) {
     final votes = Map<String, dynamic>.from((proposal['votes'] as Map<String, dynamic>?) ?? const {});
-    final hasProposal = proposal['id'].toString().isNotEmpty;
-    final proposalId = proposal['id'].toString();
+    final proposalId = proposal['id']?.toString() ?? '';
     final isPassed = proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
     final executionStatus =
         (proposal['execution_status']?.toString() ?? (isPassed ? 'ready' : 'pending')).toLowerCase();
@@ -216,226 +274,192 @@ class ProposalPanel extends StatelessWidget {
       statusColor = context.successColor;
     }
 
-    return EarthSection(
-      title: '$scopeLabel PROPOSAL ${hasProposal ? proposal['id'] : ''}',
-      showSurface: false,
-      infoBulletPoints: [
-        'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
-        'Quorum & Approval Thresholds: Quorum $quorumPercent%, Approval $approvalPercent% needed for enactment.',
-        'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
-        'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
-      ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // 1. Proposal Details & Progress Card
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(context.cardPadding),
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: statusColor.withValues(alpha: .15),
+                borderRadius: BorderRadius.circular(context.radiusControl),
+              ),
+              child: Icon(Icons.how_to_vote_outlined, size: context.iconSize + 4, color: statusColor),
             ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: statusColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(context.radiusControl),
+            SizedBox(width: context.spacingTitleOffset),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          proposal['title']?.toString() ?? '',
+                          style: context.widgetValueStyle,
+                        ),
                       ),
-                      child: Icon(Icons.how_to_vote_outlined, size: context.iconSize + 4, color: statusColor),
-                    ),
-                    SizedBox(width: context.spacingTitleOffset),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      if (proposalId.isNotEmpty) ...[
+                        SizedBox(width: context.spacingInline),
+                        EarthBadge(
+                          label: isCoolingOff ? 'COOLING-OFF' : executionStatus.toUpperCase(),
+                          customColor: statusColor,
+                        ),
+                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
+                    style: context.widgetFooterStyle,
+                  ),
+                  Text(
+                    'Quorum $quorumPercent% · approval $approvalPercent%',
+                    style: context.widgetFooterStyle,
+                  ),
+                  if (isCoolingOff) ...[
+                    const SizedBox(height: 6),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: context.warningColor.withValues(alpha: .12),
+                        borderRadius: BorderRadius.circular(context.radiusControl),
+                        border: Border.all(color: context.warningColor.withValues(alpha: .3)),
+                      ),
+                      child: Row(
                         children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  proposal['title']?.toString() ?? '',
-                                  style: context.widgetValueStyle,
-                                ),
-                              ),
-                              if (hasProposal) ...[
-                                SizedBox(width: context.spacingInline),
-                                EarthBadge(
-                                  label: isCoolingOff ? 'COOLING-OFF' : executionStatus.toUpperCase(),
-                                  customColor: statusColor,
-                                ),
-                              ],
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
-                            style: context.widgetFooterStyle,
-                          ),
-                          Text(
-                            'Quorum $quorumPercent% · approval $approvalPercent%',
-                            style: context.widgetFooterStyle,
-                          ),
-                          if (isCoolingOff) ...[
-                            const SizedBox(height: 6),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                              decoration: BoxDecoration(
-                                color: context.warningColor.withValues(alpha: .12),
-                                borderRadius: BorderRadius.circular(context.radiusControl),
-                                border: Border.all(color: context.warningColor.withValues(alpha: .3)),
-                              ),
-                              child: Row(
-                                children: [
-                                  Icon(Icons.timer_outlined, size: 13, color: context.warningColor),
-                                  const SizedBox(width: 6),
-                                  Expanded(
-                                    child: Text(
-                                      'Cooling-off active: Implementation Day $implDay ($delayDaysRemaining day(s) for challenge)',
-                                      style: context.widgetFooterStyle.copyWith(
-                                        color: context.warningColor,
-                                        fontWeight: FontWeight.w700,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                          if (proposal['deadline'] is Map) ...[
-                            const SizedBox(height: 4),
-                            Text(
-                              formatProposalDeadline(proposal['deadline'] as Map<String, dynamic>),
+                          Icon(Icons.timer_outlined, size: 13, color: context.warningColor),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              'Cooling-off active: Implementation Day $implDay ($delayDaysRemaining day(s) for challenge)',
                               style: context.widgetFooterStyle.copyWith(
                                 color: context.warningColor,
-                                fontWeight: FontWeight.w600,
+                                fontWeight: FontWeight.w700,
                               ),
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),
                   ],
-                ),
-
-                SizedBox(height: context.spacingTitleOffset),
-
-                // Voting Tally Breakdown & Progress Bar
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
+                  if (proposal['deadline'] is Map) ...[
+                    const SizedBox(height: 4),
                     Text(
-                      'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
-                      style: context.widgetTitleStyle,
+                      formatProposalDeadline(proposal['deadline'] as Map<String, dynamic>),
+                      style: context.widgetFooterStyle.copyWith(
+                        color: context.warningColor,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
-                    if (totalVotes > 0)
-                      Text(
-                        '${((supportCount / totalVotes) * 100).toStringAsFixed(1)}% SUPPORT',
-                        style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                  ],
+                ],
+              ),
+            ),
+          ],
+        ),
+
+        SizedBox(height: context.spacingTitleOffset),
+
+        // Voting Tally Breakdown & Progress Bar
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
+              style: context.widgetTitleStyle,
+            ),
+            if (totalVotes > 0)
+              Text(
+                '${((supportCount / totalVotes) * 100).toStringAsFixed(1)}% SUPPORT',
+                style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: totalVotes == 0
+              ? const LinearProgressIndicator(
+                  value: 0,
+                  minHeight: 6,
+                  backgroundColor: Colors.white10,
+                )
+              : Row(
+                  children: [
+                    if (supportCount > 0)
+                      Expanded(
+                        flex: supportCount,
+                        child: Container(
+                          height: 6,
+                          color: context.primaryColor,
+                        ),
+                      ),
+                    if (opposeCount > 0)
+                      Expanded(
+                        flex: opposeCount,
+                        child: Container(
+                          height: 6,
+                          color: context.errorColor,
+                        ),
+                      ),
+                    if (uncastCount > 0)
+                      Expanded(
+                        flex: uncastCount,
+                        child: Container(
+                          height: 6,
+                          color: Colors.white12,
+                        ),
                       ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(4),
-                  child: totalVotes == 0
-                      ? const LinearProgressIndicator(
-                          value: 0,
-                          minHeight: 6,
-                          backgroundColor: Colors.white10,
-                        )
-                      : Row(
-                          children: [
-                            if (supportCount > 0)
-                              Expanded(
-                                flex: supportCount,
-                                child: Container(
-                                  height: 6,
-                                  color: context.primaryColor,
-                                ),
-                              ),
-                            if (opposeCount > 0)
-                              Expanded(
-                                flex: opposeCount,
-                                child: Container(
-                                  height: 6,
-                                  color: context.errorColor,
-                                ),
-                              ),
-                            if (uncastCount > 0)
-                              Expanded(
-                                flex: uncastCount,
-                                child: Container(
-                                  height: 6,
-                                  color: Colors.white12,
-                                ),
-                              ),
-                          ],
-                        ),
-                ),
-              ],
-            ),
-          ),
+        ),
 
-          SizedBox(height: context.spacingTitleOffset),
+        SizedBox(height: context.spacingTitleOffset),
 
-          // 2. Legislative Action Buttons Hub
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              for (final choice in ['support', 'oppose', 'abstain'])
-                EarthButton(
-                  label: choice,
-                  variant: choice == 'support'
-                      ? EarthButtonVariant.primary
-                      : (choice == 'oppose' ? EarthButtonVariant.danger : EarthButtonVariant.ghost),
-                  onPressed: busy || !hasProposal || isExecuted || isVoided
-                      ? null
-                      : () => action(() => const EarthApi().vote(proposal['id'] as String, choice)),
-                ),
+        // Legislative Action Buttons
+        Wrap(
+          spacing: 8,
+          runSpacing: 6,
+          children: [
+            for (final choice in ['support', 'oppose', 'abstain'])
               EarthButton(
-                label: 'CREATE $scopeLabel PROPOSAL',
-                icon: Icons.note_add_outlined,
-                variant: EarthButtonVariant.secondary,
-                onPressed: busy
+                label: choice,
+                variant: choice == 'support'
+                    ? EarthButtonVariant.primary
+                    : (choice == 'oppose' ? EarthButtonVariant.danger : EarthButtonVariant.ghost),
+                onPressed: busy || proposalId.isEmpty || isExecuted || isVoided
                     ? null
-                    : () => showProposalComposer(context, action,
-                        institutionId: institutionId, scopeLabel: scopeLabel),
+                    : () => action(() => const EarthApi().vote(proposalId, choice)),
               ),
-              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
-                EarthButton(
-                  label: isCoolingOff ? 'COOLING-OFF (DAY $implDay)' : 'EXECUTE PROPOSAL',
-                  icon: isCoolingOff ? Icons.lock_clock_outlined : Icons.check_circle_outline,
-                  variant: EarthButtonVariant.primary,
-                  onPressed: busy || isCoolingOff
-                      ? null
-                      : () => action(() => const EarthApi().executeProposal(proposalId)),
-                ),
-              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
-                EarthButton(
-                  label: 'CHALLENGE PROPOSAL',
-                  icon: Icons.gavel_outlined,
-                  variant: EarthButtonVariant.danger,
-                  onPressed: busy ? null : () => showChallengeDialog(context, action, proposalId),
-                ),
-              if (hasProposal && isChallenged && hasJudicialAuthority)
-                EarthButton(
-                  label: 'ISSUE RULING',
-                  icon: Icons.balance_outlined,
-                  variant: EarthButtonVariant.secondary,
-                  onPressed: busy ? null : () => showAppealRulingDialog(context, action, proposalId),
-                ),
-            ],
-          ),
-        ],
-      ),
+            if (proposalId.isNotEmpty && isPassed && !isChallenged && !isVoided && !isExecuted)
+              EarthButton(
+                label: isCoolingOff ? 'COOLING-OFF (DAY $implDay)' : 'EXECUTE PROPOSAL',
+                icon: isCoolingOff ? Icons.lock_clock_outlined : Icons.check_circle_outline,
+                variant: EarthButtonVariant.primary,
+                onPressed: busy || isCoolingOff
+                    ? null
+                    : () => action(() => const EarthApi().executeProposal(proposalId)),
+              ),
+            if (proposalId.isNotEmpty && isPassed && !isChallenged && !isVoided && !isExecuted)
+              EarthButton(
+                label: 'CHALLENGE PROPOSAL',
+                icon: Icons.gavel_outlined,
+                variant: EarthButtonVariant.danger,
+                onPressed: busy ? null : () => showChallengeDialog(context, action, proposalId),
+              ),
+            if (proposalId.isNotEmpty && isChallenged && hasJudicialAuthority)
+              EarthButton(
+                label: 'ISSUE RULING',
+                icon: Icons.balance_outlined,
+                variant: EarthButtonVariant.secondary,
+                onPressed: busy ? null : () => showAppealRulingDialog(context, action, proposalId),
+              ),
+          ],
+        ),
+      ],
     );
   }
 }
