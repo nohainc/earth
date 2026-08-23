@@ -293,13 +293,13 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             let totalFundedCents = 0n;
 
             if (residents.rows.length > 0) {
-              const spendPerResidentCents = revCents / BigInt(residents.rows.length);
-              const remainderCents = revCents % BigInt(residents.rows.length);
+              const eligibleBuyers = residents.rows.filter((r) => r.human_id !== bld.owner_id);
+              const buyerCount = Math.max(1, eligibleBuyers.length);
+              const spendPerResidentCents = revCents / BigInt(buyerCount);
+              const remainderCents = revCents % BigInt(buyerCount);
 
-              for (let i = 0; i < residents.rows.length; i++) {
-                const res = residents.rows[i];
-                if (res.human_id === bld.owner_id) continue; // Owner does not buy from themselves
-
+              for (let i = 0; i < eligibleBuyers.length; i++) {
+                const res = eligibleBuyers[i];
                 const resAccount = await tx.query<{ account_id: string; balance: string }>(
                   "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
                   [res.human_id],
@@ -321,30 +321,6 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
                     reasonId: bld.id,
                     ruleVersion: 'real-estate-v2',
                     correlationId: `RES-BUY-${bld.id}-${res.human_id}-${day}`,
-                  });
-                  totalFundedCents += payableCents;
-                }
-              }
-            } else {
-              // B2B Commerce / Supply Contract buyer when city has no individual residents
-              const businessBuyer = await tx.query<{ account_id: string; balance: string }>(
-                "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
-                [`account-city-${bld.city_id}`],
-              );
-              if (businessBuyer.rows[0]) {
-                const buyerBalanceCents = moneyToCents(businessBuyer.rows[0].balance);
-                const payableCents = buyerBalanceCents >= revCents ? revCents : buyerBalanceCents;
-                if (payableCents > 0n) {
-                  await transferCredits(tx, {
-                    ledgerId: crypto.randomUUID(),
-                    gameDay: day,
-                    debitAccount: businessBuyer.rows[0].account_id,
-                    creditAccount: 'account-market-clearing',
-                    amount: centsToMoney(payableCents),
-                    reasonType: 'commercial_contract_purchase',
-                    reasonId: bld.id,
-                    ruleVersion: 'real-estate-v2',
-                    correlationId: `B2B-BUY-${bld.id}-${day}`,
                   });
                   totalFundedCents += payableCents;
                 }
@@ -376,43 +352,65 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               }
             }
           } else if (oClass === 'civic') {
-            // Civic municipal facility: explicitly funded via municipal public procurement from city treasury
-            const cityTreasury = await tx.query<{ account_id: string; balance: string }>(
-              "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
-              [`account-city-${bld.city_id}`],
+            // Civic municipal facility: Genuine resident utility consumers pay utility bills
+            // Debited from resident personal accounts into clearing account -> credited to city treasury
+            const residents = await tx.query<{ human_id: string }>(
+              "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
+              [bld.city_id],
             );
-            const treasuryBalanceCents = cityTreasury.rows[0] ? moneyToCents(cityTreasury.rows[0].balance) : 0n;
-            const payableCents = treasuryBalanceCents >= revCents ? revCents : treasuryBalanceCents;
 
-            if (payableCents > 0n) {
-              const payableAmt = centsToMoney(payableCents);
-              // 1. Explicit Municipal Utility Procurement
-              await transferCredits(tx, {
-                ledgerId: crypto.randomUUID(),
-                gameDay: day,
-                debitAccount: cityTreasury.rows[0].account_id,
-                creditAccount: 'account-market-clearing',
-                amount: payableAmt,
-                reasonType: 'municipal_utility_procurement',
-                reasonId: bld.id,
-                ruleVersion: 'real-estate-v2',
-                correlationId: `MUNI-PROC-${bld.id}-${day}`,
-              });
+            let totalUtilityInflowCents = 0n;
 
-              // 2. Clear from clearing account to city treasury utility revenue ledger
+            if (residents.rows.length > 0) {
+              const billPerResidentCents = revCents / BigInt(residents.rows.length);
+              const remainderCents = revCents % BigInt(residents.rows.length);
+
+              for (let i = 0; i < residents.rows.length; i++) {
+                const res = residents.rows[i];
+                const resAccount = await tx.query<{ account_id: string; balance: string }>(
+                  "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+                  [res.human_id],
+                );
+                if (!resAccount.rows[0]) continue;
+
+                const resDueCents = billPerResidentCents + (i === 0 ? remainderCents : 0n);
+                const resBalanceCents = moneyToCents(resAccount.rows[0].balance);
+                const payableCents = resBalanceCents >= resDueCents ? resDueCents : resBalanceCents;
+
+                if (payableCents > 0n) {
+                  // 1. Resident pays municipal utility bill
+                  await transferCredits(tx, {
+                    ledgerId: crypto.randomUUID(),
+                    gameDay: day,
+                    debitAccount: resAccount.rows[0].account_id,
+                    creditAccount: 'account-market-clearing',
+                    amount: centsToMoney(payableCents),
+                    reasonType: 'municipal_utility_bill',
+                    reasonId: bld.id,
+                    ruleVersion: 'real-estate-v2',
+                    correlationId: `MUNI-BILL-${bld.id}-${res.human_id}-${day}`,
+                  });
+                  totalUtilityInflowCents += payableCents;
+                }
+              }
+            }
+
+            // 2. Clear real utility inflows from clearing account into the municipal treasury
+            if (totalUtilityInflowCents > 0n) {
+              const clearedAmt = centsToMoney(totalUtilityInflowCents);
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
                 debitAccount: 'account-market-clearing',
                 creditAccount: `account-city-${bld.city_id}`,
-                amount: payableAmt,
+                amount: clearedAmt,
                 reasonType: 'civic_utility_revenue',
                 reasonId: bld.id,
                 ruleVersion: 'real-estate-v2',
                 correlationId: `CIVIC-REV-${bld.id}-${day}`,
               });
 
-              actualGrossRevenueCrd = Number(payableAmt);
+              actualGrossRevenueCrd = Number(clearedAmt);
             }
           }
         } else if (!isCreditOutput && outAmt > 0 && bld.resource_output_type) {
@@ -445,7 +443,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
       if (rev > 0) {
         const revCents = BigInt(Math.round(rev * 100));
 
-        // Customer demand from residents / market buyers
+        // Customer demand from residents in the city
         const residents = await tx.query<{ human_id: string }>(
           "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
           [bld.city_id],

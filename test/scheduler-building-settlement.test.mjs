@@ -457,6 +457,12 @@ test('settleBuildingUpkeepAndRevenue: double-entry reconciliation verifies clear
         rowCount: 1,
       };
     }
+    if (sql.includes("FROM memberships WHERE city_id")) {
+      return { rows: [{ human_id: 'H-RES-01' }], rowCount: 1 };
+    }
+    if (sql.includes("FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'")) {
+      return { rows: [{ account_id: 'acc-H-RES-01', balance: '100000' }], rowCount: 1 };
+    }
     if (sql.includes("FROM account_balances WHERE account_id = $1")) {
       return { rows: [{ account_id: params[0], balance: '100000' }], rowCount: 1 };
     }
@@ -483,8 +489,10 @@ test('settleBuildingUpkeepAndRevenue: double-entry reconciliation verifies clear
   // Reconciliation Assertions:
   assert.equal(ledgerInflows.length, 1);
   assert.equal(ledgerOutflows.length, 1);
-  assert.equal(ledgerInflows[0].reason, 'municipal_utility_procurement');
+  assert.equal(ledgerInflows[0].reason, 'municipal_utility_bill');
+  assert.equal(ledgerInflows[0].debit, 'acc-H-RES-01');
   assert.equal(ledgerOutflows[0].reason, 'civic_utility_revenue');
+  assert.equal(ledgerOutflows[0].credit, 'account-city-CITY-0084');
   assert.equal(ledgerInflows[0].amount, ledgerOutflows[0].amount);
   assert.equal(ledgerInflows[0].amount, '1200.00');
 
