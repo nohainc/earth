@@ -11,3 +11,5 @@ backups/earth-d1-cutover-backup.sql
 coverage/
 *.lcov
 .wrangler/
+failures/
+test/failures/
