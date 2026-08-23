@@ -7,7 +7,6 @@ import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../governance/governance_dialogs.dart';
 import 'lifecycle_dialogs.dart';
-import 'cemetery_pantheon_dialog.dart';
 import 'global_rankings_dialog.dart';
 
 Widget _lifecycleTopicHeading(BuildContext context, String title,
@@ -1754,14 +1753,6 @@ class PantheonPanel extends StatelessWidget {
                         style: context.widgetFooterStyle,
                       ),
                     ],
-                  ),
-                ),
-                SizedBox(width: context.spacingInline),
-                Builder(
-                  builder: (ctx) => EarthButton(
-                    label: 'EXPLORE CEMETERY',
-                    icon: Icons.open_in_new,
-                    onPressed: () => showCemeteryPantheonDialog(ctx),
                   ),
                 ),
               ],

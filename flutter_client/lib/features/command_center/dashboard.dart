@@ -28,6 +28,7 @@ import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
 import '../activity/activity_panel.dart';
 import '../lifecycle/historical_archive_panel.dart';
+import '../lifecycle/cemetery_pantheon_dialog.dart';
 import 'quick_actions_panel.dart';
 import 'command_executive_quadrant.dart';
 
@@ -802,7 +803,12 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'pantheon':
-        return [PantheonPanel(pantheon: pantheon)];
+        return [
+          CemeteryPantheonDialog(
+            api: const EarthApi(),
+            lineageSource: pantheon,
+          ),
+        ];
       case 'contracts':
         return [
           LayoutBuilder(

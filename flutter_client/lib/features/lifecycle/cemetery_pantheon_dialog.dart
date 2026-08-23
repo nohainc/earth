@@ -4,16 +4,10 @@ import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../dynasty/dynasty_tree_dialog.dart';
 
-void showCemeteryPantheonDialog(BuildContext context, {EarthApi? api}) {
-  showDialog(
-    context: context,
-    builder: (ctx) => CemeteryPantheonDialog(api: api ?? const EarthApi()),
-  );
-}
-
 class CemeteryPantheonDialog extends StatefulWidget {
   final EarthApi api;
-  const CemeteryPantheonDialog({super.key, required this.api});
+  final Map<String, dynamic>? lineageSource;
+  const CemeteryPantheonDialog({super.key, required this.api, this.lineageSource});
 
   @override
   State<CemeteryPantheonDialog> createState() => _CemeteryPantheonDialogState();
@@ -78,17 +72,7 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
 
   @override
   Widget build(BuildContext context) {
-    return Dialog(
-      backgroundColor: context.panelColor,
-      insetPadding: EdgeInsets.symmetric(
-        horizontal: context.spacingTopic,
-        vertical: context.spacingPage,
-      ),
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusPanel),
-        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-      ),
-      child: Container(
+    return Container(
         width: 840,
         height: 680,
         padding: EdgeInsets.all(context.spacingPage),
@@ -126,14 +110,11 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
                   icon: Icons.account_tree_outlined,
                   onPressed: () => showDynastyTreeDialog(context, api: widget.api),
                 ),
-                SizedBox(width: context.spacingInline),
-                IconButton(
-                  icon: Icon(Icons.close, color: context.mutedColor, size: context.iconSize),
-                  onPressed: () => Navigator.of(context).pop(),
-                ),
               ],
             ),
             SizedBox(height: context.spacingTopic),
+
+            _buildLineageTree(),
 
             // Search Bar & Tabs
             EarthSearchInput(
@@ -177,7 +158,55 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
             ),
           ],
         ),
-      ),
+      );
+  }
+
+  Widget _buildLineageTree() {
+    final source = widget.lineageSource ?? const <String, dynamic>{};
+    final records = <Map<String, dynamic>>[
+      ...(source['deceasedPantheon'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((raw) => Map<String, dynamic>.from(raw)),
+      ...(source['livingLeaders'] as List<dynamic>? ?? const [])
+          .whereType<Map>()
+          .map((raw) => Map<String, dynamic>.from(raw)),
+    ];
+    if (records.isEmpty) return const SizedBox.shrink();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('DYNASTIC SUCCESSION LINEAGE TREE', style: context.widgetTitleStyle),
+        SizedBox(height: context.spacingInline),
+        ...records.indexed.map((indexed) {
+          final entry = indexed.$2;
+          final living = entry['death_game_day'] == null && entry['deathGameDay'] == null;
+          final name = (entry['display_name'] ?? entry['name'] ?? 'Unknown Human').toString();
+          final score = (entry['final_legacy'] ?? entry['composite_legacy_score'] ?? entry['legacy'] ?? 0).toString();
+          final color = living ? context.primaryColor : context.secondaryColor;
+          return Padding(
+            padding: EdgeInsets.only(bottom: indexed.$1 == records.length - 1 ? 0 : context.spacingControl),
+            child: Container(
+              padding: EdgeInsets.all(context.cardPadding),
+              decoration: BoxDecoration(
+                color: color.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(context.radiusCard),
+                border: Border.all(color: color.withValues(alpha: .25)),
+              ),
+              child: Row(children: [
+                Icon(Icons.person_outline, color: color, size: context.iconSize),
+                SizedBox(width: context.spacingInline),
+                Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Text('GEN ${entry['generation'] ?? indexed.$1 + 1} · ${living ? 'CURRENT ACTIVE CITIZEN' : 'ANCESTOR'}', style: context.captionStyle.copyWith(color: color)),
+                  Text(name, style: context.widgetValueStyle),
+                  Text(living ? 'Active · Current dynasty member' : 'Archived · Historical dynasty member', style: context.widgetFooterStyle),
+                ])),
+                Text('$score L', style: context.widgetTitleStyle.copyWith(color: color)),
+              ]),
+            ),
+          );
+        }),
+        SizedBox(height: context.spacingTopic),
+      ],
     );
   }
 
