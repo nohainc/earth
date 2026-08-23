@@ -31,8 +31,7 @@ import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-pos
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { createSocialInitiative, listSocialInitiatives, listSocialDirectory, listSocialTimeline, listSocialRelationships, respondToSocialInitiative, contributeToSocialInitiative, type SocialKind } from './social-gameplay-postgres.ts';
 import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
-import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
-import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
+import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
 import { BUILDING_CATALOG, PATENT_CATALOG } from './real-estate-catalog.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
@@ -1015,6 +1014,22 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Policy update failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/auto-repair' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ buildingId?: string; enabled?: boolean }>(request);
+      if (!parsed.ok) return parsed.response;
+      const buildingId = parsed.value.buildingId?.trim() ?? '';
+      const autoRepairEnabled = parsed.value.enabled ?? true;
+      if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => setBuildingAutoRepair(repository, { humanId: viewer.id, buildingId, autoRepairEnabled }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Auto-repair update failed' }, { status: 409 });
       }
     }
     if (url.pathname === '/api/real-estate/invest' && request.method === 'POST') {

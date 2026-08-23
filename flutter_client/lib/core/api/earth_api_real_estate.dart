@@ -61,6 +61,21 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
+  Future<EarthState> setBuildingAutoRepair({
+    required String buildingId,
+    required bool enabled,
+  }) async {
+    final res = await _request(
+      '/api/real-estate/auto-repair',
+      method: 'POST',
+      body: {
+        'buildingId': buildingId,
+        'enabled': enabled,
+      },
+    );
+    return EarthState(res as Map<String, dynamic>);
+  }
+
   Future<EarthState> investInPublicBuilding({
     required String buildingId,
     required int sharesCount,

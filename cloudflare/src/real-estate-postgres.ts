@@ -443,6 +443,31 @@ export async function setBuildingOperatingPolicy(
   });
 }
 
+export async function setBuildingAutoRepair(
+  repository: PostgresRepository,
+  input: {
+    humanId: string;
+    buildingId: string;
+    autoRepairEnabled: boolean;
+  },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const bld = await tx.query<{ id: string; owner_id: string }>(
+      'SELECT id, owner_id FROM buildings WHERE id = $1',
+      [input.buildingId],
+    );
+    if (!bld.rows[0]) throw new Error('Building not found');
+    if (bld.rows[0].owner_id !== input.humanId) throw new Error('Unauthorized');
+
+    await tx.query(
+      'UPDATE buildings SET auto_repair_enabled = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [input.autoRepairEnabled, input.buildingId],
+    );
+
+    return { ok: true, buildingId: input.buildingId, autoRepairEnabled: input.autoRepairEnabled };
+  });
+}
+
 export async function repairBuilding(
   repository: PostgresRepository,
   input: {

@@ -5,6 +5,7 @@ import {
   purchasePrivatePlotAndConstruct,
   upgradeBuilding,
   setBuildingOperatingPolicy,
+  setBuildingAutoRepair,
   repairBuilding,
   investInPublicBuilding,
   demolishBuilding,
@@ -476,6 +477,33 @@ test('acquireBuildingPatentLicense supports city civic licensing debited to city
   assert.equal(res.ok, true);
   assert.equal(res.license.licensee_id, 'CITY-0084');
   assert.equal(res.license.license_type, 'city_civic');
+});
+
+test('setBuildingAutoRepair updates auto repair toggle on facility', async () => {
+  const updates = [];
+  const client = new MockDbClient((sql, params) => {
+    if (sql.includes('SELECT id, owner_id FROM buildings WHERE id = $1')) {
+      return { rows: [{ id: 'BLD-TEST', owner_id: 'H-001' }], rowCount: 1 };
+    }
+    if (sql.includes('UPDATE buildings SET auto_repair_enabled')) {
+      updates.push(params);
+      return { rows: [], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+  const repo = new PostgresRepository(client);
+
+  const res = await setBuildingAutoRepair(repo, {
+    humanId: 'H-001',
+    buildingId: 'BLD-TEST',
+    autoRepairEnabled: false,
+  });
+
+  assert.equal(res.ok, true);
+  assert.equal(res.autoRepairEnabled, false);
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0][0], false);
+  assert.equal(updates[0][1], 'BLD-TEST');
 });
 
 

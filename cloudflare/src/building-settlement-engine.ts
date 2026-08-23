@@ -128,12 +128,13 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
     const effectiveYield = efficiency * policyYield;
 
-    // Settle Daily Operating Credits
+    // Settle Daily Operating Credits -> Credited to City Operations
     const opCostCrd = Number(bld.daily_operating_credits || 0) * policyCost * costMult;
     let operatingPaid = true;
 
     if (opCostCrd > 0) {
       const opCostCents = BigInt(Math.round(opCostCrd * 100));
+      const opsAccount = `account-city-operations-${bld.city_id}`;
       if (oClass === 'civic') {
         const cityAccount = await tx.query<{ account_id: string; balance: string }>(
           "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
@@ -146,7 +147,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             ledgerId: crypto.randomUUID(),
             gameDay: day,
             debitAccount: cityAccount.rows[0].account_id,
-            creditAccount: 'account-city-operations',
+            creditAccount: opsAccount,
             amount: centsToMoney(opCostCents),
             reasonType: 'building_operating_cost',
             reasonId: bld.id,
@@ -166,7 +167,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             ledgerId: crypto.randomUUID(),
             gameDay: day,
             debitAccount: ownerAccount.rows[0].account_id,
-            creditAccount: `account-city-${bld.city_id}`,
+            creditAccount: opsAccount,
             amount: centsToMoney(opCostCents),
             reasonType: 'building_operating_cost',
             reasonId: bld.id,
@@ -239,7 +240,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
-                debitAccount: `account-city-${bld.city_id}`,
+                debitAccount: 'account-market-settlement',
                 creditAccount: ownerAccount.rows[0].account_id,
                 amount: centsToMoney(revCents),
                 reasonType: 'building_commercial_revenue',
@@ -253,6 +254,25 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
                 'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3',
                 [outAmt, day, bld.business_id],
               );
+            }
+          } else if (oClass === 'civic') {
+            // Civic municipal facility generates utility revenue for city treasury
+            const cityAccount = await tx.query<{ account_id: string }>(
+              "SELECT account_id FROM account_balances WHERE account_id = $1",
+              [`account-city-${bld.city_id}`],
+            );
+            if (cityAccount.rows[0]) {
+              await transferCredits(tx, {
+                ledgerId: crypto.randomUUID(),
+                gameDay: day,
+                debitAccount: 'account-market-settlement',
+                creditAccount: `account-city-${bld.city_id}`,
+                amount: centsToMoney(revCents),
+                reasonType: 'civic_utility_revenue',
+                reasonId: bld.id,
+                ruleVersion: 'real-estate-v2',
+                correlationId: `CIVIC-REV-${bld.id}-${day}`,
+              });
             }
           }
         } else if (!isCreditOutput && outAmt > 0 && bld.resource_output_type) {
@@ -276,7 +296,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
         );
       }
     } else if (oClass === 'public_investment') {
-      // Distribute public investment shares pro-rata
+      // Distribute public investment shares pro-rata from market settlement
       const isCreditOutput = bld.resource_output_type === 'credits';
       const rev = (isCreditOutput ? Number(bld.resource_output_amount || 0) : 0) * effectiveYield;
       if (rev > 0) {
@@ -301,7 +321,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
-                debitAccount: `account-city-${bld.city_id}`,
+                debitAccount: 'account-market-settlement',
                 creditAccount: invAccount.rows[0].account_id,
                 amount: centsToMoney(payoutCents),
                 reasonType: 'public_share_dividend',

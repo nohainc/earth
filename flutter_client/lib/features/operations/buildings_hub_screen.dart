@@ -1071,6 +1071,39 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               ],
             ),
             const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Text('AUTO-REPAIR (<80%):', style: context.captionStyle.copyWith(fontSize: 10)),
+                    const SizedBox(width: 6),
+                    Text(
+                      'Cost: ${isCivic ? '1 Material' : '1 Component'} / cycle',
+                      style: context.captionStyle.copyWith(fontSize: 10, color: context.primaryColor),
+                    ),
+                  ],
+                ),
+                Transform.scale(
+                  scale: 0.8,
+                  child: Switch.adaptive(
+                    value: b['auto_repair_enabled'] == true || b['auto_repair_enabled']?.toString() == 'true',
+                    activeColor: context.primaryColor,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    onChanged: widget.busy
+                        ? null
+                        : (val) async {
+                            EarthAudioEngine.instance.playClick();
+                            await widget.action(() => const EarthApi().setBuildingAutoRepair(
+                                  buildingId: id,
+                                  enabled: val,
+                                ));
+                          },
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
             Wrap(
               spacing: 8,
               runSpacing: 6,
