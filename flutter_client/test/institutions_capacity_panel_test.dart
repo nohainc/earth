@@ -50,12 +50,15 @@ void main() {
     });
 
     await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(body: CorporationOverviewPanel(state: state)),
+      home: Scaffold(body: SingleChildScrollView(child: CorporationOverviewPanel(state: state))),
     ));
 
     expect(find.text('CORPORATION'), findsOneWidget);
     expect(find.text('You belong to Carthage Dynamics.'), findsNothing);
     expect(find.text('LEAVE CORPORATION'), findsOneWidget);
+    expect(find.text('CORPORATE CHARTER & BYLAWS'), findsOneWidget);
+    expect(find.text('Internal Corporate Tax Levy'), findsOneWidget);
+    expect(find.text('Shareholder Supermajority Protection'), findsOneWidget);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsOneWidget);
     expect(find.text('12500 C'), findsOneWidget);
@@ -173,5 +176,8 @@ void main() {
     expect(find.text('BUSINESS EFFECT'), findsOneWidget);
     expect(find.text('SERVICE CONDITIONS'), findsOneWidget);
     expect(find.text('HOUSING · 85%'), findsOneWidget);
+    expect(find.text('MUNICIPAL ORDINANCES & TARIFFS'), findsOneWidget);
+    expect(find.text('Municipal Energy & Grid Tariff'), findsOneWidget);
+    expect(find.text('Essential Services Minimum Standard'), findsOneWidget);
   });
 }

@@ -512,6 +512,75 @@ class CorporationOverviewPanel extends StatelessWidget {
             ),
           ),
           SizedBox(height: context.spacingTopic),
+          Text('CORPORATE CHARTER & BYLAWS', style: context.widgetTitleStyle),
+          const SizedBox(height: 4),
+          Text(
+            'Operational policies governed by this corporation. Overrides Earth baseline within constitutional boundaries.',
+            style: context.widgetFooterStyle,
+          ),
+          SizedBox(height: context.spacingControl),
+          EarthDataList(
+            children: [
+              EarthDataRow(
+                title: 'Internal Corporate Tax Levy',
+                subtitle:
+                    '2.0% on affiliated business revenues\nAllocated directly to the sovereign corporate treasury to fund public goods and research. Parent Earth ceiling: Max 15.0%.',
+                leading: Icon(Icons.receipt_long_outlined, size: context.iconSize, color: context.secondaryColor),
+                badges: const [
+                  EarthBadge(label: 'CUSTOM OVERRIDE', variant: EarthBadgeVariant.primary),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Corporate Dividend Distribution',
+                subtitle:
+                    '50% treasury retained · 50% distributed to equity holders per game-cycle based on registered shareholding.',
+                leading: Icon(Icons.payments_outlined, size: context.iconSize, color: context.secondaryColor),
+                badges: const [
+                  EarthBadge(label: 'CUSTOM OVERRIDE', variant: EarthBadgeVariant.primary),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Shareholder Supermajority Protection',
+                subtitle:
+                    '67.0% voting supermajority required for charter amendments, corporate restructuring, or asset liquidations.',
+                leading: Icon(Icons.lock_outline_rounded, size: context.iconSize, color: context.primaryColor),
+                badges: const [
+                  EarthBadge(label: 'IMMUTABLE INVARIANT', variant: EarthBadgeVariant.neutral),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Membership Admission Standards',
+                subtitle:
+                    'Current policy: ${(corporation['admission_policy'] ?? 'open').toString().toUpperCase()}. Open admission welcomes all universal citizens; approval requires executive review.',
+                leading: Icon(Icons.how_to_reg_outlined, size: context.iconSize, color: context.secondaryColor),
+                badges: [
+                  EarthBadge(
+                    label: (corporation['admission_policy'] ?? 'open').toString().toLowerCase() == 'open'
+                        ? 'EARTH DEFAULT'
+                        : 'CUSTOM OVERRIDE',
+                    variant: (corporation['admission_policy'] ?? 'open').toString().toLowerCase() == 'open'
+                        ? EarthBadgeVariant.neutral
+                        : EarthBadgeVariant.primary,
+                  ),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Executive Role & Adoption Powers',
+                subtitle:
+                    'Active Corporation Executives hold statutory authority to adopt unclaimed cities and introduce governance proposals.',
+                leading: Icon(Icons.manage_accounts_outlined, size: context.iconSize, color: context.secondaryColor),
+                badges: const [
+                  EarthBadge(label: 'EARTH DEFAULT', variant: EarthBadgeVariant.neutral),
+                ],
+                showDivider: false,
+              ),
+            ],
+          ),
+          SizedBox(height: context.spacingTopic),
           Text('CORPORATION DECISIONS', style: context.widgetTitleStyle),
           const SizedBox(height: 5),
           Text(
@@ -959,6 +1028,58 @@ class CityImpactPanel extends StatelessWidget {
                         : (value < .75 ? EarthBadgeVariant.warning : EarthBadgeVariant.success)),
               );
             }).toList(),
+          ),
+          SizedBox(height: context.spacingTopic),
+          Text('MUNICIPAL ORDINANCES & TARIFFS', style: context.widgetTitleStyle),
+          const SizedBox(height: 4),
+          Text(
+            'Local ordinances and service tariffs set by this municipality. Restricted by Corporate Charters and Earth Law.',
+            style: context.widgetFooterStyle,
+          ),
+          SizedBox(height: context.spacingControl),
+          EarthDataList(
+            children: [
+              EarthDataRow(
+                title: 'Municipal Energy & Grid Tariff',
+                subtitle:
+                    '${taxRate == null ? '3.0' : (taxRate * 100).toStringAsFixed(1)}% consumption tariff\nApplied to municipal energy grid load and infrastructure utility draws.',
+                leading: Icon(Icons.bolt_outlined, size: context.iconSize, color: context.warningColor),
+                badges: const [
+                  EarthBadge(label: 'CUSTOM OVERRIDE', variant: EarthBadgeVariant.warning),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Public Housing & Residency Criteria',
+                subtitle:
+                    'Priority allocation granted to active municipal residents and registered corporate affiliate citizens.',
+                leading: Icon(Icons.home_work_outlined, size: context.iconSize, color: context.secondaryColor),
+                badges: const [
+                  EarthBadge(label: 'DELEGATED', variant: EarthBadgeVariant.neutral),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Infrastructure Maintenance Assessment',
+                subtitle:
+                    'Municipal surcharge funding local transport connectivity, water filtration, and community health centers.',
+                leading: Icon(Icons.construction_outlined, size: context.iconSize, color: context.secondaryColor),
+                badges: const [
+                  EarthBadge(label: 'CUSTOM OVERRIDE', variant: EarthBadgeVariant.warning),
+                ],
+                showDivider: true,
+              ),
+              EarthDataRow(
+                title: 'Essential Services Minimum Standard',
+                subtitle:
+                    'Municipal service ratios must maintain minimum survival index (>0.50) as guaranteed by Planetary Law.',
+                leading: Icon(Icons.shield_outlined, size: context.iconSize, color: context.primaryColor),
+                badges: const [
+                  EarthBadge(label: 'IMMUTABLE INVARIANT', variant: EarthBadgeVariant.neutral),
+                ],
+                showDivider: false,
+              ),
+            ],
           ),
         ],
       ),
