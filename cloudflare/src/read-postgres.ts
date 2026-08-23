@@ -28,6 +28,11 @@ export async function markNotificationRead(repository: PostgresRepository, human
   return { ok: true };
 }
 
+export async function markAllNotificationsRead(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
+  await repository.query('UPDATE notifications SET read_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND read_at IS NULL', [humanId]);
+  return { ok: true, unread: 0, unreadCount: 0 };
+}
+
 export async function auditWorld(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const [balances, ledger, machines, succession, corporations, cities] = await Promise.all([
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),

@@ -37,14 +37,36 @@ class _ActivityPanelState extends State<ActivityPanel> {
   int _currentPage = 0;
   static const int _pageSize = 10;
 
+  bool _isNotificationRead(Map<String, dynamic> n) {
+    final id = n['id']?.toString() ?? '';
+    if (_locallyReadIds.contains(id)) return true;
+
+    final readAt = n['read_at'] ?? n['readAt'];
+    if (readAt != null && readAt.toString().isNotEmpty && readAt.toString() != 'null') {
+      return true;
+    }
+
+    final read = n['read'];
+    if (read == true || read == 'true' || read == 1 || read == '1') {
+      return true;
+    }
+
+    final status = n['status']?.toString().toLowerCase();
+    if (status == 'read') return true;
+
+    return false;
+  }
+
   @override
   Widget build(BuildContext context) {
-    final effectiveUnread = widget.unreadCount - _locallyReadIds.length;
-    final displayUnread = effectiveUnread > 0 ? effectiveUnread : 0;
-
     final validNotifications = widget.notifications
-        .whereType<Map<String, dynamic>>()
+        .whereType<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
         .toList();
+
+    final unreadCount = validNotifications
+        .where((n) => !_isNotificationRead(n))
+        .length;
 
     final totalPages = (validNotifications.length / _pageSize).ceil().clamp(1, 9999);
     if (_currentPage >= totalPages) {
@@ -61,19 +83,20 @@ class _ActivityPanelState extends State<ActivityPanel> {
 
     return EarthSection(
       key: widget.panelKey,
-      title: displayUnread > 0
-          ? 'DIRECT ALERTS & NOTIFICATIONS ($displayUnread)'
+      title: unreadCount > 0
+          ? 'DIRECT ALERTS & NOTIFICATIONS ($unreadCount)'
           : 'DIRECT ALERTS & NOTIFICATIONS',
       showSurface: false,
       trailing: validNotifications.isNotEmpty
           ? EarthButton(
               label: 'MARK ALL AS READ',
               icon: Icons.done_all_rounded,
-              onPressed: displayUnread > 0
+              onPressed: unreadCount > 0
                   ? () async {
                       for (final n in validNotifications) {
-                        if (n['id'] != null) {
-                          _locallyReadIds.add(n['id'].toString());
+                        final id = n['id']?.toString();
+                        if (id != null && id.isNotEmpty) {
+                          _locallyReadIds.add(id);
                         }
                       }
                       setState(() {});
@@ -95,7 +118,7 @@ class _ActivityPanelState extends State<ActivityPanel> {
                     final id = n['id']?.toString() ?? 'NOTIF';
                     final title = n['title']?.toString() ?? 'Notification';
                     final body = n['body']?.toString() ?? '';
-                    final isRead = n['read'] == true || _locallyReadIds.contains(id);
+                    final isRead = _isNotificationRead(n);
 
                     return EarthDataRow(
                       title: title,

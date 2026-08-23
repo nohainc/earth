@@ -21,7 +21,6 @@ void main() {
 
     String? markedReadId;
     bool markedAllRead = false;
-    bool refreshed = false;
 
     await tester.pumpWidget(
       MaterialApp(
@@ -30,7 +29,7 @@ void main() {
             child: ActivityPanel(
               notifications: notifications,
               unreadCount: 15,
-              onRefresh: () => refreshed = true,
+              onRefresh: () {},
               onMarkRead: (id) async => markedReadId = id,
               onMarkAllRead: () async => markedAllRead = true,
             ),
@@ -77,5 +76,55 @@ void main() {
 
     // 7. Refresh button is deleted
     expect(find.byTooltip('Refresh alerts'), findsNothing);
+  });
+
+  testWidgets('ActivityPanel handles read_at database format and updates unread state immediately',
+      (tester) async {
+    final notifications = <Map<dynamic, dynamic>>[
+      {
+        'id': 'NOTIF-PG-1',
+        'title': 'Tax Settlement Invoice',
+        'body': '250 Credits settled.',
+        'read_at': null,
+      },
+      {
+        'id': 'NOTIF-PG-2',
+        'title': 'Contract Accepted',
+        'body': 'Solar grid maintenance agreement.',
+        'read_at': '2026-08-20T10:00:00Z',
+      },
+    ];
+
+    String? markedReadId;
+    bool markedAllRead = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: ActivityPanel(
+              notifications: notifications,
+              onRefresh: () {},
+              onMarkRead: (id) async => markedReadId = id,
+              onMarkAllRead: () async => markedAllRead = true,
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.pumpAndSettle();
+
+    // 1 unread item, so MARK ALL AS READ is active
+    expect(find.text('DIRECT ALERTS & NOTIFICATIONS (1)'), findsOneWidget);
+    expect(find.text('NEW'), findsOneWidget);
+    expect(find.text('READ'), findsOneWidget);
+
+    // Mark single unread item as read
+    await tester.tap(find.byTooltip('Mark read'));
+    await tester.pumpAndSettle();
+    expect(markedReadId, 'NOTIF-PG-1');
+    expect(find.text('DIRECT ALERTS & NOTIFICATIONS'), findsOneWidget);
+    expect(find.text('NEW'), findsNothing);
   });
 }
