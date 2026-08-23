@@ -10,14 +10,102 @@ const mutedColor = Color(0xff94a3b8);
 const cyanAccentColor = Color(0xff55d8b2);
 
 /// Stable semantic colors for the six player resources.
-/// Use these colors for resource icons; keep numeric values neutral.
+/// Use these colors for resource icons and badges; keep numeric values neutral.
 class EarthResourceColors {
-  static const Color credits = Color(0xfff59e0b); // Gold credits
-  static const Color food = Color(0xff34d399); // Biosphere emerald
-  static const Color energy = Color(0xfffbbf24); // Solar amber
-  static const Color materials = Color(0xff94a3b8); // Slate titanium
-  static const Color components = Color(0xff38bdf8); // Sky components
-  static const Color compute = Color(0xff818cf8); // Quantum indigo
+  static const Color credits = Color(0xfff59e0b); // Gold credits (CRD)
+  static const Color energy = Color(0xfffbbf24); // Solar amber (NRG)
+  static const Color food = Color(0xff34d399); // Biosphere emerald (BIO)
+  static const Color materials = Color(0xff94a3b8); // Slate titanium (ORE)
+  static const Color components = Color(0xff38bdf8); // Sky components (MAT)
+  static const Color compute = Color(0xff818cf8); // Quantum indigo (DAT)
+}
+
+/// Metadata and canonical definitions for the 6 core resources.
+class EarthResourceMeta {
+  final String key;
+  final String shortCode;
+  final String label;
+  final String longName;
+  final IconData icon;
+  final Color color;
+
+  const EarthResourceMeta({
+    required this.key,
+    required this.shortCode,
+    required this.label,
+    required this.longName,
+    required this.icon,
+    required this.color,
+  });
+
+  static const List<EarthResourceMeta> all = [
+    EarthResourceMeta(
+      key: 'credits',
+      shortCode: 'CRD',
+      label: 'Credits',
+      longName: 'Universal Currency',
+      icon: Icons.monetization_on_outlined,
+      color: EarthResourceColors.credits,
+    ),
+    EarthResourceMeta(
+      key: 'energy',
+      shortCode: 'NRG',
+      label: 'Energy',
+      longName: 'Grid Power & Megawatts',
+      icon: Icons.bolt_rounded,
+      color: EarthResourceColors.energy,
+    ),
+    EarthResourceMeta(
+      key: 'food',
+      shortCode: 'BIO',
+      label: 'Food',
+      longName: 'Biomass & Agrifood',
+      icon: Icons.eco_outlined,
+      color: EarthResourceColors.food,
+    ),
+    EarthResourceMeta(
+      key: 'material',
+      shortCode: 'ORE',
+      label: 'Materials',
+      longName: 'Raw Minerals & Ores',
+      icon: Icons.terrain_outlined,
+      color: EarthResourceColors.materials,
+    ),
+    EarthResourceMeta(
+      key: 'components',
+      shortCode: 'MAT',
+      label: 'Components',
+      longName: 'Refined Alloys & Modules',
+      icon: Icons.precision_manufacturing_outlined,
+      color: EarthResourceColors.components,
+    ),
+    EarthResourceMeta(
+      key: 'compute',
+      shortCode: 'DAT',
+      label: 'Compute',
+      longName: 'Quantum Data & Telemetry',
+      icon: Icons.memory_rounded,
+      color: EarthResourceColors.compute,
+    ),
+  ];
+
+  static EarthResourceMeta forCommodity(String key) {
+    final normalized = key.toLowerCase().trim();
+    return all.firstWhere(
+      (m) =>
+          m.key == normalized ||
+          (normalized == 'materials' && m.key == 'material') ||
+          m.shortCode.toLowerCase() == normalized,
+      orElse: () => EarthResourceMeta(
+        key: normalized,
+        shortCode: normalized.length >= 3 ? normalized.substring(0, 3).toUpperCase() : normalized.toUpperCase(),
+        label: normalized.toUpperCase(),
+        longName: normalized.toUpperCase(),
+        icon: Icons.category_outlined,
+        color: EarthResourceColors.materials,
+      ),
+    );
+  }
 }
 
 /// ThemeExtension to propagate dynamic surfaces, panels, cards, and accents throughout the UI.

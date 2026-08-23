@@ -110,13 +110,14 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric('Components Price', '$componentsPrice C',
-                          cyanAccentColor),
+                      _rowMetric('Energy (NRG)', '$energyPrice C',
+                          EarthResourceColors.energy),
                       const SizedBox(height: 5),
-                      _rowMetric('Energy Price', '$energyPrice C', mutedColor),
+                      _rowMetric('Materials (ORE)', '$materialsPrice C',
+                          EarthResourceColors.materials),
                       const SizedBox(height: 5),
-                      _rowMetric(
-                          'Materials Price', '$materialsPrice C', mutedColor),
+                      _rowMetric('Components (MAT)', '$componentsPrice C',
+                          EarthResourceColors.components),
                     ],
                   ),
                   onTap: () => onNavigate?.call('market'),

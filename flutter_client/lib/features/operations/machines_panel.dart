@@ -333,7 +333,7 @@ class ProductionEventsPanel extends StatelessWidget {
         'Production Audit Stream: Immutable chronological record of manufacturing, fabrication, and chemical synthesis runs executed across your automated machine fleet.',
         'Cycle Day: Canonical game day when the production run settled.',
         'Machine Class: Model of fabrication rig or synthesis reactor.',
-        'Yield & Resource: Net units produced and specific commodity type (Food, Materials, Energy, Components, Compute).',
+        'Yield & Resource: Net units produced and specific commodity type (Energy, Food, Materials, Components, Compute).',
       ],
       child: events.isEmpty
           ? const EarthEmptyState(

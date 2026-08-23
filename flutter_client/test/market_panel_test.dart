@@ -131,8 +131,8 @@ void main() {
     await tester.pumpAndSettle();
 
     // Switch to SELL
-    await tester.ensureVisible(find.text('SELL ENGY'));
-    await tester.tap(find.text('SELL ENGY'));
+    await tester.ensureVisible(find.text('SELL NRG'));
+    await tester.tap(find.text('SELL NRG'));
     await tester.pumpAndSettle();
 
     // Change sell qty to 7 and price to 20.00
@@ -141,7 +141,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Switch back to BUY
-    await tester.tap(find.text('BUY ENGY'));
+    await tester.tap(find.text('BUY NRG'));
     await tester.pumpAndSettle();
 
     // Verify BUY restored 42 and 15.00
@@ -149,7 +149,7 @@ void main() {
     expect(tester.widget<TextField>(priceField).controller!.text, '15.00');
 
     // Switch back to SELL
-    await tester.tap(find.text('SELL ENGY'));
+    await tester.tap(find.text('SELL NRG'));
     await tester.pumpAndSettle();
 
     // Verify SELL restored 7 and 20.00
@@ -254,12 +254,13 @@ void main() {
       (tester) async {
     const state = EarthState({
       'human': {},
-      'resources': {'food': 0, 'energy': 20, 'material': 80, 'compute': 4},
+      'resources': {'energy': 20, 'food': 0, 'material': 80, 'components': 50, 'compute': 4},
       'market': {
         'products': {
-          'food': {'price': 12.0},
           'energy': {'price': 8.0},
+          'food': {'price': 12.0},
           'material': {'price': 20.0},
+          'components': {'price': 40.0},
           'compute': {'price': 30.0},
         },
         'orders': [],

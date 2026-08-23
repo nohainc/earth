@@ -10,7 +10,7 @@ class SuppliesTodayPanel extends StatelessWidget {
 
   const SuppliesTodayPanel({super.key, required this.state});
 
-  static const _products = ['food', 'energy', 'material', 'compute'];
+  static const _products = ['energy', 'food', 'material', 'components', 'compute'];
 
   @override
   Widget build(BuildContext context) {
@@ -161,9 +161,18 @@ class CommodityMeta {
 
   static const all = [
     CommodityMeta(
+      key: 'energy',
+      name: 'ENERGY',
+      symbol: 'NRG',
+      description:
+          'Electrical power units and grid wattage consumed per cycle.',
+      color: EarthResourceColors.energy,
+      icon: Icons.bolt_rounded,
+    ),
+    CommodityMeta(
       key: 'food',
       name: 'FOOD',
-      symbol: 'FOOD',
+      symbol: 'BIO',
       description:
           'Vertical farm harvest & bio-nutrients for human metabolic survival.',
       color: EarthResourceColors.food,
@@ -172,38 +181,29 @@ class CommodityMeta {
     CommodityMeta(
       key: 'material',
       name: 'MATERIALS',
-      symbol: 'MATR',
+      symbol: 'ORE',
       description:
-          'Raw industrial base feedstock for manufacturing and construction.',
+          'Raw industrial base mineral feedstock from planetary extractions.',
       color: EarthResourceColors.materials,
-      icon: Icons.view_in_ar_outlined,
+      icon: Icons.terrain_outlined,
     ),
     CommodityMeta(
       key: 'components',
       name: 'COMPONENTS',
-      symbol: 'FABR',
+      symbol: 'MAT',
       description:
-          'Precision mechanical sub-assemblies required to maintain and build machines.',
+          'Precision mechanical sub-assemblies and fabricated structural modules.',
       color: EarthResourceColors.components,
-      icon: Icons.settings_outlined,
-    ),
-    CommodityMeta(
-      key: 'energy',
-      name: 'ENERGY',
-      symbol: 'ENGY',
-      description:
-          'Electrical power units consumed per production and municipal cycle.',
-      color: EarthResourceColors.energy,
-      icon: Icons.bolt_outlined,
+      icon: Icons.precision_manufacturing_outlined,
     ),
     CommodityMeta(
       key: 'compute',
       name: 'COMPUTE',
-      symbol: 'INFO',
+      symbol: 'DAT',
       description:
-          'Quantum processing and algorithmic research compute capacity.',
+          'Quantum processing, telemetry feeds, and algorithmic compute capacity.',
       color: EarthResourceColors.compute,
-      icon: Icons.memory_outlined,
+      icon: Icons.memory_rounded,
     ),
   ];
 

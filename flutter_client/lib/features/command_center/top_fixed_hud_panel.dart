@@ -180,8 +180,17 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
     final resources = [
       _HudResource(
+        key: 'energy',
+        label: 'Energy (NRG)',
+        icon: Icons.bolt_rounded,
+        color: EarthResourceColors.energy,
+        value: formatWholeNumber(widget.state.resources['energy']),
+        net: netFor('energy'),
+        targetSection: 'market',
+      ),
+      _HudResource(
         key: 'food',
-        label: 'Food',
+        label: 'Food (BIO)',
         icon: Icons.eco_outlined,
         color: EarthResourceColors.food,
         value: formatWholeNumber(widget.state.resources['food']),
@@ -189,18 +198,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         targetSection: 'market',
       ),
       _HudResource(
-        key: 'energy',
-        label: 'Energy',
-        icon: Icons.bolt_outlined,
-        color: EarthResourceColors.energy,
-        value: formatWholeNumber(widget.state.resources['energy']),
-        net: netFor('energy'),
-        targetSection: 'market',
-      ),
-      _HudResource(
         key: 'material',
-        label: 'Materials',
-        icon: Icons.view_in_ar_outlined,
+        label: 'Materials (ORE)',
+        icon: Icons.terrain_outlined,
         color: EarthResourceColors.materials,
         value: formatWholeNumber(widget.state.resources['material'] ??
             widget.state.resources['materials']),
@@ -209,8 +209,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
       ),
       _HudResource(
         key: 'components',
-        label: 'Components',
-        icon: Icons.settings_outlined,
+        label: 'Components (MAT)',
+        icon: Icons.precision_manufacturing_outlined,
         color: EarthResourceColors.components,
         value: formatWholeNumber(widget.state.resources['components']),
         net: netFor('components'),
@@ -218,7 +218,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
       ),
       _HudResource(
         key: 'compute',
-        label: 'Compute',
+        label: 'Compute (DAT)',
         icon: Icons.memory_rounded,
         color: EarthResourceColors.compute,
         value: formatWholeNumber(widget.state.resources['compute']),
