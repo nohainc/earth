@@ -245,21 +245,21 @@ class _SidebarState extends State<Sidebar> {
         Icons.public_rounded,
         [
           (
-            'communities',
-            'Communities',
-            Icons.groups_outlined,
-            null,
-          ),
-          (
             'civic-rankings',
             'Rankings',
             Icons.leaderboard_outlined,
             null,
           ),
           (
-            'pantheon',
-            'Memorial',
-            Icons.account_balance_outlined,
+            'communities',
+            'Communities',
+            Icons.groups_outlined,
+            null,
+          ),
+          (
+            'constitution',
+            'Constitution',
+            Icons.gavel_outlined,
             null,
           ),
           (
@@ -269,9 +269,9 @@ class _SidebarState extends State<Sidebar> {
             null,
           ),
           (
-            'constitution',
-            'Constitution',
-            Icons.gavel_outlined,
+            'pantheon',
+            'Memorial',
+            Icons.account_balance_outlined,
             null,
           ),
         ]
