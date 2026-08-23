@@ -3,37 +3,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/features/activity/activity_panel.dart';
 
 void main() {
-  testWidgets('ActivityPanel renders stacked topics: alerts first, public telemetry feed second',
+  testWidgets('ActivityPanel renders paginated direct alerts without outer event wrapper or icon',
       (tester) async {
-    final notifications = [
-      {
-        'id': 'NOTIF-001',
-        'title': 'Tax Assessment Cleared',
-        'body': 'Quarterly municipal tax was deducted.',
-        'read': false,
-      },
-      {
-        'id': 'NOTIF-002',
-        'title': 'Contract Proposed',
-        'body': 'New capacity agreement proposed.',
-        'read': false,
-      },
-    ];
+    tester.view.physicalSize = const Size(1440, 1200);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
 
-    final events = [
-      {
-        'id': 1,
-        'eventKey': 'evt-1',
-        'type': 'world.day_advanced',
-        'gameDay': 185,
+    final notifications = List.generate(
+      15,
+      (i) => {
+        'id': 'NOTIF-${i + 1}',
+        'title': 'Notification #${i + 1}',
+        'body': 'Details for alert #${i + 1}',
+        'read': false,
       },
-      {
-        'id': 2,
-        'eventKey': 'evt-2',
-        'type': 'market.batch_settled',
-        'gameDay': 185,
-      },
-    ];
+    );
 
     String? markedReadId;
     bool markedAllRead = false;
@@ -44,11 +28,8 @@ void main() {
         home: Scaffold(
           body: SingleChildScrollView(
             child: ActivityPanel(
-              events: events,
               notifications: notifications,
-              unreadCount: 2,
-              isLiveConnected: true,
-              isReconnecting: false,
+              unreadCount: 15,
               onRefresh: () => refreshed = true,
               onMarkRead: (id) async => markedReadId = id,
               onMarkAllRead: () async => markedAllRead = true,
@@ -58,37 +39,44 @@ void main() {
       ),
     );
 
-    expect(find.text('EVENT HISTORY & ARCHIVE'), findsOneWidget);
-    expect(find.text('DIRECT ALERTS & NOTIFICATIONS (2)'), findsOneWidget);
-    expect(find.text('Tax Assessment Cleared'), findsOneWidget);
-    expect(find.text('Contract Proposed'), findsOneWidget);
-    expect(find.text('MARK ALL READ'), findsOneWidget);
+    // 1. Topic Title without leading icon
+    expect(find.text('DIRECT ALERTS & NOTIFICATIONS (15)'), findsOneWidget);
+    expect(find.text('EVENT HISTORY & ARCHIVE'), findsNothing);
+    expect(find.text('PLANETARY TELEMETRY & WORLD FEED'), findsNothing);
 
-    // Both topics are directly visible on page without switching tabs
-    expect(find.text('PLANETARY TELEMETRY & WORLD FEED'), findsOneWidget);
-    expect(find.textContaining('World operating cycle advanced to Game Day 185'), findsOneWidget);
-    expect(find.textContaining('Central Market batch cleared and settled'), findsOneWidget);
+    // 2. Pagination: Page 1 shows items 1-10
+    expect(find.text('Notification #1'), findsOneWidget);
+    expect(find.text('Notification #10'), findsOneWidget);
+    expect(find.text('Notification #11'), findsNothing);
+    expect(find.text('PAGE 1 OF 2 (15 TOTAL)'), findsOneWidget);
 
-    // Verify info icon is present and opens description dialog
-    expect(find.byIcon(Icons.info_outline), findsWidgets);
-    await tester.tap(find.byIcon(Icons.info_outline).first);
-    await tester.pumpAndSettle();
-    expect(find.textContaining('Real-Time Operations Telemetry'), findsOneWidget);
-    await tester.tap(find.text('CLOSE'));
-    await tester.pumpAndSettle();
-
-    // Tap mark read icon for NOTIF-001
+    // 3. Mark read single item
     await tester.tap(find.byTooltip('Mark read').first);
     await tester.pumpAndSettle();
-    expect(markedReadId, 'NOTIF-001');
+    expect(markedReadId, 'NOTIF-1');
 
-    // Tap mark all read
+    // 4. Navigate to Page 2
+    await tester.tap(find.text('NEXT'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PAGE 2 OF 2 (15 TOTAL)'), findsOneWidget);
+    expect(find.text('Notification #11'), findsOneWidget);
+    expect(find.text('Notification #15'), findsOneWidget);
+    expect(find.text('Notification #1'), findsNothing);
+
+    // 5. Navigate back to Page 1
+    await tester.tap(find.text('PREVIOUS'));
+    await tester.pumpAndSettle();
+    expect(find.text('PAGE 1 OF 2 (15 TOTAL)'), findsOneWidget);
+    expect(find.text('Notification #1'), findsOneWidget);
+
+    // 6. Mark all read
     await tester.tap(find.text('MARK ALL READ'));
     await tester.pumpAndSettle();
     expect(markedAllRead, isTrue);
 
-    // Refresh icon
-    await tester.tap(find.byTooltip('Refresh events & notifications'));
+    // 7. Refresh action
+    await tester.tap(find.byTooltip('Refresh alerts'));
     expect(refreshed, isTrue);
   });
 }
