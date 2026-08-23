@@ -9,6 +9,7 @@ import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { reconcileWorldSimulation } from './engines/simulation-orchestrator.ts';
 import { computeResourceFlows } from './engines/resource-flow-engine.ts';
 import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
+import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 
 type Row = Record<string, any>;
 
@@ -81,7 +82,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
   const startIndex = economicStartIndex(referencePrice || 50);
   const feeRate = Number(await marketFeeRate(repository, viewerId));
-  const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees] = await Promise.all([
+  const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees, buildings, municipalLabor, corporateResearch] = await Promise.all([
     Promise.all([
       repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
         FROM cities
@@ -143,7 +144,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT institution_roles.id, institution_roles.name, institution_roles.institution_id, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id"),
     Promise.all([repository.query('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12'), repository.query('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20')]),
     repository.query("SELECT e.id, e.business_id, e.name, e.role, e.skill, e.morale, e.wage, e.status, e.hired_game_day FROM business_employees e WHERE e.business_id IN (SELECT b.id FROM businesses b LEFT JOIN business_management bm ON bm.business_id = b.id WHERE b.owner_id = $1 OR bm.manager_id = $1 OR EXISTS (SELECT 1 FROM business_shares bs WHERE bs.business_id = b.id AND bs.holder_id = $1)) ORDER BY e.status, e.name", [viewerId]),
+    repository.query("SELECT b.*, (SELECT COUNT(*)::integer FROM building_staff_assignments WHERE building_id = b.id AND status = 'active') AS active_staff_count FROM buildings b WHERE b.owner_id = $1 OR b.city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084') ORDER BY b.created_game_day DESC, b.id", [viewerId]).catch(() => ({ rows: [] })),
+    repository.query("SELECT mlp.*, m.name AS machine_name, m.machine_type, m.condition, m.productive_capacity FROM municipal_labor_pool mlp JOIN machines m ON m.id = mlp.machine_id WHERE mlp.human_id = $1 ORDER BY mlp.created_at DESC", [viewerId]).catch(() => ({ rows: [] })),
+    repository.query("SELECT crp.* FROM corporate_research_pools crp WHERE crp.corporation_id = COALESCE((SELECT corporation_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CORP-001') ORDER BY crp.status, crp.created_at DESC", [viewerId]).catch(() => ({ rows: [] })),
   ]);
+  const buildingsRows = buildings?.rows ?? [];
+  const municipalLaborRows = municipalLabor?.rows ?? [];
+  const corporateResearchRows = corporateResearch?.rows ?? [];
   const serviceRatios = city ? { housing: ratio(city.housing_capacity, city.residents), energy: ratio(city.energy_capacity, city.residents), connectivity: ratio(city.connectivity_capacity, city.residents), health: ratio(city.health_capacity, 100) } : { housing: 0.75, energy: 0.75, connectivity: 0.75, health: 0.5 };
   const serviceStatus = { housing: serviceRatios.housing >= 1 ? 'normal' : serviceRatios.housing >= 0.75 ? 'basic' : 'critical', utilities: serviceRatios.energy >= 1 ? 'normal' : serviceRatios.energy >= 0.75 ? 'basic' : 'critical', connectivity: serviceRatios.connectivity >= 1 ? 'normal' : serviceRatios.connectivity >= 0.75 ? 'basic' : 'critical', health: serviceRatios.health >= 0.8 ? 'normal' : serviceRatios.health >= 0.5 ? 'basic' : 'critical' };
   const cityQualification = city ? { activePopulation: Number(city.residents ?? 0) >= 10, housing: Number(city.housing_capacity ?? 0) >= Number(city.residents ?? 0), energy: Number(city.energy_capacity ?? 0) >= Number(city.residents ?? 0), connectivity: Number(city.connectivity_capacity ?? 0) >= Number(city.residents ?? 0), health: Number(city.health_capacity ?? 0) >= 50, treasury: Number(city.treasury ?? 0) >= 0, governance: true } : {};
@@ -226,6 +233,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     resourceFlows: flows,
     business: businessRow,
     businesses: business.rows,
+    buildings: buildingsRows,
+    municipalLabor: municipalLaborRows,
+    corporateResearch: corporateResearchRows,
+    buildingCatalog: Object.values(BUILDING_CATALOG),
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
     technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0), corporationSharedPatents: corporationSharedTechnology.rows }, machines: machineRows, workforce: employees.rows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,

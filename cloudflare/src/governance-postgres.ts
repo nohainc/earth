@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
+import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -112,11 +113,49 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = $1", [current.id]);
       return { ok: true, executionStatus: 'skipped', reason: 'Proposal has no target rule payload', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
-    if (!['market', 'finance', 'services', 'technology'].includes(category)) throw new Error('Target rule is outside engine bounds');
+    if (category === 'megaproject_procurement') {
+      const bType = String(value.buildingType ?? 'geothermal-grid');
+      const spec = BUILDING_CATALOG[bType] ?? BUILDING_CATALOG['geothermal-grid'];
+      const buildingId = `BLD-MUNI-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+      const day = Number(world.rows[0]?.game_day ?? 0);
+
+      await tx.query(
+        `INSERT INTO buildings (
+          id, city_id, owner_id, ownership_type,
+          building_type, name, tier, condition, max_staff_slots,
+          upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
+          base_revenue_crd, status, created_game_day
+        ) VALUES ($1, $2, $2, 'municipal', $3, $4, $5, 100, $6, $7, $8, $9, $10, $11, $12, 'active', $13)`,
+        [
+          buildingId,
+          current.institution_id,
+          spec.type,
+          current.title || spec.name,
+          spec.tier,
+          spec.maxStaffSlots,
+          spec.upkeepEnergy,
+          spec.upkeepFood,
+          spec.upkeepMaterials,
+          spec.upkeepComponents,
+          spec.upkeepCompute,
+          spec.baseDailyRevenueCrd,
+          day,
+        ],
+      );
+
+      await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'executed' WHERE id = $1", [current.id]);
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'megaproject.constructed', `Municipal Megaproject ${spec.name} commissioned`, toNanoMarkup({ proposalId: current.id, buildingId, cityId: current.institution_id })]);
+      return { ok: true, executionStatus: 'executed', buildingId, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+    }
+
+    if (!['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(category)) throw new Error('Target rule is outside engine bounds');
     if (category === 'finance' && value.rate !== undefined && (typeof value.rate !== 'number' || Number(value.rate) < 0 || Number(value.rate) > 0.25)) throw new Error('Finance rule rate must be between 0 and 0.25');
     const quorum = value.quorum !== undefined ? Number(value.quorum) : 0.25;
     const approval = value.approvalThreshold !== undefined ? Number(value.approvalThreshold) : 0.50;
     const votingPeriod = value.votingPeriodDays !== undefined ? Number(value.votingPeriodDays) : 30;
+    const activeRule = await tx.query<{ id: string; version: number }>('SELECT id, version FROM governance_rules WHERE institution_id = $1 AND category = $2 AND status = \'active\' ORDER BY version DESC LIMIT 1', [current.institution_id, category]);
+    const version = Number(activeRule.rows[0]?.version ?? 0) + 1;
+    const ruleId = `GOV-${current.institution_id}-${category}-v${version}`;
     await tx.query('INSERT INTO governance_rules (id, institution_id, name, category, quorum_threshold, approval_threshold, voting_period_days, version, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'active\',$9)', [ruleId, current.institution_id, current.title, category, quorum, approval, votingPeriod, version, input.humanId]);
     await tx.query("UPDATE governance_rules SET status = 'superseded' WHERE institution_id = $1 AND category = $2 AND status = 'active' AND id <> $3", [current.institution_id, category, ruleId]);
     await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'executed' WHERE id = $1", [current.id]);

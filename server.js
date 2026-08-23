@@ -2819,8 +2819,10 @@ async function command(path, body, req = null) {
   const voteMatch = path.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
   if (voteMatch && body.method === 'POST') {
     const proposalId = voteMatch[1];
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     if (!['support', 'oppose', 'abstain'].includes(body.vote)) throw new ApiError('Invalid ballot', 400, 'VALIDATION_ERROR');
-    const proposal = state.governance.proposals.find((p) => String(p.id) === proposalId) || state.governance.proposals[0];
+    const proposal = state.governance.proposals.find((p) => String(p.id) === proposalId);
     if (!proposal) throw new ApiError('Proposal not found', 404, 'NOT_FOUND');
     const voter = human('amara', req);
     if (!voter) throw new ApiError('Human is not eligible to vote', 401, 'AUTHENTICATION_REQUIRED');

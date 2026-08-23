@@ -105,7 +105,7 @@ async function settleInstitutionBusinessEffects(tx: PostgresRepository, day: num
 async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise<void> {
   const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true");
   if (!rule.rows[0]) return;
-  const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string; city_charter: string | null; corporation_charter: string | null }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN memberships ON memberships.human_id = businesses.owner_id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE businesses.status = 'active'");
+  const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string; city_id: string | null; corporation_id: string | null; city_charter: string | null; corporation_charter: string | null }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue, memberships.city_id, memberships.corporation_id, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN memberships ON memberships.human_id = businesses.owner_id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE businesses.status = 'active'");
   for (const business of businesses.rows) {
     const taxableCents = moneyToCents(business.revenue) - moneyToCents(business.taxed_revenue);
     const effectiveCorporateRate = effectiveRate(business.city_charter, business.corporation_charter, 'corporateTaxBps', rule.rows[0].rate);
@@ -117,8 +117,173 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
     if (prior.rows[0]) continue;
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [business.owner_id]);
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < taxCents) continue;
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-ouc-treasury', amount: tax, reasonType: 'business_tax', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId });
+
+    // 3-Way Pro-Rata Tax Distribution: 60% City, 25% Corp, 15% Planetary
+    const cityCents = (taxCents * 60n) / 100n;
+    const corpCents = (taxCents * 25n) / 100n;
+    const oucCents = taxCents - cityCents - corpCents;
+
+    const cityTarget = business.city_id ? `account-city-${business.city_id}` : 'account-ouc-treasury';
+    const corpTarget = business.corporation_id ? `account-corporation-${business.corporation_id}` : cityTarget;
+
+    if (cityCents > 0n) {
+      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: cityTarget, amount: centsToMoney(cityCents), reasonType: 'business_tax_city', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-CITY` });
+    }
+    if (corpCents > 0n) {
+      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: corpTarget, amount: centsToMoney(corpCents), reasonType: 'business_tax_corp', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-CORP` });
+    }
+    if (oucCents > 0n) {
+      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(oucCents), reasonType: 'business_tax_ouc', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-OUC` });
+    }
+
     await tx.query('UPDATE business_financials SET taxed_revenue = revenue, operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [tax, day, business.id]);
+  }
+}
+
+async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: number): Promise<void> {
+  const bldQuery = await tx.query<{
+    id: string;
+    owner_id: string;
+    city_id: string;
+    ownership_type: string;
+    business_id: string | null;
+    upkeep_energy: string;
+    upkeep_food: string;
+    upkeep_materials: string;
+    upkeep_components: string;
+    upkeep_compute: string;
+    base_revenue_crd: string;
+    tier: number;
+    condition: string;
+  }>("SELECT id, owner_id, city_id, ownership_type, business_id, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, base_revenue_crd, tier, condition FROM buildings WHERE status = 'active'");
+
+  for (const bld of bldQuery.rows) {
+    if (bld.ownership_type === 'private') {
+      const uEnergy = Number(bld.upkeep_energy);
+      const uFood = Number(bld.upkeep_food);
+      const uMat = Number(bld.upkeep_materials);
+      const uComp = Number(bld.upkeep_components);
+      const uDat = Number(bld.upkeep_compute);
+
+      let upkeepMet = true;
+      if (uEnergy > 0) {
+        const bal = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'energy' FOR UPDATE", [bld.owner_id]);
+        if (Number(bal.rows[0]?.amount ?? 0) >= uEnergy) {
+          await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'energy'", [uEnergy, bld.owner_id]);
+        } else upkeepMet = false;
+      }
+      if (uFood > 0 && upkeepMet) {
+        const bal = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'food' FOR UPDATE", [bld.owner_id]);
+        if (Number(bal.rows[0]?.amount ?? 0) >= uFood) {
+          await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'food'", [uFood, bld.owner_id]);
+        } else upkeepMet = false;
+      }
+      if (uMat > 0 && upkeepMet) {
+        const bal = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'material' FOR UPDATE", [bld.owner_id]);
+        if (Number(bal.rows[0]?.amount ?? 0) >= uMat) {
+          await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'material'", [uMat, bld.owner_id]);
+        } else upkeepMet = false;
+      }
+      if (uComp > 0 && upkeepMet) {
+        const bal = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE", [bld.owner_id]);
+        if (Number(bal.rows[0]?.amount ?? 0) >= uComp) {
+          await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components'", [uComp, bld.owner_id]);
+        } else upkeepMet = false;
+      }
+      if (uDat > 0 && upkeepMet) {
+        const bal = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'compute' FOR UPDATE", [bld.owner_id]);
+        if (Number(bal.rows[0]?.amount ?? 0) >= uDat) {
+          await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'compute'", [uDat, bld.owner_id]);
+        } else upkeepMet = false;
+      }
+
+      if (upkeepMet) {
+        const rev = Number(bld.base_revenue_crd);
+        if (rev > 0) {
+          const revCents = BigInt(Math.round(rev * 100));
+          const ownerAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [bld.owner_id]);
+          if (ownerAccount.rows[0]) {
+            await transferCredits(tx, {
+              ledgerId: crypto.randomUUID(),
+              gameDay: day,
+              debitAccount: `account-city-${bld.city_id}`,
+              creditAccount: ownerAccount.rows[0].account_id,
+              amount: centsToMoney(revCents),
+              reasonType: 'building_commercial_revenue',
+              reasonId: bld.id,
+              ruleVersion: 'real-estate-v1',
+              correlationId: `BLD-REV-${bld.id}-${day}`,
+            }).catch(() => undefined);
+          }
+          if (bld.business_id) {
+            await tx.query("UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3", [rev, day, bld.business_id]);
+          }
+        }
+      } else {
+        await tx.query("UPDATE buildings SET condition = GREATEST(0, condition - 5), updated_at = CURRENT_TIMESTAMP WHERE id = $1", [bld.id]);
+      }
+    }
+  }
+}
+
+async function settleMunicipalLaborShifts(tx: PostgresRepository, day: number): Promise<void> {
+  const cities = await tx.query<{ id: string }>("SELECT id FROM cities");
+  for (const c of cities.rows) {
+    const cityId = c.id;
+    const capacityQuery = await tx.query<{ total_slots: string }>(
+      "SELECT COALESCE(SUM(max_staff_slots), 0) AS total_slots FROM buildings WHERE city_id = $1 AND ownership_type = 'municipal' AND status = 'active'",
+      [cityId],
+    );
+    const totalSlots = Number(capacityQuery.rows[0]?.total_slots ?? 0);
+    if (totalSlots <= 0) continue;
+
+    const pool = await tx.query<{ id: string; human_id: string; machine_id: string }>(
+      "SELECT id, human_id, machine_id FROM municipal_labor_pool WHERE city_id = $1 AND status = 'active'",
+      [cityId],
+    );
+    if (pool.rows.length === 0) continue;
+
+    const allocatedHours = Math.min(24, Math.round((totalSlots / pool.rows.length) * 24));
+    const dailyWagePerMachine = allocatedHours * 12; // 12 CRD/hour base municipal shift wage
+    if (dailyWagePerMachine <= 0) continue;
+
+    const cityAccount = await tx.query<{ account_id: string; balance: string }>(
+      "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+      [`account-city-${cityId}`],
+    );
+    if (!cityAccount.rows[0]) continue;
+
+    for (const item of pool.rows) {
+      const wageCents = BigInt(dailyWagePerMachine * 100);
+      if (moneyToCents(cityAccount.rows[0].balance) < wageCents) break;
+
+      const humanAccount = await tx.query<{ account_id: string }>(
+        "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
+        [item.human_id],
+      );
+      if (!humanAccount.rows[0]) continue;
+
+      const correlationId = `MUNI-WAGE-${item.id}-${day}`;
+      const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1", [correlationId]);
+      if (prior.rows[0]) continue;
+
+      await transferCredits(tx, {
+        ledgerId: crypto.randomUUID(),
+        gameDay: day,
+        debitAccount: cityAccount.rows[0].account_id,
+        creditAccount: humanAccount.rows[0].account_id,
+        amount: centsToMoney(wageCents),
+        reasonType: 'municipal_shift_payroll',
+        reasonId: item.machine_id,
+        ruleVersion: 'muni-labor-v1',
+        correlationId,
+      }).catch(() => undefined);
+
+      await tx.query(
+        "UPDATE municipal_labor_pool SET accumulated_wages_crd = accumulated_wages_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
+        [dailyWagePerMachine, item.id],
+      );
+    }
   }
 }
 
@@ -557,6 +722,8 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await settleInstitutionBusinessEffects(tx, day);
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
+      await settleBuildingUpkeepAndRevenue(tx, day);
+      await settleMunicipalLaborShifts(tx, day);
       await processCityDynamics(tx, day);
       await processPatentExpirations(tx, day);
       await updateFinancialStates(tx, day);

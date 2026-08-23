@@ -55,6 +55,10 @@ class EarthState {
   Map<String, dynamic> get personalFinance => _toMap(json['personalFinance']);
   List<dynamic> get contracts => _toList(json['contracts']);
   List<dynamic> get roles => _toList(json['roles']);
+  List<dynamic> get buildings => _toList(json['buildings']);
+  List<dynamic> get municipalLabor => _toList(json['municipalLabor']);
+  List<dynamic> get corporateResearch => _toList(json['corporateResearch']);
+  List<dynamic> get buildingCatalog => _toList(json['buildingCatalog']);
   Map<String, dynamic>? get membership =>
       json['membership'] is Map ? Map<String, dynamic>.from(json['membership'] as Map) : null;
   List<Map<String, dynamic>> get myCommunities {

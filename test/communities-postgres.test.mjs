@@ -9,6 +9,7 @@ import {
   decideCommunityMembershipRequest,
   setCommunityMemberRole,
   disbandCommunity,
+  contributeToCommunity,
 } from '../cloudflare/src/communities-postgres.ts';
 
 class MockDbClient {
@@ -158,4 +159,19 @@ test('disbandCommunity succeeds when treasury is zero and fails when treasury > 
   const res = await disbandCommunity(repoEmpty, { communityId: 'COMM-001', humanId: 'H-001' });
   assert.equal(res.ok, true);
   assert.equal(res.disbanded, true);
+});
+
+test('community contribution rejects non-positive amounts before ledger mutation', async () => {
+  const client = new MockDbClient({
+    "SELECT amount, game_day FROM ledger_entries": { rows: [], rowCount: 0 },
+    'SELECT id, status, shared_credits FROM communities': { rows: [{ id: 'COMM-001', status: 'active', shared_credits: '0' }], rowCount: 1 },
+    'SELECT human_id FROM community_members': { rows: [{ human_id: 'H-001' }], rowCount: 1 },
+    "SELECT account_id, balance FROM account_balances": { rows: [{ account_id: 'account-human-H-001', balance: '100' }], rowCount: 1 },
+  });
+  const repo = new PostgresRepository(client);
+  await assert.rejects(
+    () => contributeToCommunity(repo, { communityId: 'COMM-001', humanId: 'H-001', amount: -10, correlationId: 'community-negative-1' }),
+    /positive|amount|ledger/i,
+  );
+  assert.equal(client.calls.some((call) => call.sql.includes('UPDATE communities SET shared_credits')), false);
 });
