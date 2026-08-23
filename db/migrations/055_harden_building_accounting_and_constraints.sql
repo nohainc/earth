@@ -1,14 +1,14 @@
 -- Migration 055: Building Accounting Model Hardening, Settlement Journals, and Referential Integrity
 
 -- 1. Ensure zero-balance market clearing account exists
-INSERT INTO account_balances (account_id, owner_id, currency, balance, created_at, updated_at)
+INSERT INTO account_balances (account_id, owner_id, currency, balance)
 VALUES
-  ('account-market-clearing', 'SYSTEM', 'CREDIT', 0.00, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+  ('account-market-clearing', 'SYSTEM', 'CREDIT', 0.00)
 ON CONFLICT (account_id) DO NOTHING;
 
 -- 2. Ensure operations accounts exist for all existing cities
-INSERT INTO account_balances (account_id, owner_id, currency, balance, created_at, updated_at)
-SELECT 'account-city-operations-' || id, id, 'CREDIT', 0.00, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
+INSERT INTO account_balances (account_id, owner_id, currency, balance)
+SELECT 'account-city-operations-' || id, id, 'CREDIT', 0.00
 FROM cities
 ON CONFLICT (account_id) DO NOTHING;
 
