@@ -530,20 +530,29 @@ Future<void> showMachineAcquisitionDialog(
   Future<void> Function(Future<EarthState> Function()) action,
   List<dynamic> productionCatalog,
 ) async {
+  final seenTypes = <String>{};
   final catalogOptions = <Map<String, dynamic>>[];
   for (final sector in productionCatalog.whereType<Map>()) {
     final machineTypes = sector['machineTypes'] is List ? sector['machineTypes'] as List : const [];
     final catalogList = sector['catalog'] is List ? sector['catalog'] as List : const [];
-    for (final item in catalogList) {
+    for (int i = 0; i < catalogList.length; i++) {
+      final item = catalogList[i];
       if (item is Map) {
-        catalogOptions.add(Map<String, dynamic>.from(item));
+        final map = Map<String, dynamic>.from(item);
+        final inferredType = (map['type'] ?? map['id'] ?? (i < machineTypes.length ? machineTypes[i] : null))?.toString().trim();
+        if (inferredType != null && inferredType.isNotEmpty && !seenTypes.contains(inferredType)) {
+          seenTypes.add(inferredType);
+          map['type'] = inferredType;
+          catalogOptions.add(map);
+        }
       }
     }
     if (catalogList.isEmpty) {
       for (final type in machineTypes) {
-        final machineType = type.toString();
+        final machineType = type.toString().trim();
         final acquisition = sector['acquisition'] is Map ? Map<String, dynamic>.from(sector['acquisition'] as Map) : const <String, dynamic>{};
-        if (acquisition.isNotEmpty) {
+        if (acquisition.isNotEmpty && machineType.isNotEmpty && !seenTypes.contains(machineType)) {
+          seenTypes.add(machineType);
           catalogOptions.add({'type': machineType, 'output': sector['output']?.toString() ?? 'resource', ...acquisition});
         }
       }
@@ -574,18 +583,31 @@ Future<void> showMachineAcquisitionDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) {
-        final filteredOptions = selectedCategory == 'all'
+        final rawFiltered = selectedCategory == 'all'
             ? options
             : options.where((opt) => (opt['category']?.toString() ?? 'energy') == selectedCategory).toList();
 
-        if (!filteredOptions.any((opt) => opt['type'].toString() == selectedType)) {
+        // Guaranteed unique types in filteredOptions
+        final filteredSeen = <String>{};
+        final filteredOptions = <Map<String, dynamic>>[];
+        for (final opt in rawFiltered) {
+          final t = opt['type']?.toString().trim() ?? '';
+          if (t.isNotEmpty && !filteredSeen.contains(t)) {
+            filteredSeen.add(t);
+            filteredOptions.add(opt);
+          }
+        }
+
+        if (filteredOptions.isNotEmpty && !filteredOptions.any((opt) => opt['type'].toString() == selectedType)) {
           selectedType = filteredOptions.first['type'].toString();
         }
 
-        final selectedOption = options.firstWhere(
-          (option) => option['type'].toString() == selectedType,
-          orElse: () => options.first,
-        );
+        final selectedOption = filteredOptions.isNotEmpty
+            ? filteredOptions.firstWhere(
+                (option) => option['type'].toString() == selectedType,
+                orElse: () => filteredOptions.first,
+              )
+            : options.first;
 
         final machineName = (selectedOption['name'] ?? selectedOption['type'])?.toString() ?? selectedType;
         final outputResource = (selectedOption['output'] ?? 'resource').toString().toUpperCase();
@@ -656,7 +678,9 @@ Future<void> showMachineAcquisitionDialog(
                   const SizedBox(height: 12),
                   DropdownButtonFormField<String>(
                     isExpanded: true,
-                    value: selectedType,
+                    value: filteredOptions.any((opt) => opt['type'].toString() == selectedType)
+                        ? selectedType
+                        : (filteredOptions.isNotEmpty ? filteredOptions.first['type'].toString() : null),
                     items: filteredOptions.map((option) {
                       final optType = option['type'].toString();
                       final optName = (option['name'] ?? optType.replaceAll('-', ' ')).toString().toUpperCase();

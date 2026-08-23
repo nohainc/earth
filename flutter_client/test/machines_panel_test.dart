@@ -187,5 +187,67 @@ void main() {
     expect(find.text('Acquire Machine'), findsOneWidget);
     expect(find.textContaining('3200 CR + 50 Mat'), findsOneWidget);
   });
+
+  testWidgets('MachinesPanel acquisition dialog handles sectors without type field and prevents duplicate dropdown values',
+      (tester) async {
+    const emptyState = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {'research': {}},
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+      'machines': [],
+    });
+
+    final legacyCatalog = [
+      {
+        'id': 'energy',
+        'name': 'Energy',
+        'output': 'energy',
+        'machineTypes': ['solar-array', 'geothermal-tap'],
+        'catalog': [
+          {
+            // Note: missing 'type' key
+            'name': 'Solar Array',
+            'category': 'energy',
+            'credit': 3200,
+            'material': 50,
+          },
+          {
+            // Duplicate of first type if fallback is same
+            'name': 'Solar Array Duplicate',
+            'category': 'energy',
+            'credit': 3200,
+            'material': 50,
+          },
+        ],
+      },
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: MachinesPanel(
+              state: emptyState,
+              busy: false,
+              productionCatalog: legacyCatalog,
+              action: (cb) async => cb(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('ACQUIRE MACHINE'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Acquire Machine'), findsOneWidget);
+  });
 }
 
