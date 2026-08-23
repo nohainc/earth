@@ -61,8 +61,9 @@ class _SidebarState extends State<Sidebar> {
         'technology',
         'patents',
       ],
-      ['corporation', 'city', 'civic', 'public-finance', 'civic-rankings'],
-      ['life', 'pantheon', 'dynasty', 'history'],
+      ['corporation', 'city', 'civic', 'public-finance'],
+      ['life', 'dynasty'],
+      ['civic-rankings', 'pantheon', 'history'],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -211,14 +212,8 @@ class _SidebarState extends State<Sidebar> {
             ),
           (
             'civic',
-            'Public',
+            'Public Governance',
             Icons.public_outlined,
-            null,
-          ),
-          (
-            'civic-rankings',
-            'Rankings',
-            Icons.leaderboard_outlined,
             null,
           ),
         ]
@@ -237,6 +232,18 @@ class _SidebarState extends State<Sidebar> {
             'dynasty',
             dynastyName?.isNotEmpty == true ? dynastyName! : 'Dynasty',
             Icons.account_tree_outlined,
+            null,
+          ),
+        ]
+      ),
+      (
+        'EARTH',
+        Icons.public_rounded,
+        [
+          (
+            'civic-rankings',
+            'Rankings',
+            Icons.leaderboard_outlined,
             null,
           ),
           (

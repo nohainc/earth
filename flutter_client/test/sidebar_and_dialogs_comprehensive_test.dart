@@ -66,6 +66,18 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(navigatedTo, 'finance');
+
+    // Test expanding EARTH group
+    expect(find.text('EARTH'), findsOneWidget);
+    await tester.tap(find.text('EARTH'));
+    await tester.pumpAndSettle();
+    expect(find.text('Rankings'), findsOneWidget);
+    expect(find.text('Memorial'), findsOneWidget);
+    expect(find.text('Archive'), findsOneWidget);
+
+    await tester.tap(find.text('Rankings'));
+    await tester.pumpAndSettle();
+    expect(navigatedTo, 'civic-rankings');
   });
 
   testWidgets('Sidebar hides City when unaffiliated', (tester) async {
