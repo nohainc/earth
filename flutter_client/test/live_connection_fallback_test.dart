@@ -118,12 +118,10 @@ void main() {
         ),
       );
 
-      expect(find.text('ALERTS'), findsOneWidget);
-      expect(find.text('PUBLIC FEED'), findsOneWidget);
+      expect(find.text('DIRECT ALERTS & NOTIFICATIONS'), findsOneWidget);
+      expect(find.text('PLANETARY TELEMETRY & WORLD FEED'), findsOneWidget);
       expect(find.text('POLLING MODE (PERIODIC SYNC)'), findsNothing);
 
-      await tester.tap(find.text('PUBLIC FEED'));
-      await tester.pumpAndSettle();
       await tester.tap(find.byTooltip('Refresh events & notifications'));
       expect(refreshed, isTrue);
     });

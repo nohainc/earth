@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/features/activity/activity_panel.dart';
 
 void main() {
-  testWidgets('ActivityPanel renders notifications, unread count, and actions',
+  testWidgets('ActivityPanel renders stacked topics: alerts first, public telemetry feed second',
       (tester) async {
     final notifications = [
       {
@@ -59,11 +59,15 @@ void main() {
     );
 
     expect(find.text('EVENT HISTORY & ARCHIVE'), findsOneWidget);
-    expect(find.text('LIVE STREAM ACTIVE'), findsNothing);
-    expect(find.text('ALERTS (2)'), findsOneWidget);
+    expect(find.text('DIRECT ALERTS & NOTIFICATIONS (2)'), findsOneWidget);
     expect(find.text('Tax Assessment Cleared'), findsOneWidget);
     expect(find.text('Contract Proposed'), findsOneWidget);
     expect(find.text('MARK ALL READ'), findsOneWidget);
+
+    // Both topics are directly visible on page without switching tabs
+    expect(find.text('PLANETARY TELEMETRY & WORLD FEED'), findsOneWidget);
+    expect(find.textContaining('World operating cycle advanced to Game Day 185'), findsOneWidget);
+    expect(find.textContaining('Central Market batch cleared and settled'), findsOneWidget);
 
     // Verify info icon is present and opens description dialog
     expect(find.byIcon(Icons.info_outline), findsWidgets);
@@ -82,13 +86,6 @@ void main() {
     await tester.tap(find.text('MARK ALL READ'));
     await tester.pumpAndSettle();
     expect(markedAllRead, isTrue);
-
-    // Switch to Public Activity tab
-    await tester.tap(find.text('PUBLIC FEED'));
-    await tester.pumpAndSettle();
-
-  expect(find.textContaining('World operating cycle advanced to Game Day 185'), findsOneWidget);
-    expect(find.textContaining('Central Market batch cleared and settled'), findsOneWidget);
 
     // Refresh icon
     await tester.tap(find.byTooltip('Refresh events & notifications'));

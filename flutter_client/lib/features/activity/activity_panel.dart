@@ -32,21 +32,8 @@ class ActivityPanel extends StatefulWidget {
   State<ActivityPanel> createState() => _ActivityPanelState();
 }
 
-class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _ActivityPanelState extends State<ActivityPanel> {
   final Set<String> _locallyReadIds = <String>{};
-
-  @override
-  void initState() {
-    super.initState();
-    _tabController = TabController(length: 2, vsync: this);
-  }
-
-  @override
-  void dispose() {
-    _tabController.dispose();
-    super.dispose();
-  }
 
   String _formatEventSummary(Map<String, dynamic> evt) {
     final type = evt['type']?.toString() ?? 'event';
@@ -132,9 +119,9 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
       title: 'EVENT HISTORY & ARCHIVE',
       showSurface: false,
       infoBulletPoints: const [
-        'Real-Time Operations Telemetry: Secondary archive for reviewing events after they leave Daily Priorities.',
-        'Use domain pages for current decisions: Businesses for operations, Contracts for commitments, Trade for orders, Governance for civic actions, and Family for personal events.',
-        'Personal alerts and public events remain available here for history, audit, and context.',
+        'Real-Time Operations Telemetry: Unified archive for reviewing events after they leave Daily Priorities.',
+        'Personal Directives: Direct alerts, tax assessments, and contract notifications appear first.',
+        'Planetary Telemetry: Real-time global market, civic, and technological events appear below for historical context.',
       ],
       trailing: Tooltip(
         message: 'Refresh events & notifications',
@@ -144,166 +131,171 @@ class _ActivityPanelState extends State<ActivityPanel> with SingleTickerProvider
           onPressed: widget.onRefresh,
         ),
       ),
-      child: Container(
-        decoration: BoxDecoration(
-          color: context.surfaceColor,
-          borderRadius: BorderRadius.circular(context.radiusCard),
-          border: Border.all(color: context.subtleBorderColor),
-        ),
-        clipBehavior: Clip.antiAlias,
-        child: Column(
-          children: [
-            TabBar(
-              controller: _tabController,
-              indicatorColor: context.primaryColor,
-              indicatorSize: TabBarIndicatorSize.tab,
-              indicatorWeight: 2.5,
-              dividerColor: context.subtleBorderColor,
-              labelColor: context.inkColor,
-              unselectedLabelColor: context.mutedColor,
-              labelStyle: context.widgetTitleStyle,
-              tabs: [
-                Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      const Icon(Icons.notifications_active_outlined, size: 14),
-                      const SizedBox(width: 6),
-                      Text(displayUnread > 0 ? 'ALERTS ($displayUnread)' : 'ALERTS'),
-                    ],
-                  ),
-                ),
-                const Tab(
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(Icons.feed_outlined, size: 14),
-                      SizedBox(width: 6),
-                      Text('PUBLIC FEED'),
-                    ],
-                  ),
-                ),
-              ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // ── TOPIC 1: DIRECT ALERTS & NOTIFICATIONS ──
+          Container(
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
             ),
-            SizedBox(
-              height: 420,
-              child: Padding(
-                padding: EdgeInsets.all(context.cardPadding),
-                child: TabBarView(
-                  controller: _tabController,
+            padding: EdgeInsets.all(context.cardPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    // TAB 1: PERSONAL ALERTS
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                    Row(
                       children: [
-                        if (widget.notifications.isNotEmpty && displayUnread > 0)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  '$displayUnread PENDING NOTIFICATIONS',
-                                  style: context.captionStyle.copyWith(color: context.mutedColor),
-                                ),
-                                TextButton.icon(
-                                  onPressed: () async {
-                                    for (final n in widget.notifications) {
-                                      if (n is Map<String, dynamic> && n['id'] != null) {
-                                        _locallyReadIds.add(n['id'].toString());
-                                      }
-                                    }
-                                    setState(() {});
-                                    await widget.onMarkAllRead();
-                                  },
-                                  icon: Icon(Icons.done_all_rounded, size: 13, color: context.primaryColor),
-                                  label: Text(
-                                    'MARK ALL READ',
-                                    style: context.controlStyle.copyWith(color: context.primaryColor),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        Expanded(
-                          child: widget.notifications.isEmpty
-                              ? const EarthEmptyState(
-                                  message: 'No notifications received yet.',
-                                  icon: Icons.check_circle_outline_rounded,
-                                )
-                              : EarthDataList(
-                                  children: widget.notifications.take(30).map((n) {
-                                    if (n is! Map<String, dynamic>) {
-                                      return const SizedBox.shrink();
-                                    }
-                                    final id = n['id']?.toString() ?? 'NOTIF';
-                                    final title = n['title']?.toString() ?? 'Notification';
-                                    final body = n['body']?.toString() ?? '';
-                                    final isRead = n['read'] == true || _locallyReadIds.contains(id);
-
-                                    return EarthDataRow(
-                                      title: title,
-                                      subtitle: body.isNotEmpty ? body : null,
-                                      leading: Icon(
-                                        isRead
-                                            ? Icons.notifications_none_rounded
-                                            : Icons.notifications_active_outlined,
-                                        size: context.iconSize,
-                                        color: isRead ? context.mutedColor : context.primaryColor,
-                                      ),
-                                      badges: [
-                                        EarthBadge(
-                                          label: isRead ? 'READ' : 'NEW',
-                                          variant: isRead ? EarthBadgeVariant.neutral : EarthBadgeVariant.primary,
-                                        ),
-                                      ],
-                                      trailing: !isRead
-                                          ? Tooltip(
-                                              message: 'Mark read',
-                                              child: EarthButton(
-                                                label: 'MARK READ',
-                                                onPressed: () async {
-                                                  setState(() => _locallyReadIds.add(id));
-                                                  await widget.onMarkRead(id);
-                                                },
-                                              ),
-                                            )
-                                          : null,
-                                    );
-                                  }).toList(),
-                                ),
+                        Icon(
+                          Icons.notifications_active_outlined,
+                          size: 16,
+                          color: displayUnread > 0 ? context.warningColor : context.mutedColor,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          displayUnread > 0
+                              ? 'DIRECT ALERTS & NOTIFICATIONS ($displayUnread)'
+                              : 'DIRECT ALERTS & NOTIFICATIONS',
+                          style: context.widgetTitleStyle,
                         ),
                       ],
                     ),
-
-                    // TAB 2: PUBLIC ACTIVITY FEED
-                    widget.events.isEmpty
-                        ? const EarthEmptyState(
-                            message: 'No recent World activity recorded.',
-                            icon: Icons.sensors_off_rounded,
-                          )
-                        : EarthDataList(
-                            children: widget.events.take(40).map((evt) {
-                              if (evt is! Map<String, dynamic>) {
-                                return const SizedBox.shrink();
-                              }
-                              final type = evt['type']?.toString() ?? 'event';
-                              final color = _getEventColor(context, type);
-                              final icon = _getEventIcon(type);
-                              final summary = _formatEventSummary(evt);
-
-                              return EarthDataRow(
-                                title: summary,
-                                leading: Icon(icon, size: context.iconSize, color: color),
-                              );
-                            }).toList(),
-                          ),
+                    if (widget.notifications.isNotEmpty && displayUnread > 0)
+                      TextButton.icon(
+                        onPressed: () async {
+                          for (final n in widget.notifications) {
+                            if (n is Map<String, dynamic> && n['id'] != null) {
+                              _locallyReadIds.add(n['id'].toString());
+                            }
+                          }
+                          setState(() {});
+                          await widget.onMarkAllRead();
+                        },
+                        icon: Icon(Icons.done_all_rounded, size: 13, color: context.primaryColor),
+                        label: Text(
+                          'MARK ALL READ',
+                          style: context.controlStyle.copyWith(color: context.primaryColor),
+                        ),
+                      ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 12),
+                if (widget.notifications.isEmpty)
+                  const EarthEmptyState(
+                    message: 'No pending notifications. All personal systems nominal.',
+                    icon: Icons.check_circle_outline_rounded,
+                  )
+                else
+                  EarthDataList(
+                    children: widget.notifications.take(30).map((n) {
+                      if (n is! Map<String, dynamic>) {
+                        return const SizedBox.shrink();
+                      }
+                      final id = n['id']?.toString() ?? 'NOTIF';
+                      final title = n['title']?.toString() ?? 'Notification';
+                      final body = n['body']?.toString() ?? '';
+                      final isRead = n['read'] == true || _locallyReadIds.contains(id);
+
+                      return EarthDataRow(
+                        title: title,
+                        subtitle: body.isNotEmpty ? body : null,
+                        leading: Icon(
+                          isRead
+                              ? Icons.notifications_none_rounded
+                              : Icons.notifications_active_outlined,
+                          size: context.iconSize,
+                          color: isRead ? context.mutedColor : context.primaryColor,
+                        ),
+                        badges: [
+                          EarthBadge(
+                            label: isRead ? 'READ' : 'NEW',
+                            variant: isRead ? EarthBadgeVariant.neutral : EarthBadgeVariant.primary,
+                          ),
+                        ],
+                        trailing: !isRead
+                            ? Tooltip(
+                                message: 'Mark read',
+                                child: EarthButton(
+                                  label: 'MARK READ',
+                                  onPressed: () async {
+                                    setState(() => _locallyReadIds.add(id));
+                                    await widget.onMarkRead(id);
+                                  },
+                                ),
+                              )
+                            : null,
+                      );
+                    }).toList(),
+                  ),
+              ],
             ),
-          ],
-        ),
+          ),
+
+          const SizedBox(height: 16),
+
+          // ── TOPIC 2: PLANETARY ACTIVITY & WORLD FEED ──
+          Container(
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
+            ),
+            padding: EdgeInsets.all(context.cardPadding),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.sensors_rounded, size: 16, color: context.primaryColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'PLANETARY TELEMETRY & WORLD FEED',
+                          style: context.widgetTitleStyle,
+                        ),
+                      ],
+                    ),
+                    EarthBadge(
+                      label: widget.isLiveConnected ? 'LIVE STREAM' : 'ARCHIVE',
+                      variant: widget.isLiveConnected
+                          ? EarthBadgeVariant.success
+                          : EarthBadgeVariant.neutral,
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                if (widget.events.isEmpty)
+                  const EarthEmptyState(
+                    message: 'No recent planetary activity recorded.',
+                    icon: Icons.sensors_off_rounded,
+                  )
+                else
+                  EarthDataList(
+                    children: widget.events.take(40).map((evt) {
+                      if (evt is! Map<String, dynamic>) {
+                        return const SizedBox.shrink();
+                      }
+                      final type = evt['type']?.toString() ?? 'event';
+                      final color = _getEventColor(context, type);
+                      final icon = _getEventIcon(type);
+                      final summary = _formatEventSummary(evt);
+
+                      return EarthDataRow(
+                        title: summary,
+                        leading: Icon(icon, size: context.iconSize, color: color),
+                      );
+                    }).toList(),
+                  ),
+              ],
+            ),
+          ),
+        ],
       ),
     );
   }
