@@ -1097,3 +1097,203 @@ Future<void> showCityChangeDialog(
     ),
   );
 }
+
+/// Displays comprehensive constitutional rules, tax rates, and perks of a corporation.
+Future<void> showCorporationCharterDialog(
+  BuildContext context,
+  Map<String, dynamic> corporation,
+  EarthState state, {
+  bool isMember = false,
+  VoidCallback? onJoin,
+}) async {
+  final id = corporation['id']?.toString() ?? '';
+  final name = corporation['name']?.toString() ?? id;
+  final capitalCity = corporation['capital_city_name']?.toString() ?? 'Capital City';
+  final members = asIntOr(corporation['member_count'], 0);
+  final cityCount = asIntOr(corporation['city_count'], 1);
+  final treasury = asDouble(corporation['treasury']) ?? 0.0;
+  final admissionPolicy = (corporation['admission_policy']?.toString() ?? 'open').toUpperCase();
+
+  final rules = corporation['rules'] is Map
+      ? Map<String, dynamic>.from(corporation['rules'] as Map)
+      : const <String, dynamic>{};
+
+  final incomeTaxBps = asIntOr(rules['incomeTaxBps'], 200);
+  final salesTaxBps = asIntOr(rules['salesTaxBps'], 100);
+  final corporateTaxBps = asIntOr(rules['corporateTaxBps'], 250);
+  final propertyTaxBps = asIntOr(rules['propertyTaxBps'], 150);
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: context.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.radiusPanel),
+        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+      ),
+      title: Row(
+        children: [
+          Icon(Icons.account_balance_outlined, color: context.primaryColor),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              '$name Charter & Constitution',
+              style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+            ),
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 560,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
+                'CONSTITUTIONAL TAX SCHEDULE',
+                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 8),
+              EarthMetricGrid(
+                metrics: [
+                  EarthMetricTile(
+                    label: 'INCOME TAX',
+                    value: '${(incomeTaxBps / 100).toStringAsFixed(1)}%',
+                    subtitle: 'Applied to member income',
+                    icon: Icons.percent_outlined,
+                  ),
+                  EarthMetricTile(
+                    label: 'MARKET SALES FEE',
+                    value: '${(salesTaxBps / 100).toStringAsFixed(1)}%',
+                    subtitle: 'Transaction levy',
+                    icon: Icons.storefront_outlined,
+                  ),
+                  EarthMetricTile(
+                    label: 'CORPORATE TAX',
+                    value: '${(corporateTaxBps / 100).toStringAsFixed(1)}%',
+                    subtitle: 'Enterprise revenue levy',
+                    icon: Icons.domain,
+                  ),
+                  EarthMetricTile(
+                    label: 'PROPERTY LEVY',
+                    value: '${(propertyTaxBps / 100).toStringAsFixed(1)}%',
+                    subtitle: 'Asset base tax',
+                    icon: Icons.home_work_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'GOVERNANCE & ECONOMIC STANDING',
+                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 8),
+              EarthMetricGrid(
+                metrics: [
+                  EarthMetricTile(
+                    label: 'CAPITAL CITY',
+                    value: capitalCity,
+                    subtitle: 'Administrative Seat',
+                    icon: Icons.location_city_outlined,
+                  ),
+                  EarthMetricTile(
+                    label: 'MEMBER CITIZENS',
+                    value: '$members',
+                    subtitle: 'Affiliated Population',
+                    icon: Icons.groups_outlined,
+                  ),
+                  EarthMetricTile(
+                    label: 'CORPORATE TREASURY',
+                    value: '${treasury.toStringAsFixed(0)} C',
+                    subtitle: 'Liquid Capital Reserves',
+                    icon: Icons.savings_outlined,
+                  ),
+                  EarthMetricTile(
+                    label: 'MUNICIPAL NETWORK',
+                    value: '$cityCount Cities',
+                    subtitle: 'Chartered Territories',
+                    icon: Icons.hub_outlined,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 20),
+              Text(
+                'AFFILIATION BENEFITS & CONSTITUTION',
+                style: context.widgetTitleStyle.copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(context.radiusCard),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    _buildBenefitRow(
+                      context,
+                      Icons.shield_outlined,
+                      'Corporate Tax Protection',
+                      'Members enjoy capped municipal tax rates ($incomeTaxBps bps income / $salesTaxBps bps sales) across all $cityCount affiliated cities.',
+                    ),
+                    const SizedBox(height: 10),
+                    _buildBenefitRow(
+                      context,
+                      Icons.biotech_outlined,
+                      'Shared Technology & Patents',
+                      'Access proprietary corporate technology shares without paying external licensing premiums.',
+                    ),
+                    const SizedBox(height: 10),
+                    _buildBenefitRow(
+                      context,
+                      Icons.how_to_vote_outlined,
+                      'Shareholder Democratic Franchise',
+                      'Vote on corporate leadership, municipal tax updates, and city territorial adoptions.',
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(dialogContext),
+          child: Text('CLOSE', style: context.controlStyle.copyWith(color: context.mutedColor)),
+        ),
+        if (!isMember && onJoin != null)
+          EarthButton(
+            label: 'AFFILIATE WITH $name',
+            variant: EarthButtonVariant.primary,
+            onPressed: () {
+              Navigator.pop(dialogContext);
+              onJoin();
+            },
+          ),
+      ],
+    ),
+  );
+}
+
+Widget _buildBenefitRow(BuildContext context, IconData icon, String title, String description) {
+  return Row(
+    crossAxisAlignment: CrossAxisAlignment.start,
+    children: [
+      Icon(icon, size: 18, color: context.primaryColor),
+      const SizedBox(width: 10),
+      Expanded(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(title, style: context.widgetTitleStyle.copyWith(color: context.primaryColor)),
+            const SizedBox(height: 2),
+            Text(description, style: context.bodyStyle.copyWith(color: context.inkColor.withValues(alpha: .85))),
+          ],
+        ),
+      ),
+    ],
+  );
+}

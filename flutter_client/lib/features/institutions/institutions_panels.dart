@@ -51,27 +51,43 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   }
 
   Future<void> _load() async {
-    if (_isMember) {
-      setState(() => _loading = false);
-      return;
-    }
+    final fallback = widget.state.rankings['corporations'] is List
+        ? (widget.state.rankings['corporations'] as List)
+            .whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList()
+        : <Map<String, dynamic>>[];
+
     final generation = ++_searchGeneration;
-    setState(() => _loading = true);
+    setState(() {
+      _loading = true;
+      if (fallback.isNotEmpty && _corporations.isEmpty) {
+        _corporations = fallback;
+        _selected = fallback.first;
+      }
+    });
     try {
       final rows = await const EarthApi().listCorporations(search: _search.text);
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
-        _corporations = rows;
-        _selected = rows.isEmpty
+        _corporations = rows.isNotEmpty ? rows : fallback;
+        _selected = _corporations.isEmpty
             ? null
             : (_selected == null
-                ? rows.first
-                : rows.firstWhere((row) => row['id'] == _selected!['id'], orElse: () => rows.first));
+                ? _corporations.first
+                : _corporations.firstWhere((row) => row['id'] == _selected!['id'],
+                    orElse: () => _corporations.first));
         _loading = false;
       });
     } catch (_) {
       if (mounted && generation == _searchGeneration) {
-        setState(() => _loading = false);
+        setState(() {
+          if (_corporations.isEmpty && fallback.isNotEmpty) {
+            _corporations = fallback;
+            _selected = _corporations.first;
+          }
+          _loading = false;
+        });
       }
     }
   }
@@ -152,15 +168,29 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         : const <String, dynamic>{};
 
     return EarthSection(
-      title: 'FIND YOUR CORPORATION',
+      title: 'PLANETARY CORPORATIONS & CHARTERS',
       showSurface: false,
       infoBulletPoints: const [
-        'Independent people can compare active corporations and choose a network.',
-        'Every corporation has a capital city. Joining places you there automatically.',
-        'Open corporations accept members immediately; approval corporations create a request for their administrators.',
-        'Once affiliated, leave your current corporation before choosing another one.',
+        'Independent citizens can compare active corporations and choose an economic network.',
+        'Corporations establish regional tax charters, constitutional bylaws, and patent pools.',
+        'Every corporation has a capital city. Joining places you in its municipal jurisdiction automatically.',
+        'Open corporations accept members immediately; approval corporations require executive review.',
       ],
-      child: _isMember ? _memberView(current) : _directoryView(),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (_isMember) ...[
+            _memberView(current),
+            const SizedBox(height: 32),
+            Text(
+              'ALL PLANETARY CORPORATIONS',
+              style: context.topicTitleStyle.copyWith(color: context.mutedColor),
+            ),
+            const SizedBox(height: 12),
+          ],
+          _directoryView(),
+        ],
+      ),
     );
   }
 
@@ -169,61 +199,87 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final city = current['capital_city_name']?.toString() ??
         widget.state.membership?['city_id']?.toString() ??
         'capital city';
+    final members = current['member_count'] ?? 0;
+    final treasury = asDouble(current['treasury']) ?? 0.0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: EdgeInsets.all(context.cardPadding),
-          decoration: BoxDecoration(
-            color: context.surfaceColor,
-            borderRadius: BorderRadius.circular(context.radiusCard),
-            border: Border.all(color: context.primaryColor.withValues(alpha: .3)),
-          ),
-          child: Row(
+    return Container(
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.primaryColor.withValues(alpha: .3)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Icon(Icons.verified_user_outlined, size: context.iconSize + 2, color: context.primaryColor),
+              Icon(Icons.verified_user_outlined, size: context.iconSize + 4, color: context.primaryColor),
               SizedBox(width: context.spacingInline),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('AFFILIATED', style: context.widgetValueStyle.copyWith(color: context.primaryColor)),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('ACTIVE AFFILIATION: $name',
+                            style: context.widgetValueStyle.copyWith(color: context.primaryColor)),
+                        const EarthBadge(
+                          label: 'MEMBER JURISDICTION',
+                          variant: EarthBadgeVariant.primary,
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 4),
                     Text(
-                      'You are a member of $name. Your corporation membership places you in its capital city: $city.',
-                      style: context.widgetFooterStyle,
+                      'You are affiliated with $name. Your residency is registered in its capital city: $city ($members citizens · ${treasury.toStringAsFixed(0)} C treasury reserves).',
+                      style: context.bodyStyle.copyWith(color: context.inkColor),
                     ),
                   ],
                 ),
               ),
             ],
           ),
-        ),
-        SizedBox(height: context.spacingTitleOffset),
-        EarthButton(
-          label: 'LEAVE CORPORATION',
-          icon: Icons.logout,
-          variant: EarthButtonVariant.danger,
-          onPressed: widget.busy ? null : () => _confirmLeave(context),
-        ),
-        const SizedBox(height: 7),
-        Text(
-          'Leaving ends the corporation-city affiliation and returns you to the independent ruleset.',
-          style: context.widgetFooterStyle,
-        ),
-      ],
+          const SizedBox(height: 14),
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              EarthButton(
+                label: 'VIEW CONSTITUTION & TAX CHARTER',
+                icon: Icons.account_balance_outlined,
+                variant: EarthButtonVariant.primary,
+                onPressed: () => showCorporationCharterDialog(
+                  context,
+                  current,
+                  widget.state,
+                  isMember: true,
+                ),
+              ),
+              EarthButton(
+                label: 'LEAVE CORPORATION',
+                icon: Icons.logout,
+                variant: EarthButtonVariant.danger,
+                onPressed: widget.busy ? null : () => _confirmLeave(context),
+              ),
+            ],
+          ),
+        ],
+      ),
     );
   }
 
   Widget _directoryView() {
+    final currentCorpId = widget.state.membership?['corporation_id']?.toString();
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         EarthSearchInput(
           controller: _search,
-          hintText: 'Search corporations...',
+          hintText: 'Search corporations by name or chartered jurisdiction...',
           onChanged: (_) => _load(),
           onClear: _load,
         ),
@@ -232,7 +288,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           Center(child: CircularProgressIndicator(color: context.primaryColor))
         else if (_corporations.isEmpty)
           const EarthEmptyState(
-            message: 'No corporations found. You can found a new one from your capital city.',
+            message: 'No corporations found matching your search. You can found a new one from your capital city.',
             icon: Icons.domain_disabled_outlined,
           )
         else
@@ -242,27 +298,88 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               final name = row['name']?.toString() ?? id;
               final city = row['capital_city_name']?.toString() ?? 'capital city';
               final members = row['member_count'] ?? 0;
+              final cityCount = asIntOr(row['city_count'], 1);
+              final treasury = asDouble(row['treasury']) ?? 0.0;
+              final isAffiliated = id == currentCorpId;
               final isSelected = _selected?['id'] == id;
 
+              final rules = row['rules'] is Map
+                  ? Map<String, dynamic>.from(row['rules'] as Map)
+                  : const <String, dynamic>{};
+
+              final incomeTaxBps = asIntOr(rules['incomeTaxBps'], 200);
+              final salesTaxBps = asIntOr(rules['salesTaxBps'], 100);
+              final corporateTaxBps = asIntOr(rules['corporateTaxBps'], 250);
+
               return EarthDataRow(
-                title: name,
-                subtitle: 'Capital: $city · $members members',
+                title: '$name ($id)',
+                subtitle:
+                    'Capital: $city · $members citizens · ${treasury.toStringAsFixed(0)} C treasury · $cityCount chartered cities',
                 leading: Icon(
                   Icons.domain,
                   size: context.iconSize,
-                  color: isSelected ? context.primaryColor : context.mutedColor,
+                  color: isAffiliated
+                      ? context.primaryColor
+                      : isSelected
+                          ? context.primaryColor
+                          : context.mutedColor,
                 ),
                 isSelected: isSelected,
+                badges: [
+                  if (isAffiliated)
+                    const EarthBadge(
+                      label: 'YOUR CORPORATION',
+                      variant: EarthBadgeVariant.primary,
+                    ),
+                  EarthBadge(
+                    label: 'INCOME TAX: ${(incomeTaxBps / 100).toStringAsFixed(1)}%',
+                    variant: EarthBadgeVariant.primary,
+                  ),
+                  EarthBadge(
+                    label: 'MARKET FEE: ${(salesTaxBps / 100).toStringAsFixed(1)}%',
+                    variant: EarthBadgeVariant.secondary,
+                  ),
+                  EarthBadge(
+                    label: 'CORP TAX: ${(corporateTaxBps / 100).toStringAsFixed(1)}%',
+                    variant: EarthBadgeVariant.neutral,
+                  ),
+                ],
                 onTap: () => setState(() => _selected = row),
-                trailing: EarthButton(
-                  label: 'JOIN',
-                  variant: isSelected ? EarthButtonVariant.primary : EarthButtonVariant.secondary,
-                  onPressed: widget.busy ? null : () => setState(() => _selected = row),
+                trailing: Wrap(
+                  spacing: 6,
+                  children: [
+                    EarthButton(
+                      label: 'CHARTER & PERKS',
+                      icon: Icons.info_outline,
+                      variant: EarthButtonVariant.ghost,
+                      onPressed: () => showCorporationCharterDialog(
+                        context,
+                        row,
+                        widget.state,
+                        isMember: isAffiliated,
+                        onJoin: () {
+                          setState(() => _selected = row);
+                          _join();
+                        },
+                      ),
+                    ),
+                    if (!isAffiliated)
+                      EarthButton(
+                        label: 'JOIN',
+                        variant: isSelected
+                            ? EarthButtonVariant.primary
+                            : EarthButtonVariant.secondary,
+                        onPressed: widget.busy ? null : () {
+                          setState(() => _selected = row);
+                          _join();
+                        },
+                      ),
+                  ],
                 ),
               );
             }).toList(),
           ),
-        if (_selected != null) ...[
+        if (_selected != null && !_isMember) ...[
           SizedBox(height: context.spacingTitleOffset),
           EarthButton(
             label: 'JOIN ${_selected!['name']?.toString().toUpperCase()}',

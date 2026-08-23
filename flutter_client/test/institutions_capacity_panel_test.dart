@@ -180,4 +180,87 @@ void main() {
     expect(find.text('Municipal Energy & Grid Tariff'), findsOneWidget);
     expect(find.text('Essential Services Minimum Standard'), findsOneWidget);
   });
+
+  testWidgets('InstitutionsPanel renders planetary corporations with constitutional tax badges and charter dialog',
+      (tester) async {
+    const state = EarthState({
+      'human': {'id': 'H-0044'},
+      'membership': {'corporation_id': 'CORP-001', 'city_id': 'CITY-0084'},
+      'institutions': {
+        'corporation': {
+          'id': 'CORP-001',
+          'name': 'Carthage Dynamics',
+          'member_count': 38,
+          'treasury': 12500,
+          'capital_city_name': 'New Carthage',
+          'rules': {
+            'incomeTaxBps': 250,
+            'salesTaxBps': 100,
+            'corporateTaxBps': 300,
+          },
+        },
+      },
+      'rankings': {
+        'corporations': [
+          {
+            'id': 'CORP-001',
+            'name': 'Carthage Dynamics',
+            'member_count': 38,
+            'treasury': 12500,
+            'capital_city_name': 'New Carthage',
+            'city_count': 3,
+            'rules': {
+              'incomeTaxBps': 250,
+              'salesTaxBps': 100,
+              'corporateTaxBps': 300,
+            },
+          },
+          {
+            'id': 'CORP-002',
+            'name': 'Aether Syndicate',
+            'member_count': 15,
+            'treasury': 5400,
+            'capital_city_name': 'Olympus Peak',
+            'city_count': 1,
+            'rules': {
+              'incomeTaxBps': 180,
+              'salesTaxBps': 80,
+              'corporateTaxBps': 200,
+            },
+          },
+        ],
+      },
+    });
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: CorporationDirectoryPanel(
+            state: state,
+            busy: false,
+            action: (cb) async {},
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    expect(find.text('PLANETARY CORPORATIONS & CHARTERS'), findsOneWidget);
+    expect(find.text('ACTIVE AFFILIATION: Carthage Dynamics'), findsOneWidget);
+    expect(find.text('VIEW CONSTITUTION & TAX CHARTER'), findsOneWidget);
+    expect(find.text('ALL PLANETARY CORPORATIONS'), findsOneWidget);
+
+    expect(find.text('Carthage Dynamics (CORP-001)'), findsOneWidget);
+    expect(find.text('Aether Syndicate (CORP-002)'), findsOneWidget);
+    expect(find.text('INCOME TAX: 2.5%'), findsWidgets);
+    expect(find.text('MARKET FEE: 1.0%'), findsWidgets);
+    expect(find.text('INCOME TAX: 1.8%'), findsOneWidget);
+
+    await tester.tap(find.text('CHARTER & PERKS').first);
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('Charter & Constitution'), findsOneWidget);
+    expect(find.text('CONSTITUTIONAL TAX SCHEDULE'), findsOneWidget);
+    expect(find.text('Corporate Tax Protection'), findsOneWidget);
+  });
 }

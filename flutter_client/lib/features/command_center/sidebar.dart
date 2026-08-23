@@ -85,8 +85,8 @@ class _SidebarState extends State<Sidebar> {
     final corporation = widget.state.institutions['corporation'];
     final city = widget.state.institutions['city'];
     final corporationName = isCorporationMember && corporation is Map
-        ? corporation['name']?.toString() ?? 'Corporation'
-        : 'Corporation';
+        ? corporation['name']?.toString() ?? 'Corporations'
+        : 'Corporations';
     final cityName = isCorporationMember && city is Map
         ? city['name']?.toString() ?? 'City & Services'
         : 'City & Services';

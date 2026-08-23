@@ -92,10 +92,17 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
           + LEAST(1, health_capacity / 100.0) * 20
           + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) DESC, residents DESC, id LIMIT 20`),
       repository.query(`SELECT c.id, c.member_count, c.treasury,
+          i.name, i.status, i.charter_rules,
+          c.capital_city_id,
+          cap_i.name AS capital_city_name,
+          COALESCE((SELECT COUNT(*) FROM cities WHERE cities.corporation_id = c.id), 0)::integer AS city_count,
           (LEAST(1, GREATEST(0, c.member_count::numeric) / 100.0) * 55
            + LEAST(1, GREATEST(0, c.treasury::numeric) / 25000.0) * 25
            + LEAST(1, (SELECT COUNT(*)::numeric FROM businesses b WHERE b.owner_id IN (SELECT human_id FROM memberships m WHERE m.corporation_id = c.id) AND b.status = 'active') / 10.0) * 20) AS development_score
-        FROM corporations c ORDER BY development_score DESC, member_count DESC, id LIMIT 10`),
+        FROM corporations c
+        JOIN institutions i ON i.id = c.institution_id
+        LEFT JOIN institutions cap_i ON cap_i.id = c.capital_city_id
+        ORDER BY development_score DESC, c.member_count DESC, c.id LIMIT 10`),
       repository.query("SELECT humans.id, humans.display_name, humans.standing, humans.legacy, memberships.city_id FROM humans JOIN memberships ON memberships.human_id = humans.id WHERE humans.life_status = 'active' AND memberships.city_id = (SELECT city_id FROM memberships WHERE human_id = $1) ORDER BY humans.standing DESC, humans.legacy DESC, humans.id LIMIT 20", [viewerId]),
     ]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
@@ -222,7 +229,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
     technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0), corporationSharedPatents: corporationSharedTechnology.rows }, machines: machineRows, workforce: employees.rows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
-    publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }, ...social.rows.map((row) => ({ type: 'social', title: row.title, initiativeId: row.id, status: row.status }))], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, socialInitiatives: social.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
+    publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }, ...social.rows.map((row) => ({ type: 'social', title: row.title, initiativeId: row.id, status: row.status }))], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, socialInitiatives: social.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },
     persistence: 'planetscale-postgres',

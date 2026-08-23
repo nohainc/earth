@@ -17,14 +17,17 @@ void main() {
       action: (_) async { actions++; },
     ))));
     await tester.pumpAndSettle();
-    expect(find.textContaining('Aether Dynamics'), findsOneWidget);
-    expect(find.textContaining('New Kyoto'), findsOneWidget);
+    expect(find.textContaining('Aether Dynamics'), findsWidgets);
+    expect(find.textContaining('New Kyoto'), findsWidgets);
     expect(find.text('LEAVE CORPORATION'), findsOneWidget);
     await tester.tap(find.text('LEAVE CORPORATION').first);
     await tester.pumpAndSettle();
     expect(find.text('Leave Corporation?'), findsOneWidget);
     expect(actions, 0);
-    await tester.enterText(find.byType(TextField), 'Aether Dynamics');
+    await tester.enterText(
+      find.descendant(of: find.byType(AlertDialog), matching: find.byType(TextField)),
+      'Aether Dynamics',
+    );
     await tester.pump();
     await tester.tap(find.descendant(
       of: find.byType(AlertDialog),
