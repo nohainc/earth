@@ -207,7 +207,7 @@ void main() {
     await tester.tap(find.text('COMPOSE'));
     await tester.pumpAndSettle();
 
-    expect(find.text('TRANSMIT DIPLOMATIC DISPATCH'), findsOneWidget);
+    expect(find.text('SEND DIPLOMATIC DISPATCH'), findsOneWidget);
 
     // Fill Compose Form
     final textFields = find.byType(TextField);
@@ -215,8 +215,8 @@ void main() {
     await tester.enterText(textFields.at(2), 'Agreement Confirmation');
     await tester.enterText(textFields.at(3), 'We accept your terms.');
 
-    // Transmit
-    await tester.tap(find.text('TRANSMIT DISPATCH'));
+    // Send
+    await tester.tap(find.text('SEND DISPATCH'));
     await tester.pumpAndSettle();
   });
 }

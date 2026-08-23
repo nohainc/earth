@@ -342,7 +342,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
         EarthAudioEngine.instance.playChime();
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Diplomatic dispatch transmitted successfully!'),
+            content: Text('Diplomatic dispatch sent successfully!'),
             backgroundColor: cyanAccentColor,
           ),
         );
@@ -785,7 +785,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                     ),
                                     const SizedBox(height: 3),
                                     const Text(
-                                      'Transmit the first sub-space message using the console below.',
+                                      'Send the first message using the console below.',
                                       style: TextStyle(
                                           color: mutedColor, fontSize: 10.5),
                                       textAlign: TextAlign.center,
@@ -823,7 +823,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                   fontSize: 11.5, color: inkColor),
                               decoration: InputDecoration(
                                 hintText:
-                                    'Transmit message to #${currentChannel['name'] ?? 'relay'}...',
+                                    'Send message to #${currentChannel['name'] ?? 'relay'}...',
                                 hintStyle: const TextStyle(
                                     color: mutedColor, fontSize: 11),
                                 contentPadding: const EdgeInsets.symmetric(
@@ -860,7 +860,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                         strokeWidth: 2, color: Colors.black))
                                 : const Icon(Icons.send, size: 13),
                             label: const Text(
-                              'TRANSMIT',
+                              'SEND',
                               style: TextStyle(
                                   fontWeight: FontWeight.w800, fontSize: 10.5),
                             ),
@@ -1695,7 +1695,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                   Icon(Icons.send_rounded, size: 15, color: cyanAccentColor),
                   SizedBox(width: 7),
                   Text(
-                    'TRANSMIT DIPLOMATIC DISPATCH',
+                    'SEND DIPLOMATIC DISPATCH',
                     style: TextStyle(
                       color: cyanAccentColor,
                       fontSize: 12.5,
@@ -1889,7 +1889,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                         child: CircularProgressIndicator(
                             strokeWidth: 2, color: Colors.black))
                     : const Icon(Icons.send_rounded, size: 13),
-                label: const Text('TRANSMIT DISPATCH'),
+                label: const Text('SEND DISPATCH'),
                 style: FilledButton.styleFrom(
                   backgroundColor: cyanAccentColor,
                   foregroundColor: Colors.black,
