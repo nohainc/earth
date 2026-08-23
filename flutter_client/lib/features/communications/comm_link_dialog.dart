@@ -379,241 +379,90 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final panelContent = _loading && _channels.isEmpty && _dispatches.isEmpty
-        ? const SizedBox(
-            height: 380,
-            child: Center(child: CircularProgressIndicator()),
-          )
-        : _error != null
-            ? Center(
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                          Icons.signal_cellular_connected_no_internet_4_bar,
-                          color: Colors.redAccent,
-                          size: 36),
-                      const SizedBox(height: 12),
-                      Text(
-                        'Comm-Link Relay Error: $_error',
-                        style: const TextStyle(
-                            color: Colors.redAccent, fontSize: 13),
-                        textAlign: TextAlign.center,
-                      ),
-                      const SizedBox(height: 16),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.refresh, size: 16),
-                        onPressed: _initialLoad,
-                        label: const Text('RECONNECT RELAY'),
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cyanAccentColor,
-                          foregroundColor: Colors.black,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              )
-            : Container(
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: EarthColors.borderSubtle),
-                ),
-                clipBehavior: Clip.antiAlias,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.all(8.0),
-                      child: _buildTopMetricsHud(),
-                    ),
-                    _buildSegmentedNavHeader(),
-                    Expanded(
-                      child: switch (_activeMode) {
-                        'dispatches' => _buildDispatchesContainer(),
-                        _ => _buildChannelsView(),
-                      },
-                    ),
-                  ],
-                ),
-              );
+    if (_loading && _channels.isEmpty && _dispatches.isEmpty) {
+      return const SizedBox(
+        height: 380,
+        child: Center(child: CircularProgressIndicator()),
+      );
+    }
 
-    return EarthPanel(
-      title: 'UNIVERSAL COMM-LINK / SUB-SPACE RELAY',
-      showSurface: !widget.isPageMode,
-      showTitle: true,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      contentPadding:
-          widget.isPageMode ? EdgeInsets.zero : const EdgeInsets.all(12),
-      infoDescription:
-          '• Universal Comm-Link connects all planetary citizens and institutions across sub-space relays.\n\n'
-          '• FREQUENCIES: Real-time public broadcasts and regional municipal forum channels.\n\n'
-          '• DIPLOMATIC DISPATCHES: P2P encrypted correspondence, official proposals, and binding bilateral terms.\n\n'
-          '• ATTACHED CONTRACTS: Review and execute commercial contracts directly from dispatch attachments.',
-      child: SizedBox(
-        height: widget.isPageMode
-            ? (MediaQuery.sizeOf(context).height - 240).clamp(460.0, 920.0)
-            : 470,
-        child: panelContent,
-      ),
-    );
-  }
-
-  // ==========================================
-  // TOP HUD / INTELLIGENCE METRICS
-  // ==========================================
-
-  Widget _buildTopMetricsHud() {
-    final gameDay = widget.state?.clock['day'] ?? 1;
-    final hour = _parseNumber(widget.state?.clock['minute']) ~/ 60;
-    final min = _parseNumber(widget.state?.clock['minute']) % 60;
-    final clockStr =
-        'Day $gameDay · ${hour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')}';
-
-    return EarthMetricGrid(
-      metrics: [
-        EarthMetricTile(
-          label: 'RELAY STATUS',
-          value: 'ONLINE · 142.8 GHz',
-          icon: Icons.wifi_tethering,
-          accentColor: context.primaryColor,
-        ),
-        EarthMetricTile(
-          label: 'ACTIVE CHANNELS',
-          value: '${_channels.length} FREQUENCIES',
-          icon: Icons.cell_tower,
-          accentColor: context.secondaryColor,
-        ),
-        EarthMetricTile(
-          label: 'DIPLOMATIC DISPATCHES',
-          value: _unreadDispatchesCount > 0
-              ? '$_unreadDispatchesCount UNREAD'
-              : '${_dispatches.length} ARCHIVED',
-          icon: Icons.mark_email_unread_outlined,
-          accentColor: _unreadDispatchesCount > 0
-              ? context.warningColor
-              : context.mutedColor,
-        ),
-        EarthMetricTile(
-          label: 'SUB-SPACE CLOCK',
-          value: clockStr,
-          icon: Icons.access_time_rounded,
-          accentColor: context.primaryColor,
-        ),
-      ],
-    );
-  }
-
-  // ==========================================
-  // SEGMENTED MODE NAVIGATION
-  // ==========================================
-
-  Widget _buildSegmentedNavHeader() {
-    return Container(
-      height: 48,
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        border:
-            const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
-      ),
-      child: Row(
-        children: [
-          _buildNavTabItem(
-            id: 'channels',
-            label: 'CHANNELS',
-            icon: Icons.settings_input_antenna,
-          ),
-          _buildNavTabItem(
-            id: 'dispatches',
-            label: 'DISPATCHES',
-            icon: Icons.outgoing_mail,
-            badge: _unreadDispatchesCount > 0 ? _unreadDispatchesCount : null,
-            badgeColor: EarthColors.goldMetallic,
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildNavTabItem({
-    required String id,
-    required String label,
-    required IconData icon,
-    int? badge,
-    Color? badgeColor,
-  }) {
-    final isSelected = _activeMode == id;
-    return Expanded(
-      child: Material(
-        color: Colors.transparent,
-        child: InkWell(
-          onTap: () {
-            EarthAudioEngine.instance.playClick();
-            setState(() {
-              _activeMode = id;
-            });
-          },
-          borderRadius: BorderRadius.zero,
-          child: AnimatedContainer(
-            duration: const Duration(milliseconds: 160),
-            padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 8),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: BorderSide(
-                  color: isSelected ? cyanAccentColor : Colors.transparent,
-                  width: 2.5,
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(
+                Icons.signal_cellular_connected_no_internet_4_bar,
+                color: Colors.redAccent,
+                size: 36,
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Comm-Link Relay Error: $_error',
+                style: const TextStyle(color: Colors.redAccent, fontSize: 13),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+              FilledButton.icon(
+                icon: const Icon(Icons.refresh, size: 16),
+                onPressed: _initialLoad,
+                label: const Text('RECONNECT RELAY'),
+                style: FilledButton.styleFrom(
+                  backgroundColor: cyanAccentColor,
+                  foregroundColor: Colors.black,
                 ),
               ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Icon(
-                  icon,
-                  size: 13,
-                  color: isSelected ? cyanAccentColor : mutedColor,
-                ),
-                const SizedBox(width: 5),
-                Flexible(
-                  child: Text(
-                    label,
-                    style: TextStyle(
-                      color: isSelected ? inkColor : mutedColor,
-                      fontSize: 10.5,
-                      fontWeight:
-                          isSelected ? FontWeight.w800 : FontWeight.w600,
-                      letterSpacing: 0.8,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                if (badge != null && badge > 0) ...[
-                  const SizedBox(width: 5),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 5, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: badgeColor ?? cyanAccentColor,
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    child: Text(
-                      '$badge',
-                      style: const TextStyle(
-                        color: Colors.black,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                  ),
-                ],
-              ],
-            ),
+            ],
           ),
         ),
+      );
+    }
+
+    final channelsTopic = EarthSection(
+      title: 'CHANNELS',
+      showSurface: false,
+      child: Container(
+        height: 480,
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: BorderRadius.circular(context.radiusCard),
+          border: Border.all(color: context.subtleBorderColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: _buildChannelsView(),
       ),
+    );
+
+    final dispatchesTopic = EarthSection(
+      title: 'DIPLOMATIC DISPATCHES',
+      showSurface: false,
+      trailing: _unreadDispatchesCount > 0
+          ? EarthBadge(
+              label: '$_unreadDispatchesCount UNREAD',
+              variant: EarthBadgeVariant.warning,
+            )
+          : null,
+      child: Container(
+        height: 520,
+        decoration: BoxDecoration(
+          color: context.surfaceColor,
+          borderRadius: BorderRadius.circular(context.radiusCard),
+          border: Border.all(color: context.subtleBorderColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: _buildDispatchesContainer(),
+      ),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        channelsTopic,
+        const SizedBox(height: 24),
+        dispatchesTopic,
+      ],
     );
   }
 

@@ -9,27 +9,55 @@ import 'package:earth_client/features/communications/comm_link_dialog.dart';
 
 void main() {
   testWidgets(
-      'CommLinkDialog renders channels, messages, sends text, and switches to dispatches',
+      'CommLinkDialog renders channels and dispatches as separate stacked topics',
       (tester) async {
+    tester.view.physicalSize = const Size(1440, 1600);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.resetPhysicalSize);
+
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
       if (path == '/api/comm/channels') {
         return http.Response(
           NanoMarkupHelper.encode({
-            'ok': true,
             'channels': [
               {
                 'id': 'channel-global-relay',
-                'scope': 'global',
                 'name': 'Planetary Public Relay',
-                'description': 'Universal broadcast frequency',
+                'scope': 'global',
+                'description': 'Universal sub-space broadcast channel',
+                'active_participants': 1420,
               },
               {
-                'id': 'channel-city-new-tokyo',
-                'scope': 'city',
+                'id': 'channel-city-tokyo',
                 'name': 'Neo-Tokyo City Hall',
-                'description': 'Municipal forum for Neo-Tokyo',
+                'scope': 'city',
+                'city_id': 'city-tokyo-01',
+                'description': 'Official municipal communications',
+                'active_participants': 89,
+              },
+            ],
+            'frequencies': ['142.8 GHz', '84.2 GHz'],
+          }),
+          200,
+          headers: {'content-type': 'application/nanomarkup'},
+        );
+      }
+
+      if (path == '/api/comm/messages' && request.method == 'GET') {
+        return http.Response(
+          NanoMarkupHelper.encode({
+            'messages': [
+              {
+                'id': 'msg-101',
+                'sender_human_id': 'H-0042',
+                'sender_display_name': 'Dmitri Rostov',
+                'sender_role': 'Commodity Broker',
+                'body': 'Silicon demand has spiked in London.',
+                'timestamp': '07:14:02',
+                'game_day': 184,
+                'is_verified': true,
               },
             ],
           }),
@@ -38,45 +66,20 @@ void main() {
         );
       }
 
-      if (path == '/api/comm/messages') {
-        if (request.method == 'POST') {
-          return http.Response(
-            NanoMarkupHelper.encode({
-              'ok': true,
-              'message': {
-                'id': 'msg-999',
-                'channel_id': 'channel-global-relay',
-                'sender_human_id': 'H-0044',
-                'sender_display_name': 'Amara Vance',
-                'sender_dynasty_name': 'Vance Dynasty',
-                'body': 'Test broadcast message',
-                'game_day': 184,
-                'game_minute': 500,
-                'attachments': [],
-                'created_at': DateTime.now().toIso8601String(),
-              },
-            }),
-            200,
-            headers: {'content-type': 'application/nanomarkup'},
-          );
-        }
+      if (path == '/api/comm/messages' && request.method == 'POST') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'messages': [
-              {
-                'id': 'msg-1',
-                'channel_id': 'channel-global-relay',
-                'sender_human_id': 'H-0012',
-                'sender_display_name': 'Dmitri Rostov',
-                'sender_dynasty_name': 'House of Rostov',
-                'body': 'Silicon demand has spiked in London.',
-                'game_day': 184,
-                'game_minute': 420,
-                'attachments': [],
-                'created_at': DateTime.now().toIso8601String(),
-              },
-            ],
+            'message': {
+              'id': 'msg-102',
+              'sender_human_id': 'H-0001',
+              'sender_display_name': 'Executive Commander',
+              'sender_role': 'Enterprise Founder',
+              'body': 'Test broadcast message',
+              'timestamp': '07:15:00',
+              'game_day': 184,
+              'is_verified': true,
+            },
           }),
           200,
           headers: {'content-type': 'application/nanomarkup'},
@@ -89,34 +92,36 @@ void main() {
             NanoMarkupHelper.encode({
               'ok': true,
               'dispatch': {
-                'id': 'mail-999',
-                'sender_human_id': 'H-0044',
-                'recipient_human_id': 'H-0012',
-                'subject': 'Trade Agreement Accepted',
-                'body': 'Terms confirmed.',
-                'status': 'unread',
+                'id': 'dsp-202',
+                'sender_id': 'H-0001',
+                'recipient_id': 'H-0012',
+                'subject': 'Agreement Confirmation',
+                'content': 'We accept your terms.',
+                'status': 'sent',
+                'dispatch_type': 'diplomatic',
+                'created_at': '2026-08-20T08:00:00Z',
               },
             }),
             200,
             headers: {'content-type': 'application/nanomarkup'},
           );
         }
+
         return http.Response(
           NanoMarkupHelper.encode({
-            'ok': true,
             'dispatches': [
               {
-                'id': 'mail-1',
-                'sender_human_id': 'H-0012',
-                'sender_display_name': 'Dmitri Rostov',
-                'recipient_human_id': 'H-0044',
+                'id': 'dsp-201',
+                'sender_id': 'H-0088',
+                'sender_name': 'Ambassador Vance',
+                'recipient_id': 'H-0001',
                 'subject': 'Tender Offer & Supply Contract',
-                'body':
-                    'We are seeking to secure long-term rights to 250 units.',
+                'summary': 'Proposed bilateral energy distribution contract for 1,500 Credits.',
+                'body': 'Dear Executive, Vance Logistics hereby extends an official tender offer.',
                 'status': 'unread',
-                'game_day': 184,
-                'game_minute': 510,
                 'dispatch_type': 'contract_offer',
+                'created_at': '2026-08-20T06:30:00Z',
+                'has_actionable_contract': true,
                 'action_payload': {
                   'contractId': 'CTR-904',
                   'creditsOffered': 1500
@@ -149,18 +154,21 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CommLinkDialog(api: api),
+          body: SingleChildScrollView(
+            child: CommLinkDialog(api: api, isPageMode: true),
+          ),
         ),
       ),
     );
 
     await tester.pumpAndSettle();
-    expect(find.text('YEAR 1   DAY 184   07:00'), findsOneWidget);
 
-    // 1. Verify Top Header & Mode Tabs
-    expect(find.text('UNIVERSAL COMM-LINK / SUB-SPACE RELAY'), findsOneWidget);
+    // 1. Verify Two Distinct Topics
     expect(find.text('CHANNELS'), findsOneWidget);
-    expect(find.text('DISPATCHES'), findsOneWidget);
+    expect(find.text('DIPLOMATIC DISPATCHES'), findsOneWidget);
+    expect(find.text('UNIVERSAL COMM-LINK / SUB-SPACE RELAY'), findsNothing);
+    expect(find.text('RELAY STATUS'), findsNothing);
+    expect(find.text('SUB-SPACE CLOCK'), findsNothing);
 
     // 2. Verify Channels List & Initial Message
     expect(find.text('Planetary Public Relay'), findsWidgets);
@@ -181,10 +189,7 @@ void main() {
 
     expect(find.text('Test broadcast message'), findsOneWidget);
 
-    // 5. Switch Mode to DISPATCHES
-    await tester.tap(find.text('DISPATCHES'));
-    await tester.pumpAndSettle();
-
+    // 5. Verify Dispatches topic is immediately present on the page
     expect(find.text('INBOX'), findsOneWidget);
     expect(find.text('SENT'), findsOneWidget);
     expect(find.text('COMPOSE'), findsOneWidget);
@@ -206,9 +211,9 @@ void main() {
 
     // Fill Compose Form
     final textFields = find.byType(TextField);
-    await tester.enterText(textFields.at(0), 'H-0012');
-    await tester.enterText(textFields.at(1), 'Agreement Confirmation');
-    await tester.enterText(textFields.at(2), 'We accept your terms.');
+    await tester.enterText(textFields.at(1), 'H-0012');
+    await tester.enterText(textFields.at(2), 'Agreement Confirmation');
+    await tester.enterText(textFields.at(3), 'We accept your terms.');
 
     // Transmit
     await tester.tap(find.text('TRANSMIT DISPATCH'));
