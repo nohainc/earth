@@ -36,9 +36,7 @@ void main() {
               }
             ],
           },
-          events: [
-            {'title': 'City resilience charter adopted', 'game_day': 210}
-          ],
+          events: const [],
         ),
       ),
     ));
@@ -47,7 +45,7 @@ void main() {
     expect(find.text('HISTORICAL ARCHIVE'), findsOneWidget);
     expect(find.text('Mira Vance'), findsOneWidget);
     expect(find.text('Vance House'), findsWidgets);
-    expect(find.text('City resilience charter adopted'), findsOneWidget);
+    expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
   testWidgets('Quick Actions routes the player to the selected domain',

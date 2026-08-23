@@ -12,18 +12,16 @@ void main() {
     ],
   };
 
-  testWidgets('archive page renders citizens, dynasties, and world events', (tester) async {
+  testWidgets('archive page renders citizens and dynasties', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
       pantheon: pantheon,
-      events: [
-        {'type': 'world_clock', 'gameDay': 184, 'title': 'World advances'},
-      ],
+      events: [],
     ))));
     await tester.pumpAndSettle();
     expect(find.text('HISTORICAL ARCHIVE'), findsOneWidget);
     expect(find.textContaining('Founder Marcus Vance'), findsOneWidget);
     expect(find.textContaining('Vance Dynasty'), findsWidgets);
-    expect(find.textContaining('World advances'), findsOneWidget);
+    expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
   testWidgets('archive page renders explicit empty states', (tester) async {
@@ -34,6 +32,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No citizens have entered the public archive yet.'), findsOneWidget);
     expect(find.text('No dynasties have been archived yet.'), findsOneWidget);
-    expect(find.text('World milestones will appear as the persistent world advances.'), findsOneWidget);
+    expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 }
