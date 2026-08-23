@@ -154,7 +154,6 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     upkeep_components: string;
     upkeep_compute: string;
     daily_operating_credits: string;
-    base_revenue_crd: string;
     resource_output_type: string | null;
     resource_output_amount: string | null;
     tier: number;

@@ -313,8 +313,8 @@ export async function upgradeBuilding(
       city_id: string;
       building_type: string;
       tier: number;
-      base_revenue_crd: string;
       resource_output_amount: string;
+      daily_operating_credits: string;
       status: string;
     }>('SELECT * FROM buildings WHERE id = $1 FOR UPDATE', [input.buildingId]);
     const bld = bldRes.rows[0];
@@ -506,7 +506,7 @@ export async function investInPublicBuilding(
       city_id: string;
       ownership_class: string;
       name: string;
-      base_revenue_crd: string;
+      resource_output_amount: string;
     }>('SELECT * FROM buildings WHERE id = $1', [input.buildingId]);
     const bld = bldRes.rows[0];
     if (!bld) throw new Error('Public investment facility not found');

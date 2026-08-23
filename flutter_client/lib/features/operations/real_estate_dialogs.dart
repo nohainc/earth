@@ -313,8 +313,9 @@ Future<void> showBuildingUpgradeDialog(
   final name = building['name']?.toString() ?? 'Facility';
   final currentTier = asIntOr(building['tier'], 1);
   final nextTier = currentTier + 1;
-  final baseRev = asDoubleOr(building['base_revenue_crd'], 0);
-  final projectedRev = (baseRev * 1.30).roundToDouble();
+  final outAmt = asDoubleOr(building['resource_output_amount'], 0);
+  final outType = building['resource_output_type']?.toString();
+  final projectedAmt = (outAmt * 1.30);
 
   final upgradeCreditCost = (currentTier * 5000 + 4000);
   final upgradeMaterialCost = (currentTier * 40 + 20);
@@ -355,12 +356,12 @@ Future<void> showBuildingUpgradeDialog(
                   ],
                 ),
                 const SizedBox(height: 6),
-                if (baseRev > 0)
+                if (outAmt > 0)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('Yield: +${formatWholeNumber(baseRev)} CRD', style: context.widgetFooterStyle),
-                      Text('Projected: +${formatWholeNumber(projectedRev)} CRD',
+                      Text('Yield: +${outType == 'credits' || outType == null ? formatWholeNumber(outAmt) : outAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}', style: context.widgetFooterStyle),
+                      Text('Projected: +${outType == 'credits' || outType == null ? formatWholeNumber(projectedAmt) : projectedAmt.toStringAsFixed(1)} ${(outType ?? 'CRD').toUpperCase()}',
                           style: context.widgetFooterStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
                     ],
                   ),
