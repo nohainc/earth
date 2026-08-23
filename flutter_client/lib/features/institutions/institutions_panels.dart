@@ -1495,6 +1495,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       return EarthSection(
         key: widget.panelKey,
         title: 'COMMUNITY',
+        showSurface: false,
         icon: Icons.groups_outlined,
         trailing: EarthButton(
           label: 'REGISTRY',
@@ -1529,6 +1530,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
     return EarthSection(
       key: widget.panelKey,
       title: name.toUpperCase(),
+      showSurface: false,
       icon: Icons.diversity_3_outlined,
       trailing: EarthButton(
         label: 'ALL COMMUNITIES',
