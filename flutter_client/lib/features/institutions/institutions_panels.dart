@@ -1289,3 +1289,554 @@ class CommunitiesPanel extends StatelessWidget {
     );
   }
 }
+
+/// Dedicated management and activity panel for the player's active community.
+class MyCommunityPanel extends StatefulWidget {
+  final Key? panelKey;
+  final EarthState state;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function()) action;
+  final ValueChanged<String>? onNavigate;
+
+  const MyCommunityPanel({
+    super.key,
+    this.panelKey,
+    required this.state,
+    required this.busy,
+    required this.action,
+    this.onNavigate,
+  });
+
+  @override
+  State<MyCommunityPanel> createState() => _MyCommunityPanelState();
+}
+
+class _MyCommunityPanelState extends State<MyCommunityPanel> {
+  List<dynamic> _members = [];
+  List<dynamic> _requests = [];
+  bool _loading = false;
+  String? _loadedCommunityId;
+
+  @override
+  void initState() {
+    super.initState();
+    _fetchDetails();
+  }
+
+  @override
+  void didUpdateWidget(covariant MyCommunityPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final myComm = widget.state.myCommunity;
+    final currentId = myComm?['id']?.toString();
+    if (currentId != _loadedCommunityId) {
+      _fetchDetails();
+    }
+  }
+
+  Future<void> _fetchDetails() async {
+    final myComm = widget.state.myCommunity;
+    if (myComm == null) return;
+    final id = myComm['id']?.toString();
+    if (id == null) return;
+
+    setState(() {
+      _loading = true;
+      _loadedCommunityId = id;
+    });
+
+    try {
+      final memRes = await const EarthApi().listCommunityMembers(id);
+      _members = memRes['members'] as List<dynamic>? ?? [];
+      final admissionPolicy = (myComm['admission_policy']?.toString() ?? 'open').toLowerCase();
+      final myRole = myComm['my_role']?.toString();
+      final isFounderOrAdmin = myRole == 'founder' || myRole == 'admin';
+
+      if (admissionPolicy == 'approval' && isFounderOrAdmin) {
+        final reqRes = await const EarthApi().listCommunityRequests(id);
+        _requests = reqRes['requests'] as List<dynamic>? ?? [];
+      } else {
+        _requests = [];
+      }
+    } catch (_) {}
+
+    if (mounted) {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final myComm = widget.state.myCommunity;
+    if (myComm == null) {
+      return EarthSection(
+        key: widget.panelKey,
+        title: 'COMMUNITY',
+        icon: Icons.groups_outlined,
+        trailing: EarthButton(
+          label: 'REGISTRY',
+          icon: Icons.travel_explore_outlined,
+          variant: EarthButtonVariant.primary,
+          onPressed: () => widget.onNavigate?.call('communities'),
+        ),
+        child: EarthEmptyState(
+          message:
+              'You are not currently an owner or member of any community. Explore all registered communities or found a new guild.',
+          icon: Icons.groups_outlined,
+          action: EarthButton(
+            label: 'EXPLORE ALL COMMUNITIES',
+            variant: EarthButtonVariant.primary,
+            onPressed: () => widget.onNavigate?.call('communities'),
+          ),
+        ),
+      );
+    }
+
+    final id = myComm['id']?.toString() ?? 'COM-001';
+    final name = myComm['name']?.toString() ?? 'Community';
+    final founderName = myComm['founder_name']?.toString() ?? 'Citizen';
+    final description = myComm['description']?.toString() ?? '';
+    final admissionPolicy = (myComm['admission_policy']?.toString() ?? 'open').toUpperCase();
+    final myRole = myComm['my_role']?.toString();
+    final isOwner = myRole == 'founder';
+    final isAdmin = myRole == 'admin';
+    final memberCount = asIntOr(myComm['member_count'], _members.isNotEmpty ? _members.length : 1);
+    final sharedCredits = asDouble(myComm['shared_credits']) ?? 0.0;
+
+    return EarthSection(
+      key: widget.panelKey,
+      title: name.toUpperCase(),
+      icon: Icons.diversity_3_outlined,
+      trailing: EarthButton(
+        label: 'ALL COMMUNITIES',
+        icon: Icons.travel_explore_outlined,
+        variant: EarthButtonVariant.ghost,
+        onPressed: () => widget.onNavigate?.call('communities'),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          // Top Identity & Action Header Bar
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '$name ($id)',
+                            style: context.pageTitleStyle,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Guild ID: $id · Founded by $founderName',
+                            style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 4,
+                      children: [
+                        if (isOwner)
+                          const EarthBadge(
+                            label: 'OWNER / FOUNDER',
+                            variant: EarthBadgeVariant.primary,
+                          )
+                        else if (isAdmin)
+                          const EarthBadge(
+                            label: 'ADMIN',
+                            variant: EarthBadgeVariant.primary,
+                          )
+                        else
+                          const EarthBadge(
+                            label: 'MEMBER',
+                            variant: EarthBadgeVariant.success,
+                          ),
+                        EarthBadge(
+                          label: admissionPolicy == 'APPROVAL' ? 'APPROVAL REQ' : 'OPEN ACCESS',
+                          variant: EarthBadgeVariant.neutral,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    if (isOwner || isAdmin)
+                      EarthButton(
+                        label: 'MANAGE COMMUNITY',
+                        icon: Icons.settings_outlined,
+                        variant: EarthButtonVariant.primary,
+                        onPressed: widget.busy
+                            ? null
+                            : () async {
+                                await showCommunityManageDialog(
+                                  context,
+                                  myComm,
+                                  widget.state,
+                                  widget.action,
+                                );
+                                _fetchDetails();
+                              },
+                      ),
+                    EarthButton(
+                      label: 'CONTRIBUTE CREDITS',
+                      icon: Icons.savings_outlined,
+                      variant: isOwner || isAdmin ? EarthButtonVariant.secondary : EarthButtonVariant.primary,
+                      onPressed: widget.busy
+                          ? null
+                          : () => showCommunityContributionDialog(context, widget.action, id),
+                    ),
+                    if (!isOwner)
+                      EarthButton(
+                        label: 'LEAVE COMMUNITY',
+                        variant: EarthButtonVariant.danger,
+                        onPressed: widget.busy
+                            ? null
+                            : () => widget.action(() => const EarthApi().leaveCommunity(id)),
+                      ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // 1. Key Metrics Grid
+          EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'COMMUNAL TREASURY',
+                value: '${sharedCredits.toStringAsFixed(2)} C',
+                subtitle: 'Voluntary shared pool',
+                icon: Icons.savings_outlined,
+              ),
+              EarthMetricTile(
+                label: 'CITIZENS / MEMBERS',
+                value: '$memberCount',
+                subtitle: 'Active guild contributors',
+                icon: Icons.groups_outlined,
+              ),
+              EarthMetricTile(
+                label: 'YOUR ROLE',
+                value: isOwner ? 'FOUNDER' : isAdmin ? 'ADMIN' : 'MEMBER',
+                subtitle: isOwner ? 'Full Authority' : isAdmin ? 'Co-Manager' : 'Guild Citizen',
+                icon: Icons.badge_outlined,
+              ),
+              EarthMetricTile(
+                label: 'ADMISSION POLICY',
+                value: admissionPolicy == 'APPROVAL' ? 'APPROVAL' : 'OPEN',
+                subtitle: admissionPolicy == 'APPROVAL' ? 'Application review' : 'Instant enrollment',
+                icon: Icons.policy_outlined,
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+
+          // 2. Manifesto & Purpose Section
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'GUILD MANIFESTO & PURPOSE',
+                      style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                    ),
+                    if (isOwner || isAdmin)
+                      EarthButton(
+                        label: 'EDIT MANIFESTO',
+                        icon: Icons.edit_outlined,
+                        variant: EarthButtonVariant.ghost,
+                        onPressed: widget.busy
+                            ? null
+                            : () async {
+                                await showCommunityManageDialog(
+                                  context,
+                                  myComm,
+                                  widget.state,
+                                  widget.action,
+                                );
+                                _fetchDetails();
+                              },
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  padding: const EdgeInsets.all(14),
+                  decoration: BoxDecoration(
+                    color: context.panelColor,
+                    borderRadius: BorderRadius.circular(context.radiusControl),
+                    border: Border.all(color: context.subtleBorderColor),
+                  ),
+                  child: Text(
+                    description.isNotEmpty
+                        ? description
+                        : 'No custom manifesto established for this community yet. The founder or administrators can update the guild declaration at any time.',
+                    style: context.bodyStyle.copyWith(
+                      color: context.inkColor,
+                      fontSize: 13,
+                      height: 1.5,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // 3. Quick Contribution Strip
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.volunteer_activism_outlined,
+                    color: context.primaryColor, size: 28),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'CONTRIBUTE TO GUILD TREASURY',
+                        style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Communal funds empower shared ventures, municipal infrastructure, and guild projects.',
+                        style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  children: [
+                    EarthButton(
+                      label: '+100 C',
+                      variant: EarthButtonVariant.secondary,
+                      onPressed: widget.busy
+                          ? null
+                          : () => widget.action(() => const EarthApi().contributeToCommunity(id, 100)),
+                    ),
+                    EarthButton(
+                      label: '+500 C',
+                      variant: EarthButtonVariant.secondary,
+                      onPressed: widget.busy
+                          ? null
+                          : () => widget.action(() => const EarthApi().contributeToCommunity(id, 500)),
+                    ),
+                    EarthButton(
+                      label: 'CUSTOM',
+                      icon: Icons.add_circle_outline,
+                      variant: EarthButtonVariant.primary,
+                      onPressed: widget.busy
+                          ? null
+                          : () => showCommunityContributionDialog(context, widget.action, id),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          // 4. Pending Review Requests (if founder/admin and requests exist)
+          if ((isOwner || isAdmin) && _requests.isNotEmpty) ...[
+            const SizedBox(height: 24),
+            Text(
+              'PENDING ADMISSION REQUESTS (${_requests.length})',
+              style: context.topicTitleStyle.copyWith(color: context.warningColor),
+            ),
+            const SizedBox(height: 8),
+            EarthDataList(
+              children: _requests.map((raw) {
+                final req = raw as Map<String, dynamic>;
+                final reqId = req['id']?.toString() ?? '';
+                final applicant = req['human_name']?.toString() ?? req['human_id']?.toString() ?? '';
+                final reqDay = req['requested_game_day'];
+
+                return EarthDataRow(
+                  title: applicant,
+                  subtitle: 'Requested admission on Game Day $reqDay',
+                  leading: Icon(Icons.person_add_outlined, color: context.warningColor),
+                  badges: const [
+                    EarthBadge(
+                      label: 'PENDING REVIEW',
+                      variant: EarthBadgeVariant.warning,
+                    ),
+                  ],
+                  trailing: Wrap(
+                    spacing: 6,
+                    children: [
+                      EarthButton(
+                        label: 'APPROVE',
+                        variant: EarthButtonVariant.primary,
+                        onPressed: widget.busy
+                            ? null
+                            : () async {
+                                await const EarthApi().decideCommunityRequest(
+                                  communityId: id,
+                                  requestId: reqId,
+                                  action: 'approve',
+                                );
+                                _fetchDetails();
+                              },
+                      ),
+                      EarthButton(
+                        label: 'REJECT',
+                        variant: EarthButtonVariant.danger,
+                        onPressed: widget.busy
+                            ? null
+                            : () async {
+                                await const EarthApi().decideCommunityRequest(
+                                  communityId: id,
+                                  requestId: reqId,
+                                  action: 'reject',
+                                );
+                                _fetchDetails();
+                              },
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
+          ],
+
+          const SizedBox(height: 24),
+
+          // 5. Members Directory
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                'MEMBER ROSTER (${_members.length})',
+                style: context.topicTitleStyle.copyWith(color: context.mutedColor),
+              ),
+              if (_loading)
+                const SizedBox(
+                  width: 14,
+                  height: 14,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              else
+                IconButton(
+                  icon: const Icon(Icons.refresh_rounded, size: 16),
+                  tooltip: 'Refresh Members',
+                  onPressed: _fetchDetails,
+                ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          _members.isEmpty
+              ? const EarthEmptyState(
+                  message: 'Member roster is currently synchronizing or no other members joined yet.',
+                  icon: Icons.groups_outlined,
+                )
+              : EarthDataList(
+                  children: _members.map((raw) {
+                    final m = raw as Map<String, dynamic>;
+                    final hId = m['human_id']?.toString() ?? '';
+                    final hName = m['human_name']?.toString() ?? hId;
+                    final role = (m['role']?.toString() ?? 'member').toUpperCase();
+                    final isMFounder = role == 'FOUNDER';
+                    final isMAdmin = role == 'ADMIN';
+                    final joinedDay = m['joined_game_day'];
+
+                    return EarthDataRow(
+                      title: '$hName ($hId)',
+                      subtitle: 'Joined Game Day $joinedDay',
+                      leading: Icon(
+                        isMFounder
+                            ? Icons.star_rounded
+                            : isMAdmin
+                                ? Icons.verified_user_outlined
+                                : Icons.person_outline_rounded,
+                        color: isMFounder
+                            ? context.primaryColor
+                            : isMAdmin
+                                ? context.secondaryColor
+                                : context.mutedColor,
+                      ),
+                      badges: [
+                        EarthBadge(
+                          label: role,
+                          variant: isMFounder
+                              ? EarthBadgeVariant.primary
+                              : isMAdmin
+                                  ? EarthBadgeVariant.secondary
+                                  : EarthBadgeVariant.neutral,
+                        ),
+                      ],
+                      trailing: isOwner && !isMFounder
+                          ? isMAdmin
+                              ? EarthButton(
+                                  label: 'DEMOTE',
+                                  variant: EarthButtonVariant.ghost,
+                                  onPressed: widget.busy
+                                      ? null
+                                      : () async {
+                                          await const EarthApi().setCommunityMemberRole(
+                                            communityId: id,
+                                            targetHumanId: hId,
+                                            role: 'member',
+                                          );
+                                          _fetchDetails();
+                                        },
+                                )
+                              : EarthButton(
+                                  label: 'MAKE ADMIN',
+                                  variant: EarthButtonVariant.secondary,
+                                  onPressed: widget.busy
+                                      ? null
+                                      : () async {
+                                          await const EarthApi().setCommunityMemberRole(
+                                            communityId: id,
+                                            targetHumanId: hId,
+                                            role: 'admin',
+                                          );
+                                          _fetchDetails();
+                                        },
+                                )
+                          : null,
+                    );
+                  }).toList(),
+                ),
+        ],
+      ),
+    );
+  }
+}

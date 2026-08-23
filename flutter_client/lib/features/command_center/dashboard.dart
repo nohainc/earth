@@ -45,6 +45,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'civic' => 'PUBLIC',
       'corporation' => 'CORPORATION',
       'city' => 'MY CITY',
+      'my-community' => 'MY COMMUNITY',
       'communities' => 'COMMUNITIES',
       'dynasty' => 'FAMILY',
       'technology' => 'TECHNOLOGY',
@@ -681,6 +682,16 @@ class Dashboard extends StatelessWidget {
                 ],
               );
             },
+          ),
+        ];
+      case 'my-community':
+        return [
+          MyCommunityPanel(
+            panelKey: sectionKeys['my-community'],
+            state: state,
+            busy: busy,
+            action: action,
+            onNavigate: onNavigate,
           ),
         ];
       case 'communities':

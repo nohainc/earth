@@ -143,4 +143,67 @@ void main() {
     expect(find.text('Artisanal fabrication guild of Carthage.'), findsOneWidget);
     expect(find.text('JOIN COMMUNITY'), findsOneWidget);
   });
+
+  testWidgets('MyCommunityPanel renders active guild metrics, manifesto, contribution actions, and role badges',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'name': 'Amara Vance', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {'research': {}},
+      'institutions': {},
+      'membership': {},
+      'communities': [
+        {
+          'id': 'COM-002',
+          'name': 'Solar Engineers',
+          'founder_id': 'H-0044',
+          'founder_name': 'Amara Vance',
+          'description': 'Pioneering clean renewable energy across the quadrant.',
+          'status': 'active',
+          'admission_policy': 'approval',
+          'my_role': 'founder',
+          'member_count': 5,
+          'shared_credits': 1250.0,
+        },
+      ],
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+    });
+
+    bool contributionTriggered = false;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: MyCommunityPanel(
+              state: state,
+              busy: false,
+              action: (cb) async {
+                contributionTriggered = true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('SOLAR ENGINEERS'), findsOneWidget);
+    expect(find.textContaining('Guild ID: COM-002'), findsOneWidget);
+    expect(find.text('OWNER / FOUNDER'), findsOneWidget);
+    expect(find.text('1250.00 C'), findsOneWidget);
+    expect(find.text('GUILD MANIFESTO & PURPOSE'), findsOneWidget);
+    expect(find.text('Pioneering clean renewable energy across the quadrant.'), findsOneWidget);
+    expect(find.text('CONTRIBUTE TO GUILD TREASURY'), findsOneWidget);
+    expect(find.text('+100 C'), findsOneWidget);
+
+    await tester.tap(find.text('+100 C'));
+    await tester.pumpAndSettle();
+
+    expect(contributionTriggered, isTrue);
+  });
 }

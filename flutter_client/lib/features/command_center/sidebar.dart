@@ -61,7 +61,7 @@ class _SidebarState extends State<Sidebar> {
         'technology',
         'patents',
       ],
-      ['corporation', 'city', 'communities', 'civic', 'public-finance'],
+      ['corporation', 'city', 'my-community', 'communities', 'civic', 'public-finance'],
       ['life', 'dynasty'],
       ['civic-rankings', 'pantheon', 'history', 'constitution'],
     ];
@@ -90,6 +90,9 @@ class _SidebarState extends State<Sidebar> {
     final cityName = isCorporationMember && city is Map
         ? city['name']?.toString() ?? 'City & Services'
         : 'City & Services';
+
+    final myCommunity = widget.state.myCommunity;
+    final communityName = myCommunity?['name']?.toString() ?? 'Community';
 
     final fullUserName = (widget.state.human['name'] ??
             widget.state.human['display_name'] ??
@@ -210,9 +213,16 @@ class _SidebarState extends State<Sidebar> {
               Icons.location_city_outlined,
               null,
             ),
+          if (myCommunity != null)
+            (
+              'my-community',
+              communityName,
+              Icons.diversity_3_outlined,
+              null,
+            ),
           (
             'communities',
-            'Communities',
+            myCommunity != null ? 'All Communities' : 'Communities',
             Icons.groups_outlined,
             null,
           ),

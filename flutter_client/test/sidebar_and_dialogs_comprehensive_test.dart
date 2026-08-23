@@ -117,6 +117,56 @@ void main() {
     expect(find.text('Communities'), findsOneWidget);
   });
 
+  testWidgets('Sidebar displays active community name in CIVIC group when affiliated', (tester) async {
+    const state = EarthState({
+      'clock': {'day': 185, 'minute': 720},
+      'human': {'name': 'Amara Vance'},
+      'membership': {},
+      'institutions': {},
+      'communities': [
+        {
+          'id': 'COM-001',
+          'name': 'Carthage Artisans',
+          'my_role': 'founder',
+        }
+      ],
+      'business': {},
+      'technology': {'research': {}},
+    });
+
+    String? navigatedTo;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 250,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'command',
+              onNavigate: (section) {
+                navigatedTo = section;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CIVIC'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('Carthage Artisans'), findsOneWidget);
+    expect(find.text('All Communities'), findsOneWidget);
+
+    await tester.tap(find.text('Carthage Artisans'));
+    await tester.pumpAndSettle();
+
+    expect(navigatedTo, 'my-community');
+  });
+
   testWidgets('showProposalComposer validates length and submits proposal',
       (tester) async {
     bool submitted = false;
