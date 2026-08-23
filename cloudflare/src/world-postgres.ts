@@ -109,7 +109,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         c.name, 
         COALESCE(c.description, '') AS description, 
         c.founder_id, 
-        COALESCE(h.display_name, h.name, 'Citizen') AS founder_name, 
+        COALESCE(h.display_name, 'Citizen') AS founder_name, 
         c.status, 
         COALESCE(c.admission_policy, 'open') AS admission_policy, 
         COALESCE(c.shared_credits, 0) AS shared_credits,

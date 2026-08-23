@@ -29,7 +29,7 @@ export async function listCommunities(repository: PostgresRepository): Promise<R
       c.name, 
       COALESCE(c.description, '') AS description, 
       c.founder_id, 
-      COALESCE(h.display_name, h.name, 'Citizen') AS founder_name, 
+      COALESCE(h.display_name, 'Citizen') AS founder_name, 
       c.status, 
       COALESCE(c.admission_policy, 'open') AS admission_policy, 
       c.shared_credits,
@@ -126,7 +126,7 @@ export async function listCommunityMembers(repository: PostgresRepository, commu
       cm.human_id, 
       cm.role, 
       cm.joined_game_day,
-      COALESCE(h.display_name, h.name, 'Citizen') AS human_name
+      COALESCE(h.display_name, 'Citizen') AS human_name
     FROM community_members cm
     JOIN humans h ON h.id = cm.human_id
     WHERE cm.community_id = $1 
@@ -206,7 +206,7 @@ export async function listCommunityMembershipRequests(
       r.human_id, 
       r.status, 
       r.requested_game_day,
-      COALESCE(h.display_name, h.name, 'Citizen') AS human_name
+      COALESCE(h.display_name, 'Citizen') AS human_name
     FROM community_membership_requests r
     JOIN humans h ON h.id = r.human_id
     WHERE r.community_id = $1 AND r.status = 'pending'
@@ -313,6 +313,7 @@ export async function listCommunityContributions(repository: PostgresRepository,
 
 export async function contributeToCommunity(repository: PostgresRepository, input: { communityId: string; humanId: string; amount: number; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
+    if (!Number.isFinite(input.amount) || input.amount <= 0) throw new Error('Contribution amount must be positive');
     const prior = await tx.query<{ amount: string; game_day: number }>("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'community_contribution' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, amount: Number(prior.rows[0].amount), gameDay: Number(prior.rows[0].game_day), correlationId: input.correlationId };
     const community = await tx.query<{ id: string; status: string; shared_credits: string }>('SELECT id, status, shared_credits FROM communities WHERE id = $1 FOR UPDATE', [input.communityId]);
