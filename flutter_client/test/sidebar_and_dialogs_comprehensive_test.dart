@@ -74,10 +74,11 @@ void main() {
     expect(find.text('Rankings'), findsOneWidget);
     expect(find.text('Memorial'), findsOneWidget);
     expect(find.text('Archive'), findsOneWidget);
+    expect(find.text('Constitution'), findsOneWidget);
 
-    await tester.tap(find.text('Rankings'));
+    await tester.tap(find.text('Constitution'));
     await tester.pumpAndSettle();
-    expect(navigatedTo, 'civic-rankings');
+    expect(navigatedTo, 'constitution');
   });
 
   testWidgets('Sidebar hides City when unaffiliated', (tester) async {

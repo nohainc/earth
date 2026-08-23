@@ -29,6 +29,7 @@ import '../communications/comm_link_dialog.dart';
 import '../activity/activity_panel.dart';
 import '../lifecycle/historical_archive_panel.dart';
 import '../lifecycle/cemetery_pantheon_dialog.dart';
+import '../governance/constitution_panel.dart';
 import 'quick_actions_panel.dart';
 import 'command_executive_quadrant.dart';
 
@@ -53,6 +54,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'history' => 'ARCHIVE',
       'life' => 'LIFE',
       'pantheon' => 'MEMORIAL',
+      'constitution' => 'CONSTITUTION',
       'contracts' => 'CONTRACTS',
       'projects' => 'PROJECTS',
       'finance' => 'FINANCE',
@@ -754,6 +756,8 @@ class Dashboard extends StatelessWidget {
         return [CivicRankingsPanel(state: state)];
       case 'history':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
+      case 'constitution':
+        return [ConstitutionPanel(state: state)];
       case 'life':
         return [
           LayoutBuilder(

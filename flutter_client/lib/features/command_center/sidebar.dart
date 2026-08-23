@@ -63,7 +63,7 @@ class _SidebarState extends State<Sidebar> {
       ],
       ['corporation', 'city', 'civic', 'public-finance'],
       ['life', 'dynasty'],
-      ['civic-rankings', 'pantheon', 'history'],
+      ['civic-rankings', 'pantheon', 'history', 'constitution'],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -256,6 +256,12 @@ class _SidebarState extends State<Sidebar> {
             'history',
             'Archive',
             Icons.history_outlined,
+            null,
+          ),
+          (
+            'constitution',
+            'Constitution',
+            Icons.gavel_outlined,
             null,
           ),
         ]
