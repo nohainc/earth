@@ -135,62 +135,36 @@ class _ActivityPanelState extends State<ActivityPanel> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           // ── TOPIC 1: DIRECT ALERTS & NOTIFICATIONS ──
-          Container(
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
-            ),
-            padding: EdgeInsets.all(context.cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(
-                          Icons.notifications_active_outlined,
-                          size: 16,
-                          color: displayUnread > 0 ? context.warningColor : context.mutedColor,
-                        ),
-                        const SizedBox(width: 8),
-                        Text(
-                          displayUnread > 0
-                              ? 'DIRECT ALERTS & NOTIFICATIONS ($displayUnread)'
-                              : 'DIRECT ALERTS & NOTIFICATIONS',
-                          style: context.widgetTitleStyle,
-                        ),
-                      ],
+          EarthSection(
+            title: displayUnread > 0
+                ? 'DIRECT ALERTS & NOTIFICATIONS ($displayUnread)'
+                : 'DIRECT ALERTS & NOTIFICATIONS',
+            icon: Icons.notifications_active_outlined,
+            showSurface: false,
+            trailing: (widget.notifications.isNotEmpty && displayUnread > 0)
+                ? TextButton.icon(
+                    onPressed: () async {
+                      for (final n in widget.notifications) {
+                        if (n is Map<String, dynamic> && n['id'] != null) {
+                          _locallyReadIds.add(n['id'].toString());
+                        }
+                      }
+                      setState(() {});
+                      await widget.onMarkAllRead();
+                    },
+                    icon: Icon(Icons.done_all_rounded, size: 13, color: context.primaryColor),
+                    label: Text(
+                      'MARK ALL READ',
+                      style: context.controlStyle.copyWith(color: context.primaryColor),
                     ),
-                    if (widget.notifications.isNotEmpty && displayUnread > 0)
-                      TextButton.icon(
-                        onPressed: () async {
-                          for (final n in widget.notifications) {
-                            if (n is Map<String, dynamic> && n['id'] != null) {
-                              _locallyReadIds.add(n['id'].toString());
-                            }
-                          }
-                          setState(() {});
-                          await widget.onMarkAllRead();
-                        },
-                        icon: Icon(Icons.done_all_rounded, size: 13, color: context.primaryColor),
-                        label: Text(
-                          'MARK ALL READ',
-                          style: context.controlStyle.copyWith(color: context.primaryColor),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (widget.notifications.isEmpty)
-                  const EarthEmptyState(
+                  )
+                : null,
+            child: widget.notifications.isEmpty
+                ? const EarthEmptyState(
                     message: 'No pending notifications. All personal systems nominal.',
                     icon: Icons.check_circle_outline_rounded,
                   )
-                else
-                  EarthDataList(
+                : EarthDataList(
                     children: widget.notifications.take(30).map((n) {
                       if (n is! Map<String, dynamic>) {
                         return const SizedBox.shrink();
@@ -231,52 +205,27 @@ class _ActivityPanelState extends State<ActivityPanel> {
                       );
                     }).toList(),
                   ),
-              ],
-            ),
           ),
 
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
 
-          // ── TOPIC 2: PLANETARY ACTIVITY & WORLD FEED ──
-          Container(
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
+          // ── TOPIC 2: PLANETARY TELEMETRY & WORLD FEED ──
+          EarthSection(
+            title: 'PLANETARY TELEMETRY & WORLD FEED',
+            icon: Icons.sensors_rounded,
+            showSurface: false,
+            trailing: EarthBadge(
+              label: widget.isLiveConnected ? 'LIVE STREAM' : 'ARCHIVE',
+              variant: widget.isLiveConnected
+                  ? EarthBadgeVariant.success
+                  : EarthBadgeVariant.neutral,
             ),
-            padding: EdgeInsets.all(context.cardPadding),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.sensors_rounded, size: 16, color: context.primaryColor),
-                        const SizedBox(width: 8),
-                        Text(
-                          'PLANETARY TELEMETRY & WORLD FEED',
-                          style: context.widgetTitleStyle,
-                        ),
-                      ],
-                    ),
-                    EarthBadge(
-                      label: widget.isLiveConnected ? 'LIVE STREAM' : 'ARCHIVE',
-                      variant: widget.isLiveConnected
-                          ? EarthBadgeVariant.success
-                          : EarthBadgeVariant.neutral,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 12),
-                if (widget.events.isEmpty)
-                  const EarthEmptyState(
+            child: widget.events.isEmpty
+                ? const EarthEmptyState(
                     message: 'No recent planetary activity recorded.',
                     icon: Icons.sensors_off_rounded,
                   )
-                else
-                  EarthDataList(
+                : EarthDataList(
                     children: widget.events.take(40).map((evt) {
                       if (evt is! Map<String, dynamic>) {
                         return const SizedBox.shrink();
@@ -292,8 +241,6 @@ class _ActivityPanelState extends State<ActivityPanel> {
                       );
                     }).toList(),
                   ),
-              ],
-            ),
           ),
         ],
       ),
