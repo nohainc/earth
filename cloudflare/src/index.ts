@@ -575,7 +575,8 @@ const worker = {
       const requestId = communityRequestDecisionMatch[2];
       const parsed = await parseJsonBody<{ action?: 'approve' | 'reject' }>(request);
       if (!parsed.ok) return parsed.response;
-      const action = parsed.value.action === 'reject' ? 'reject' : 'approve';
+      if (parsed.value.action !== 'approve' && parsed.value.action !== 'reject') return Response.json({ ok: false, error: 'Request action must be approve or reject' }, { status: 400 });
+      const action = parsed.value.action;
       try {
         const result = await withRepository(env, (repository) => decideCommunityMembershipRequestPostgres(repository, { communityId, deciderId: viewer.id, requestId, action }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -592,7 +593,8 @@ const worker = {
       const targetHumanId = communityMemberRoleMatch[2];
       const parsed = await parseJsonBody<{ role?: 'admin' | 'member' }>(request);
       if (!parsed.ok) return parsed.response;
-      const role = parsed.value.role === 'admin' ? 'admin' : 'member';
+      if (parsed.value.role !== 'admin' && parsed.value.role !== 'member') return Response.json({ ok: false, error: 'Member role must be admin or member' }, { status: 400 });
+      const role = parsed.value.role;
       try {
         const result = await withRepository(env, (repository) => setCommunityMemberRolePostgres(repository, { communityId, actorId: viewer.id, targetHumanId, role }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -603,6 +605,8 @@ const worker = {
     }
     const communityMembersMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/members$/);
     if (communityMembersMatch && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const communityId = communityMembersMatch[1];
       try {
         const result = await withRepository(env, (repository) => listCommunityMembersPostgres(repository, communityId));
@@ -628,6 +632,8 @@ const worker = {
     }
     const communityContributionMatch = url.pathname.match(/^\/api\/communities\/([^/]+)\/contributions$/);
     if (communityContributionMatch && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const communityId = communityContributionMatch[1];
       try {
         const result = await withRepository(env, (repository) => listCommunityContributionsPostgres(repository, communityId));
@@ -936,7 +942,7 @@ const worker = {
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: 'energy', correlationId }));
+        const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${spec.name ?? type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: spec.inputResource ?? 'energy', correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {

@@ -1,4 +1,5 @@
 import type { PostgresRepository } from './repository';
+import { MACHINE_CATALOG } from './production-catalog';
 
 export async function recycleMachine(repository: PostgresRepository, input: { machineId: string; ownerId: string; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -6,9 +7,9 @@ export async function recycleMachine(repository: PostgresRepository, input: { ma
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, eventId: prior.rows[0].id, machineId: input.machineId, materialReturned: Number(prior.rows[0].material_returned), componentsReturned: Number(prior.rows[0].components_returned), efficiency: Number(prior.rows[0].efficiency), gameDay: Number(prior.rows[0].game_day), correlationId: input.correlationId };
     const machine = await tx.query<{ id: string; machine_type: string; condition: string; productive_capacity: string }>('SELECT id, machine_type, condition, productive_capacity FROM machines WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.machineId, input.ownerId]);
     if (!machine.rows[0]) throw new Error('Machine not found for this Human');
-    const embeddedMaterial: Record<string, number> = { extractor: 80, 'energy-array': 60, 'compute-node': 100, fabricator: 90, 'housing-fabricator': 110, 'research-cluster': 140, 'service-robot': 45 };
+    const baseMaterial = MACHINE_CATALOG[machine.rows[0].machine_type]?.material ?? 60;
     const efficiency = Math.min(0.8, Math.max(0.2, 0.25 + Number(machine.rows[0].condition ?? 0) / 200));
-    const materialReturned = Math.round((embeddedMaterial[machine.rows[0].machine_type] ?? 60) * efficiency * 100) / 100;
+    const materialReturned = Math.round(baseMaterial * efficiency * 100) / 100;
     const componentsReturned = Math.round((Number(machine.rows[0].productive_capacity ?? 1) * 25 * efficiency) * 100) / 100;
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);

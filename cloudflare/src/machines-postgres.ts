@@ -1,6 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
 import { centsToMoney, moneyToCents } from './money';
+import { MACHINE_CATALOG } from './production-catalog';
 
 type MachineInput = { id: string; owner_id: string; condition: string; maintenance_due: string; name: string; productive_capacity: string; utilization: string };
 
@@ -20,7 +21,8 @@ export async function acquireMachine(repository: PostgresRepository, input: { ow
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-machine-registry', amount: credit, reasonType: 'machine_acquisition', reasonId: machineId, ruleVersion: 'machine-v3', correlationId: input.correlationId });
     const debitedMaterial = await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'material' AND amount >= $1", [input.material, input.ownerId]);
     if (debitedMaterial.rowCount !== 1) throw new Error('Machine acquisition material reservation failed');
-    await tx.query('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity, output_resource, input_resource) VALUES ($1,$2,$3,$4,100,25,0,$5,$6,$7)', [machineId, input.ownerId, input.name, input.machineType, input.capacity, input.output, input.inputResource]);
+    const inputPerOutput = MACHINE_CATALOG[input.machineType]?.inputPerOutput ?? 0.25;
+    await tx.query('INSERT INTO machines (id, owner_id, name, machine_type, condition, utilization, maintenance_due, productive_capacity, output_resource, input_resource, input_per_output) VALUES ($1,$2,$3,$4,100,25,0,$5,$6,$7,$8)', [machineId, input.ownerId, input.name, input.machineType, input.capacity, input.output, input.inputResource, inputPerOutput]);
     // Acquired machines remain personal work units until the player chooses
     // a workplace. This matters once a Human owns more than one business.
     await tx.query('INSERT INTO machine_acquisitions (id, machine_id, owner_id, machine_type, credit_cost, material_cost, game_day) VALUES ($1,$2,$3,$4,$5,$6,$7)', [input.correlationId, machineId, input.ownerId, input.machineType, credit, input.material, day]);

@@ -6,7 +6,7 @@ import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'machines_dialogs.dart';
 
-class MachinesPanel extends StatelessWidget {
+class MachinesPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final List<dynamic> productionCatalog;
@@ -23,8 +23,15 @@ class MachinesPanel extends StatelessWidget {
   });
 
   @override
+  State<MachinesPanel> createState() => _MachinesPanelState();
+}
+
+class _MachinesPanelState extends State<MachinesPanel> {
+  String _selectedFilter = 'all';
+
+  @override
   Widget build(BuildContext context) {
-    final machines = state.machines;
+    final machines = widget.state.machines;
     final activeMachines = machines.where((raw) {
       final status = (raw as Map)['status']?.toString() ?? 'active';
       return status != 'sold' && status != 'recycled' && status != 'decommissioned';
@@ -42,6 +49,14 @@ class MachinesPanel extends StatelessWidget {
                 0, (sum, raw) => sum + asDoubleOr((raw as Map)['condition'], 100)) /
             activeMachines.length;
 
+    final filteredMachines = _selectedFilter == 'all'
+        ? machines
+        : machines.where((raw) {
+            final m = raw as Map<String, dynamic>;
+            final out = (m['output_resource']?.toString() ?? '').toLowerCase();
+            return out == _selectedFilter;
+          }).toList();
+
     return EarthSection(
       title: 'AUTOMATION / MACHINE INVENTORY',
       showSurface: false,
@@ -58,11 +73,11 @@ class MachinesPanel extends StatelessWidget {
         label: 'ACQUIRE MACHINE',
         icon: Icons.add_circle_outline,
         variant: EarthButtonVariant.primary,
-        onPressed: busy
+        onPressed: widget.busy
             ? null
             : () {
                 EarthAudioEngine.instance.playClick();
-                showMachineAcquisitionDialog(context, action, productionCatalog);
+                showMachineAcquisitionDialog(context, widget.action, widget.productionCatalog);
               },
       ),
       child: Column(
@@ -100,15 +115,52 @@ class MachinesPanel extends StatelessWidget {
               ),
             ],
           ),
+          if (machines.isNotEmpty) ...[
+            SizedBox(height: context.spacingControl),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: [
+                  for (final filter in [
+                    {'id': 'all', 'label': 'ALL (${machines.length})'},
+                    {'id': 'energy', 'label': '⚡ ENERGY'},
+                    {'id': 'food', 'label': '🌾 FOOD'},
+                    {'id': 'material', 'label': '⛏️ MATERIALS'},
+                    {'id': 'components', 'label': '⚙️ COMPONENTS'},
+                    {'id': 'compute', 'label': '📡 COMPUTE'},
+                  ])
+                    Padding(
+                      padding: const EdgeInsets.only(right: 6),
+                      child: ChoiceChip(
+                        label: Text(filter['label']!),
+                        selected: _selectedFilter == filter['id'],
+                        onSelected: (selected) {
+                          if (selected) {
+                            setState(() {
+                              _selectedFilter = filter['id']!;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                ],
+              ),
+            ),
+          ],
           SizedBox(height: context.spacingTopic),
           if (machines.isEmpty)
             const EarthEmptyState(
               message: 'No registered machines in active inventory.',
               icon: Icons.precision_manufacturing_outlined,
             )
+          else if (filteredMachines.isEmpty)
+            EarthEmptyState(
+              message: 'No machines producing $_selectedFilter.',
+              icon: Icons.filter_list,
+            )
           else
             Column(
-              children: machines.map((raw) {
+              children: filteredMachines.map((raw) {
                 final machine = raw as Map<String, dynamic>;
                 final id = machine['id']?.toString() ?? '';
                 final name = machine['name']?.toString() ?? 'Machine';
@@ -132,7 +184,7 @@ class MachinesPanel extends StatelessWidget {
                 final workplace = businessName == null || businessName.isEmpty
                     ? 'PERSONAL WORK UNIT'
                     : 'WORKPLACE · $businessName';
-                final businessId = (activeBusiness ?? state.business)['id']?.toString();
+                final businessId = (widget.activeBusiness ?? widget.state.business)['id']?.toString();
 
                 final isInactive = status == 'sold' ||
                     status == 'recycled' ||
@@ -215,11 +267,11 @@ class MachinesPanel extends StatelessWidget {
                             Text('UTILIZATION:', style: context.captionStyle),
                             for (final level in [0, 25, 50, 75, 100])
                               InkWell(
-                                onTap: busy
+                                onTap: widget.busy
                                     ? null
                                     : () {
                                         EarthAudioEngine.instance.playClick();
-                                        action(() => const EarthApi().setMachineUtilization(id, level));
+                                        widget.action(() => const EarthApi().setMachineUtilization(id, level));
                                       },
                                 borderRadius: BorderRadius.circular(context.radiusControl),
                                 child: Container(
@@ -254,29 +306,29 @@ class MachinesPanel extends StatelessWidget {
                             EarthButton(
                               label: 'MAINTAIN (10 COMP)',
                               variant: EarthButtonVariant.primary,
-                              onPressed: busy
+                              onPressed: widget.busy
                                   ? null
                                   : () {
                                       EarthAudioEngine.instance.playClick();
-                                      action(() => const EarthApi().maintainMachine(id));
+                                      widget.action(() => const EarthApi().maintainMachine(id));
                                     },
                             ),
                             EarthButton(
                               label: 'UPGRADE (+0.2x)',
-                              onPressed: busy
+                              onPressed: widget.busy
                                   ? null
                                   : () {
                                       EarthAudioEngine.instance.playClick();
-                                      showMachineUpgradeDialog(context, action, id);
+                                      showMachineUpgradeDialog(context, widget.action, id);
                                     },
                             ),
                             EarthButton(
                               label: 'SELL MACHINE',
-                              onPressed: busy
+                              onPressed: widget.busy
                                   ? null
                                   : () {
                                       EarthAudioEngine.instance.playClick();
-                                      showMachineSaleDialog(context, action, id);
+                                      showMachineSaleDialog(context, widget.action, id);
                                     },
                             ),
                             if (businessId != null && businessId.isNotEmpty)
@@ -284,11 +336,11 @@ class MachinesPanel extends StatelessWidget {
                                 label: businessName == null || businessName.isEmpty
                                     ? 'ASSIGN TO BUSINESS'
                                     : 'RELEASE TO PERSONAL',
-                                onPressed: busy
+                                onPressed: widget.busy
                                     ? null
                                     : () {
                                         EarthAudioEngine.instance.playClick();
-                                        action(() => const EarthApi().assignMachineToBusiness(
+                                        widget.action(() => const EarthApi().assignMachineToBusiness(
                                               id,
                                               businessName == null || businessName.isEmpty ? businessId : null,
                                             ));
@@ -297,11 +349,11 @@ class MachinesPanel extends StatelessWidget {
                             EarthButton(
                               label: 'RECYCLE',
                               variant: EarthButtonVariant.danger,
-                              onPressed: busy
+                              onPressed: widget.busy
                                   ? null
                                   : () {
                                       EarthAudioEngine.instance.playClick();
-                                      showDecommissionDialog(context, action, id);
+                                      showDecommissionDialog(context, widget.action, id);
                                     },
                             ),
                           ],
