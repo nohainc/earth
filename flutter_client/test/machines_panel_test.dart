@@ -128,4 +128,64 @@ void main() {
 
     expect(acquireTriggered, isTrue);
   });
+
+  testWidgets('MachinesPanel acquisition dialog handles string-formatted numbers in catalog safely',
+      (tester) async {
+    const emptyState = EarthState({
+      'clock': {'day': 184, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 5000},
+      'world': {'health': 100},
+      'resources': {},
+      'business': {},
+      'technology': {'research': {}},
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+      'machines': [],
+    });
+
+    final stringCatalog = [
+      {
+        'sector': 'energy',
+        'output': 'energy',
+        'catalog': [
+          {
+            'type': 'solar-array',
+            'name': 'Photovoltaic Array',
+            'category': 'energy',
+            'tier': '1',
+            'output': 'energy',
+            'credit': '3200',
+            'material': '50',
+            'capacity': '1.5',
+            'description': 'Solar energy harvester.',
+          },
+        ],
+      },
+    ];
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: MachinesPanel(
+              state: emptyState,
+              busy: false,
+              productionCatalog: stringCatalog,
+              action: (cb) async => cb(),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    await tester.tap(find.text('ACQUIRE MACHINE'));
+    await tester.pumpAndSettle();
+
+    // Verify it opened without throwing type error
+    expect(find.text('Acquire Machine'), findsOneWidget);
+    expect(find.textContaining('3200 CR + 50 Mat'), findsOneWidget);
+  });
 }
+

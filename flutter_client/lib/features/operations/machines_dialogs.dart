@@ -4,6 +4,7 @@ import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/consequence_preview_card.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 Future<void> showDecommissionDialog(
     BuildContext context,
@@ -590,9 +591,9 @@ Future<void> showMachineAcquisitionDialog(
         final outputResource = (selectedOption['output'] ?? 'resource').toString().toUpperCase();
         final inputResource = (selectedOption['inputResource'] ?? 'energy').toString().toUpperCase();
         final capacity = (selectedOption['capacity'] ?? 1.5).toString();
-        final creditCost = (selectedOption['credit'] as num?)?.toDouble() ?? 3600.0;
-        final materialCost = (selectedOption['material'] as num?)?.toInt() ?? 60;
-        final tier = (selectedOption['tier'] as num?)?.toInt() ?? 1;
+        final creditCost = asDoubleOr(selectedOption['credit'], 3600.0);
+        final materialCost = asIntOr(selectedOption['material'], 60);
+        final tier = asIntOr(selectedOption['tier'], 1);
         final description = selectedOption['description']?.toString() ?? '';
         final requiredTech = selectedOption['requiredTech']?.toString();
 

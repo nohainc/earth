@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/earth_theme_context.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 class Sidebar extends StatefulWidget {
   final EarthState state;
@@ -105,11 +106,11 @@ class _SidebarState extends State<Sidebar> {
 
     final unreadNotifs = widget.unreadNotifications > 0
         ? widget.unreadNotifications
-        : (widget.state.json['unreadNotifications'] as num?)?.toInt() ?? 0;
+        : asIntOr(widget.state.json['unreadNotifications'], 0);
 
     final unreadMsgs = widget.unreadCommMessages > 0
         ? widget.unreadCommMessages
-        : (widget.state.json['unreadMessages'] as num?)?.toInt() ?? 0;
+        : asIntOr(widget.state.json['unreadMessages'], 0);
 
     final groups = [
       (
