@@ -114,6 +114,7 @@ void main() {
     await tester.tap(find.text('CIVIC'));
     await tester.pumpAndSettle();
     expect(find.text('City & Services'), findsNothing);
+    expect(find.text('Communities'), findsOneWidget);
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',

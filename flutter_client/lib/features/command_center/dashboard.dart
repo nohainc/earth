@@ -45,6 +45,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'civic' => 'PUBLIC',
       'corporation' => 'CORPORATION',
       'city' => 'MY CITY',
+      'communities' => 'COMMUNITIES',
       'dynasty' => 'FAMILY',
       'technology' => 'TECHNOLOGY',
       'patents' => 'PATENTS & LICENSING',
@@ -616,8 +617,6 @@ class Dashboard extends StatelessWidget {
                       action: action,
                       institutionId: cityId,
                       scopeLabel: 'CITY');
-              final communities =
-                  CommunitiesPanel(state: state, busy: busy, action: action);
               final cityImpact = CityImpactPanel(state: state);
               if (constraints.maxWidth > 1000) {
                 return Row(
@@ -643,8 +642,6 @@ class Dashboard extends StatelessWidget {
                           ],
                           const SizedBox(height: 34),
                           humanServices,
-                          const SizedBox(height: 34),
-                          communities,
                         ],
                       ),
                     ),
@@ -681,12 +678,14 @@ class Dashboard extends StatelessWidget {
                   humanServices,
                   const SizedBox(height: 34),
                   cityImpact,
-                  const SizedBox(height: 34),
-                  communities,
                 ],
               );
             },
           ),
+        ];
+      case 'communities':
+        return [
+          CommunitiesPanel(state: state, busy: busy, action: action),
         ];
       case 'technology':
         return [

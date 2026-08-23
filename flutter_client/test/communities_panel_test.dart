@@ -46,9 +46,9 @@ void main() {
       ),
     );
 
-    expect(find.text('COMMUNITIES / SHARED LIFE'), findsOneWidget);
+    expect(find.text('CITIZEN COMMUNITIES & GUILDS'), findsOneWidget);
     expect(find.textContaining('Carthage Artisans (COM-001)'), findsOneWidget);
-    expect(find.text('16 active members'), findsOneWidget);
+    expect(find.textContaining('16 members'), findsOneWidget);
     expect(find.text('JOIN'), findsOneWidget);
     expect(find.text('CONTRIBUTE'), findsOneWidget);
 

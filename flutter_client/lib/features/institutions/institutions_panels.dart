@@ -1102,70 +1102,114 @@ class CommunitiesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final communities = state.communities;
+    final totalMembers = communities.fold<int>(
+      0,
+      (sum, raw) => sum + asIntOr((raw as Map)['member_count'], 12),
+    );
 
-    return EarthSection(
-      title: 'COMMUNITIES / SHARED LIFE',
-      showSurface: false,
-      infoBulletPoints: const [
-        'Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, and shared municipal governance.',
-        'Membership & Contributions: Join or leave freely; voluntary treasury contributions fund local public projects and communal resources.',
-      ],
-      trailing: EarthButton(
-        label: 'FOUND COMMUNITY',
-        icon: Icons.add_rounded,
-        onPressed: busy ? null : () => showCommunityComposer(context, action),
-      ),
-      child: communities.isEmpty
-          ? const EarthEmptyState(
-              message: 'No communities registered yet. You can found the first one.',
-              icon: Icons.groups_outlined,
-            )
-          : EarthDataList(
-              children: communities.take(6).map((raw) {
-                final community = raw as Map<String, dynamic>;
-                final id = community['id']?.toString() ?? 'COM-001';
-                final name = community['name']?.toString() ?? 'Community';
-                final status = (community['status']?.toString() ?? 'active').toUpperCase();
-                final members = asIntOr(community['member_count'], 12);
-
-                return EarthDataRow(
-                  title: '$name ($id)',
-                  subtitle: '$members active members',
-                  leading: Icon(
-                    Icons.groups_outlined,
-                    size: context.iconSize,
-                    color: context.primaryColor,
-                  ),
-                  badges: [
-                    EarthBadge(
-                      label: status,
-                      variant: status == 'ACTIVE' ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
-                    ),
-                  ],
-                  trailing: Wrap(
-                    spacing: 6,
-                    runSpacing: 4,
-                    children: [
-                      EarthButton(
-                        label: 'JOIN',
-                        variant: EarthButtonVariant.primary,
-                        onPressed: busy ? null : () => action(() => const EarthApi().joinCommunity(id)),
-                      ),
-                      EarthButton(
-                        label: 'LEAVE',
-                        variant: EarthButtonVariant.danger,
-                        onPressed: busy ? null : () => action(() => const EarthApi().leaveCommunity(id)),
-                      ),
-                      EarthButton(
-                        label: 'CONTRIBUTE',
-                        variant: EarthButtonVariant.secondary,
-                        onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
-                      ),
-                    ],
-                  ),
-                );
-              }).toList(),
+    return SingleChildScrollView(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          EarthSection(
+            title: 'CITIZEN COMMUNITIES & GUILDS',
+            showSurface: false,
+            infoBulletPoints: const [
+              'Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared projects.',
+              'Membership & Contributions: Join or leave freely; voluntary treasury contributions fund shared communal initiatives and social crowdfunding campaigns.',
+              'Cross-World Belonging: Communities are independent citizen associations spanning across all corporations and cities on Earth.',
+            ],
+            trailing: EarthButton(
+              label: 'FOUND COMMUNITY',
+              icon: Icons.add_rounded,
+              variant: EarthButtonVariant.primary,
+              onPressed: busy ? null : () => showCommunityComposer(context, action),
             ),
+            child: EarthMetricGrid(
+              metrics: [
+                EarthMetricTile(
+                  label: 'ACTIVE GUILDS',
+                  value: '${communities.length}',
+                  subtitle: 'Registered cooperatives',
+                  icon: Icons.groups_outlined,
+                  accentColor: context.primaryColor,
+                ),
+                EarthMetricTile(
+                  label: 'COMMUNITY MEMBERS',
+                  value: '$totalMembers',
+                  subtitle: 'Participating citizens',
+                  icon: Icons.person_search_outlined,
+                  accentColor: context.secondaryColor,
+                ),
+                EarthMetricTile(
+                  label: 'COMMUNAL INITIATIVES',
+                  value: 'ACTIVE',
+                  subtitle: 'Social crowdfunding',
+                  icon: Icons.handshake_outlined,
+                  accentColor: context.warningColor,
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: context.spacingSection),
+          EarthSection(
+            title: 'PLANETARY COMMUNITY REGISTRY',
+            showSurface: false,
+            child: communities.isEmpty
+                ? const EarthEmptyState(
+                    message: 'No communities registered yet. You can found the first one.',
+                    icon: Icons.groups_outlined,
+                  )
+                : EarthDataList(
+                    children: communities.map((raw) {
+                      final community = raw as Map<String, dynamic>;
+                      final id = community['id']?.toString() ?? 'COM-001';
+                      final name = community['name']?.toString() ?? 'Community';
+                      final status = (community['status']?.toString() ?? 'active').toUpperCase();
+                      final members = asIntOr(community['member_count'], 12);
+                      final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
+
+                      return EarthDataRow(
+                        title: '$name ($id)',
+                        subtitle: '$members members · ${sharedCredits.toStringAsFixed(0)} C in communal treasury',
+                        leading: Icon(
+                          Icons.groups_outlined,
+                          size: context.iconSize,
+                          color: context.primaryColor,
+                        ),
+                        badges: [
+                          EarthBadge(
+                            label: status,
+                            variant: status == 'ACTIVE' ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
+                          ),
+                        ],
+                        trailing: Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: [
+                            EarthButton(
+                              label: 'JOIN',
+                              variant: EarthButtonVariant.primary,
+                              onPressed: busy ? null : () => action(() => const EarthApi().joinCommunity(id)),
+                            ),
+                            EarthButton(
+                              label: 'LEAVE',
+                              variant: EarthButtonVariant.danger,
+                              onPressed: busy ? null : () => action(() => const EarthApi().leaveCommunity(id)),
+                            ),
+                            EarthButton(
+                              label: 'CONTRIBUTE',
+                              variant: EarthButtonVariant.secondary,
+                              onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
+                            ),
+                          ],
+                        ),
+                      );
+                    }).toList(),
+                  ),
+          ),
+        ],
+      ),
     );
   }
 }

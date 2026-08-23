@@ -61,7 +61,7 @@ class _SidebarState extends State<Sidebar> {
         'technology',
         'patents',
       ],
-      ['corporation', 'city', 'civic', 'public-finance'],
+      ['corporation', 'city', 'communities', 'civic', 'public-finance'],
       ['life', 'dynasty'],
       ['civic-rankings', 'pantheon', 'history', 'constitution'],
     ];
@@ -210,6 +210,12 @@ class _SidebarState extends State<Sidebar> {
               Icons.location_city_outlined,
               null,
             ),
+          (
+            'communities',
+            'Communities',
+            Icons.groups_outlined,
+            null,
+          ),
           (
             'civic',
             'Public Governance',
