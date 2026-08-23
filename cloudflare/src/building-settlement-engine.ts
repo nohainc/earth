@@ -277,57 +277,99 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
         if (isCreditOutput && outAmt > 0) {
           const revCents = BigInt(Math.round(outAmt * 100));
-          actualGrossRevenueCrd = outAmt;
 
-          // 1. Economic Clearing: Fund the clearing account from consumer/market demand
-          await tx.query(
-            'UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2',
-            [centsToMoney(revCents), 'account-market-clearing'],
-          );
-
-          // 2. Clear funds to the recipient
           if (oClass === 'private') {
             const ownerAccount = await tx.query<{ account_id: string }>(
               "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
               [bld.owner_id],
             );
-            if (ownerAccount.rows[0]) {
+            // Buyer is consumer market / city operations commerce pool
+            const buyerAccount = opsAccount;
+            const buyerCheck = await tx.query<{ account_id: string; balance: string }>(
+              "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+              [buyerAccount],
+            );
+
+            // Transfer from buyer to clearing account, then clearing account to owner
+            const buyerBalanceCents = buyerCheck.rows[0] ? moneyToCents(buyerCheck.rows[0].balance) : 0n;
+            const payableCents = buyerBalanceCents >= revCents ? revCents : buyerBalanceCents;
+
+            if (payableCents > 0n && ownerAccount.rows[0]) {
+              const payableAmt = centsToMoney(payableCents);
+              // 1. Double-entry buyer payment into clearing account
+              await transferCredits(tx, {
+                ledgerId: crypto.randomUUID(),
+                gameDay: day,
+                debitAccount: buyerAccount,
+                creditAccount: 'account-market-clearing',
+                amount: payableAmt,
+                reasonType: 'consumer_service_purchase',
+                reasonId: bld.id,
+                ruleVersion: 'real-estate-v2',
+                correlationId: `DEMAND-BUY-${bld.id}-${day}`,
+              });
+
+              // 2. Clear from clearing account to owner
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
                 debitAccount: 'account-market-clearing',
                 creditAccount: ownerAccount.rows[0].account_id,
-                amount: centsToMoney(revCents),
+                amount: payableAmt,
                 reasonType: 'building_commercial_revenue',
                 reasonId: bld.id,
                 ruleVersion: 'real-estate-v2',
                 correlationId: `BLD-REV-${bld.id}-${day}`,
               });
-            }
-            if (bld.business_id) {
-              await tx.query(
-                'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3',
-                [outAmt, day, bld.business_id],
-              );
+
+              actualGrossRevenueCrd = Number(payableAmt);
+
+              if (bld.business_id) {
+                await tx.query(
+                  'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3',
+                  [actualGrossRevenueCrd, day, bld.business_id],
+                );
+              }
             }
           } else if (oClass === 'civic') {
-            // Civic municipal facility generates utility revenue deposited into city treasury
-            const cityAccount = await tx.query<{ account_id: string }>(
-              "SELECT account_id FROM account_balances WHERE account_id = $1",
-              [`account-city-${bld.city_id}`],
+            // Civic utility facility: city consumers pay utility fee to clearing account, then clearing to city treasury
+            const buyerAccount = opsAccount;
+            const buyerCheck = await tx.query<{ account_id: string; balance: string }>(
+              "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+              [buyerAccount],
             );
-            if (cityAccount.rows[0]) {
+            const buyerBalanceCents = buyerCheck.rows[0] ? moneyToCents(buyerCheck.rows[0].balance) : 0n;
+            const payableCents = buyerBalanceCents >= revCents ? revCents : buyerBalanceCents;
+
+            if (payableCents > 0n) {
+              const payableAmt = centsToMoney(payableCents);
+              // 1. Citizen/Commercial utility payment into clearing account
+              await transferCredits(tx, {
+                ledgerId: crypto.randomUUID(),
+                gameDay: day,
+                debitAccount: buyerAccount,
+                creditAccount: 'account-market-clearing',
+                amount: payableAmt,
+                reasonType: 'utility_service_payment',
+                reasonId: bld.id,
+                ruleVersion: 'real-estate-v2',
+                correlationId: `UTILITY-BUY-${bld.id}-${day}`,
+              });
+
+              // 2. Clear from clearing account to city treasury
               await transferCredits(tx, {
                 ledgerId: crypto.randomUUID(),
                 gameDay: day,
                 debitAccount: 'account-market-clearing',
                 creditAccount: `account-city-${bld.city_id}`,
-                amount: centsToMoney(revCents),
+                amount: payableAmt,
                 reasonType: 'civic_utility_revenue',
                 reasonId: bld.id,
                 ruleVersion: 'real-estate-v2',
                 correlationId: `CIVIC-REV-${bld.id}-${day}`,
               });
+
+              actualGrossRevenueCrd = Number(payableAmt);
             }
           }
         } else if (!isCreditOutput && outAmt > 0 && bld.resource_output_type) {
@@ -357,49 +399,67 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
       const isCreditOutput = bld.resource_output_type === 'credits';
       const rev = (isCreditOutput ? Number(bld.resource_output_amount || 0) : 0) * effectiveYield;
       if (rev > 0) {
-        actualGrossRevenueCrd = rev;
         const revCents = BigInt(Math.round(rev * 100));
-
-        // Fund clearing account from market commerce
-        await tx.query(
-          'UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2',
-          [centsToMoney(revCents), 'account-market-clearing'],
+        const buyerAccount = opsAccount;
+        const buyerCheck = await tx.query<{ account_id: string; balance: string }>(
+          "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+          [buyerAccount],
         );
+        const buyerBalanceCents = buyerCheck.rows[0] ? moneyToCents(buyerCheck.rows[0].balance) : 0n;
+        const payableCents = buyerBalanceCents >= revCents ? revCents : buyerBalanceCents;
 
-        const sharesQuery = await tx.query<{
-          investor_id: string;
-          shares_owned: number;
-          total_shares_issued: number;
-        }>(
-          'SELECT investor_id, shares_owned, total_shares_issued FROM building_investment_shares WHERE building_id = $1',
-          [bld.id],
-        );
+        if (payableCents > 0n) {
+          const payableAmt = centsToMoney(payableCents);
+          // 1. Buyer payment into clearing account
+          await transferCredits(tx, {
+            ledgerId: crypto.randomUUID(),
+            gameDay: day,
+            debitAccount: buyerAccount,
+            creditAccount: 'account-market-clearing',
+            amount: payableAmt,
+            reasonType: 'public_commercial_purchase',
+            reasonId: bld.id,
+            ruleVersion: 'real-estate-v2',
+            correlationId: `PUB-BUY-${bld.id}-${day}`,
+          });
 
-        for (const s of sharesQuery.rows) {
-          const payout = (rev * s.shares_owned) / Math.max(1, s.total_shares_issued);
-          if (payout > 0) {
-            const payoutCents = BigInt(Math.round(payout * 100));
-            const invAccount = await tx.query<{ account_id: string }>(
-              "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
-              [s.investor_id],
-            );
-            if (invAccount.rows[0]) {
-              await transferCredits(tx, {
-                ledgerId: crypto.randomUUID(),
-                gameDay: day,
-                debitAccount: 'account-market-clearing',
-                creditAccount: invAccount.rows[0].account_id,
-                amount: centsToMoney(payoutCents),
-                reasonType: 'public_share_dividend',
-                reasonId: bld.id,
-                ruleVersion: 'real-estate-v2',
-                correlationId: `PUB-DIV-${bld.id}-${s.investor_id}-${day}`,
-              });
+          actualGrossRevenueCrd = Number(payableAmt);
 
-              await tx.query(
-                'UPDATE building_investment_shares SET accumulated_dividends_crd = accumulated_dividends_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE building_id = $2 AND investor_id = $3',
-                [payout, bld.id, s.investor_id],
+          const sharesQuery = await tx.query<{
+            investor_id: string;
+            shares_owned: number;
+            total_shares_issued: number;
+          }>(
+            'SELECT investor_id, shares_owned, total_shares_issued FROM building_investment_shares WHERE building_id = $1',
+            [bld.id],
+          );
+
+          for (const s of sharesQuery.rows) {
+            const payout = (actualGrossRevenueCrd * s.shares_owned) / Math.max(1, s.total_shares_issued);
+            if (payout > 0) {
+              const payoutCents = BigInt(Math.round(payout * 100));
+              const invAccount = await tx.query<{ account_id: string }>(
+                "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
+                [s.investor_id],
               );
+              if (invAccount.rows[0]) {
+                await transferCredits(tx, {
+                  ledgerId: crypto.randomUUID(),
+                  gameDay: day,
+                  debitAccount: 'account-market-clearing',
+                  creditAccount: invAccount.rows[0].account_id,
+                  amount: centsToMoney(payoutCents),
+                  reasonType: 'public_share_dividend',
+                  reasonId: bld.id,
+                  ruleVersion: 'real-estate-v2',
+                  correlationId: `PUB-DIV-${bld.id}-${s.investor_id}-${day}`,
+                });
+
+                await tx.query(
+                  'UPDATE building_investment_shares SET accumulated_dividends_crd = accumulated_dividends_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE building_id = $2 AND investor_id = $3',
+                  [payout, bld.id, s.investor_id],
+                );
+              }
             }
           }
         }

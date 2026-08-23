@@ -149,6 +149,9 @@ test('settleBuildingUpkeepAndRevenue: public investment distributes pro-rata sha
     if (sql.includes('FROM account_balances WHERE owner_id')) {
       return { rows: [{ account_id: `acc-${params[0]}` }], rowCount: 1 };
     }
+    if (sql.includes('FROM account_balances WHERE account_id')) {
+      return { rows: [{ account_id: 'account-city-operations-CITY-0084', balance: '50000' }], rowCount: 1 };
+    }
     if (sql.includes('earth_transfer_credits')) {
       transfers.push({
         debit: params[2],
@@ -168,12 +171,26 @@ test('settleBuildingUpkeepAndRevenue: public investment distributes pro-rata sha
   const repo = new PostgresRepository(client);
   await settleBuildingUpkeepAndRevenue(repo, 184);
 
-  // 2000 CRD total yield
-  // H-INV-1 (60%): 1200 CRD
-  // H-INV-2 (40%): 800 CRD
-  assert.equal(transfers.length, 2);
-  assert.equal(transfers[0].debit, 'account-market-clearing');
-  assert.equal(transfers[0].credit, 'acc-H-INV-1');
+  // Total 3 double-entry transfers:
+  // 1. Buyer payment: account-city-operations -> account-market-clearing (2000 CRD)
+  // 2. Share dividend 1: account-market-clearing -> acc-H-INV-1 (1200 CRD)
+  // 3. Share dividend 2: account-market-clearing -> acc-H-INV-2 (800 CRD)
+  assert.equal(transfers.length, 3);
+  assert.equal(transfers[0].reason, 'public_commercial_purchase');
+  assert.equal(transfers[0].debit, 'account-city-operations-CITY-0084');
+  assert.equal(transfers[0].credit, 'account-market-clearing');
+  assert.equal(transfers[0].amount, '2000.00');
+
+  assert.equal(transfers[1].reason, 'public_share_dividend');
+  assert.equal(transfers[1].debit, 'account-market-clearing');
+  assert.equal(transfers[1].credit, 'acc-H-INV-1');
+  assert.equal(transfers[1].amount, '1200.00');
+
+  assert.equal(transfers[2].reason, 'public_share_dividend');
+  assert.equal(transfers[2].debit, 'account-market-clearing');
+  assert.equal(transfers[2].credit, 'acc-H-INV-2');
+  assert.equal(transfers[2].amount, '800.00');
+
   assert.equal(shareUpdates.length, 2);
   assert.equal(shareUpdates[0][0], 1200);
   assert.equal(shareUpdates[1][0], 800);
@@ -234,6 +251,9 @@ test('settleBuildingUpkeepAndRevenue: failed ledger transfer aborts without upda
         rows: [{ investor_id: 'H-INV-1', shares_owned: 100, total_shares_issued: 100 }],
         rowCount: 1,
       };
+    }
+    if (sql.includes('FROM account_balances WHERE account_id = $1')) {
+      return { rows: [{ account_id: 'account-city-operations-CITY-0084', balance: '50000' }], rowCount: 1 };
     }
     if (sql.includes('FROM account_balances WHERE owner_id')) {
       return { rows: [{ account_id: 'acc-H-INV-1', balance: '50000' }], rowCount: 1 };
@@ -341,6 +361,9 @@ test('settleBuildingUpkeepAndRevenue: debits daily operating credits and execute
       // 10 components available
       return { rows: [{ amount: '10' }], rowCount: 1 };
     }
+    if (sql.includes("FROM account_balances WHERE account_id = $1")) {
+      return { rows: [{ account_id: 'account-city-operations-CITY-0084', balance: '50000' }], rowCount: 1 };
+    }
     if (sql.includes("FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'")) {
       return { rows: [{ account_id: 'acc-H-001', balance: '20000' }], rowCount: 1 };
     }
@@ -368,17 +391,92 @@ test('settleBuildingUpkeepAndRevenue: debits daily operating credits and execute
   assert.equal(resourceDeductions[0][0], 'H-001');
   assert.equal(resourceDeductions[0][1], 'components');
 
-  // Operating costs debited 50 CRD, then output credited 500 CRD
-  assert.equal(transfers.length, 2);
+  // 3 Double-entry transfers:
+  // 1. Operating fee: acc-H-001 -> account-city-operations-CITY-0084 (50 CRD)
+  // 2. Buyer purchase: account-city-operations-CITY-0084 -> account-market-clearing (500 CRD)
+  // 3. Commercial revenue: account-market-clearing -> acc-H-001 (500 CRD)
+  assert.equal(transfers.length, 3);
   assert.equal(transfers[0].reason, 'building_operating_cost');
   assert.equal(transfers[0].debit, 'acc-H-001');
   assert.equal(transfers[0].credit, 'account-city-operations-CITY-0084');
   assert.equal(transfers[0].amount, '50.00');
 
-  assert.equal(transfers[1].reason, 'building_commercial_revenue');
-  assert.equal(transfers[1].debit, 'account-market-clearing');
-  assert.equal(transfers[1].credit, 'acc-H-001');
+  assert.equal(transfers[1].reason, 'consumer_service_purchase');
+  assert.equal(transfers[1].debit, 'account-city-operations-CITY-0084');
+  assert.equal(transfers[1].credit, 'account-market-clearing');
   assert.equal(transfers[1].amount, '500.00');
+
+  assert.equal(transfers[2].reason, 'building_commercial_revenue');
+  assert.equal(transfers[2].debit, 'account-market-clearing');
+  assert.equal(transfers[2].credit, 'acc-H-001');
+  assert.equal(transfers[2].amount, '500.00');
 });
+
+test('settleBuildingUpkeepAndRevenue: double-entry reconciliation verifies clearing inflows match payouts exactly', async () => {
+  const ledgerInflows = [];
+  const ledgerOutflows = [];
+  const journals = [];
+
+  const client = new MockDbClient((sql, params) => {
+    if (sql.includes('SELECT id, name, city_id')) return { rows: [], rowCount: 0 };
+    if (sql.includes("SELECT * FROM buildings WHERE status = 'active'")) {
+      return {
+        rows: [
+          {
+            id: 'BLD-CIVIC-01',
+            owner_id: 'CITY-0084',
+            city_id: 'CITY-0084',
+            ownership_class: 'civic',
+            business_id: null,
+            operating_policy: 'balanced',
+            condition: '100',
+            daily_operating_credits: '100',
+            resource_output_type: 'credits',
+            resource_output_amount: '1200',
+          },
+        ],
+        rowCount: 1,
+      };
+    }
+    if (sql.includes("FROM account_balances WHERE account_id = $1")) {
+      return { rows: [{ account_id: params[0], balance: '100000' }], rowCount: 1 };
+    }
+    if (sql.includes("earth_transfer_credits")) {
+      const entry = { debit: params[2], credit: params[3], amount: params[4], reason: params[5] };
+      if (entry.credit === 'account-market-clearing') {
+        ledgerInflows.push(entry);
+      }
+      if (entry.debit === 'account-market-clearing') {
+        ledgerOutflows.push(entry);
+      }
+      return { rows: [{ status: 'applied', ledger_id: 'LED-REC', amount: params[4], already_processed: false }], rowCount: 1 };
+    }
+    if (sql.includes("INSERT INTO building_settlement_journals")) {
+      journals.push(params);
+      return { rows: [], rowCount: 1 };
+    }
+    return { rows: [], rowCount: 0 };
+  });
+
+  const repo = new PostgresRepository(client);
+  await settleBuildingUpkeepAndRevenue(repo, 184);
+
+  // Reconciliation Assertions:
+  assert.equal(ledgerInflows.length, 1);
+  assert.equal(ledgerOutflows.length, 1);
+  assert.equal(ledgerInflows[0].amount, ledgerOutflows[0].amount);
+  assert.equal(ledgerInflows[0].amount, '1200.00');
+
+  // Journal Assertions:
+  assert.equal(journals.length, 1);
+  const grossRev = journals[0][5];
+  const opCost = journals[0][6];
+  const netSurplus = journals[0][7];
+  assert.equal(grossRev, 1200);
+  assert.equal(opCost, 100);
+  assert.equal(netSurplus, 1100); // 1200 - 100
+  assert.equal(netSurplus, grossRev - opCost);
+});
+
 
 
