@@ -350,6 +350,8 @@ test('acquireBuildingPatentLicense purchases private license and transfers credi
   const client = new MockDbClient((sql) => {
     if (sql.includes('SELECT details FROM world_events')) return { rows: [], rowCount: 0 };
     if (sql.includes('SELECT reason_id FROM ledger_entries')) return { rows: [], rowCount: 0 };
+    if (sql.includes('FROM buildings WHERE id')) return { rows: [{ id: 'BLD-01', owner_id: 'H-001' }], rowCount: 1 };
+    if (sql.includes('FROM building_patent_licenses WHERE building_id')) return { rows: [], rowCount: 0 };
     if (sql.includes('SELECT game_day')) return { rows: [{ game_day: 184 }], rowCount: 1 };
     if (sql.includes('FROM account_balances')) return { rows: [{ account_id: 'acc-h-1', balance: '50000' }], rowCount: 1 };
     if (sql.includes('UPDATE account_balances')) return { rows: [{ balance: '38000' }], rowCount: 1 };
@@ -361,6 +363,7 @@ test('acquireBuildingPatentLicense purchases private license and transfers credi
             patent_id: 'PAT-DAT-02',
             license_type: 'private_building',
             licensee_id: 'H-001',
+            building_id: 'BLD-01',
             status: 'active',
           },
         ],
@@ -375,6 +378,7 @@ test('acquireBuildingPatentLicense purchases private license and transfers credi
     humanId: 'H-001',
     patentId: 'PAT-DAT-02',
     licenseType: 'private_building',
+    buildingId: 'BLD-01',
     correlationId: 'test-acq-lic-1',
   });
 

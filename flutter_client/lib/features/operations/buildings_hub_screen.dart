@@ -54,7 +54,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
     final totalDailyPrivateYield = privateBuildings.fold<double>(
       0,
-      (sum, b) => sum + asDoubleOr(b['base_revenue_crd'], 0),
+      (sum, b) {
+        final outType = b['resource_output_type']?.toString();
+        final outAmt = asDoubleOr(b['resource_output_amount'], 0);
+        return sum + (outType == 'credits' || outType == null ? outAmt : 0);
+      },
     );
     final totalDailyOperatingCost = privateBuildings.fold<double>(
       0,
@@ -831,7 +835,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final isPublic = ownershipClass == 'public_investment';
     final isCivic = ownershipClass == 'civic';
 
-    final baseRev = asDoubleOr(b['base_revenue_crd'], 0);
     final resOutType = b['resource_output_type']?.toString();
     final resOutAmt = asDoubleOr(b['resource_output_amount'], 0);
     final opCost = asDoubleOr(b['daily_operating_credits'], 0);
@@ -1004,9 +1007,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         spacing: 6,
                         runSpacing: 4,
                         children: [
-                          if (baseRev > 0) _buildPill(context, '+${formatWholeNumber(baseRev)} CRD', context.successColor),
-                          if (resOutAmt > 0 && resOutType != null)
-                            _buildPill(context, '+${resOutAmt.toStringAsFixed(1)} ${resOutType.toUpperCase()}', context.successColor),
+                          if (resOutAmt > 0)
+                            _buildPill(
+                              context,
+                              '+${resOutType == 'credits' || resOutType == null ? formatWholeNumber(resOutAmt) : resOutAmt.toStringAsFixed(1)} ${(resOutType ?? 'CRD').toUpperCase()}',
+                              context.successColor,
+                            ),
                         ],
                       ),
                     ],

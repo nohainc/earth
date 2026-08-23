@@ -140,12 +140,11 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
   }
 }
 
-async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: number): Promise<void> {
+export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: number): Promise<void> {
   const bldQuery = await tx.query<{
     id: string;
     owner_id: string;
     city_id: string;
-    ownership_type: string;
     ownership_class: string | null;
     business_id: string | null;
     operating_policy: string | null;
@@ -257,8 +256,8 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
         }
 
         // Produce Credit Revenue if applicable
-        const isCreditOutput = !bld.resource_output_type || bld.resource_output_type === 'credits';
-        const rev = (isCreditOutput ? (Number(bld.resource_output_amount || 0) || Number(bld.base_revenue_crd || 0)) : 0) * effectiveYield;
+        const isCreditOutput = bld.resource_output_type === 'credits';
+        const rev = (isCreditOutput ? Number(bld.resource_output_amount || 0) : 0) * effectiveYield;
         if (rev > 0) {
           const revCents = BigInt(Math.round(rev * 100));
           const ownerAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [bld.owner_id]);
@@ -289,8 +288,8 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
       }
     } else if (oClass === 'public_investment') {
       // Distribute public investment shares pro-rata
-      const isCreditOutput = !bld.resource_output_type || bld.resource_output_type === 'credits';
-      const rev = (isCreditOutput ? (Number(bld.resource_output_amount || 0) || Number(bld.base_revenue_crd || 0)) : 0) * effectiveYield;
+      const isCreditOutput = bld.resource_output_type === 'credits';
+      const rev = (isCreditOutput ? Number(bld.resource_output_amount || 0) : 0) * effectiveYield;
       if (rev > 0) {
         const sharesQuery = await tx.query<{
           investor_id: string;
@@ -328,14 +327,21 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
   }
 }
 
-async function settleCivicDividends(tx: PostgresRepository, day: number): Promise<void> {
+export async function settleCivicDividends(tx: PostgresRepository, day: number): Promise<void> {
   const cities = await tx.query<{ id: string }>("SELECT id FROM cities");
   for (const c of cities.rows) {
     const cityId = c.id;
 
+    // Idempotency check: Skip if civic dividends for this city and day have already been distributed
+    const priorPayout = await tx.query<{ id: string }>(
+      'SELECT id FROM civic_dividend_payouts WHERE city_id = $1 AND day = $2',
+      [cityId, day],
+    );
+    if (priorPayout.rows[0]) continue;
+
     // Calculate total civic surplus from municipal buildings (only cash credit outputs)
     const civicBldQuery = await tx.query<{ total_rev: string }>(
-      "SELECT COALESCE(SUM(COALESCE(resource_output_amount, base_revenue_crd)), 0) AS total_rev FROM buildings WHERE city_id = $1 AND ownership_class = 'civic' AND (resource_output_type = 'credits' OR resource_output_type IS NULL) AND status = 'active'",
+      "SELECT COALESCE(SUM(resource_output_amount), 0) AS total_rev FROM buildings WHERE city_id = $1 AND ownership_class = 'civic' AND resource_output_type = 'credits' AND status = 'active'",
       [cityId],
     );
     const totalCivicSurplus = Number(civicBldQuery.rows[0]?.total_rev ?? 0);

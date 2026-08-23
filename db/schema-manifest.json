@@ -81,6 +81,12 @@
       "license_type",
       "licensee_id",
       "licensor_corporation_id",
+      "building_id",
+      "city_id",
+      "is_permanent",
+      "granted_game_day",
+      "expiry_game_day",
+      "royalty_per_day_crd",
       "status"
     ],
     "buildings": [
@@ -615,6 +621,11 @@
       "building_investment_shares",
       "building_id",
       "investor_id"
+    ],
+    [
+      "civic_dividend_payouts",
+      "city_id",
+      "day"
     ]
   ],
   "requiredIndexes": [
@@ -624,6 +635,8 @@
     "idx_bld_patent_lic_licensee",
     "idx_bld_patent_lic_building",
     "idx_bld_patent_lic_city",
+    "uq_building_patent_active",
+    "uq_city_patent_active",
     "ledger_game_day_idx",
     "market_orders_book_idx",
     "ownership_history_idx",

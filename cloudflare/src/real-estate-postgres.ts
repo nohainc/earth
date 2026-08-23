@@ -392,20 +392,18 @@ export async function upgradeBuilding(
       correlationId: input.correlationId,
     });
 
-    const newRevenue = tierSpec?.dailyCreditRevenue ?? (Number(bld.base_revenue_crd) * 1.30);
     const newOutputAmount = tierSpec?.resourceOutputAmount ?? (Number(bld.resource_output_amount || 0) * 1.30);
     const newOpCredits = tierSpec?.dailyOperatingCredits ?? Number(bld.daily_operating_credits || 0);
 
     await tx.query(
       `UPDATE buildings SET
         tier = $1,
-        base_revenue_crd = $2,
-        resource_output_amount = $3,
-        daily_operating_credits = $4,
+        resource_output_amount = $2,
+        daily_operating_credits = $3,
         condition = 100.0,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = $5`,
-      [nextTier, newRevenue, newOutputAmount, newOpCredits, bld.id],
+      WHERE id = $4`,
+      [nextTier, newOutputAmount, newOpCredits, bld.id],
     );
 
     const updated = await tx.query('SELECT * FROM buildings WHERE id = $1', [bld.id]);
@@ -755,11 +753,17 @@ export async function acquireBuildingPatentLicense(
     if (isCivic) {
       const targetCityId = input.cityId;
       if (!targetCityId) throw new Error('City ID is required for civic patent licensing');
-      const mem = await tx.query(
-        "SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2 AND status = 'active'",
+
+      // Check civic governance authorization or membership
+      const authRes = await tx.query(
+        `SELECT 1 FROM authority_delegations WHERE institution_id = $1 AND delegate_id = $2 AND status = 'active'
+         UNION
+         SELECT 1 FROM governance_role_assignments WHERE institution_id = $1 AND human_id = $2 AND status = 'active'
+         UNION
+         SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2 AND status = 'active'`,
         [targetCityId, input.humanId],
       );
-      if (!mem.rows[0]) throw new Error('Caller is not authorized for city civic licensing');
+      if (!authRes.rows[0]) throw new Error('Caller is not authorized for city civic licensing');
 
       const existingCivic = await tx.query(
         "SELECT 1 FROM building_patent_licenses WHERE city_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window') AND license_type = 'city_civic'",
@@ -777,20 +781,21 @@ export async function acquireBuildingPatentLicense(
       }
       licenseeId = targetCityId;
     } else {
-      if (input.buildingId) {
-        const bldCheck = await tx.query<{ owner_id: string }>(
-          'SELECT owner_id FROM buildings WHERE id = $1',
-          [input.buildingId],
-        );
-        if (!bldCheck.rows[0]) throw new Error('Target building not found');
-        if (bldCheck.rows[0].owner_id !== input.humanId) throw new Error('Only the property owner can license this building');
-
-        const existingPrivate = await tx.query(
-          "SELECT 1 FROM building_patent_licenses WHERE building_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window')",
-          [input.buildingId, patentSpec.patentId],
-        );
-        if (existingPrivate.rows[0]) throw new Error('An active patent license already exists for this building');
+      if (!input.buildingId) {
+        throw new Error('Building ID is required for private building patent license');
       }
+      const bldCheck = await tx.query<{ owner_id: string }>(
+        'SELECT owner_id FROM buildings WHERE id = $1',
+        [input.buildingId],
+      );
+      if (!bldCheck.rows[0]) throw new Error('Target building not found');
+      if (bldCheck.rows[0].owner_id !== input.humanId) throw new Error('Only the property owner can license this building');
+
+      const existingPrivate = await tx.query(
+        "SELECT 1 FROM building_patent_licenses WHERE building_id = $1 AND patent_id = $2 AND status IN ('active', 'renewal_window')",
+        [input.buildingId, patentSpec.patentId],
+      );
+      if (existingPrivate.rows[0]) throw new Error('An active patent license already exists for this building');
     }
 
     const costCrd = isCivic

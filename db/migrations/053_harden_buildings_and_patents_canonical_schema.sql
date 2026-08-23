@@ -53,3 +53,14 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_building_patent_active
 CREATE UNIQUE INDEX IF NOT EXISTS uq_city_patent_active
   ON building_patent_licenses (city_id, patent_id)
   WHERE status IN ('active', 'renewal_window') AND license_type = 'city_civic' AND city_id IS NOT NULL;
+
+-- 5. Prevent duplicate civic dividend payouts for the same city and day
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_constraint WHERE conname = 'uq_civic_dividend_city_day'
+  ) THEN
+    ALTER TABLE civic_dividend_payouts ADD CONSTRAINT uq_civic_dividend_city_day
+      UNIQUE (city_id, day);
+  END IF;
+END $$;

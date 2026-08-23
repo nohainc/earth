@@ -1,7 +1,7 @@
-import type { PostgresRepository } from './repository';
-import { transferCredits } from './financial-postgres';
-import { enqueueOutbox } from './outbox-postgres';
-import { centsToMoney, marketValueToCents, moneyToCents, rateAmountToCents } from './money';
+import type { PostgresRepository } from './repository.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { enqueueOutbox } from './outbox-postgres.ts';
+import { centsToMoney, marketValueToCents, moneyToCents, rateAmountToCents } from './money.ts';
 import { marketFeeRate } from './market-rules.ts';
 
 type MarketOrderInput = {
