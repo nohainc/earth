@@ -96,8 +96,8 @@ void main() {
 
     await tester.pumpAndSettle();
 
-    // Verify Title & Subtitle
-    expect(find.text('PLANETARY PANTHEON & CEMETERY ARCHIVE'), findsOneWidget);
+    // Verify Memorial Content
+    expect(find.text('PLANETARY PANTHEON & CEMETERY ARCHIVE'), findsNothing);
     expect(find.textContaining('Founder Marcus Vance'), findsWidgets);
     expect(find.textContaining('Senator Elena Rostova'), findsOneWidget);
     expect(find.textContaining('LEGACY: 4500'), findsOneWidget);

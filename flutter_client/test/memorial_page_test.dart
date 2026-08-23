@@ -32,7 +32,7 @@ void main() {
       },
     ))));
     await tester.pumpAndSettle();
-    expect(find.text('PLANETARY PANTHEON & CEMETERY ARCHIVE'), findsOneWidget);
+    expect(find.text('PLANETARY PANTHEON & CEMETERY ARCHIVE'), findsNothing);
     expect(find.textContaining('Founder Marcus Vance'), findsWidgets);
     expect(find.text('ALL CEMETERY MEMORIALS'), findsOneWidget);
     await tester.tap(find.text('PANTHEON OF HONORS'));

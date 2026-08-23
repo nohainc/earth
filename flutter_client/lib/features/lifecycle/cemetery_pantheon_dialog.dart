@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
-import '../dynasty/dynasty_tree_dialog.dart';
 
 class CemeteryPantheonDialog extends StatefulWidget {
   final EarthApi api;
@@ -79,41 +78,6 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header
-            Row(
-              children: [
-                Icon(
-                  Icons.account_balance,
-                  color: context.primaryColor,
-                  size: context.iconSize + 4,
-                ),
-                SizedBox(width: context.spacingTitleOffset),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'PLANETARY PANTHEON & CEMETERY ARCHIVE',
-                        style: context.pageTitleStyle,
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Universal civil memorial records, deceased citizens, ancestral lineages, and lifetime achievements.',
-                        style: context.widgetFooterStyle,
-                      ),
-                    ],
-                  ),
-                ),
-                EarthButton(
-                  buttonKey: const Key('btn-open-dynasty-tree'),
-                  label: 'DYNASTY TREE',
-                  icon: Icons.account_tree_outlined,
-                  onPressed: () => showDynastyTreeDialog(context, api: widget.api),
-                ),
-              ],
-            ),
-            SizedBox(height: context.spacingTopic),
-
             _buildLineageTree(),
 
             // Search Bar & Tabs
