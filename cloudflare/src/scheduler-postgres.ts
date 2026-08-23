@@ -7,10 +7,10 @@ import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents,
 import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { expireSocialInitiatives } from './social-gameplay-postgres.ts';
-import { settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
+import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 
-export { settleBuildingUpkeepAndRevenue, settleCivicDividends };
+export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
 
 const products = ['food', 'material', 'components', 'energy', 'compute'];
 
