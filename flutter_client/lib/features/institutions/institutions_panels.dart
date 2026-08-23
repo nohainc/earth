@@ -379,14 +379,6 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
               );
             }).toList(),
           ),
-        if (_selected != null && !_isMember) ...[
-          SizedBox(height: context.spacingTitleOffset),
-          EarthButton(
-            label: 'JOIN ${_selected!['name']?.toString().toUpperCase()}',
-            variant: EarthButtonVariant.primary,
-            onPressed: widget.busy ? null : _join,
-          ),
-        ],
       ],
     );
   }
