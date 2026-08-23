@@ -114,7 +114,7 @@ class _SidebarState extends State<Sidebar> {
     final groups = [
       (
         'NOW',
-        Icons.bolt_rounded,
+        Icons.radar_rounded,
         [
           (
             'command',
