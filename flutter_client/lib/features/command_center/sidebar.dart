@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
+import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/design_system/earth_theme_context.dart';
 
 class Sidebar extends StatefulWidget {
   final EarthState state;
@@ -10,6 +11,8 @@ class Sidebar extends StatefulWidget {
   final bool busy;
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
+  final int unreadNotifications;
+  final int unreadCommMessages;
 
   const Sidebar({
     super.key,
@@ -20,6 +23,8 @@ class Sidebar extends StatefulWidget {
     this.busy = false,
     this.onLogout,
     this.onSecurity,
+    this.unreadNotifications = 0,
+    this.unreadCommMessages = 0,
   });
 
   @override
@@ -45,15 +50,16 @@ class _SidebarState extends State<Sidebar> {
 
   int _groupForSection(String section) {
     const groups = [
-      ['command', 'briefing', 'messages'],
+      ['command', 'briefing', 'messages', 'notifications'],
       [
         'business',
         'machines',
         'contracts',
+        'projects',
         'market',
         'finance',
         'technology',
-        'patents'
+        'patents',
       ],
       ['corporation', 'city', 'civic', 'public-finance', 'civic-rankings'],
       ['life', 'pantheon', 'dynasty', 'history'],
@@ -64,9 +70,17 @@ class _SidebarState extends State<Sidebar> {
     return 0;
   }
 
+  void _toggleGroup(int groupIdx) {
+    EarthAudioEngine.instance.playClick();
+    setState(() {
+      _expandedGroup = _expandedGroup == groupIdx ? -1 : groupIdx;
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isCorporationMember = widget.state.membership?['corporation_id'] != null;
+    final isCorporationMember =
+        widget.state.membership?['corporation_id'] != null;
     final corporation = widget.state.institutions['corporation'];
     final city = widget.state.institutions['city'];
     final corporationName = isCorporationMember && corporation is Map
@@ -75,6 +89,7 @@ class _SidebarState extends State<Sidebar> {
     final cityName = isCorporationMember && city is Map
         ? city['name']?.toString() ?? 'City & Services'
         : 'City & Services';
+
     final fullUserName = (widget.state.human['name'] ??
             widget.state.human['display_name'] ??
             'Life')
@@ -83,166 +98,225 @@ class _SidebarState extends State<Sidebar> {
     final dynastyName = widget.state.life['dynastyName']
         ?.toString()
         .replaceFirst(RegExp(r'^house\s+', caseSensitive: false), '');
+
+    final unreadNotifs = widget.unreadNotifications > 0
+        ? widget.unreadNotifications
+        : (widget.state.json['unreadNotifications'] as num?)?.toInt() ?? 0;
+
+    final unreadMsgs = widget.unreadCommMessages > 0
+        ? widget.unreadCommMessages
+        : (widget.state.json['unreadMessages'] as num?)?.toInt() ?? 0;
+
     final groups = [
       (
         'NOW',
+        Icons.bolt_rounded,
         [
-          ('command', 'Command Center', Icons.dashboard_outlined),
-          ('briefing', 'Daily Priorities', Icons.today_outlined),
-          ('messages', 'Messages', Icons.settings_input_antenna),
+          (
+            'command',
+            'Command Center',
+            Icons.dashboard_outlined,
+            null,
+          ),
+          (
+            'briefing',
+            'Daily Priorities',
+            Icons.today_outlined,
+            null,
+          ),
+          (
+            'messages',
+            'Messages',
+            Icons.settings_input_antenna,
+            unreadMsgs > 0 ? '$unreadMsgs' : null,
+          ),
+          (
+            'notifications',
+            'Notifications',
+            Icons.notifications_none_outlined,
+            unreadNotifs > 0 ? '$unreadNotifs' : null,
+          ),
         ]
       ),
       (
         'BUSINESS',
+        Icons.apartment_rounded,
         [
-          ('business',
-              (widget.activeBusiness?['name'] ?? 'Business').toString(),
-              Icons.storefront_outlined),
+          (
+            'business',
+            (widget.activeBusiness?['name'] ?? 'Business').toString(),
+            Icons.storefront_outlined,
+            null,
+          ),
           (
             'machines',
-            'Machines & Production',
-            Icons.precision_manufacturing_outlined
+            'Assets',
+            Icons.precision_manufacturing_outlined,
+            null,
           ),
-          ('contracts', 'Contracts & Revenue', Icons.handshake_outlined),
-          ('market', 'Trade & Supplies', Icons.swap_horiz),
+          (
+            'market',
+            'Trade & Supplies',
+            Icons.swap_horiz_rounded,
+            null,
+          ),
+          (
+            'contracts',
+            'Contracts',
+            Icons.handshake_outlined,
+            null,
+          ),
+          (
+            'projects',
+            'Projects',
+            Icons.assignment_turned_in_outlined,
+            null,
+          ),
           (
             'finance',
             'Personal Finance',
-            Icons.account_balance_wallet_outlined
+            Icons.account_balance_wallet_outlined,
+            null,
           ),
-          ('technology', 'Research & Technology', Icons.biotech_outlined),
-          ('patents', 'Patents & Licensing', Icons.assignment_outlined),
+          (
+            'technology',
+            'Research',
+            Icons.biotech_outlined,
+            null,
+          ),
+          (
+            'patents',
+            'Patents',
+            Icons.assignment_outlined,
+            null,
+          ),
         ]
       ),
       (
         'CIVIC',
+        Icons.account_balance_rounded,
         [
-          ('corporation', corporationName, Icons.account_balance_outlined),
+          (
+            'corporation',
+            corporationName,
+            Icons.account_balance_outlined,
+            null,
+          ),
           if (isCorporationMember)
-            ('city', cityName, Icons.location_city_outlined),
-          ('civic', 'Public', Icons.public_outlined),
-          ('civic-rankings', 'Rankings', Icons.leaderboard_outlined),
+            (
+              'city',
+              cityName,
+              Icons.location_city_outlined,
+              null,
+            ),
+          (
+            'civic',
+            'Public',
+            Icons.public_outlined,
+            null,
+          ),
+          (
+            'civic-rankings',
+            'Rankings',
+            Icons.leaderboard_outlined,
+            null,
+          ),
         ]
       ),
       (
         'LIFE',
+        Icons.fingerprint_rounded,
         [
-          ('life', userName, Icons.person_outline),
-          ('dynasty', dynastyName?.isNotEmpty == true ? dynastyName! : 'Dynasty',
-              Icons.account_tree_outlined),
-          ('pantheon', 'Memorial', Icons.account_balance_outlined),
-          ('history', 'Archive', Icons.history_outlined),
+          (
+            'life',
+            userName.isNotEmpty ? userName : 'Life',
+            Icons.person_outline_rounded,
+            null,
+          ),
+          (
+            'dynasty',
+            dynastyName?.isNotEmpty == true ? dynastyName! : 'Dynasty',
+            Icons.account_tree_outlined,
+            null,
+          ),
+          (
+            'pantheon',
+            'Memorial',
+            Icons.account_balance_outlined,
+            null,
+          ),
+          (
+            'history',
+            'Archive',
+            Icons.history_outlined,
+            null,
+          ),
         ]
       ),
     ];
 
     return Container(
-      width: 224,
-      padding: const EdgeInsets.fromLTRB(12, 14, 12, 14),
-      decoration: const BoxDecoration(
-        border: Border(right: BorderSide(color: Colors.white12)),
+      width: 236,
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          context.primaryColor.withValues(alpha: 0.04),
+          context.canvasColor,
+        ),
+        border: Border(
+          right: BorderSide(
+            color: context.primaryColor.withValues(alpha: 0.14),
+            width: 1.0,
+          ),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. NAVIGATION MENU ITEMS
+          // 1. SCROLLABLE NAVIGATION LIST
           Expanded(
             child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   for (int groupIdx = 0;
                       groupIdx < groups.length;
                       groupIdx++) ...[
-                    InkWell(
-                      onTap: () => setState(() => _expandedGroup =
-                          _expandedGroup == groupIdx ? -1 : groupIdx),
-                      borderRadius: BorderRadius.circular(8),
-                      child: Padding(
-                        padding: EdgeInsets.only(
-                          left: 8,
-                          top: groupIdx == 0 ? 0 : 10,
-                          bottom: 6,
-                        ),
-                        child: Row(
-                          children: [
-                            Expanded(
-                                child: Text(groups[groupIdx].$1,
-                                    style: EarthTypography.menuGroup)),
-                            Icon(
-                              _expandedGroup == groupIdx
-                                  ? Icons.expand_less
-                                  : Icons.expand_more,
-                              size: 16,
-                              color: mutedColor,
-                            ),
-                          ],
-                        ),
-                      ),
+                    // GROUP HEADER
+                    _buildGroupHeader(
+                      context,
+                      title: groups[groupIdx].$1,
+                      icon: groups[groupIdx].$2,
+                      isExpanded: _expandedGroup == groupIdx,
+                      onTap: () => _toggleGroup(groupIdx),
+                      isFirst: groupIdx == 0,
                     ),
+
+                    // EXPANDABLE ITEMS LIST
                     AnimatedSize(
-                      duration: const Duration(milliseconds: 160),
-                      curve: Curves.easeOut,
+                      duration: const Duration(milliseconds: 180),
+                      curve: Curves.easeOutCubic,
                       child: _expandedGroup == groupIdx
-                          ? Column(
-                              children: [
-                                for (final item in groups[groupIdx].$2)
-                                  Padding(
-                                    padding: const EdgeInsets.only(bottom: 2),
-                                    child: SizedBox(
-                                      width: double.infinity,
-                                      child: TextButton(
-                                        onPressed: () =>
-                                            widget.onNavigate(item.$1),
-                                        style: TextButton.styleFrom(
-                                          splashFactory: NoSplash.splashFactory,
-                                          enableFeedback: false,
-                                          foregroundColor: violetColor,
-                                          backgroundColor:
-                                              item.$1 == widget.selectedSection
-                                                  ? violetColor.withValues(
-                                                      alpha: .16)
-                                                  : Colors.transparent,
-                                          shape: RoundedRectangleBorder(
-                                              borderRadius:
-                                                  BorderRadius.circular(8)),
-                                          padding: const EdgeInsets.symmetric(
-                                              horizontal: 12, vertical: 10),
-                                          alignment: Alignment.centerLeft,
-                                        ),
-                                        child: Row(
-                                          children: [
-                                            Icon(item.$3,
-                                                size: 16,
-                                                color: item.$1 ==
-                                                        widget.selectedSection
-                                                    ? inkColor
-                                                    : mutedColor),
-                                            const SizedBox(width: 10),
-                                            Expanded(
-                                              child: Text(
-                                                item.$2,
-                                                overflow: TextOverflow.ellipsis,
-                                                maxLines: 1,
-                                                style: EarthTypography.menu
-                                                    .copyWith(
-                                                  color: item.$1 ==
-                                                          widget.selectedSection
-                                                      ? inkColor
-                                                      : mutedColor,
-                                                  fontWeight: item.$1 ==
-                                                          widget.selectedSection
-                                                      ? FontWeight.w700
-                                                      : FontWeight.w500,
-                                                ),
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
+                          ? Padding(
+                              padding: const EdgeInsets.only(top: 4, bottom: 8),
+                              child: Column(
+                                children: [
+                                  for (final item in groups[groupIdx].$3)
+                                    _buildNavItem(
+                                      context,
+                                      sectionKey: item.$1,
+                                      label: item.$2,
+                                      icon: item.$3,
+                                      badge: item.$4,
+                                      isSelected:
+                                          item.$1 == widget.selectedSection,
+                                      onSelect: () {
+                                        EarthAudioEngine.instance.playClick();
+                                        widget.onNavigate(item.$1);
+                                      },
                                     ),
-                                  ),
-                              ],
+                                ],
+                              ),
                             )
                           : const SizedBox.shrink(),
                     ),
@@ -251,8 +325,183 @@ class _SidebarState extends State<Sidebar> {
               ),
             ),
           ),
-
         ],
+      ),
+    );
+  }
+
+  // --- GROUP HEADER WIDGET ---
+  Widget _buildGroupHeader(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required bool isExpanded,
+    required VoidCallback onTap,
+    required bool isFirst,
+  }) {
+    return Padding(
+      padding: EdgeInsets.only(top: isFirst ? 0 : 8, bottom: 2),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: context.surfaceColor.withValues(alpha: 0.6),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            child: Row(
+              children: [
+                Icon(
+                  icon,
+                  size: 14,
+                  color: isExpanded
+                      ? context.primaryColor
+                      : context.mutedColor.withValues(alpha: 0.8),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 1.5,
+                      color: isExpanded
+                          ? context.primaryColor
+                          : context.mutedColor,
+                    ),
+                  ),
+                ),
+                AnimatedRotation(
+                  turns: isExpanded ? 0.5 : 0.0,
+                  duration: const Duration(milliseconds: 180),
+                  child: Icon(
+                    Icons.keyboard_arrow_down_rounded,
+                    size: 16,
+                    color: context.mutedColor.withValues(alpha: 0.7),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // --- NAVIGATION ITEM WIDGET ---
+  Widget _buildNavItem(
+    BuildContext context, {
+    required String sectionKey,
+    required String label,
+    required IconData icon,
+    required String? badge,
+    required bool isSelected,
+    required VoidCallback onSelect,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 2),
+      child: SizedBox(
+        width: double.infinity,
+        child: TextButton(
+          onPressed: onSelect,
+          style: TextButton.styleFrom(
+            splashFactory: NoSplash.splashFactory,
+            enableFeedback: false,
+            foregroundColor: context.primaryColor,
+            backgroundColor: isSelected
+                ? context.primaryColor.withValues(alpha: 0.14)
+                : Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+              side: isSelected
+                  ? BorderSide(
+                      color: context.primaryColor.withValues(alpha: 0.32),
+                      width: 0.8,
+                    )
+                  : BorderSide.none,
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+            alignment: Alignment.centerLeft,
+          ),
+          child: Row(
+            children: [
+              // Active Luminous Bar
+              if (isSelected)
+                Container(
+                  width: 3.2,
+                  height: 16,
+                  margin: const EdgeInsets.only(right: 8),
+                  decoration: BoxDecoration(
+                    color: context.primaryColor,
+                    borderRadius: BorderRadius.circular(2),
+                    boxShadow: [
+                      BoxShadow(
+                        color: context.primaryColor.withValues(alpha: 0.65),
+                        blurRadius: 6,
+                        spreadRadius: 0.5,
+                      ),
+                    ],
+                  ),
+                )
+              else
+                const SizedBox(width: 4),
+
+              // Item Icon
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected
+                    ? context.primaryColor
+                    : context.mutedColor.withValues(alpha: 0.85),
+              ),
+              const SizedBox(width: 10),
+
+              // Item Label
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                    color: isSelected ? context.inkColor : context.mutedColor,
+                    letterSpacing: isSelected ? 0.2 : 0.0,
+                  ),
+                ),
+              ),
+
+              // Unread / Action Badge
+              if (badge != null) ...[
+                const SizedBox(width: 6),
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: context.primaryColor,
+                    borderRadius: BorderRadius.circular(10),
+                    boxShadow: [
+                      BoxShadow(
+                        color: context.primaryColor.withValues(alpha: 0.4),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    badge,
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w800,
+                      color: context.canvasColor,
+                      letterSpacing: 0.4,
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
       ),
     );
   }

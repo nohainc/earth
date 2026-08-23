@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import 'earth_state.dart';
 
 class PlayerObjective {
@@ -39,19 +38,19 @@ class PlayerObjective {
   Color get categoryColor {
     switch (category.toLowerCase()) {
       case 'enterprise':
-        return Colors.orangeAccent;
+        return const Color(0xFFF59E0B);
       case 'civic':
-        return cyanAccentColor;
+        return const Color(0xFF38BDF8);
       case 'dynasty':
-        return const Color(0xFFFFD54F);
+        return const Color(0xFFFBBF24);
       case 'technology':
-        return violetColor;
+        return const Color(0xFF818CF8);
       case 'finance':
-        return const Color(0xFF00E676);
+        return const Color(0xFF10B981);
       case 'civilization':
-        return const Color(0xFFFF4081);
+        return const Color(0xFFA78BFA);
       default:
-        return cyanAccentColor;
+        return const Color(0xFF38BDF8);
     }
   }
 

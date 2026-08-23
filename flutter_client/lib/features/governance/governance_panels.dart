@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
-import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'governance_dialogs.dart';
 
@@ -16,80 +15,60 @@ class CivicStatusPanel extends StatelessWidget {
     final human = state.human;
     final membership = state.membership;
     final city = state.institutions['city'];
-    final cityMap = city is Map
-        ? Map<String, dynamic>.from(city)
-        : const <String, dynamic>{};
-    final citizenship = membership?['status']?.toString() ??
-        membership?['type']?.toString() ??
-        'Independent citizen';
-    final standing =
-        human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
-    final voting =
-        membership?['voting_eligible'] ?? membership?['votingEligible'] ?? true;
-    final obligations = membership?['obligations']?.toString() ??
-        'Review current laws and tax obligations';
+    final cityMap = city is Map ? Map<String, dynamic>.from(city) : const <String, dynamic>{};
+    final citizenship =
+        membership?['status']?.toString() ?? membership?['type']?.toString() ?? 'Independent citizen';
+    final standing = human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
+    final voting = membership?['voting_eligible'] ?? membership?['votingEligible'] ?? true;
+    final obligations =
+        membership?['obligations']?.toString() ?? 'Review current laws and tax obligations';
 
-    return EarthPanel(
+    return EarthSection(
       title: 'CIVIC STATUS',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Your current place in the civic system: residency, standing, voting access, and obligations.\n\n• These details explain what you can do in governance today.\n\n• City services and detailed membership history remain on City & Services and your personal record.',
-      child: Wrap(
-        spacing: 10,
-        runSpacing: 10,
+      infoBulletPoints: const [
+        'Your current place in the civic system: residency, standing, voting access, and obligations.',
+        'These details explain what you can do in governance today.',
+        'City services and detailed membership history remain on City & Services and your personal record.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _statusTile(
-              'RESIDENCY',
-              cityMap['name']?.toString().toUpperCase() ?? 'INDEPENDENT',
-              Icons.location_city_outlined,
-              cyanAccentColor),
-          _statusTile('CITIZENSHIP', citizenship.toUpperCase(),
-              Icons.badge_outlined, violetColor),
-          _statusTile(
-              'VOTING',
-              voting == true ? 'ELIGIBLE' : 'RESTRICTED',
-              Icons.how_to_vote_outlined,
-              voting == true ? Colors.tealAccent : Colors.orangeAccent),
-          _statusTile('STANDING', standing.toString(),
-              Icons.trending_up_outlined, Colors.amberAccent),
-          SizedBox(
-              width: 250,
-              child: Text('Current obligation: $obligations',
-                  style: const TextStyle(color: mutedColor, fontSize: 10.5))),
+          EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'RESIDENCY',
+                value: cityMap['name']?.toString().toUpperCase() ?? 'INDEPENDENT',
+                icon: Icons.location_city_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'CITIZENSHIP',
+                value: citizenship.toUpperCase(),
+                icon: Icons.badge_outlined,
+                accentColor: context.secondaryColor,
+              ),
+              EarthMetricTile(
+                label: 'VOTING',
+                value: voting == true ? 'ELIGIBLE' : 'RESTRICTED',
+                icon: Icons.how_to_vote_outlined,
+                accentColor: voting == true ? context.successColor : context.warningColor,
+              ),
+              EarthMetricTile(
+                label: 'STANDING',
+                value: standing.toString(),
+                icon: Icons.trending_up_outlined,
+                accentColor: context.warningColor,
+              ),
+            ],
+          ),
+          SizedBox(height: context.spacingInline),
+          Text(
+            'Current obligation: $obligations',
+            style: context.widgetFooterStyle,
+          ),
         ],
       ),
-    );
-  }
-
-  Widget _statusTile(String label, String value, IconData icon, Color color) {
-    return Container(
-      width: 135,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .75),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: .28))),
-      child: Row(children: [
-        Icon(icon, size: 15, color: color),
-        const SizedBox(width: 7),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: const TextStyle(
-                  color: mutedColor,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 3),
-          Text(value,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                  color: color, fontSize: 11, fontWeight: FontWeight.w800)),
-        ])),
-      ]),
     );
   }
 }
@@ -102,69 +81,53 @@ class CivicInfluencePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heldRoles = state.roles
-        .where((raw) =>
-            raw is Map &&
-            raw['human_id']?.toString() == state.human['id']?.toString())
+        .where((raw) => raw is Map && raw['human_id']?.toString() == state.human['id']?.toString())
         .length;
-    final proposals =
-        (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
+    final proposals = (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
     final communities = state.communities.length;
-    return EarthPanel(
+
+    return EarthSection(
       title: 'YOUR CIVIC INFLUENCE',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Influence grows through participation, public responsibility, and relationships.\n\n• Voting, holding office, joining communities, and sponsoring proposals are different ways to shape the world.\n\n• This is a direction for play, not a leaderboard.',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        const Text('Choose how you want to matter in public life.',
-            style: TextStyle(
-                color: inkColor, fontSize: 12, fontWeight: FontWeight.w700)),
-        const SizedBox(height: 10),
-        Wrap(spacing: 10, runSpacing: 10, children: [
-          _influenceTile(
-              'OFFICES HELD', '$heldRoles', Icons.account_balance_outlined),
-          _influenceTile('OPEN DECISIONS', '$proposals', Icons.gavel_outlined),
-          _influenceTile('COMMUNITIES', '$communities', Icons.groups_outlined),
-        ]),
-        const SizedBox(height: 10),
-        const Text(
-            'Possible paths: independent citizen · community leader · business-backed politician · city administrator · legal or planetary delegate.',
-            style: TextStyle(color: mutedColor, fontSize: 10.5)),
-      ]),
-    );
-  }
-
-  Widget _influenceTile(String label, String value, IconData icon) {
-    return Container(
-      width: 135,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .75),
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Row(
+      infoBulletPoints: const [
+        'Influence grows through participation, public responsibility, and relationships.',
+        'Voting, holding office, joining communities, and sponsoring proposals are different ways to shape the world.',
+        'This is a direction for play, not a leaderboard.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(icon, size: 15, color: cyanAccentColor),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(label,
-                    style: const TextStyle(
-                        color: mutedColor,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800)),
-                Text(value,
-                    style: const TextStyle(
-                        color: inkColor,
-                        fontSize: 13,
-                        fontWeight: FontWeight.w800)),
-              ],
-            ),
+          Text(
+            'Choose how you want to matter in public life.',
+            style: context.widgetValueStyle,
+          ),
+          SizedBox(height: context.spacingControl),
+          EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'OFFICES HELD',
+                value: '$heldRoles',
+                icon: Icons.account_balance_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'OPEN DECISIONS',
+                value: '$proposals',
+                icon: Icons.gavel_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'COMMUNITIES',
+                value: '$communities',
+                icon: Icons.groups_outlined,
+                accentColor: context.primaryColor,
+              ),
+            ],
+          ),
+          SizedBox(height: context.spacingInline),
+          Text(
+            'Possible paths: independent citizen · community leader · business-backed politician · city administrator · legal or planetary delegate.',
+            style: context.widgetFooterStyle,
           ),
         ],
       ),
@@ -190,11 +153,9 @@ class ProposalPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final proposals = ((state.governance['proposals'] as List<dynamic>?) ??
-            const [])
-        .where((raw) => raw is Map &&
-            (raw['institution_id'] ?? raw['institutionId'])?.toString() ==
-                institutionId)
+    final proposals = ((state.governance['proposals'] as List<dynamic>?) ?? const [])
+        .where((raw) =>
+            raw is Map && (raw['institution_id'] ?? raw['institutionId'] ?? institutionId)?.toString() == institutionId)
         .toList();
     final proposal = proposals.isEmpty
         ? <String, dynamic>{
@@ -206,18 +167,14 @@ class ProposalPanel extends StatelessWidget {
             'votes': <String, dynamic>{'support': 0, 'oppose': 0, 'uncast': 0},
           }
         : Map<String, dynamic>.from(proposals.first as Map);
-    final votes = Map<String, dynamic>.from(
-        (proposal['votes'] as Map<String, dynamic>?) ?? const {});
+    final votes = Map<String, dynamic>.from((proposal['votes'] as Map<String, dynamic>?) ?? const {});
     final hasProposal = proposal['id'].toString().isNotEmpty;
     final proposalId = proposal['id'].toString();
-    final isPassed =
-        proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
-    final executionStatus = (proposal['execution_status']?.toString() ??
-            (isPassed ? 'ready' : 'pending'))
-        .toLowerCase();
+    final isPassed = proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
+    final executionStatus =
+        (proposal['execution_status']?.toString() ?? (isPassed ? 'ready' : 'pending')).toLowerCase();
     final isChallenged = executionStatus == 'challenged';
-    final isVoided =
-        executionStatus == 'voided' || proposal['outcome'] == 'voided';
+    final isVoided = executionStatus == 'voided' || proposal['outcome'] == 'voided';
     final isExecuted = executionStatus == 'executed';
 
     final currentDay = asIntOr(state.clock['day'], 1);
@@ -227,14 +184,9 @@ class ProposalPanel extends StatelessWidget {
                 asInt(proposal['implementation_delay_days'])!
             : (isPassed ? currentDay : null));
     final delayDaysRemaining =
-        (implDay != null && currentDay < implDay && isPassed)
-            ? (implDay - currentDay)
-            : 0;
-    final isCoolingOff = isPassed &&
-        delayDaysRemaining > 0 &&
-        !isChallenged &&
-        !isVoided &&
-        !isExecuted;
+        (implDay != null && currentDay < implDay && isPassed) ? (implDay - currentDay) : 0;
+    final isCoolingOff =
+        isPassed && delayDaysRemaining > 0 && !isChallenged && !isVoided && !isExecuted;
 
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
@@ -242,8 +194,7 @@ class ProposalPanel extends StatelessWidget {
     final totalVotes = supportCount + opposeCount + uncastCount;
 
     final quorumNum = asDoubleOr(proposal['quorum'], .25);
-    final approvalThresholdNum =
-        asDoubleOr(proposal['approval_threshold'], .50);
+    final approvalThresholdNum = asDoubleOr(proposal['approval_threshold'], .50);
     final quorumPercent = (quorumNum * 100).round();
     final approvalPercent = (approvalThresholdNum * 100).round();
 
@@ -253,38 +204,38 @@ class ProposalPanel extends StatelessWidget {
       final holder = role['human_id']?.toString();
       final name = role['name']?.toString().toLowerCase() ?? '';
       return holder == state.human['id'] &&
-          (name.contains('court') ||
-              name.contains('judge') ||
-              name.contains('jurist'));
+          (name.contains('court') || name.contains('judge') || name.contains('jurist'));
     });
 
-    Color statusColor = cyanAccentColor;
-    if (isChallenged) statusColor = Colors.orangeAccent;
-    if (isVoided) statusColor = Colors.redAccent;
-    if (isExecuted) statusColor = Colors.greenAccent;
-    if (isCoolingOff) statusColor = Colors.amberAccent;
-    if (isPassed && !isCoolingOff && !isChallenged && !isVoided && !isExecuted)
-      statusColor = Colors.tealAccent;
+    Color statusColor = context.primaryColor;
+    if (isChallenged) statusColor = context.warningColor;
+    if (isVoided) statusColor = context.errorColor;
+    if (isExecuted) statusColor = context.successColor;
+    if (isCoolingOff) statusColor = context.warningColor;
+    if (isPassed && !isCoolingOff && !isChallenged && !isVoided && !isExecuted) {
+      statusColor = context.successColor;
+    }
 
-    return EarthPanel(
+    return EarthSection(
       title: '$scopeLabel PROPOSAL ${hasProposal ? proposal['id'] : ''}',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.\n\n• Quorum & Approval Thresholds:\n  - Quorum: Minimum citizen participation required for ballot validity ($quorumPercent%).\n  - Approval: Majority threshold needed among cast ballots for proposal enactment ($approvalPercent%).\n\n• Mandatory Implementation Delay (Cooling-Off Period):\n  - Spec §1.8.2: All passed legislation enters a mandatory 3-day cooling-off window prior to execution, allowing affected entities to prepare or file constitutional challenges with the UC High Court.\n\n• Legislative Stages:\n  - ACTIVE: Open for citizen voting (support, oppose, abstain).\n  - COOLING-OFF: Approved ballot undergoing mandatory judicial review window.\n  - READY: Cooling-off complete; authorized for ledger enactment.\n  - CHALLENGED: Under injunction awaiting Supreme Court ruling.\n  - EXECUTED: Enacted into statutory planetary law.',
+      infoBulletPoints: [
+        'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
+        'Quorum & Approval Thresholds: Quorum $quorumPercent%, Approval $approvalPercent% needed for enactment.',
+        'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
+        'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. PROPOSAL HEADER & EXECUTION BADGE
+          // 1. Proposal Details & Progress Card
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(context.cardPadding),
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .85),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -296,12 +247,11 @@ class ProposalPanel extends StatelessWidget {
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
                         color: statusColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(context.radiusControl),
                       ),
-                      child: Icon(Icons.how_to_vote_outlined,
-                          size: 20, color: statusColor),
+                      child: Icon(Icons.how_to_vote_outlined, size: context.iconSize + 4, color: statusColor),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: context.spacingTitleOffset),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -311,36 +261,14 @@ class ProposalPanel extends StatelessWidget {
                               Expanded(
                                 child: Text(
                                   proposal['title']?.toString() ?? '',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13.5,
-                                    color: inkColor,
-                                  ),
+                                  style: context.widgetValueStyle,
                                 ),
                               ),
                               if (hasProposal) ...[
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: .15),
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(
-                                      color: statusColor.withValues(alpha: .35),
-                                    ),
-                                  ),
-                                  child: Text(
-                                    isCoolingOff
-                                        ? 'COOLING-OFF'
-                                        : executionStatus.toUpperCase(),
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
-                                      letterSpacing: .8,
-                                      color: statusColor,
-                                    ),
-                                  ),
+                                SizedBox(width: context.spacingInline),
+                                EarthBadge(
+                                  label: isCoolingOff ? 'COOLING-OFF' : executionStatus.toUpperCase(),
+                                  customColor: statusColor,
                                 ),
                               ],
                             ],
@@ -348,38 +276,30 @@ class ProposalPanel extends StatelessWidget {
                           const SizedBox(height: 4),
                           Text(
                             'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
-                            style: const TextStyle(
-                                color: mutedColor, fontSize: 11),
+                            style: context.widgetFooterStyle,
                           ),
                           Text(
                             'Quorum $quorumPercent% · approval $approvalPercent%',
-                            style: const TextStyle(
-                                color: mutedColor, fontSize: 11),
+                            style: context.widgetFooterStyle,
                           ),
                           if (isCoolingOff) ...[
                             const SizedBox(height: 6),
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 4),
+                              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
                               decoration: BoxDecoration(
-                                color:
-                                    Colors.amberAccent.withValues(alpha: .12),
-                                borderRadius: BorderRadius.circular(4),
-                                border: Border.all(
-                                    color: Colors.amberAccent
-                                        .withValues(alpha: .3)),
+                                color: context.warningColor.withValues(alpha: .12),
+                                borderRadius: BorderRadius.circular(context.radiusControl),
+                                border: Border.all(color: context.warningColor.withValues(alpha: .3)),
                               ),
                               child: Row(
                                 children: [
-                                  const Icon(Icons.timer_outlined,
-                                      size: 13, color: Colors.amberAccent),
+                                  Icon(Icons.timer_outlined, size: 13, color: context.warningColor),
                                   const SizedBox(width: 6),
                                   Expanded(
                                     child: Text(
                                       'Cooling-off active: Implementation Day $implDay ($delayDaysRemaining day(s) for challenge)',
-                                      style: const TextStyle(
-                                        color: Colors.amberAccent,
-                                        fontSize: 10.5,
+                                      style: context.widgetFooterStyle.copyWith(
+                                        color: context.warningColor,
                                         fontWeight: FontWeight.w700,
                                       ),
                                     ),
@@ -391,11 +311,9 @@ class ProposalPanel extends StatelessWidget {
                           if (proposal['deadline'] is Map) ...[
                             const SizedBox(height: 4),
                             Text(
-                              formatProposalDeadline(
-                                  proposal['deadline'] as Map<String, dynamic>),
-                              style: const TextStyle(
-                                color: Colors.orangeAccent,
-                                fontSize: 11,
+                              formatProposalDeadline(proposal['deadline'] as Map<String, dynamic>),
+                              style: context.widgetFooterStyle.copyWith(
+                                color: context.warningColor,
                                 fontWeight: FontWeight.w600,
                               ),
                             ),
@@ -406,7 +324,7 @@ class ProposalPanel extends StatelessWidget {
                   ],
                 ),
 
-                const SizedBox(height: 14),
+                SizedBox(height: context.spacingTitleOffset),
 
                 // Voting Tally Breakdown & Progress Bar
                 Row(
@@ -414,20 +332,12 @@ class ProposalPanel extends StatelessWidget {
                   children: [
                     Text(
                       'Support $supportCount  ·  Oppose $opposeCount  ·  Uncast $uncastCount',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: inkColor,
-                      ),
+                      style: context.widgetTitleStyle,
                     ),
                     if (totalVotes > 0)
                       Text(
                         '${((supportCount / totalVotes) * 100).toStringAsFixed(1)}% SUPPORT',
-                        style: const TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          color: cyanAccentColor,
-                        ),
+                        style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
                       ),
                   ],
                 ),
@@ -447,7 +357,7 @@ class ProposalPanel extends StatelessWidget {
                                 flex: supportCount,
                                 child: Container(
                                   height: 6,
-                                  color: cyanAccentColor,
+                                  color: context.primaryColor,
                                 ),
                               ),
                             if (opposeCount > 0)
@@ -455,7 +365,7 @@ class ProposalPanel extends StatelessWidget {
                                 flex: opposeCount,
                                 child: Container(
                                   height: 6,
-                                  color: Colors.redAccent,
+                                  color: context.errorColor,
                                 ),
                               ),
                             if (uncastCount > 0)
@@ -473,121 +383,54 @@ class ProposalPanel extends StatelessWidget {
             ),
           ),
 
-          const SizedBox(height: 14),
+          SizedBox(height: context.spacingTitleOffset),
 
-          // 2. LEGISLATIVE ACTIONS HUB
+          // 2. Legislative Action Buttons Hub
           Wrap(
             spacing: 8,
             runSpacing: 6,
             children: [
               for (final choice in ['support', 'oppose', 'abstain'])
-                OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: choice == 'support'
-                        ? cyanAccentColor
-                        : (choice == 'oppose' ? Colors.redAccent : mutedColor),
-                    side: BorderSide(
-                      color: choice == 'support'
-                          ? cyanAccentColor.withValues(alpha: .3)
-                          : (choice == 'oppose'
-                              ? Colors.redAccent.withValues(alpha: .3)
-                              : Colors.white24),
-                    ),
-                  ),
+                EarthButton(
+                  label: choice,
+                  variant: choice == 'support'
+                      ? EarthButtonVariant.primary
+                      : (choice == 'oppose' ? EarthButtonVariant.danger : EarthButtonVariant.ghost),
                   onPressed: busy || !hasProposal || isExecuted || isVoided
                       ? null
-                      : () => action(() => const EarthApi()
-                          .vote(proposal['id'] as String, choice)),
-                  child: Text(
-                    choice,
-                    style: const TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
+                      : () => action(() => const EarthApi().vote(proposal['id'] as String, choice)),
                 ),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: inkColor,
-                  side: const BorderSide(color: Colors.white24),
-                ),
+              EarthButton(
+                label: 'CREATE $scopeLabel PROPOSAL',
+                icon: Icons.note_add_outlined,
+                variant: EarthButtonVariant.secondary,
                 onPressed: busy
                     ? null
                     : () => showProposalComposer(context, action,
-                        institutionId: institutionId,
-                        scopeLabel: scopeLabel),
-                icon: const Icon(Icons.note_add_outlined, size: 14),
-                label: Text(
-                  'CREATE $scopeLabel PROPOSAL',
-                  style: const TextStyle(
-                      fontSize: 10.5, fontWeight: FontWeight.w700),
-                ),
+                        institutionId: institutionId, scopeLabel: scopeLabel),
               ),
-              if (hasProposal &&
-                  isPassed &&
-                  !isChallenged &&
-                  !isVoided &&
-                  !isExecuted)
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor:
-                        isCoolingOff ? Colors.amberAccent : cyanAccentColor,
-                    foregroundColor: Colors.black,
-                  ),
+              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
+                EarthButton(
+                  label: isCoolingOff ? 'COOLING-OFF (DAY $implDay)' : 'EXECUTE PROPOSAL',
+                  icon: isCoolingOff ? Icons.lock_clock_outlined : Icons.check_circle_outline,
+                  variant: EarthButtonVariant.primary,
                   onPressed: busy || isCoolingOff
                       ? null
-                      : () => action(
-                          () => const EarthApi().executeProposal(proposalId)),
-                  icon: Icon(
-                      isCoolingOff
-                          ? Icons.lock_clock_outlined
-                          : Icons.check_circle_outline,
-                      size: 14),
-                  label: Text(
-                    isCoolingOff
-                        ? 'COOLING-OFF (DAY $implDay)'
-                        : 'EXECUTE PROPOSAL',
-                    style: const TextStyle(
-                        fontSize: 10.5, fontWeight: FontWeight.w800),
-                  ),
+                      : () => action(() => const EarthApi().executeProposal(proposalId)),
                 ),
-              if (hasProposal &&
-                  isPassed &&
-                  !isChallenged &&
-                  !isVoided &&
-                  !isExecuted)
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.orangeAccent,
-                    side: BorderSide(
-                        color: Colors.orangeAccent.withValues(alpha: .35)),
-                  ),
-                  onPressed: busy
-                      ? null
-                      : () => showChallengeDialog(context, action, proposalId),
-                  icon: const Icon(Icons.gavel_outlined, size: 14),
-                  label: const Text(
-                    'CHALLENGE PROPOSAL',
-                    style:
-                        TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
-                  ),
+              if (hasProposal && isPassed && !isChallenged && !isVoided && !isExecuted)
+                EarthButton(
+                  label: 'CHALLENGE PROPOSAL',
+                  icon: Icons.gavel_outlined,
+                  variant: EarthButtonVariant.danger,
+                  onPressed: busy ? null : () => showChallengeDialog(context, action, proposalId),
                 ),
               if (hasProposal && isChallenged && hasJudicialAuthority)
-                FilledButton.icon(
-                  style: FilledButton.styleFrom(
-                    backgroundColor: violetColor,
-                    foregroundColor: Colors.white,
-                  ),
-                  onPressed: busy
-                      ? null
-                      : () =>
-                          showAppealRulingDialog(context, action, proposalId),
-                  icon: const Icon(Icons.balance_outlined, size: 14),
-                  label: const Text(
-                    'ISSUE RULING',
-                    style:
-                        TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800),
-                  ),
+                EarthButton(
+                  label: 'ISSUE RULING',
+                  icon: Icons.balance_outlined,
+                  variant: EarthButtonVariant.secondary,
+                  onPressed: busy ? null : () => showAppealRulingDialog(context, action, proposalId),
                 ),
             ],
           ),
@@ -613,197 +456,93 @@ class RolesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EarthPanel(
+    final roles = _scopedRoles;
+
+    return EarthSection(
       title: 'AUTHORITY / ACTIVE TERMS & DELEGATION',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Institutional Offices & Public Governance: Constitutional offices designated to oversee planetary infrastructure, municipal finance, and civil administration.\n\n• Constitutional Separation of Powers:\n  - ROLE-OUC-DELEGATE: Legislative and arbitral delegate with voting authority on public referendums.\n  - ROLE-CITY-MAYOR / PLANNER: Municipal executive authority allocating public finance into civic services.\n  - ROLE-JUSTICE: Supreme court jurist hearing constitutional challenges and appeals.\n\n• Action Protocols: Open roles may be claimed by qualifying citizens; active incumbents may resign or designate surrogates via delegation.',
-      child: _scopedRoles.isEmpty
-          ? const Text('No institutional terms are active yet.',
-              style: TextStyle(color: mutedColor, fontSize: 11))
-          : Container(
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: .75),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: _scopedRoles.indexed.map((indexed) {
-                  final raw = indexed.$2;
-                  final isLast = indexed.$1 == _scopedRoles.length - 1;
-                  final role = raw as Map<String, dynamic>;
-                  final roleId = role['id']?.toString() ?? 'ROLE';
-                  final name = role['name']?.toString() ?? roleId;
-                  final holder = role['human_id'] as String?;
-                  final myId = state.human['id']?.toString() ?? 'H-0044';
-                  final isMine = holder == myId;
-                  final endsDay = role['ends_game_day'] ?? '—';
+      infoBulletPoints: const [
+        'Institutional Offices & Public Governance: Constitutional offices designated to oversee planetary infrastructure, municipal finance, and civil administration.',
+        'Separation of Powers: Legislative and arbitral delegates vote on public referendums; Municipal Mayors & Planners allocate public finance; High Court Jurists hear constitutional appeals.',
+        'Action Protocols: Open roles may be claimed by qualifying citizens; active incumbents may resign or designate surrogates via delegation.',
+      ],
+      child: roles.isEmpty
+          ? const EarthEmptyState(
+              message: 'No institutional terms are active yet.',
+              icon: Icons.account_balance_outlined,
+            )
+          : EarthDataList(
+              children: roles.indexed.map((indexed) {
+                final raw = indexed.$2;
+                final isLast = indexed.$1 == roles.length - 1;
+                final role = raw as Map<String, dynamic>;
+                final roleId = role['id']?.toString() ?? 'ROLE';
+                final name = role['name']?.toString() ?? roleId;
+                final holder = role['human_id'] as String?;
+                final myId = state.human['id']?.toString() ?? 'H-0044';
+                final isMine = holder == myId;
+                final endsDay = role['ends_game_day'] ?? '—';
 
-                  return Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: isLast
-                            ? BorderSide.none
-                            : const BorderSide(color: Colors.white10),
+                return EarthDataRow(
+                  title: '$name · Holder: ${holder ?? 'OPEN'}',
+                  subtitle: 'Until day $endsDay',
+                  leading: Icon(
+                    isMine
+                        ? Icons.account_circle_outlined
+                        : (holder == null ? Icons.help_outline : Icons.badge_outlined),
+                    size: context.iconSize,
+                    color: isMine
+                        ? context.primaryColor
+                        : (holder == null ? context.warningColor : context.secondaryColor),
+                  ),
+                  badges: [
+                    if (isMine)
+                      const EarthBadge(
+                        label: 'ASSIGNED TO YOU',
+                        variant: EarthBadgeVariant.primary,
                       ),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(5),
-                              decoration: BoxDecoration(
-                                color: (isMine
-                                        ? cyanAccentColor
-                                        : (holder == null
-                                            ? Colors.orangeAccent
-                                            : violetColor))
-                                    .withValues(alpha: .15),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Icon(
-                                isMine
-                                    ? Icons.account_circle_outlined
-                                    : (holder == null
-                                        ? Icons.help_outline
-                                        : Icons.badge_outlined),
-                                size: 15,
-                                color: isMine
-                                    ? cyanAccentColor
-                                    : (holder == null
-                                        ? Colors.orangeAccent
-                                        : violetColor),
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$name · Holder: ${holder ?? 'OPEN'} · Until day $endsDay',
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: inkColor,
-                                ),
-                              ),
-                            ),
-                            if (isMine)
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 6, vertical: 2),
-                                decoration: BoxDecoration(
-                                  color: cyanAccentColor.withValues(alpha: .15),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                      color: cyanAccentColor.withValues(
-                                          alpha: .3)),
-                                ),
-                                child: const Text(
-                                  'ASSIGNED TO YOU',
-                                  style: TextStyle(
-                                    fontSize: 9,
-                                    fontWeight: FontWeight.w800,
-                                    color: cyanAccentColor,
-                                  ),
-                                ),
-                              ),
-                          ],
+                  ],
+                  trailing: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      if (isMine) ...[
+                        EarthButton(
+                          label: 'RESIGN',
+                          variant: EarthButtonVariant.danger,
+                          onPressed: busy
+                              ? null
+                              : () => action(() => const EarthApi().resignRole(role['id'] as String)),
                         ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          children: [
-                            if (isMine) ...[
-                              OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  foregroundColor: Colors.orangeAccent,
-                                  side: BorderSide(
-                                      color: Colors.orangeAccent
-                                          .withValues(alpha: .3)),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                ),
-                                onPressed: busy
-                                    ? null
-                                    : () => action(() => const EarthApi()
-                                        .resignRole(role['id'] as String)),
-                                child: const Text('RESIGN',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700)),
-                              ),
-                              OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  foregroundColor: violetColor,
-                                  side: BorderSide(
-                                      color: violetColor.withValues(alpha: .3)),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                ),
-                                onPressed: busy
-                                    ? null
-                                    : () => showDelegateDialog(
-                                        context, action, role['id'] as String),
-                                child: const Text('DELEGATE',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700)),
-                              ),
-                            ] else if (holder == null) ...[
-                              FilledButton(
-                                style: FilledButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  backgroundColor: cyanAccentColor,
-                                  foregroundColor: Colors.black,
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 2),
-                                ),
-                                onPressed: busy
-                                    ? null
-                                    : () => action(() => const EarthApi()
-                                        .claimRole(role['id'] as String)),
-                                child: const Text('CLAIM',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w800)),
-                              ),
-                            ] else ...[
-                              OutlinedButton(
-                                style: OutlinedButton.styleFrom(
-                                  visualDensity: VisualDensity.compact,
-                                  foregroundColor: Colors.redAccent,
-                                  side: BorderSide(
-                                      color: Colors.redAccent
-                                          .withValues(alpha: .3)),
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 2),
-                                ),
-                                onPressed: busy
-                                    ? null
-                                    : () => action(() => const EarthApi()
-                                        .recallRole(role['id'] as String)),
-                                child: const Text('RECALL',
-                                    style: TextStyle(
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.w700)),
-                              ),
-                            ],
-                          ],
+                        EarthButton(
+                          label: 'DELEGATE',
+                          variant: EarthButtonVariant.secondary,
+                          onPressed: busy
+                              ? null
+                              : () => showDelegateDialog(context, action, role['id'] as String),
+                        ),
+                      ] else if (holder == null) ...[
+                        EarthButton(
+                          label: 'CLAIM',
+                          variant: EarthButtonVariant.primary,
+                          onPressed: busy
+                              ? null
+                              : () => action(() => const EarthApi().claimRole(role['id'] as String)),
+                        ),
+                      ] else ...[
+                        EarthButton(
+                          label: 'RECALL',
+                          variant: EarthButtonVariant.danger,
+                          onPressed: busy
+                              ? null
+                              : () => action(() => const EarthApi().recallRole(role['id'] as String)),
                         ),
                       ],
-                    ),
-                  );
-                }).toList(),
-              ),
+                    ],
+                  ),
+                  showDivider: !isLast,
+                );
+              }).toList(),
             ),
     );
   }
@@ -812,8 +551,7 @@ class RolesPanel extends StatelessWidget {
       ? state.roles
       : state.roles.where((raw) {
           if (raw is! Map) return false;
-          return (raw['institution_id'] ?? raw['institutionId'])?.toString() ==
-              institutionId;
+          return (raw['institution_id'] ?? raw['institutionId'])?.toString() == institutionId;
         }).toList();
 }
 
@@ -831,53 +569,49 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taxRules =
-        ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
+    final taxRules = ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
 
-    return EarthPanel(
+    return EarthSection(
       title: 'LAWS IN FORCE / TAXES & PUBLIC SERVICES',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• These are the rules currently shaping taxes and public services.\n\n• Review what you pay, what public systems receive, and how the rules affect your work, business, and residency.\n\n• Detailed municipal treasury controls belong in City & Services.',
+      infoBulletPoints: const [
+        'These are the rules currently shaping taxes and public services.',
+        'Review what you pay, what public systems receive, and how the rules affect your work, business, and residency.',
+        'Detailed municipal treasury controls belong in City & Services.',
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            margin: const EdgeInsets.only(bottom: 14),
+            padding: EdgeInsets.all(context.cardPadding),
+            margin: EdgeInsets.only(bottom: context.spacingTitleOffset),
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .78),
-              borderRadius: BorderRadius.circular(12),
-              border:
-                  Border.all(color: Colors.orangeAccent.withValues(alpha: .3)),
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.primaryColor.withValues(alpha: .3)),
             ),
-            child: const Row(
+            child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Icon(Icons.account_balance_wallet_outlined,
-                    color: Colors.orangeAccent, size: 19),
-                SizedBox(width: 10),
+                Icon(
+                  Icons.account_balance_wallet_outlined,
+                  color: context.warningColor,
+                  size: context.iconSize + 3,
+                ),
+                SizedBox(width: context.spacingInline),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('WHY THIS MATTERS TO YOU',
-                          style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: .9,
-                              color: Colors.orangeAccent)),
-                      SizedBox(height: 5),
+                      Text(
+                        'WHY THIS MATTERS TO YOU',
+                        style: context.topicTitleStyle.copyWith(color: context.warningColor),
+                      ),
+                      const SizedBox(height: 5),
                       Text(
                         'Tax rules change the credits you keep from work, business profit, property, and resource activity. Public budgets return value through city services and infrastructure. Review the rule, then decide whether to vote, adapt the business, or change residency.',
-                        style: TextStyle(
-                            fontSize: 11.5,
-                            height: 1.35,
-                            fontWeight: FontWeight.w600),
+                        style: context.widgetFooterStyle.copyWith(height: 1.35),
                       ),
                     ],
                   ),
@@ -886,91 +620,40 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
             ),
           ),
           if (taxRules.isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              margin: const EdgeInsets.only(bottom: 10),
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: .7),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Padding(
-                    padding: EdgeInsets.fromLTRB(12, 10, 12, 6),
-                    child: Text(
-                      'STATUTORY TAX RULES',
-                      style: TextStyle(
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .8,
-                        color: mutedColor,
-                      ),
-                    ),
-                  ),
-                  const Divider(height: 1, color: Colors.white10),
-                  ...taxRules.indexed.map((indexed) {
-                    final raw = indexed.$2;
-                    final isLast = indexed.$1 == taxRules.length - 1;
-                    final rule = raw as Map<String, dynamic>;
+            EarthDataList(
+              children: taxRules.indexed.map((indexed) {
+                final raw = indexed.$2;
+                final isLast = indexed.$1 == taxRules.length - 1;
+                final rule = raw as Map<String, dynamic>;
 
-                    return Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 8),
-                      decoration: BoxDecoration(
-                        border: Border(
-                          bottom: isLast
-                              ? BorderSide.none
-                              : const BorderSide(color: Colors.white10),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            '${rule['scope']} / ${rule['category']}',
-                            style: const TextStyle(
-                              color: inkColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                          Text(
-                            '${(NumberFormatHelper.percent(rule['rate']))}  ·  v${rule['version']}',
-                            style: const TextStyle(
-                              color: cyanAccentColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    );
-                  }),
-                ],
-              ),
+                return EarthDataRow(
+                  title: '${rule['scope']} / ${rule['category']}',
+                  subtitle: 'Rate: ${NumberFormatHelper.percent(rule['rate'])} · Version ${rule['version']}',
+                  leading: Icon(
+                    Icons.receipt_long_outlined,
+                    size: context.iconSize,
+                    color: context.primaryColor,
+                  ),
+                  trailing: EarthStatusPill(
+                    label: 'RATE',
+                    value: NumberFormatHelper.percent(rule['rate']),
+                    color: context.primaryColor,
+                  ),
+                  showDivider: !isLast,
+                );
+              }).toList(),
             ),
           ],
-          const Text(
+          SizedBox(height: context.spacingTitleOffset),
+          Text(
             'Treasury settlement and public spending require authenticated player action.',
-            style: TextStyle(color: mutedColor, fontSize: 10.5),
+            style: context.widgetFooterStyle,
           ),
-          const SizedBox(height: 10),
-          OutlinedButton.icon(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: cyanAccentColor,
-              side: BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
-            ),
-            onPressed: busy
-                ? null
-                : () => action(() => const EarthApi().settleTax(1000)),
-            icon: const Icon(Icons.account_balance_outlined, size: 14),
-            label: const Text(
-              'SETTLE BASIC LEVY ON 1,000 C',
-              style: TextStyle(fontSize: 10.5, fontWeight: FontWeight.w700),
-            ),
+          SizedBox(height: context.spacingControl),
+          EarthButton(
+            label: 'SETTLE BASIC LEVY ON 1,000 C',
+            icon: Icons.account_balance_outlined,
+            onPressed: busy ? null : () => action(() => const EarthApi().settleTax(1000)),
           ),
         ],
       ),

@@ -282,10 +282,10 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     const Icon(Icons.person_pin,
                         color: EarthColors.cyanAccent, size: 24),
                     const SizedBox(width: 12),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
-                        children: const [
+                        children: [
                           Text(
                             'Step Into Designated Successor',
                             style: TextStyle(
@@ -333,8 +333,8 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Row(
-                      children: const [
+                    const Row(
+                      children: [
                         Icon(Icons.auto_awesome,
                             color: EarthColors.goldMetallic, size: 22),
                         SizedBox(width: 10),
@@ -377,7 +377,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     ),
                     const SizedBox(height: 12),
                     DropdownButtonFormField<String>(
-                      value: _selectedCity,
+                      initialValue: _selectedCity,
                       isExpanded: true,
                       decoration: const InputDecoration(
                         labelText: 'Arrival Jurisdiction & City',

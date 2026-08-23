@@ -20,11 +20,11 @@ void main() {
       ],
     });
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: BusinessManagerOverviewPanel(
           state: state,
-          businessFinancials: const {
+          businessFinancials: {
             'business': {
               'revenue': 1000.0,
               'operating_costs': 700.0,

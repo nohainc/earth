@@ -58,8 +58,9 @@ class FinancialOutlookPanel extends StatelessWidget {
         ? income - expenses - taxes
         : null;
     final obligations = <String>[];
-    if ((taxes ?? 0) > 0)
+    if ((taxes ?? 0) > 0) {
       obligations.add('Tax assessment: ${formatWholeNumber(taxes!)} C');
+    }
     final goals = personalFinanceData['goals'] is List
         ? (personalFinanceData['goals'] as List)
             .whereType<Map>()

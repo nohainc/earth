@@ -1,0 +1,144 @@
+import 'package:flutter/material.dart';
+import 'earth_theme_context.dart';
+
+/// Standardized entity row / list item used for citizens, candidates, milestones, and items.
+class EarthDataRow extends StatelessWidget {
+  final Widget? leading;
+  final String title;
+  final String? subtitle;
+  final String? secondarySubtitle;
+  final Widget? trailing;
+  final List<Widget>? badges;
+  final VoidCallback? onTap;
+  final bool isSelected;
+  final bool isHighlight;
+  final bool showDivider;
+  final EdgeInsetsGeometry? padding;
+
+  const EarthDataRow({
+    super.key,
+    required this.title,
+    this.leading,
+    this.subtitle,
+    this.secondarySubtitle,
+    this.trailing,
+    this.badges,
+    this.onTap,
+    this.isSelected = false,
+    this.isHighlight = false,
+    this.showDivider = true,
+    this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final rowContent = Container(
+      padding: padding ??
+          EdgeInsets.symmetric(
+            horizontal: context.tokens.number('pageTopics.cardPadding', 12),
+            vertical: context.tokens.number('spacing.control', 10),
+          ),
+      decoration: BoxDecoration(
+        color: isSelected
+            ? context.primaryColor.withValues(alpha: .1)
+            : Colors.transparent,
+        border: Border(
+          bottom: showDivider
+              ? BorderSide(color: context.subtleBorderColor)
+              : BorderSide.none,
+        ),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (leading != null) ...[
+            leading!,
+            SizedBox(width: context.spacingTitleOffset),
+          ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 2,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      title,
+                      style: context.widgetValueStyle.copyWith(
+                        color: isHighlight
+                            ? context.primaryColor
+                            : context.inkColor,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    if (badges != null) ...badges!,
+                  ],
+                ),
+                if (subtitle != null && subtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    subtitle!,
+                    style: context.widgetFooterStyle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+                if (secondarySubtitle != null &&
+                    secondarySubtitle!.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    secondarySubtitle!,
+                    style: context.widgetFooterStyle,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (trailing != null) ...[
+            SizedBox(width: context.spacingControl),
+            trailing!,
+          ],
+        ],
+      ),
+    );
+
+    if (onTap != null) {
+      return InkWell(
+        onTap: onTap,
+        child: rowContent,
+      );
+    }
+    return rowContent;
+  }
+}
+
+/// Standardized container for a list of [EarthDataRow]s with rounded corners and border.
+class EarthDataList extends StatelessWidget {
+  final List<Widget> children;
+  final EdgeInsetsGeometry? padding;
+
+  const EarthDataList({
+    super.key,
+    required this.children,
+    this.padding,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      decoration: BoxDecoration(
+        color: context.surfaceColor.withValues(alpha: .75),
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: children,
+      ),
+    );
+  }
+}

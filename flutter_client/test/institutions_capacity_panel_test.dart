@@ -16,7 +16,7 @@ void main() {
       },
     });
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(body: CorporationOverviewPanel(state: state)),
     ));
 
@@ -49,7 +49,7 @@ void main() {
       },
     });
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(body: CorporationOverviewPanel(state: state)),
     ));
 
@@ -162,7 +162,7 @@ void main() {
       'business': {'city_operating_modifier': 3.5},
     });
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(child: CityImpactPanel(state: state)),
       ),

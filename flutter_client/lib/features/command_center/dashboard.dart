@@ -3,7 +3,6 @@ import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/decision_queue_item.dart';
 import '../../core/models/live_connection_status.dart';
-import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../contracts/contracts_panel.dart';
 import '../finance/personal_finance_panel.dart';
@@ -27,8 +26,10 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/player_objective.dart';
 import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
+import '../activity/activity_panel.dart';
 import '../lifecycle/historical_archive_panel.dart';
 import 'quick_actions_panel.dart';
+import 'command_executive_quadrant.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
       'command' => 'COMMAND CENTER',
@@ -37,6 +38,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'net_worth' => 'NET WORTH ANALYTICS',
       'briefing' => 'EXECUTIVE BRIEFING',
       'messages' => 'MESSAGES',
+      'notifications' => 'NOTIFICATIONS',
       'business' => 'BUSINESS',
       'civic' => 'PUBLIC',
       'corporation' => 'CORPORATION',
@@ -51,6 +53,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'life' => 'LIFE',
       'pantheon' => 'MEMORIAL',
       'contracts' => 'CONTRACTS',
+      'projects' => 'PROJECTS',
       'finance' => 'FINANCE',
       'activity' => 'ACTIVITY & EVENTS',
       _ => 'COMMAND CENTER',
@@ -79,7 +82,7 @@ class Dashboard extends StatelessWidget {
   final bool isReconnecting;
   final LiveConnectionStatus? connectionStatus;
   final int unreadNotifications;
-  final Map<String, GlobalKey> sectionKeys;
+  final Map<String, Key> sectionKeys;
   final String selectedSection;
   final ValueChanged<String>? onNavigate;
   final Future<void> Function(Future<EarthState> Function()) action;
@@ -111,7 +114,7 @@ class Dashboard extends StatelessWidget {
     this.isReconnecting = false,
     this.connectionStatus,
     required this.unreadNotifications,
-    required this.sectionKeys,
+    this.sectionKeys = const {},
     this.selectedSection = 'command',
     this.onNavigate,
     required this.action,
@@ -442,22 +445,27 @@ class Dashboard extends StatelessWidget {
                 isPageMode: true,
                 onNavigate: onNavigate,
               );
-              final initiatives = SocialGameplayPanel(
-                initiatives: socialInitiatives,
-                gameDay: asInt((state.json['clock']
-                        as Map<String, dynamic>?)?['day']) ??
-                    1,
-                onChanged: onRefreshEvents,
-              );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   commLink,
-                  const SizedBox(height: 34),
-                  initiatives,
                 ],
               );
             },
+          ),
+        ];
+      case 'notifications':
+        return [
+          ActivityPanel(
+            events: events,
+            notifications: notifications,
+            unreadCount: unreadNotifications,
+            isLiveConnected: isLiveConnected,
+            isReconnecting: isReconnecting,
+            connectionStatus: connectionStatus,
+            onRefresh: onRefreshEvents ?? () {},
+            onMarkRead: onMarkNotificationRead ?? (_) async {},
+            onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
           ),
         ];
       case 'dynasty':
@@ -489,11 +497,6 @@ class Dashboard extends StatelessWidget {
                 onSelectBusiness: onSelectBusiness,
                 action: action,
               );
-              final managerOverview = BusinessManagerOverviewPanel(
-                  state: state,
-                  businessFinancials: businessFinancials,
-                  businessProfile: businessProfile,
-                  activeBusiness: activeBusiness);
               final aiAssistant =
                   AiAssistantPanel(state: state, busy: busy, action: action);
               final recommendations = AiRecommendationsPanel(state: state);
@@ -506,8 +509,6 @@ class Dashboard extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.stretch,
                             children: [
                           business,
-                          const SizedBox(height: 34),
-                          managerOverview
                         ])),
                     const SizedBox(width: 56),
                     Expanded(
@@ -527,8 +528,6 @@ class Dashboard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   business,
-                  const SizedBox(height: 34),
-                  managerOverview,
                   const SizedBox(height: 34),
                   aiAssistant,
                   const SizedBox(height: 34),
@@ -733,6 +732,7 @@ class Dashboard extends StatelessWidget {
             },
           ),
         ];
+      case 'operations':
       case 'machines':
         return [
           MachinesPanel(
@@ -779,7 +779,7 @@ class Dashboard extends StatelessWidget {
                       ),
                     ),
                     const SizedBox(width: 56),
-                    Expanded(
+                    const Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
@@ -863,6 +863,14 @@ class Dashboard extends StatelessWidget {
             },
           ),
         ];
+      case 'projects':
+        return [
+          SocialGameplayPanel(
+            initiatives: socialInitiatives,
+            gameDay: asInt((state.json['clock'] as Map<String, dynamic>?)?['day']) ?? 1,
+            onChanged: onRefreshEvents,
+          ),
+        ];
       case 'finance':
         return [
           LayoutBuilder(
@@ -913,6 +921,12 @@ class Dashboard extends StatelessWidget {
         return [
           LayoutBuilder(
             builder: (context, constraints) {
+              final quadrant = CommandExecutiveQuadrant(
+                state: state,
+                businessFinancials: businessFinancials,
+                contracts: contracts,
+                onNavigate: onNavigate,
+              );
               final summary = ExecutiveCommandSummary(
                 state: state,
                 businessFinancials: businessFinancials,
@@ -929,28 +943,35 @@ class Dashboard extends StatelessWidget {
                 onNavigate: onNavigate,
               );
               if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          QuickActionsPanel(
-                              state: state, onNavigate: onNavigate),
-                          const SizedBox(height: 28),
-                          summary,
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          objectives,
-                        ],
-                      ),
+                    quadrant,
+                    const SizedBox(height: 28),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              QuickActionsPanel(
+                                  state: state, onNavigate: onNavigate),
+                              const SizedBox(height: 28),
+                              summary,
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 56),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.stretch,
+                            children: [
+                              objectives,
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 );
@@ -958,6 +979,8 @@ class Dashboard extends StatelessWidget {
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+                  quadrant,
+                  const SizedBox(height: 28),
                   QuickActionsPanel(state: state, onNavigate: onNavigate),
                   const SizedBox(height: 28),
                   summary,
@@ -1053,7 +1076,7 @@ class EarthFlowMetric extends StatelessWidget {
                           child: Text(
                             label,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 10.5,
                               letterSpacing: 1.1,
                               color: mutedColor,

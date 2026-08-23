@@ -3,6 +3,7 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../contracts/supply_contracts_dialog.dart';
@@ -286,6 +287,23 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     EarthAudioEngine.instance.playClick();
   }
 
+  Future<void> _archiveDispatch(Map<String, dynamic> dispatch) async {
+    try {
+      await widget.api.archiveCommDispatch(dispatch['id'] as String);
+      if (!mounted) return;
+      await _fetchDispatches('inbox');
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Dispatch archived.')),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Archive failed: $e')),
+        );
+      }
+    }
+  }
+
   Future<void> _sendDispatch() async {
     final recipient = _composeRecipientController.text.trim();
     final subject = _composeSubjectController.text.trim();
@@ -407,6 +425,10 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    Padding(
+                      padding: const EdgeInsets.all(8.0),
+                      child: _buildTopMetricsHud(),
+                    ),
                     _buildSegmentedNavHeader(),
                     Expanded(
                       child: switch (_activeMode) {
@@ -451,158 +473,37 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final clockStr =
         'Day $gameDay · ${hour.toString().padLeft(2, '0')}:${min.toString().padLeft(2, '0')}';
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isCompact = constraints.maxWidth < 640;
-        if (isCompact) {
-          return Row(
-            children: [
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'CHANNELS',
-                  value: '${_channels.length} ACTIVE',
-                  icon: Icons.cell_tower,
-                  accent: cyanAccentColor,
-                ),
-              ),
-              const SizedBox(width: 6),
-              Expanded(
-                child: _buildMetricTile(
-                  label: 'DISPATCHES',
-                  value: _unreadDispatchesCount > 0
-                      ? '$_unreadDispatchesCount UNREAD'
-                      : '${_dispatches.length} TOTAL',
-                  icon: Icons.mail_outline,
-                  accent: _unreadDispatchesCount > 0
-                      ? EarthColors.goldMetallic
-                      : violetColor,
-                ),
-              ),
-            ],
-          );
-        }
-
-        return Row(
-          children: [
-            Expanded(
-              child: _buildMetricTile(
-                label: 'RELAY STATUS',
-                value: 'ONLINE · 142.8 GHz',
-                icon: Icons.wifi_tethering,
-                accent: cyanAccentColor,
-                statusDot: true,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildMetricTile(
-                label: 'ACTIVE CHANNELS',
-                value: '${_channels.length} FREQUENCIES',
-                icon: Icons.cell_tower,
-                accent: violetColor,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildMetricTile(
-                label: 'DIPLOMATIC DISPATCHES',
-                value: _unreadDispatchesCount > 0
-                    ? '$_unreadDispatchesCount UNREAD'
-                    : '${_dispatches.length} ARCHIVED',
-                icon: Icons.mark_email_unread_outlined,
-                accent: _unreadDispatchesCount > 0
-                    ? EarthColors.goldMetallic
-                    : mutedColor,
-              ),
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: _buildMetricTile(
-                label: 'SUB-SPACE CLOCK',
-                value: clockStr,
-                icon: Icons.access_time_rounded,
-                accent: cyanAccentColor,
-              ),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _buildMetricTile({
-    required String label,
-    required String value,
-    required IconData icon,
-    required Color accent,
-    bool statusDot = false,
-  }) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(5),
-            decoration: BoxDecoration(
-              color: accent.withValues(alpha: .15),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(icon, size: 13, color: accent),
-          ),
-          const SizedBox(width: 7),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
-                  children: [
-                    if (statusDot) ...[
-                      Container(
-                        width: 5,
-                        height: 5,
-                        margin: const EdgeInsets.only(right: 4),
-                        decoration: const BoxDecoration(
-                          color: Color(0xFF10B981),
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
-                    Flexible(
-                      child: Text(
-                        label,
-                        style: const TextStyle(
-                          color: mutedColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.7,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 1),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    color: inkColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: -0.2,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
+    return EarthMetricGrid(
+      metrics: [
+        EarthMetricTile(
+          label: 'RELAY STATUS',
+          value: 'ONLINE · 142.8 GHz',
+          icon: Icons.wifi_tethering,
+          accentColor: context.primaryColor,
+        ),
+        EarthMetricTile(
+          label: 'ACTIVE CHANNELS',
+          value: '${_channels.length} FREQUENCIES',
+          icon: Icons.cell_tower,
+          accentColor: context.secondaryColor,
+        ),
+        EarthMetricTile(
+          label: 'DIPLOMATIC DISPATCHES',
+          value: _unreadDispatchesCount > 0
+              ? '$_unreadDispatchesCount UNREAD'
+              : '${_dispatches.length} ARCHIVED',
+          icon: Icons.mark_email_unread_outlined,
+          accentColor: _unreadDispatchesCount > 0
+              ? context.warningColor
+              : context.mutedColor,
+        ),
+        EarthMetricTile(
+          label: 'SUB-SPACE CLOCK',
+          value: clockStr,
+          icon: Icons.access_time_rounded,
+          accentColor: context.primaryColor,
+        ),
+      ],
     );
   }
 
@@ -740,7 +641,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     );
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.transparent,
       ),
       clipBehavior: Clip.antiAlias,
@@ -917,7 +818,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                         horizontal: 14, vertical: 10),
                     decoration: BoxDecoration(
                       color: _groupSurface,
-                      border: Border(bottom: BorderSide(color: Colors.white12)),
+                      border: const Border(bottom: BorderSide(color: Colors.white12)),
                     ),
                     child: Row(
                       children: [
@@ -1364,7 +1265,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     }).toList();
 
     return Container(
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         color: Colors.transparent,
       ),
       clipBehavior: Clip.antiAlias,
@@ -1756,6 +1657,15 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                           constraints: const BoxConstraints(),
                           onPressed: () => _replyToDispatch(dispatch),
                         ),
+                        const SizedBox(width: 8),
+                        IconButton(
+                          icon: const Icon(Icons.archive_outlined,
+                              size: 15, color: cyanAccentColor),
+                          tooltip: 'Archive dispatch',
+                          padding: EdgeInsets.zero,
+                          constraints: const BoxConstraints(),
+                          onPressed: () => _archiveDispatch(dispatch),
+                        ),
                       ],
                     ),
                   ],
@@ -1992,7 +1902,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
               Expanded(
                 flex: 2,
                 child: DropdownButtonFormField<String>(
-                  value: _composeType,
+                  initialValue: _composeType,
                   isExpanded: true,
                   dropdownColor: const Color(0xFF141A24),
                   style: const TextStyle(fontSize: 11.5, color: inkColor),

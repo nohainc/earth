@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'earth_state.dart';
 
@@ -33,14 +32,14 @@ class DecisionQueueItem {
   Color get riskColor {
     switch (riskLevel.toLowerCase()) {
       case 'critical':
-        return const Color(0xFFFF5252);
+        return const Color(0xFFEF4444);
       case 'high':
-        return Colors.orangeAccent;
+        return const Color(0xFFF59E0B);
       case 'medium':
-        return violetColor;
+        return const Color(0xFF818CF8);
       case 'low':
       default:
-        return const Color(0xFF00E676);
+        return const Color(0xFF10B981);
     }
   }
 

@@ -27,13 +27,27 @@ test('Concurrency and Idempotency Stress Tests', async () => {
     }
 
     const baseUrl = `http://127.0.0.1:${port}`;
+    let sessionCookie = '';
+    try {
+      const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'amara@earthuc.com', password: 'password123456' }),
+      });
+      sessionCookie = loginRes.headers.get('set-cookie')?.split(';')[0] || '';
+    } catch {}
+
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      ...(sessionCookie ? { cookie: sessionCookie } : {}),
+    };
 
     // 1. Concurrent duplicate market order commands with identical Idempotency-Key
     const idemKey = `order-stress-${Date.now()}`;
     const orderPromises = Array.from({ length: 8 }, () =>
       fetch(`${baseUrl}/api/market/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': idemKey },
+        headers: { ...authHeaders, 'Idempotency-Key': idemKey },
         body: JSON.stringify({ product: 'energy', quantity: 2, limitPrice: 0.85, side: 'buy' }),
       }).then((r) => r.json())
     );
@@ -48,7 +62,7 @@ test('Concurrency and Idempotency Stress Tests', async () => {
     const votePromises = Array.from({ length: 6 }, (_, i) =>
       fetch(`${baseUrl}/api/governance/proposals/042/vote`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `vote-stress-${i}` },
+        headers: { ...authHeaders, 'Idempotency-Key': `vote-stress-${i}` },
         body: JSON.stringify({ vote: 'support' }),
       }).then((r) => r.json())
     );
@@ -59,7 +73,7 @@ test('Concurrency and Idempotency Stress Tests', async () => {
     const policyPromises = ['reliability', 'margin', 'growth', 'reliability'].map((policy, i) =>
       fetch(`${baseUrl}/api/businesses/B-1048/policy`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `policy-stress-${i}` },
+        headers: { ...authHeaders, 'Idempotency-Key': `policy-stress-${i}` },
         body: JSON.stringify({ policy }),
       }).then((r) => r.json())
     );

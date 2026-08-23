@@ -138,7 +138,7 @@ void main() {
       'communities': [{}],
     });
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: SingleChildScrollView(
           child: Column(children: [

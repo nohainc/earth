@@ -26,9 +26,9 @@ extension LiveConnectionStatusX on LiveConnectionStatus {
       case LiveConnectionStatus.live:
         return 'LIVE';
       case LiveConnectionStatus.reconnecting:
-        return 'RECONNECTING';
+        return 'RETRY';
       case LiveConnectionStatus.polling:
-        return 'POLLING';
+        return 'POLL';
       case LiveConnectionStatus.offline:
         return 'OFFLINE';
     }
@@ -50,13 +50,13 @@ extension LiveConnectionStatusX on LiveConnectionStatus {
   Color get color {
     switch (this) {
       case LiveConnectionStatus.live:
-        return const Color(0xFF00E676);
+        return const Color(0xFF10B981);
       case LiveConnectionStatus.reconnecting:
-        return const Color(0xFFFF9100);
+        return const Color(0xFFF59E0B);
       case LiveConnectionStatus.polling:
-        return const Color(0xFFFFD600);
+        return const Color(0xFFFBBF24);
       case LiveConnectionStatus.offline:
-        return const Color(0xFFFF5252);
+        return const Color(0xFFEF4444);
     }
   }
 

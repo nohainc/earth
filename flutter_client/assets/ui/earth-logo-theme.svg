@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title desc">
+  <title id="title">Earth game logo</title>
+  <desc id="desc">A world held by an orbit, rising city, and growing seed.</desc>
+  <style>
+    :root {
+      --earth-logo-primary: currentColor;
+      --earth-logo-secondary: #8b7cf6;
+      --earth-logo-gold: #f5b544;
+      --earth-logo-dark: #111327;
+      --earth-logo-world: #173c63;
+    }
+    .primary { fill: var(--earth-logo-primary); stroke: var(--earth-logo-primary); }
+    .secondary { fill: var(--earth-logo-secondary); stroke: var(--earth-logo-secondary); }
+    .gold { fill: var(--earth-logo-gold); stroke: var(--earth-logo-gold); }
+    .dark { fill: var(--earth-logo-dark); stroke: var(--earth-logo-dark); }
+    .world { fill: var(--earth-logo-world); stroke: var(--earth-logo-primary); }
+    .line { fill: none; stroke-linecap: round; stroke-linejoin: round; }
+  </style>
+
+  <!-- Outer civic frame -->
+  <path class="dark" d="M256 18 420 82v158c0 115-67 210-164 254C159 450 92 355 92 240V82z" opacity=".96"/>
+  <path class="line primary" d="M256 18 420 82v158c0 115-67 210-164 254C159 450 92 355 92 240V82z" stroke-width="7" opacity=".75"/>
+
+  <!-- Orbit / shared systems -->
+  <ellipse class="line gold" cx="256" cy="256" rx="218" ry="82" transform="rotate(-18 256 256)" stroke-width="12" opacity=".95"/>
+  <circle class="gold" cx="444" cy="188" r="14"/>
+
+  <!-- World -->
+  <circle class="world" cx="256" cy="260" r="126" stroke-width="7"/>
+  <path class="line primary" d="M152 226c37-31 72-41 109-30 31 9 51 4 92-24M141 286c48-25 87-21 124-3 37 18 67 20 105 3M170 337c31-18 60-20 88-8 28 12 58 13 84 0" stroke-width="8" opacity=".7"/>
+  <path class="line secondary" d="M218 140c-19 37-25 74-18 110 7 36 2 75-17 116M300 137c18 38 22 77 13 112-9 35-4 75 16 116" stroke-width="5" opacity=".65"/>
+
+  <!-- City / civilization rising above the world -->
+  <path class="primary" d="M174 142h24v-34h25v34h16V82h31v60h15V61h34v81h18v-45h26v45h20l-11 35H183z" opacity=".9"/>
+  <path class="gold" d="M184 165h145v13H184z" opacity=".9"/>
+  <path class="dark" d="M207 119h8v12h-8zm39-22h8v12h-8zm48-15h8v12h-8zm42 32h8v12h-8z"/>
+
+  <!-- Seed / future growth -->
+  <path class="gold" d="M256 452c-29-35-27-67 0-95 27 28 29 60 0 95z"/>
+  <path class="line primary" d="M256 447V366M256 394c-22-25-47-28-69-10M256 409c22-25 47-28 69-10" stroke-width="8"/>
+  <path class="line secondary" d="M187 384c-26-18-48-17-67 3 22 17 45 17 67-3zm138 0c26-18 48-17 67 3-22 17-45 17-67-3z" stroke-width="5"/>
+</svg>

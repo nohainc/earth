@@ -1,10 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/daily_briefing.dart';
 import '../../core/audio/earth_audio_engine.dart';
-import '../../shared/widgets/earth_primitives.dart';
-import '../market/market_panels.dart';
+import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 void showDailyBriefingDialog(
   BuildContext context, {
@@ -38,7 +37,6 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
   String? _error;
   DailyBriefingReport? _report;
 
-  Color get _groupSurface => EarthThemeController.instance.cardSurface;
   @override
   void initState() {
     super.initState();
@@ -57,8 +55,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       if (isOk) {
         if (mounted) {
           setState(() {
-            _report =
-                DailyBriefingReport.fromJson(Map<String, dynamic>.from(res));
+            _report = DailyBriefingReport.fromJson(Map<String, dynamic>.from(res));
             _loading = false;
           });
           EarthAudioEngine.instance.playChime();
@@ -66,8 +63,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       } else {
         if (mounted) {
           setState(() {
-            _error =
-                res['error']?.toString() ?? 'Failed to load executive briefing';
+            _error = res['error']?.toString() ?? 'Failed to load executive briefing';
             _loading = false;
           });
         }
@@ -84,36 +80,32 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final panel = EarthPanel(
-      height: widget.isPageMode ? null : 740,
-      title: 'EXECUTIVE INTELLIGENCE BRIEFING',
-      showSurface: false,
-      showTitle: false,
-      contentPadding: EdgeInsets.zero,
-      infoDescription:
-          '• Review what changed since your last visit.\n\n• Handle the decisions that can affect your businesses, household, city, or long-term direction.\n\n• Detailed market, finance, business, and civic screens remain available through the action links.',
-      child: widget.isPageMode
-          ? _buildBriefingBody()
-          : SizedBox(
-              height: 620,
-              child: SingleChildScrollView(child: _buildBriefingBody()),
-            ),
-    );
-
-    if (widget.isPageMode) return panel;
+    if (widget.isPageMode) {
+      return _buildBriefingBody();
+    }
 
     return Dialog(
-      backgroundColor: Colors.transparent,
+      backgroundColor: context.panelColor,
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-      child: SizedBox(width: 880, height: 740, child: panel),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.radiusPanel),
+        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+      ),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 880, maxHeight: 740),
+        child: SingleChildScrollView(
+          padding: EdgeInsets.all(context.tokens.number('pageTopics.cardPadding', 16)),
+          child: _buildBriefingBody(),
+        ),
+      ),
     );
   }
 
   Widget _buildBriefingBody() {
     if (_loading) {
-      return const SizedBox(
+      return SizedBox(
         height: 220,
-        child: Center(child: CircularProgressIndicator()),
+        child: Center(child: CircularProgressIndicator(color: context.primaryColor)),
       );
     }
     if (_error != null) {
@@ -123,15 +115,14 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline,
-                  color: Color(0xFFFF5252), size: 36),
+              Icon(Icons.error_outline, color: context.errorColor, size: 36),
               const SizedBox(height: 10),
-              Text(_error!,
-                  style: const TextStyle(color: Colors.white70, fontSize: 13)),
-              const SizedBox(height: 16),
-              FilledButton(
+              Text(_error!, style: context.widgetFooterStyle),
+              SizedBox(height: context.spacingInline),
+              EarthButton(
+                label: 'RETRY BRIEFING',
+                variant: EarthButtonVariant.primary,
                 onPressed: _loadBriefing,
-                child: const Text('RETRY BRIEFING'),
               ),
             ],
           ),
@@ -147,252 +138,84 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     final delta = r.netWealthDelta.delta;
     final isPos = delta >= 0;
 
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              width: 44,
-              height: 44,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                color: violetColor.withValues(alpha: .2),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: violetColor.withValues(alpha: .4)),
-              ),
-              child: const Icon(Icons.insights_outlined,
-                  size: 22, color: cyanAccentColor),
-            ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('NET WORTH',
-                      style: TextStyle(
-                          color: mutedColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1)),
-                  const SizedBox(height: 3),
-                  Text(
-                    '${r.netWealthDelta.current.toStringAsFixed(2)} CR',
-                    style: const TextStyle(
-                        color: inkColor,
-                        fontSize: 24,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: -.4),
-                  ),
-                ],
-              ),
-            ),
-            Container(
-              width: 1,
-              height: 42,
-              margin: const EdgeInsets.symmetric(horizontal: 14),
-              color: EarthColors.borderSubtle,
-            ),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('NET CHANGE',
-                      style: TextStyle(
-                          color: mutedColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.1)),
-                  const SizedBox(height: 3),
-                  Text('${isPos ? '+' : ''}${delta.toStringAsFixed(2)} CR',
-                      style: TextStyle(
-                          color: isPos
-                              ? const Color(0xFF00E676)
-                              : const Color(0xFFFF5252),
-                          fontSize: 24,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -.4)),
-                  Text(
-                      '${isPos ? '+' : ''}${r.netWealthDelta.deltaPct.toStringAsFixed(2)}% since previous day close',
-                      style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-                ],
-              ),
-            ),
-          ],
+    return EarthMetricGrid(
+      metrics: [
+        EarthMetricTile(
+          label: 'NET WORTH',
+          value: '${r.netWealthDelta.current.toStringAsFixed(2)} CR',
+          subtitle: 'Current sovereign valuation',
+          icon: Icons.insights_outlined,
+          accentColor: context.primaryColor,
         ),
-        const SizedBox(height: 14),
-        const Text(
-          'PREVIOUS GAME-DAY',
-          textAlign: TextAlign.left,
-          style: TextStyle(
-            color: mutedColor,
-            fontSize: 8.5,
-            fontWeight: FontWeight.w600,
-            letterSpacing: .7,
-          ),
+        EarthMetricTile(
+          label: 'NET CHANGE',
+          value: '${isPos ? '+' : ''}${delta.toStringAsFixed(2)} CR',
+          subtitle: '${isPos ? '+' : ''}${r.netWealthDelta.deltaPct.toStringAsFixed(2)}% since previous day close',
+          icon: isPos ? Icons.trending_up : Icons.trending_down,
+          accentColor: isPos ? context.successColor : context.errorColor,
         ),
-        const SizedBox(height: 14),
-        _cashflowResult(r.cashflow),
+        EarthMetricTile(
+          label: 'NET CASHFLOW',
+          value: '${r.cashflow.netProfit >= 0 ? '+' : ''}${r.cashflow.netProfit.toStringAsFixed(2)} CR/day',
+          subtitle: r.cashflow.netProfit >= 0 ? 'Operating surplus' : 'Operating deficit',
+          icon: Icons.account_balance_wallet_outlined,
+          accentColor: r.cashflow.netProfit >= 0 ? context.successColor : context.warningColor,
+        ),
       ],
     );
   }
 
-  Widget _cashflowResult(FinancialCashflowDelta cf) {
-    final isPositive = cf.netProfit >= 0;
-    final color = isPositive
-        ? EarthThemeController.instance.primaryAccent
-        : const Color(0xFFFF5252);
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      child: Row(
-        children: [
-          Icon(isPositive ? Icons.trending_up : Icons.trending_down,
-              color: color, size: 18),
-          const SizedBox(width: 9),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const Text('NET CASHFLOW',
-                    style: TextStyle(
-                        color: mutedColor,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .8)),
-                const SizedBox(height: 3),
-                Text(isPositive ? 'OPERATING SURPLUS' : 'OPERATING DEFICIT',
-                    style: const TextStyle(color: inkColor, fontSize: 11)),
-              ],
-            ),
-          ),
-          Text('${isPositive ? '+' : ''}${cf.netProfit.toStringAsFixed(2)} CR',
-              style: TextStyle(
-                  color: color, fontSize: 16, fontWeight: FontWeight.w800)),
-        ],
-      ),
-    );
-  }
-
   Widget _buildAllBriefingContent(DailyBriefingReport r) {
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth > 1000;
-        final left = <Widget>[
-          _buildSectionLabel('WHAT REQUIRES ATTENTION'),
-          _buildDirectivesContent(r),
-        ];
-        final right = <Widget>[
-          _buildSectionLabel('CURRENT OPERATIONS', topOffset: wide ? 0 : 34),
-          _buildIndustryContent(r),
-          _buildSectionLabel('CITY & CIVIC EFFECTS'),
-          _buildCivicContent(r),
-        ];
-        final sections = wide
-            ? Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        _buildBriefingHeading(context),
-                        _buildHeroDeltaBanner(r),
-                        _buildSectionLabel('WHAT CHANGED', topOffset: 28),
-                        _buildRecentChangesContent(r),
-                        ...left,
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 56),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: right,
-                    ),
-                  ),
-                ],
-              )
-            : Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [...left, ...right],
-              );
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (wide)
-              sections
-            else ...[
-              _buildBriefingHeading(context),
-              _buildHeroDeltaBanner(r),
-              _buildSectionLabel('WHAT CHANGED', topOffset: 28),
-              _buildRecentChangesContent(r),
-              ...left,
-              ...right,
-            ],
-            const SizedBox(height: 16),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EarthSection(
+          title: 'SINCE YOUR LAST VISIT',
+          showSurface: false,
+          infoBulletPoints: const [
+            'The financial result compares your current position with the previous game day.',
+            'The change list highlights business, contract, civic, and household effects that may require a decision.',
+            'Open Finance or Activity for the complete ledger and event history.',
           ],
-        );
-      },
-    );
-  }
-
-  Widget _buildBriefingHeading(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
-        children: [
-          const Flexible(
-            child: Text(
-              'SINCE YOUR LAST VISIT',
-              style: TextStyle(
-                color: EarthColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
-              ),
-            ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeroDeltaBanner(r),
+              SizedBox(height: context.spacingTopic),
+              Text('WHAT CHANGED', style: context.widgetTitleStyle),
+              SizedBox(height: context.spacingControl),
+              _buildRecentChangesContent(r),
+            ],
           ),
-          const SizedBox(width: 5),
-          IconButton(
-            tooltip: 'About executive briefing',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: Icon(Icons.info_outline,
-                size: 14, color: mutedColor.withValues(alpha: .8)),
-            onPressed: () => showEarthInfoDialog(
-              context,
-              title: 'SINCE YOUR LAST VISIT',
-              description:
-                  '• The financial result compares your current position with the previous game day.\n\n'
-                  '• The change list highlights business, contract, civic, and household effects that may require a decision.\n\n'
-                  '• Open Finance or Activity for the complete ledger and event history.',
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSectionLabel(String label, {double topOffset = 34}) {
-    return Padding(
-      padding: EdgeInsets.fromLTRB(0, topOffset, 0, 10),
-      child: Text(
-        label,
-        style: const TextStyle(
-          color: EarthColors.textMuted,
-          fontSize: 10,
-          fontWeight: FontWeight.bold,
-          letterSpacing: 1.1,
         ),
-      ),
+        SizedBox(height: context.spacingTopic),
+        EarthSection(
+          title: 'WHAT REQUIRES ATTENTION',
+          showSurface: false,
+          infoBulletPoints: const [
+            'High-priority operational, civic, and commercial directives recommended for your immediate review.',
+          ],
+          child: _buildDirectivesContent(r),
+        ),
+        SizedBox(height: context.spacingTopic),
+        EarthSection(
+          title: 'CURRENT OPERATIONS',
+          showSurface: false,
+          infoBulletPoints: const [
+            'Active enterprise summary, machine capacity, output volume, and pending commercial contracts.',
+          ],
+          child: _buildIndustryContent(r),
+        ),
+        SizedBox(height: context.spacingTopic),
+        EarthSection(
+          title: 'CITY & CIVIC EFFECTS',
+          showSurface: false,
+          infoBulletPoints: const [
+            'Current residency jurisdiction, municipal taxation, and recent civic legislative resolutions.',
+          ],
+          child: _buildCivicContent(r),
+        ),
+      ],
     );
   }
 
@@ -400,510 +223,151 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
     final changes = <(String, String, IconData, Color)>[
       (
         'Financial result',
-        '${r.cashflow.netProfit >= 0 ? '+' : ''}${r.cashflow.netProfit.toStringAsFixed(2)} CR net cashflow',
+        '${r.cashflow.netProfit >= 0 ? '+' : ''}${formatWholeNumber(r.cashflow.netProfit)} CR net cashflow',
         r.cashflow.netProfit >= 0 ? Icons.trending_up : Icons.trending_down,
-        r.cashflow.netProfit >= 0
-            ? const Color(0xFF00E676)
-            : const Color(0xFFFF5252),
+        r.cashflow.netProfit >= 0 ? context.successColor : context.errorColor,
       ),
       (
         'Operations',
         '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeMachines} machines · ${r.businessSummary.pendingContractsCount} pending contracts',
         Icons.business_center_outlined,
-        EarthThemeController.instance.primaryAccent,
+        context.primaryColor,
       ),
       if (r.civicSummary.recentCivicEvents.isNotEmpty)
         (
           'City and civic life',
           r.civicSummary.recentCivicEvents.first,
           Icons.location_city_outlined,
-          EarthColors.goldMetallic,
+          context.secondaryColor,
         ),
     ];
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: changes.indexed.map((indexed) {
-          final change = indexed.$2;
-          final isLast = indexed.$1 == changes.length - 1;
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: isLast
-                    ? BorderSide.none
-                    : const BorderSide(color: EarthColors.borderSubtle),
-              ),
-            ),
-            child: Row(
-              children: [
-                Icon(change.$3, size: 16, color: change.$4),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(change.$1,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700)),
-                ),
-                const SizedBox(width: 10),
-                Flexible(
-                  child: Text(change.$2,
-                      textAlign: TextAlign.right,
-                      overflow: TextOverflow.ellipsis,
-                      style:
-                          const TextStyle(color: Colors.white70, fontSize: 10)),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+    return EarthDataList(
+      children: changes.indexed.map((indexed) {
+        final change = indexed.$2;
+        final isLast = indexed.$1 == changes.length - 1;
+
+        return EarthDataRow(
+          title: change.$1,
+          subtitle: change.$2,
+          leading: Icon(change.$3, size: context.iconSize, color: change.$4),
+          showDivider: !isLast,
+        );
+      }).toList(),
     );
   }
 
   Widget _buildDirectivesContent(DailyBriefingReport r) {
     if (r.recommendedDirectives.isEmpty) {
-      return const Text('No directives require attention.',
-          style: TextStyle(color: EarthColors.textMuted));
+      return const EarthEmptyState(
+        message: 'No directives require attention.',
+        icon: Icons.check_circle_outline,
+      );
     }
 
-    return Container(
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: r.recommendedDirectives.indexed.map((indexed) {
-          final d = indexed.$2;
-          final isLast = indexed.$1 == r.recommendedDirectives.length - 1;
+    return EarthDataList(
+      children: r.recommendedDirectives.indexed.map((indexed) {
+        final d = indexed.$2;
+        final isLast = indexed.$1 == r.recommendedDirectives.length - 1;
 
-          Color badgeColor;
-          if (d.urgency == 'high') {
-            badgeColor = const Color(0xFFFF5252);
-          } else if (d.urgency == 'medium') {
-            badgeColor = const Color(0xFFFFB300);
-          } else {
-            badgeColor = const Color(0xFF38BDF8);
-          }
-
-          return Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: isLast
-                    ? BorderSide.none
-                    : const BorderSide(color: EarthColors.borderSubtle),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: badgeColor.withAlpha(30),
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: badgeColor),
-                  ),
-                  child: Text(
-                    d.urgency.toUpperCase(),
-                    style: TextStyle(
-                        color: badgeColor,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        d.title,
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                            fontSize: 12.5),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        d.reason,
-                        style: const TextStyle(
-                            color: Colors.white70, fontSize: 11, height: 1.3),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 14),
-                FilledButton.icon(
-                  key: Key('btn-directive-${d.id}'),
-                  onPressed: () {
-                    EarthAudioEngine.instance.playClick();
-                    if (!widget.isPageMode) Navigator.of(context).pop();
-                    widget.onNavigate(d.targetSection);
-                  },
-                  icon: const Icon(Icons.launch, size: 13),
-                  label: Text(d.actionLabel),
-                  style: FilledButton.styleFrom(
-                    backgroundColor:
-                        EarthThemeController.instance.primaryAccent,
-                    foregroundColor: Colors.black,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                    textStyle: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 10.5),
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
-    );
-  }
-
-  Widget _buildCashflowContent(DailyBriefingReport r) {
-    final cf = r.cashflow;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final income = _cashflowBreakdown(
-          title: 'INCOME SOURCES',
-          total: '+${cf.totalIncome.toStringAsFixed(2)} CR',
-          color: const Color(0xFF00E676),
-          rows: [
-            (
-              'Market commodity sales',
-              '+${cf.marketSales.toStringAsFixed(2)} CR'
-            ),
-            (
-              'Corporate equity dividends',
-              '+${cf.businessDividends.toStringAsFixed(2)} CR'
-            ),
-          ],
-        );
-        final expenses = _cashflowBreakdown(
-          title: 'EXPENSES',
-          total: '-${cf.totalExpenses.toStringAsFixed(2)} CR',
-          color: const Color(0xFFFF5252),
-          rows: [
-            (
-              'Machine maintenance & fuel',
-              '-${cf.machineMaintenance.toStringAsFixed(2)} CR'
-            ),
-            (
-              'Municipal civic taxes',
-              '-${cf.civicTaxes.toStringAsFixed(2)} CR'
-            ),
-          ],
-        );
-        if (constraints.maxWidth > 520) {
-          return Row(children: [
-            Expanded(child: income),
-            const SizedBox(width: 16),
-            Expanded(child: expenses)
-          ]);
+        EarthBadgeVariant badgeVariant = EarthBadgeVariant.primary;
+        if (d.urgency == 'high') {
+          badgeVariant = EarthBadgeVariant.warning;
+        } else if (d.urgency == 'medium') {
+          badgeVariant = EarthBadgeVariant.warning;
         }
-        return Column(children: [income, const SizedBox(height: 10), expenses]);
-      },
-    );
-  }
 
-  Widget _cashflowBreakdown({
-    required String title,
-    required String total,
-    required Color color,
-    required List<(String, String)> rows,
-  }) {
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(title,
-                  style: const TextStyle(
-                      color: EarthColors.textMuted,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                      letterSpacing: .8)),
-              Text(total,
-                  style: TextStyle(
-                      color: color, fontSize: 11, fontWeight: FontWeight.w800)),
-            ],
+        return EarthDataRow(
+          title: d.title,
+          subtitle: d.reason,
+          badges: [
+            EarthBadge(label: d.urgency.toUpperCase(), variant: badgeVariant),
+          ],
+          trailing: EarthButton(
+            key: Key('btn-directive-${d.id}'),
+            label: d.actionLabel,
+            icon: Icons.launch,
+            variant: d.urgency == 'high' ? EarthButtonVariant.danger : EarthButtonVariant.primary,
+            onPressed: () {
+              EarthAudioEngine.instance.playClick();
+              if (!widget.isPageMode) Navigator.of(context).pop();
+              widget.onNavigate(d.targetSection);
+            },
           ),
-          const SizedBox(height: 8),
-          for (final row in rows) _flowRow(row.$1, row.$2, color),
-        ],
-      ),
-    );
-  }
-
-  Widget _flowRow(String label, String val, Color color,
-      {bool isBold = false}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-        children: [
-          Expanded(
-            child: Text(label,
-                style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: isBold ? 12 : 11,
-                    fontWeight: isBold ? FontWeight.bold : FontWeight.normal)),
-          ),
-          const SizedBox(width: 8),
-          Text(val,
-              textAlign: TextAlign.right,
-              style: TextStyle(
-                  color: color,
-                  fontSize: isBold ? 13 : 10,
-                  fontWeight: FontWeight.bold)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildMarketsContent(DailyBriefingReport r) {
-    return Container(
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: r.marketMovements.indexed.map((indexed) {
-          final m = indexed.$2;
-          final isLast = indexed.$1 == r.marketMovements.length - 1;
-          final meta = CommodityMeta.forProduct(m.commodity);
-          final isUp = m.deltaPct >= 0;
-          final deltaStr =
-              '${isUp ? '+' : ''}${m.deltaPct.toStringAsFixed(2)}%';
-          final deltaColor =
-              isUp ? const Color(0xFF00E676) : const Color(0xFFFF5252);
-
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: isLast
-                    ? BorderSide.none
-                    : const BorderSide(color: EarthColors.borderSubtle),
-              ),
-            ),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                Icon(meta.icon, size: 26, color: meta.color),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Column(
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              meta.name,
-                              style: const TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          Text(
-                            '${m.currentPrice.toStringAsFixed(2)} C',
-                            style: const TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w700,
-                                color: Colors.white),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 3),
-                      Row(
-                        children: [
-                          Text(
-                            '${m.volume24h} units vol',
-                            style: const TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w600,
-                                color: EarthColors.textMuted),
-                          ),
-                          const Spacer(),
-                          Text(
-                            deltaStr,
-                            style: TextStyle(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: deltaColor),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+          showDivider: !isLast,
+        );
+      }).toList(),
     );
   }
 
   Widget _buildIndustryContent(DailyBriefingReport r) {
-    final items = [
-      (
-        'ACTIVE BUSINESSES',
-        '${r.businessSummary.activeBusinesses}',
-        Icons.storefront_outlined,
-        EarthThemeController.instance.primaryAccent,
-      ),
-      (
-        'DAILY OUTPUT',
-        '${r.businessSummary.totalDailyOutput}',
-        Icons.precision_manufacturing_outlined,
-        const Color(0xFF00E676),
-      ),
-      (
-        'ACTIVE MACHINES',
-        '${r.businessSummary.activeMachines}',
-        Icons.settings_suggest_outlined,
-        const Color(0xFF38BDF8),
-      ),
-      (
-        'DEGRADED MACHINES',
-        '${r.businessSummary.degradedMachinesCount}',
-        Icons.warning_amber_outlined,
-        const Color(0xFFFF5252),
-      ),
-      (
-        'PENDING CONTRACTS',
-        '${r.businessSummary.pendingContractsCount}',
-        Icons.assignment_outlined,
-        const Color(0xFFFFB300),
-      ),
-    ];
-
-    return Container(
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: EarthColors.borderSubtle),
-      ),
-      clipBehavior: Clip.antiAlias,
-      child: Column(
-        children: items.indexed.map((indexed) {
-          final item = indexed.$2;
-          final isLast = indexed.$1 == items.length - 1;
-
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border(
-                bottom: isLast
-                    ? BorderSide.none
-                    : const BorderSide(color: EarthColors.borderSubtle),
-              ),
-            ),
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(6),
-                  decoration: BoxDecoration(
-                    color: item.$4.withAlpha(25),
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(item.$3, size: 16, color: item.$4),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    item.$1,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                    ),
-                  ),
-                ),
-                Text(
-                  item.$2,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                  ),
-                ),
-              ],
-            ),
-          );
-        }).toList(),
-      ),
+    return EarthMetricGrid(
+      metrics: [
+        EarthMetricTile(
+          label: 'ACTIVE BUSINESSES',
+          value: '${r.businessSummary.activeBusinesses}',
+          icon: Icons.storefront_outlined,
+          accentColor: context.primaryColor,
+        ),
+        EarthMetricTile(
+          label: 'DAILY OUTPUT',
+          value: '${r.businessSummary.totalDailyOutput}',
+          icon: Icons.precision_manufacturing_outlined,
+          accentColor: context.successColor,
+        ),
+        EarthMetricTile(
+          label: 'ACTIVE MACHINES',
+          value: '${r.businessSummary.activeMachines}',
+          icon: Icons.settings_suggest_outlined,
+          accentColor: context.primaryColor,
+        ),
+        EarthMetricTile(
+          label: 'DEGRADED MACHINES',
+          value: '${r.businessSummary.degradedMachinesCount}',
+          icon: Icons.warning_amber_outlined,
+          accentColor: r.businessSummary.degradedMachinesCount > 0 ? context.errorColor : context.successColor,
+        ),
+        EarthMetricTile(
+          label: 'PENDING CONTRACTS',
+          value: '${r.businessSummary.pendingContractsCount}',
+          icon: Icons.assignment_outlined,
+          accentColor: r.businessSummary.pendingContractsCount > 0 ? context.warningColor : context.mutedColor,
+        ),
+      ],
     );
   }
 
   Widget _buildCivicContent(DailyBriefingReport r) {
     final c = r.civicSummary;
-    return Padding(
-      padding: EdgeInsets.zero,
+
+    return Container(
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: _groupSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: EarthColors.borderSubtle),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text('CIVIC RESIDENCY: ${c.cityResidency.toUpperCase()}',
-                    style: TextStyle(
-                        color: EarthThemeController.instance.primaryAccent,
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                Text(
-                    'Municipal Tax Rate: ${c.cityTaxRatePct}% • Active Senate Bills: ${c.activeProposals}',
-                    style:
-                        const TextStyle(color: Colors.white70, fontSize: 11)),
-                const SizedBox(height: 12),
-                const Text('RECENT CIVIC RESOLUTIONS',
-                    style: TextStyle(
-                        color: EarthColors.textMuted,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold)),
-                const SizedBox(height: 6),
-                ...c.recentCivicEvents.map((e) => Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Text('• $e',
-                          style: const TextStyle(
-                              color: Colors.white70, fontSize: 11)),
-                    )),
-              ],
-            ),
+          Text(
+            'CIVIC RESIDENCY: ${c.cityResidency.toUpperCase()}',
+            style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
           ),
+          const SizedBox(height: 6),
+          Text(
+            'Municipal Tax Rate: ${c.cityTaxRatePct}% • Active Senate Bills: ${c.activeProposals}',
+            style: context.widgetFooterStyle,
+          ),
+          if (c.recentCivicEvents.isNotEmpty) ...[
+            SizedBox(height: context.spacingTitleOffset),
+            Text('RECENT CIVIC RESOLUTIONS', style: context.captionStyle),
+            const SizedBox(height: 6),
+            ...c.recentCivicEvents.map((e) => Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 2),
+                  child: Text('• $e', style: context.widgetFooterStyle),
+                )),
+          ],
         ],
       ),
     );

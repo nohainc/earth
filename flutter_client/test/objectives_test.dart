@@ -5,7 +5,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/command_center/objectives_panel.dart';
 
 void main() {
-  final testState = EarthState(const {
+  final testState = const EarthState({
     'clock': {'day': 185, 'minute': 400},
     'world': {'health': 80, 'essentialServicesIndex': 0.88},
     'human': {'id': 'H-0044', 'name': 'Amara Vance', 'credits': 32000.0, 'standing': 85.0},
@@ -58,7 +58,7 @@ void main() {
       expect(fromJson.title, 'Build the Most Valuable Corporation');
       expect(fromJson.progressPercentage, 45.0);
       expect(fromJson.categoryLabel, 'ENTERPRISE & INDUSTRY');
-      expect(fromJson.categoryColor, Colors.orangeAccent);
+      expect(fromJson.categoryColor, const Color(0xFFF59E0B));
       expect(fromJson.categoryIcon, Icons.business_center_outlined);
       expect(fromJson.isCompleted, isFalse);
     });

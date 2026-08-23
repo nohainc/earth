@@ -729,23 +729,34 @@ function settleMarket() {
   for (const product of Object.keys(state.market.products)) {
     const book = eligible.filter((o) => o.product === product).sort((a, b) => a.createdAt - b.createdAt);
     const market = state.market.products[product];
-    let supply = market.supply;
-    for (const order of book) {
-      if (supply <= 0) break;
-      const fill = Math.min(order.quantity, supply);
-      const price = money(Math.min(order.limitPrice, market.price));
+      let supply = market.supply;
+      let demand = market.demand;
+      for (const order of book) {
+      const isSell = order.side === 'sell';
+      if (isSell ? demand <= 0 : supply <= 0) break;
+      const fill = Math.min(order.quantity, isSell ? demand : supply);
+      const price = isSell
+        ? money(Math.max(order.limitPrice, market.price))
+        : money(Math.min(order.limitPrice, market.price));
       const total = money(fill * price);
-      const buyer = human(order.humanId);
-      if (buyer.credits < total) {
-        order.status = 'rejected';
-        continue;
+      const actor = human(order.humanId);
+      if (!isSell && actor.credits < total) {
+          order.status = 'rejected';
+          continue;
       }
-      buyer.credits -= total;
-      appendLedger({ debit: order.humanId, credit: 'central-market', amount: total, reason: 'market_order', correlationId: order.id });
-      state.resources[product] += fill;
+      if (isSell) {
+        actor.credits += money(total * (1 - 0.005));
+        state.market.products[product].supply += fill;
+        demand -= fill;
+        appendLedger({ debit: 'central-market', credit: order.humanId, amount: money(total * (1 - 0.005)), reason: 'market_sale', correlationId: order.id });
+      } else {
+        actor.credits -= total;
+        state.resources[product] += fill;
+        supply -= fill;
+        appendLedger({ debit: order.humanId, credit: 'central-market', amount: total, reason: 'market_order', correlationId: order.id });
+      }
       order.filled = fill;
       order.status = fill === order.quantity ? 'filled' : 'partial';
-      supply -= fill;
       if (database) void database.saveOrder(order).catch((error) => console.error('settlement persistence failed', error.message));
       fills.push({ orderId: order.id, product, quantity: fill, price, total });
     }
@@ -757,6 +768,7 @@ function settleMarket() {
 }
 
 async function command(path, body, req = null) {
+  const correlationId = body.correlationId || body.idempotencyKey || req?.headers?.['idempotency-key'] || req?.headers?.['x-request-id'];
   // Social Commons local compatibility routes.
   if (path.startsWith('/api/social/')) {
     const session = resolveSession(req);
@@ -773,7 +785,12 @@ async function command(path, body, req = null) {
     }
     if (path === '/api/social/initiatives' && body.method === 'POST') {
       if (!body.targetId || !body.kind || !String(body.title || '').trim() || !String(body.body || '').trim()) throw new ApiError('targetId, kind, title, and body are required');
-      const initiative = { id: `SOC-${randomUUID()}`, creator_id: viewerId, target_id: body.targetId, kind: body.kind, title: String(body.title).trim(), body: String(body.body).trim(), terms: body.terms || {}, escrow_amount: Number(body.terms?.creditAmount || 0), deadline_game_day: Number(body.terms?.deadlineGameDay || state.clock.day + 7), progress: 0, status: 'proposed', member_status: 'accepted' };
+      const terms = body.terms || {};
+      const escrowAmount = Number(terms.creditAmount || 0);
+      const deadlineGameDay = Number(terms.deadlineGameDay || state.clock.day + 7);
+      const contributionTarget = Number(terms.contributionTarget || 100);
+      if (!Number.isFinite(escrowAmount) || escrowAmount < 0 || !Number.isInteger(deadlineGameDay) || deadlineGameDay <= state.clock.day || !Number.isInteger(contributionTarget) || contributionTarget < 1 || contributionTarget > 100) throw new ApiError('Invalid initiative terms', 400, 'VALIDATION_ERROR');
+      const initiative = { id: `SOC-${randomUUID()}`, creator_id: viewerId, target_id: body.targetId, kind: body.kind, title: String(body.title).trim(), body: String(body.body).trim(), terms, escrow_amount: escrowAmount, deadline_game_day: deadlineGameDay, progress: 0, status: 'proposed', member_status: 'invited' };
       socialInitiatives.unshift(initiative);
       return { ok: true, initiative };
     }
@@ -782,11 +799,15 @@ async function command(path, body, req = null) {
       const initiative = socialInitiatives.find((item) => item.id === action[1]);
       if (!initiative) throw new ApiError('Social initiative not found', 404, 'NOT_FOUND');
       if (action[2] === 'contribute') {
+        if (initiative.creator_id !== viewerId && initiative.target_id !== viewerId) throw new ApiError('Forbidden: initiative is not associated with current human', 403, 'FORBIDDEN');
         const contribution = Number(body.contribution || 0);
         if (!Number.isInteger(contribution) || contribution < 1 || contribution > 100) throw new ApiError('Contribution must be an integer from 1 to 100');
         initiative.progress = Math.min(100, initiative.progress + contribution);
-        initiative.status = initiative.progress >= 100 ? 'completed' : 'active';
+        const contributionTarget = Number(initiative.terms?.contributionTarget || 100);
+        initiative.status = initiative.progress >= contributionTarget ? 'completed' : 'active';
       } else {
+        if (initiative.target_id !== viewerId) throw new ApiError('Only the invited target can respond to an initiative', 403, 'FORBIDDEN');
+        if (initiative.status !== 'proposed') throw new ApiError('Initiative is no longer awaiting a response', 409, 'CONFLICT');
         initiative.member_status = action[2] === 'accept' ? 'accepted' : 'declined';
         initiative.status = action[2] === 'accept' ? 'active' : 'declined';
       }
@@ -827,6 +848,28 @@ async function command(path, body, req = null) {
     };
   }
   if (path === '/api/world/activity' && body.method === 'GET') return { activity: state.publicActivity || [{ type: 'world_clock', day: state.clock.day }, { type: 'research_progress', progress: state.technology.research.progress }, { type: 'market_cycle', batch: state.world.batch }], persistence: database ? 'postgres-reference' : 'reference-simulator', authority: 'non-production' };
+
+  if (path === '/api/cities' && body.method === 'GET') {
+    return {
+      cities: [
+        { id: 'city-new-tokyo', name: 'Neo-Tokyo', residents: 124, housing_capacity: 150, energy_capacity: 180, connectivity_capacity: 160, health_capacity: 140, qolIndex: 92, rank: 1, rankDelta: 0 },
+        { id: 'city-new-york', name: 'New York', residents: 98, housing_capacity: 120, energy_capacity: 140, connectivity_capacity: 150, health_capacity: 110, qolIndex: 85, rank: 2, rankDelta: 1 },
+        { id: 'city-london', name: 'London', residents: 82, housing_capacity: 100, energy_capacity: 110, connectivity_capacity: 120, health_capacity: 95, qolIndex: 78, rank: 3, rankDelta: -1 },
+      ],
+      generatedFrom: database ? 'planetscale-postgres' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/corporations' && body.method === 'GET') {
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const search = (url?.searchParams.get('search') || body.search || '').trim().toLowerCase();
+    const corporations = [
+      { id: 'corp-kline-industrial', name: 'Kline Industrial Syndicate', member_count: 14, treasury: 32000, marketCap: 84000, rank: 1, rankDelta: 0 },
+      { id: 'corp-aegis-power', name: 'Aegis Fusion & Grid', member_count: 11, treasury: 27500, marketCap: 68000, rank: 2, rankDelta: 1 },
+      { id: 'corp-orbital-logistics', name: 'Orbital Logistics Consortia', member_count: 8, treasury: 19800, marketCap: 45000, rank: 3, rankDelta: -1 },
+    ].filter((corporation) => !search || corporation.name.toLowerCase().includes(search) || corporation.id.toLowerCase().includes(search));
+    return { corporations, generatedFrom: database ? 'planetscale-postgres' : 'reference-simulator' };
+  }
   if (path === '/api/audit' && body.method === 'GET') return audit();
   if (path === '/api/institutions' && body.method === 'GET') return state.institutions;
   if (path === '/api/production/catalog' && body.method === 'GET') {
@@ -837,7 +880,23 @@ async function command(path, body, req = null) {
       { id: 'computing', name: 'Computing', category: 'computing', basePrice: 2.0, description: 'Datacenter processing units and AI capacity.' },
     ];
   }
-  if (path === '/api/notifications' && body.method === 'GET') return { notifications: state.notifications || [], unreadCount: (state.notifications || []).filter((n) => !n.read).length };
+  if (path === '/api/notifications' && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const limit = Math.min(50, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 20)));
+    const notifications = (state.notifications || [])
+      .filter((notification) => !notification.human_id || notification.human_id === session.humanId)
+      .slice(0, limit);
+    return {
+      ok: true,
+      notifications,
+      unread: (state.notifications || []).filter((n) => (!n.human_id || n.human_id === session.humanId) && !n.read).length,
+      unreadCount: (state.notifications || []).filter((n) => (!n.human_id || n.human_id === session.humanId) && !n.read).length,
+      limit,
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
   if (path === '/api/ownership/events' && body.method === 'GET') {
     return {
       events: state.ownershipEvents || [{ id: 'own-001', assetType: 'business', assetId: 'B-0001', ownerId: 'H-0044', gameDay: state.clock.day, timestamp: Date.now() }],
@@ -895,8 +954,10 @@ async function command(path, body, req = null) {
     };
   }
   if (path === '/api/history' && body.method === 'GET') {
+    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
+    const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 30)));
     return {
-      events: state.publicActivity || [],
+      events: (state.publicActivity || []).slice(0, limit),
       rankings: [],
       deceased: [],
       persistence: database ? 'postgres-reference' : 'reference-simulator',
@@ -908,6 +969,7 @@ async function command(path, body, req = null) {
     const metric = (url?.searchParams.get('metric') || body.metric || 'composite').toLowerCase();
     const search = (url?.searchParams.get('search') || body.search || '').trim().toLowerCase();
     const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 50)));
+    const offset = Math.max(0, Number(url?.searchParams.get('offset') || body.offset || 0));
 
     let citizens = [
       {
@@ -1022,11 +1084,11 @@ async function command(path, body, req = null) {
       category,
       metric,
       wealth: citizens.map((c) => ({ human_id: c.id, balance: c.credits })),
-      cities: cities.slice(0, limit),
-      corporations: corporations.slice(0, limit),
-      technologies: technologies.slice(0, limit),
-      citizens: citizens.slice(0, limit),
-      dynasticHouses: dynasticHouses.slice(0, limit),
+      cities: cities.slice(offset, offset + limit),
+      corporations: corporations.slice(offset, offset + limit),
+      technologies: technologies.slice(offset, offset + limit),
+      citizens: citizens.slice(offset, offset + limit),
+      dynasticHouses: dynasticHouses.slice(offset, offset + limit),
       userStanding: {
         rank: 1,
         totalTracked: citizens.length,
@@ -1041,7 +1103,7 @@ async function command(path, body, req = null) {
   if (path === '/api/cemetery' && body.method === 'GET') {
     const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
     const search = (url?.searchParams.get('search') || body.search || '').trim().toLowerCase();
-    const dynasty = (url?.searchParams.get('dynasty') || body.dynasty || '').trim();
+    const dynasty = (url?.searchParams.get('dynasty') || body.dynasty || '').trim().toLowerCase();
     const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 50)));
 
     let memorials = [
@@ -1079,7 +1141,7 @@ async function command(path, body, req = null) {
       );
     }
     if (dynasty) {
-      memorials = memorials.filter((m) => m.dynasty_name === dynasty);
+      memorials = memorials.filter((m) => m.dynasty_name.toLowerCase() === dynasty);
     }
 
     return {
@@ -1140,27 +1202,40 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/comm/dispatches' && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const viewerId = session.humanId;
     const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
     const folder = url?.searchParams.get('folder') || body.folder || 'inbox';
+    const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 30)));
+    const offset = Math.max(0, Number(url?.searchParams.get('offset') || body.offset || 0));
     let list = commState.dispatches;
     if (folder === 'sent') {
-      list = list.filter((d) => d.sender_human_id === 'H-0044');
+      list = list.filter((d) => d.sender_human_id === viewerId);
     } else if (folder === 'archived') {
-      list = list.filter((d) => d.recipient_human_id === 'H-0044' && d.status === 'archived');
+      list = list.filter((d) => d.recipient_human_id === viewerId && d.status === 'archived');
     } else {
-      list = list.filter((d) => d.recipient_human_id === 'H-0044' && d.status !== 'archived');
+      list = list.filter((d) => d.recipient_human_id === viewerId && d.status !== 'archived');
     }
-    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === 'H-0044' && d.status === 'unread').length;
+    const total = list.length;
+    list = list.slice(offset, offset + limit);
+    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === viewerId && d.status === 'unread').length;
     return {
       ok: true,
       folder,
       dispatches: list,
+      total,
+      limit,
+      offset,
       unreadCount,
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
 
   if (path === '/api/comm/dispatches' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const senderId = session.humanId;
     const recipientId = (body.recipientId || '').trim();
     const subject = (body.subject || '').trim();
     const text = (body.body || '').trim();
@@ -1169,7 +1244,7 @@ async function command(path, body, req = null) {
     }
     const newDispatch = {
       id: `mail-${Date.now()}`,
-      sender_human_id: 'H-0044',
+      sender_human_id: senderId,
       sender_display_name: 'Amara Vance',
       sender_dynasty_name: 'Vance Dynasty',
       recipient_human_id: recipientId,
@@ -1194,8 +1269,10 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/comm/dispatches/read' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const dispatchId = body.dispatchId;
-    const found = commState.dispatches.find((d) => d.id === dispatchId);
+    const found = commState.dispatches.find((d) => d.id === dispatchId && d.recipient_human_id === session.humanId);
     if (found) {
       found.status = 'read';
       found.read_at = new Date().toISOString();
@@ -1208,8 +1285,20 @@ async function command(path, body, req = null) {
     };
   }
 
+  if (path === '/api/comm/dispatches/archive' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const dispatchId = body.dispatchId;
+    const found = commState.dispatches.find((d) => d.id === dispatchId && d.recipient_human_id === session.humanId);
+    if (!found) throw new ApiError('Dispatch not found', 404, 'NOT_FOUND');
+    found.status = body.archived === false ? 'read' : 'archived';
+    return { ok: true, dispatchId, archived: found.status === 'archived', persistence: database ? 'postgres-reference' : 'reference-simulator' };
+  }
+
   if (path === '/api/comm/metrics' && body.method === 'GET') {
-    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === 'H-0044' && d.status === 'unread').length;
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === session.humanId && d.status === 'unread').length;
     return {
       ok: true,
       unreadDispatches: unreadCount,
@@ -1277,17 +1366,19 @@ async function command(path, body, req = null) {
 
   // Personal Finance & Taxation
   if (path === '/api/finance/personal' && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     return {
       account: { balance: player.credits, currency: 'CREDIT', owner_id: player.id },
       state: {
-        status: player.credits > 500 ? 'active' : 'at_risk',
+        status: player.insolvencyStatus === 'restructured' ? 'insolvency_restructuring' : player.credits > 500 ? 'active' : 'at_risk',
         protected_credits: 100,
         income: 760,
         expenses: 240,
         tax_obligations: 48,
         liquidity_status: player.credits > 1000 ? 'healthy' : 'tight',
-        insolvency_status: player.credits >= 100 ? 'solvent' : 'insolvent',
+        insolvency_status: player.insolvencyStatus === 'restructured' ? 'restructured' : player.credits >= 100 ? 'solvent' : 'insolvent',
       },
       liquidatableAssets: {
         machines: [{ id: 'MACH-01', name: 'Standard Fabrication Rig', value: 850 }],
@@ -1299,9 +1390,13 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/finance/personal/declare' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    if (player.insolvencyStatus === 'restructured') throw new ApiError('Insolvency restructuring already recorded', 409, 'CONFLICT');
     player.credits = Math.max(100, player.credits);
+    player.insolvencyStatus = 'restructured';
     const result = {
       ok: true,
       status: 'insolvency_restructuring',
@@ -1326,9 +1421,12 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/taxes/settle' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const taxableAmount = Number(body.taxableAmount || 1000);
+    if (!Number.isFinite(taxableAmount) || taxableAmount <= 0) throw new ApiError('Taxable amount must be positive', 400, 'VALIDATION_ERROR');
     const taxRate = 0.05;
     const taxDue = money(taxableAmount * taxRate);
     if (player.credits < taxDue) throw new ApiError('Insufficient Credits for tax settlement', 400, 'VALIDATION_ERROR');
@@ -1342,14 +1440,30 @@ async function command(path, body, req = null) {
 
   // Contracts & Arbitration
   if (path === '/api/contracts' && body.method === 'GET') {
-    return { ok: true, contracts: state.contracts || [], persistence: database ? 'postgres-reference' : 'reference-simulator' };
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    return { ok: true, contracts: (state.contracts || []).filter((contract) => contract.proposer_id === session.humanId || contract.counterparty_id === session.humanId), persistence: database ? 'postgres-reference' : 'reference-simulator' };
+  }
+
+  const contractDetailMatch = path.match(/^\/api\/contracts\/([^/]+)$/);
+  if (contractDetailMatch && contractDetailMatch[1] !== 'supply' && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const contract = (state.contracts || []).find((candidate) => candidate.id === contractDetailMatch[1]);
+    if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
+    if (contract.proposer_id !== session.humanId && contract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
+    return { ok: true, contract, persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
 
   if (path === '/api/contracts/supply' && body.method === 'GET') {
-    return { ok: true, supplyContracts: supplyContractsState, persistence: database ? 'postgres-reference' : 'reference-simulator' };
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    return { ok: true, supplyContracts: supplyContractsState.filter((contract) => contract.proposer_id === session.humanId || contract.counterparty_id === session.humanId), persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
 
   if (path === '/api/contracts/supply/propose' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
 
@@ -1357,6 +1471,7 @@ async function command(path, body, req = null) {
     const dailyQuantity = Number(body.dailyQuantity || 10);
     const unitPrice = Number(body.unitPrice || 10);
     const totalDays = Number(body.totalDays || 30);
+    if (!Number.isInteger(dailyQuantity) || dailyQuantity <= 0 || !Number.isFinite(unitPrice) || unitPrice <= 0 || !Number.isInteger(totalDays) || totalDays <= 0) throw new ApiError('Invalid supply contract terms', 400, 'VALIDATION_ERROR');
     const totalAmount = (dailyQuantity * unitPrice * totalDays).toFixed(2);
     const penaltyAmount = Number(body.penaltyPerDefault || 0).toFixed(2);
     const resourceType = body.resourceType || 'energy';
@@ -1403,7 +1518,11 @@ async function command(path, body, req = null) {
 
   const contractTicksMatch = path.match(/^\/api\/contracts\/([^/]+)\/ticks$/);
   if (contractTicksMatch && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const contractId = contractTicksMatch[1];
+    const contract = supplyContractsState.find((candidate) => candidate.contract_id === contractId);
+    if (contract && contract.proposer_id !== session.humanId && contract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
     const ticks = supplyTicksState[contractId] || [];
     return { ok: true, ticks, persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
@@ -1422,6 +1541,7 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/dynasty/perks/unlock' && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const perkKey = body.perkKey;
     const catalogItem = dynastyState.catalogPerks.find((p) => p.key === perkKey);
     if (!catalogItem) throw new ApiError(`Invalid perk key '${perkKey}'`, 400, 'BAD_REQUEST');
@@ -1449,6 +1569,7 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/dynasty/heirlooms/equip' && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     const heirloomId = body.heirloomId;
     const heirloom = dynastyState.heirlooms.find((h) => h.id === heirloomId);
@@ -1462,7 +1583,9 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/dynasty/heirlooms/forge' && body.method === 'POST') {
-    const name = body.name || 'Ancestral Relic';
+    if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const name = String(body.name || 'Ancestral Relic').trim();
+    if (name.length < 3 || name.length > 100) throw new ApiError('Heirloom name must be between 3 and 100 characters', 400, 'VALIDATION_ERROR');
     const heirloomType = body.heirloomType || 'dynasty_standard';
     const inscription = body.inscription || 'Forged by the house patriarch.';
     const statBuff = body.statBuff || '+5% Prestige & Influence';
@@ -1485,8 +1608,12 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/dynasty/motto' && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const motto = body.motto ? String(body.motto).trim() : dynastyState.dynasty.motto;
     const dynastyName = body.dynastyName ? String(body.dynastyName).trim() : dynastyState.dynasty.dynasty_name;
+    if (motto.length < 3 || motto.length > 160 || dynastyName.length < 3 || dynastyName.length > 80) {
+      throw new ApiError('Dynasty name and motto are invalid', 400, 'VALIDATION_ERROR');
+    }
     dynastyState.dynasty.motto = motto;
     dynastyState.dynasty.dynasty_name = dynastyName;
     publish('dynasty.motto_updated', { motto, dynastyName });
@@ -1658,6 +1785,7 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/player/daily-briefing' && body.method === 'GET') {
+    if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const currentDay = state.clock?.day || 185;
     const previousDay = Math.max(1, currentDay - 1);
 
@@ -1740,6 +1868,8 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/contracts' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     if (!player) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const contract = {
@@ -1756,6 +1886,7 @@ async function command(path, body, req = null) {
       created_at: Date.now(),
       dispute_id: null,
     };
+    if (!contract.title || contract.title.length < 2 || !Number.isFinite(contract.amount) || contract.amount <= 0 || !Number.isInteger(contract.terms.durationDays) || contract.terms.durationDays <= 0) throw new ApiError('Invalid contract terms', 400, 'VALIDATION_ERROR');
     state.contracts.unshift(contract);
     publish('contract.proposed', contract);
     const result = { ok: true, contract, contracts: state.contracts, state: snapshot() };
@@ -1765,9 +1896,13 @@ async function command(path, body, req = null) {
 
   const acceptContractMatch = path.match(/^\/api\/contracts\/([^/]+)\/accept$/);
   if (acceptContractMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const contractId = acceptContractMatch[1];
     const supplyContract = supplyContractsState.find((c) => c.contract_id === contractId);
     if (supplyContract) {
+      if (supplyContract.proposer_id !== session.humanId && supplyContract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
+      if (supplyContract.status === 'accepted') throw new ApiError('Contract already accepted', 409, 'CONFLICT');
       supplyContract.status = 'accepted';
       publish('supply_contract.accepted', supplyContract);
       const result = { ok: true, status: 'accepted', contractId, escrowLocked: supplyContract.escrow_total };
@@ -1776,6 +1911,7 @@ async function command(path, body, req = null) {
     }
     const contract = state.contracts.find((c) => c.id === contractId);
     if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
+    if (contract.proposer_id !== session.humanId && contract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
     if (contract.status === 'accepted') throw new ApiError('Contract already accepted', 409, 'CONFLICT');
     if (contract.status === 'cancelled') throw new ApiError('Cancelled contract cannot be accepted', 409, 'CONFLICT');
     contract.status = 'accepted';
@@ -1787,9 +1923,13 @@ async function command(path, body, req = null) {
 
   const cancelContractMatch = path.match(/^\/api\/contracts\/([^/]+)\/cancel$/);
   if (cancelContractMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const contractId = cancelContractMatch[1];
     const supplyContract = supplyContractsState.find((c) => c.contract_id === contractId);
     if (supplyContract) {
+      if (supplyContract.proposer_id !== session.humanId && supplyContract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
+      if (supplyContract.status === 'cancelled') throw new ApiError('Contract already cancelled', 409, 'CONFLICT');
       supplyContract.status = 'cancelled';
       const refunded = supplyContract.escrow_remaining;
       supplyContract.escrow_remaining = '0.00';
@@ -1801,6 +1941,7 @@ async function command(path, body, req = null) {
     }
     const contract = state.contracts.find((c) => c.id === contractId);
     if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
+    if (contract.proposer_id !== session.humanId && contract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
     if (contract.status === 'cancelled') throw new ApiError('Contract already cancelled', 409, 'CONFLICT');
     contract.status = 'cancelled';
     publish('contract.cancelled', contract);
@@ -1811,9 +1952,13 @@ async function command(path, body, req = null) {
 
   const disputeContractMatch = path.match(/^\/api\/contracts\/([^/]+)\/dispute$/);
   if (disputeContractMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const contractId = disputeContractMatch[1];
     const contract = state.contracts.find((c) => c.id === contractId);
     if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
+    if (contract.proposer_id !== session.humanId && contract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
+    if (contract.status !== 'accepted') throw new ApiError('Only accepted contracts can be disputed', 409, 'CONFLICT');
     if (contract.dispute_id) throw new ApiError('Dispute already open for this contract', 409, 'CONFLICT');
     contract.dispute_id = `DISP-${randomUUID().slice(0, 8).toUpperCase()}`;
     contract.dispute_status = 'open';
@@ -1826,9 +1971,12 @@ async function command(path, body, req = null) {
 
   const resolveContractMatch = path.match(/^\/api\/contracts\/([^/]+)\/resolve$/);
   if (resolveContractMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const contractId = resolveContractMatch[1];
     const contract = state.contracts.find((c) => c.id === contractId);
     if (!contract) throw new ApiError('Contract not found', 404, 'NOT_FOUND');
+    if (contract.proposer_id !== session.humanId && contract.counterparty_id !== session.humanId) throw new ApiError('Forbidden: contract is not associated with current human', 403, 'FORBIDDEN');
     if (!contract.dispute_id) throw new ApiError('No open dispute to resolve', 400, 'VALIDATION_ERROR');
     contract.status = body.outcome === 'refund' ? 'refunded' : 'resolved';
     contract.dispute_status = 'resolved';
@@ -1842,15 +1990,23 @@ async function command(path, body, req = null) {
   // Notifications
   const readNotificationMatch = path.match(/^\/api\/notifications\/([^/]+)\/read$/);
   if (readNotificationMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const notifId = readNotificationMatch[1];
-    const notif = state.notifications.find((n) => n.id === notifId);
-    if (notif) notif.read = true;
-    return { ok: true, notificationId: notifId, unreadCount: state.notifications.filter((n) => !n.read).length };
+    const notif = state.notifications.find((n) => n.id === notifId && (!n.human_id || n.human_id === session.humanId));
+    if (!notif) throw new ApiError('Notification not found', 404, 'NOT_FOUND');
+    notif.read = true;
+    const unreadCount = state.notifications.filter((n) => (!n.human_id || n.human_id === session.humanId) && !n.read).length;
+    return { ok: true, notificationId: notifId, unread: unreadCount, unreadCount };
   }
 
   if (path === '/api/notifications/read-all' && body.method === 'POST') {
-    for (const n of state.notifications) n.read = true;
-    return { ok: true, unreadCount: 0 };
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    for (const n of state.notifications) {
+      if (!n.human_id || n.human_id === session.humanId) n.read = true;
+    }
+    return { ok: true, unread: 0, unreadCount: 0 };
   }
 
   // --- Authentication Routes ---
@@ -1926,6 +2082,25 @@ async function command(path, body, req = null) {
       authenticated: true,
       human: { id: session.humanId, email: session.email, displayName: session.displayName || h.name, credits: h.credits, standing: h.standing },
       user: { id: session.humanId, email: session.email, displayName: session.displayName || h.name },
+      persistence: database ? 'postgres-reference' : 'reference-simulator',
+    };
+  }
+
+  if (path === '/api/auth/profile' && body.method === 'PATCH') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const displayName = String(body.displayName || '').trim();
+    if (displayName.length < 2 || displayName.length > 80) {
+      throw new ApiError('Display name must be between 2 and 80 characters', 400, 'VALIDATION_ERROR');
+    }
+    session.displayName = displayName;
+    const user = Array.from(registeredUsers.values()).find((candidate) => candidate.humanId === session.humanId);
+    if (user) user.displayName = displayName;
+    const player = human(session.humanId, req);
+    player.name = displayName;
+    return {
+      ok: true,
+      human: { id: player.id, displayName, email: session.email },
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
@@ -2131,7 +2306,6 @@ async function command(path, body, req = null) {
     return { ok: true, life: state.life, succession: state.life.successor, state: snapshot() };
   }
 
-  const correlationId = body.correlationId || body.idempotencyKey || req?.headers?.['idempotency-key'] || req?.headers?.['x-request-id'];
   if (correlationId && commandResults.has(correlationId)) return commandResults.get(correlationId);
 
   if ((path === '/api/day/advance' || path === '/api/world/tick') && body.method === 'POST') {
@@ -2142,15 +2316,22 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/market/orders' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const product = state.market.products[body.product];
     if (!product) throw new ApiError('Unknown product', 400, 'VALIDATION_ERROR');
-    if (!Number.isFinite(body.quantity) || body.quantity < 1 || !Number.isFinite(body.limitPrice) || body.limitPrice <= 0) throw new ApiError('Invalid order', 400, 'VALIDATION_ERROR');
+    if (!Number.isInteger(body.quantity) || body.quantity < 1 || !Number.isFinite(body.limitPrice) || body.limitPrice <= 0) throw new ApiError('Invalid order', 400, 'VALIDATION_ERROR');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
+    const side = String(body.side || 'buy').toLowerCase();
+    if (!['buy', 'sell'].includes(side)) throw new ApiError('Order side must be buy or sell', 400, 'VALIDATION_ERROR');
+    const quantity = Math.floor(Number(body.quantity));
+    if (quantity < 1) throw new ApiError('Order quantity must be a positive integer', 400, 'VALIDATION_ERROR');
+    if (side === 'sell' && (state.resources[body.product] || 0) < quantity) throw new ApiError('Insufficient inventory for sell order', 400, 'VALIDATION_ERROR');
     const total = money(body.quantity * body.limitPrice);
-    if (player.credits < total) throw new ApiError('Insufficient Credits', 400, 'VALIDATION_ERROR');
+    if (side === 'buy' && player.credits < total) throw new ApiError('Insufficient Credits', 400, 'VALIDATION_ERROR');
     const actorId = player.id || 'H-0044';
-    const order = { id: randomUUID(), humanId: actorId, product: body.product, quantity: Math.floor(body.quantity), limitPrice: Number(body.limitPrice), filled: 0, status: 'open', createdAt: Date.now() };
+    if (side === 'sell') state.resources[body.product] -= quantity;
+    const order = { id: randomUUID(), humanId: actorId, product: body.product, side, quantity, limitPrice: Number(body.limitPrice), filled: 0, status: 'open', createdAt: Date.now() };
     state.market.orders.push(order);
     if (database) void database.saveOrder(order).catch((error) => console.error('order persistence failed', error.message));
     const result = { ok: true, order, state: snapshot() };
@@ -2165,6 +2346,8 @@ async function command(path, body, req = null) {
   }
 
   if ((path === '/api/businesses/kline-works/policy' || path === '/api/businesses/B-1048/policy' || path === '/api/business/policy' || path === '/api/businesses/me/policy') && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const actorId = player.id || 'H-0044';
@@ -2206,7 +2389,7 @@ async function command(path, body, req = null) {
     return result;
   }
 
-  if ((path === '/api/ai/upgrade' || path.includes('/upgrade')) && body.method === 'POST') {
+  if ((path === '/api/ai/upgrade' || path === '/api/ai/assistants/AI-01/upgrade') && body.method === 'POST') {
     const player = human('amara', req);
     if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     if (player.credits < 2400) throw new ApiError('Insufficient Credits for AI upgrade', 409, 'CONFLICT');
@@ -2222,6 +2405,7 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/technology' && body.method === 'GET') {
+    if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     return {
       projects: [state.technology.research],
       patents: state.patents || [],
@@ -2231,10 +2415,10 @@ async function command(path, body, req = null) {
   }
 
   if (path === '/api/technology/projects' && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const budget = Number(body.budget ?? 240);
-    if (!body.name || body.name.length < 3 || budget < 240) throw new ApiError('Invalid project parameters', 400, 'VALIDATION_ERROR');
+    if (typeof body.name !== 'string' || body.name.trim().length < 3 || !Number.isFinite(budget) || budget < 240) throw new ApiError('Invalid project parameters', 400, 'VALIDATION_ERROR');
     if (player.credits < budget) throw new ApiError('Insufficient Credits', 400, 'VALIDATION_ERROR');
     player.credits -= budget;
     const project = {
@@ -2255,11 +2439,11 @@ async function command(path, body, req = null) {
   }
 
   if ((path === '/api/technology/me/fund' || path === '/api/technology/TECH-001/fund' || path === '/api/research/fund' || path === '/api/technology/research/fund') && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const actorId = player.id || 'H-0044';
-    const amount = Number(body.amount || 240);
-    if (amount < 1) throw new ApiError('Invalid funding amount', 400, 'VALIDATION_ERROR');
+    const amount = Number(body.amount ?? 240);
+    if (!Number.isFinite(amount) || amount < 1) throw new ApiError('Invalid funding amount', 400, 'VALIDATION_ERROR');
     if (player.credits < amount) throw new ApiError('Insufficient Credits', 400, 'VALIDATION_ERROR');
     player.credits -= amount;
     state.technology.research.progress = Math.min(100, (state.technology.research.progress || 0) + 4);
@@ -2272,8 +2456,8 @@ async function command(path, body, req = null) {
   }
 
   if ((path === '/api/technology/me/patent' || path === '/api/technology/TECH-001/patent') && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     if ((state.technology.research.progress || 0) < 100) throw new ApiError('Research must reach 100% before patent grant', 409, 'CONFLICT');
     const patentId = `PAT-${state.technology.research.id || 'TECH-001'}`;
     const patent = {
@@ -2295,15 +2479,19 @@ async function command(path, body, req = null) {
   }
 
   if ((path === '/api/technology/me/license' || path === '/api/technology/TECH-001/license') && body.method === 'POST') {
+    if (!resolveSession(req)) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const licenseeId = body.licenseeId || player.id || 'H-0044';
     const royaltyRate = Number(body.royaltyRate ?? 0.05);
     const licenseFee = Number(body.licenseFee ?? 0);
-    const licenseId = `LIC-PAT-TECH-001-${licenseeId}`;
+    if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0) throw new ApiError('Invalid license terms', 400, 'VALIDATION_ERROR');
+    const patentId = `PAT-${state.technology.research.id || 'TECH-001'}`;
+    const patent = (state.patents || []).find((candidate) => candidate.id === patentId && candidate.status === 'active');
+    if (!patent) throw new ApiError('An active patent is required before licensing', 409, 'CONFLICT');
+    const licenseId = `LIC-${patentId}-${licenseeId}`;
     const license = {
       id: licenseId,
-      patent_id: 'PAT-TECH-001',
+      patent_id: patentId,
       licensor_id: player.id || 'H-0044',
       licensee_id: licenseeId,
       royalty_rate: royaltyRate,
@@ -2323,10 +2511,14 @@ async function command(path, body, req = null) {
 
   // Machines
   if (path === '/api/machines' && body.method === 'GET') {
-    return { machines: state.machines || [], persistence: database ? 'postgres-reference' : 'reference-simulator' };
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    return { ok: true, machines: (state.machines || []).filter((machine) => machine.owner_id === session.humanId), persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
 
   if (path === '/api/machines/acquire' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
     const machineType = body.machineType || 'fabrication-rig';
@@ -2360,10 +2552,14 @@ async function command(path, body, req = null) {
 
   const maintainMachineMatch = path.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
   if (maintainMachineMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const machineId = maintainMachineMatch[1];
     const machine = (state.machines || []).find((m) => m.id === machineId);
     if (!machine) throw new ApiError('Machine not found', 404, 'NOT_FOUND');
+    if (machine.owner_id !== session.humanId) throw new ApiError('Forbidden: machine is not owned by current human', 403, 'FORBIDDEN');
     const amount = Number(body.amount ?? 10);
+    if (!Number.isFinite(amount) || amount <= 0) throw new ApiError('Maintenance amount must be positive', 400, 'VALIDATION_ERROR');
     if ((state.resources.components || 0) < amount) throw new ApiError('Insufficient Components for maintenance', 400, 'VALIDATION_ERROR');
     state.resources.components -= amount;
     machine.condition = Math.min(100, (machine.condition || 80) + Math.round(amount * 0.8));
@@ -2376,10 +2572,15 @@ async function command(path, body, req = null) {
 
   const utilizationMachineMatch = path.match(/^\/api\/machines\/([^/]+)\/utilization$/);
   if (utilizationMachineMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const machineId = utilizationMachineMatch[1];
     const machine = (state.machines || []).find((m) => m.id === machineId);
     if (!machine) throw new ApiError('Machine not found', 404, 'NOT_FOUND');
-    machine.utilization = Number(body.utilization ?? 50);
+    if (machine.owner_id !== session.humanId) throw new ApiError('Forbidden: machine is not owned by current human', 403, 'FORBIDDEN');
+    const utilization = Number(body.utilization ?? 50);
+    if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) throw new ApiError('Utilization must be an integer from 0 to 100', 400, 'VALIDATION_ERROR');
+    machine.utilization = utilization;
     publish('machine.utilization_updated', { machineId, utilization: machine.utilization });
     const result = { ok: true, machine, state: snapshot() };
     if (correlationId) commandResults.set(correlationId, result);
@@ -2388,9 +2589,12 @@ async function command(path, body, req = null) {
 
   const upgradeMachineMatch = path.match(/^\/api\/machines\/([^/]+)\/upgrade$/);
   if (upgradeMachineMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const machineId = upgradeMachineMatch[1];
     const machine = (state.machines || []).find((m) => m.id === machineId);
     if (!machine) throw new ApiError('Machine not found', 404, 'NOT_FOUND');
+    if (machine.owner_id !== session.humanId) throw new ApiError('Forbidden: machine is not owned by current human', 403, 'FORBIDDEN');
     const player = human('amara', req);
     if (player.credits < 600) throw new ApiError('Insufficient Credits for machine upgrade', 400, 'VALIDATION_ERROR');
     if ((state.resources.components || 0) < 20) throw new ApiError('Insufficient Components for machine upgrade', 400, 'VALIDATION_ERROR');
@@ -2407,11 +2611,15 @@ async function command(path, body, req = null) {
 
   const sellMachineMatch = path.match(/^\/api\/machines\/([^/]+)\/sell$/);
   if (sellMachineMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const machineId = sellMachineMatch[1];
     const machine = (state.machines || []).find((m) => m.id === machineId);
     if (!machine) throw new ApiError('Machine not found', 404, 'NOT_FOUND');
+    if (machine.owner_id !== session.humanId) throw new ApiError('Forbidden: machine is not owned by current human', 403, 'FORBIDDEN');
     const buyerId = body.buyerId || 'H-0045';
     const price = Number(body.price ?? 500);
+    if (!buyerId || !Number.isFinite(price) || price <= 0) throw new ApiError('Buyer and positive sale price are required', 400, 'VALIDATION_ERROR');
     const player = human('amara', req);
     player.credits += price;
     machine.owner_id = buyerId;
@@ -2425,9 +2633,13 @@ async function command(path, body, req = null) {
 
   const decommissionMachineMatch = path.match(/^\/api\/machines\/([^/]+)\/decommission$/);
   if (decommissionMachineMatch && body.method === 'POST') {
+    const session = resolveSession(req);
     const machineId = decommissionMachineMatch[1];
     const machine = (state.machines || []).find((m) => m.id === machineId);
     if (!machine) throw new ApiError('Machine not found', 404, 'NOT_FOUND');
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    if (machine.owner_id !== session.humanId) throw new ApiError('Forbidden: machine is not owned by current human', 403, 'FORBIDDEN');
+    if (['recycled', 'decommissioned', 'sold'].includes(machine.status)) throw new ApiError('Machine is already inactive', 409, 'CONFLICT');
     machine.status = 'recycled';
     machine.utilization = 0;
     state.resources.material = (state.resources.material || 0) + 25;
@@ -2438,10 +2650,38 @@ async function command(path, body, req = null) {
     return result;
   }
 
+  const workplaceMachineMatch = path.match(/^\/api\/machines\/([^/]+)\/workplace$/);
+  if (workplaceMachineMatch && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const machine = (state.machines || []).find((m) => m.id === workplaceMachineMatch[1]);
+    if (!machine) throw new ApiError('Machine not found', 404, 'NOT_FOUND');
+    if (machine.owner_id !== session.humanId) throw new ApiError('Forbidden: machine is not owned by current human', 403, 'FORBIDDEN');
+    const businessId = body.businessId == null ? null : String(body.businessId).trim();
+    if (businessId && businessId !== state.businesses.klineWorks.id) throw new ApiError('Business not found', 404, 'NOT_FOUND');
+    machine.business_id = businessId;
+    machine.business_name = businessId ? state.businesses.klineWorks.name : null;
+    publish('machine.workplace_assigned', { machineId: machine.id, businessId });
+    return { ok: true, machine, state: snapshot() };
+  }
+
   // Business Financials & Dividends & Liquidation
+  const businessProfileMatch = path.match(/^\/api\/businesses\/([^/]+)$/);
+  if (businessProfileMatch && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const businessId = businessProfileMatch[1];
+    const business = state.businesses.klineWorks;
+    if (businessId !== business.id) throw new ApiError('Business not found', 404, 'NOT_FOUND');
+    return { ok: true, business, profile: business, persistence: database ? 'postgres-reference' : 'reference-simulator' };
+  }
+
   const businessFinancialsMatch = path.match(/^\/api\/businesses\/([^/]+)\/financials$/);
   if (businessFinancialsMatch && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const businessId = businessFinancialsMatch[1];
+    if (businessId !== state.businesses.klineWorks.id) throw new ApiError('Business not found', 404, 'NOT_FOUND');
     return {
       business: {
         id: businessId,
@@ -2465,7 +2705,10 @@ async function command(path, body, req = null) {
 
   const businessOwnershipMatch = path.match(/^\/api\/businesses\/([^/]+)\/ownership$/);
   if (businessOwnershipMatch && body.method === 'GET') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const businessId = businessOwnershipMatch[1];
+    if (businessId !== state.businesses.klineWorks.id) throw new ApiError('Business not found', 404, 'NOT_FOUND');
     return {
       businessId,
       controllingHumanId: 'H-0044',
@@ -2481,10 +2724,14 @@ async function command(path, body, req = null) {
   const businessDividendsMatch = path.match(/^\/api\/businesses\/([^/]+)\/dividends$/);
   if (businessDividendsMatch && body.method === 'POST') {
     const businessId = businessDividendsMatch[1];
+    if (businessId !== state.businesses.klineWorks.id) throw new ApiError('Business not found', 404, 'NOT_FOUND');
     const amount = Number(body.amount ?? 100);
     if (!Number.isFinite(amount) || amount <= 0) throw new ApiError('Dividend amount must be positive', 400, 'VALIDATION_ERROR');
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
+    if (state.businesses.klineWorks.ownerId && state.businesses.klineWorks.ownerId !== player.id) throw new ApiError('Unauthorized: Not business owner', 403, 'FORBIDDEN');
+    if (state.businesses.klineWorks.status === 'dissolved') throw new ApiError('Business is dissolved', 409, 'CONFLICT');
     player.credits += Math.round(amount * 0.75 * 100) / 100;
     appendLedger({ debit: `business-${businessId}`, credit: player.id || 'H-0044', amount: Math.round(amount * 0.75 * 100) / 100, reason: 'dividend_distribution', correlationId: randomUUID() });
     publish('business.dividends_distributed', { businessId, amount });
@@ -2496,8 +2743,12 @@ async function command(path, body, req = null) {
   const businessLiquidationMatch = path.match(/^\/api\/businesses\/([^/]+)\/liquidate$/);
   if (businessLiquidationMatch && body.method === 'POST') {
     const businessId = businessLiquidationMatch[1];
+    if (businessId !== state.businesses.klineWorks.id) throw new ApiError('Business not found', 404, 'NOT_FOUND');
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
+    if (state.businesses.klineWorks.ownerId && state.businesses.klineWorks.ownerId !== player.id) throw new ApiError('Unauthorized: Not business owner', 403, 'FORBIDDEN');
+    if (state.businesses.klineWorks.status === 'dissolved') throw new ApiError('Business is already dissolved', 409, 'CONFLICT');
     state.businesses.klineWorks.status = 'dissolved';
     publish('business.liquidated', { businessId, ownerId: player.id || 'H-0044' });
     const result = { ok: true, businessId, status: 'dissolved', releasedMachines: (state.machines || []).length, state: snapshot() };
@@ -2507,9 +2758,12 @@ async function command(path, body, req = null) {
 
   const cancelOrderMatch = path.match(/^\/api\/market\/orders\/([^/]+)$/);
   if (cancelOrderMatch && body.method === 'DELETE') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const orderId = cancelOrderMatch[1];
     const order = state.market.orders.find((o) => o.id === orderId);
     if (!order) throw new ApiError('Order not found', 404, 'NOT_FOUND');
+    if (order.humanId !== session.humanId) throw new ApiError('Forbidden: order is not owned by current human', 403, 'FORBIDDEN');
     if (order.status === 'filled') throw new ApiError('Cannot cancel a filled order', 400, 'VALIDATION_ERROR');
     if (order.status === 'cancelled') throw new ApiError('Order is already cancelled', 409, 'CONFLICT');
     if (order.status === 'rejected') throw new ApiError('Order is already rejected', 409, 'CONFLICT');
@@ -2520,6 +2774,7 @@ async function command(path, body, req = null) {
     order.releasedEscrow = releasedEscrow;
 
     const player = human('amara', req);
+    if (order.side === 'sell' && remainingQty > 0) state.resources[order.product] = (state.resources[order.product] || 0) + remainingQty;
     if (player && releasedEscrow > 0) {
       player.credits += releasedEscrow;
       appendLedger({ debit: 'central-market-escrow', credit: player.id || 'H-0044', amount: releasedEscrow, reason: 'order_cancellation_refund', correlationId: randomUUID() });

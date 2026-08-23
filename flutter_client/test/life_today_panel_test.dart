@@ -23,7 +23,7 @@ void main() {
       'life': {},
     });
 
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(body: LifeTodayPanel(state: state)),
     ));
 

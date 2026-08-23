@@ -1060,7 +1060,7 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
                 children: [
                   Expanded(
                     child: DropdownButtonFormField<String>(
-                      value: _proposerRole,
+                      initialValue: _proposerRole,
                       isExpanded: true,
                       dropdownColor: EarthColors.cardSurface,
                       style: const TextStyle(fontSize: 12, color: Colors.white),
@@ -1421,8 +1421,9 @@ class _SupplyContractsDialogState extends State<SupplyContractsDialog> {
 
   static int _parseInt(dynamic val, {int fallback = 0}) {
     if (val is num) return val.toInt();
-    if (val is String)
+    if (val is String) {
       return int.tryParse(val) ?? double.tryParse(val)?.toInt() ?? fallback;
+    }
     return fallback;
   }
 }

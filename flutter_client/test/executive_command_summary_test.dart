@@ -6,7 +6,7 @@ import 'package:earth_client/features/command_center/dashboard.dart';
 import 'package:earth_client/features/command_center/executive_command_summary.dart';
 
 void main() {
-  final sampleState = EarthState({
+  final sampleState = const EarthState({
     'status': {'phase': 'Operational'},
     'world': {'name': 'Earth Prime', 'day': 42, 'population': 12000000},
     'institutions': {

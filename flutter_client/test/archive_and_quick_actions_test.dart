@@ -17,10 +17,10 @@ void main() {
 
   testWidgets('Historical Archive presents people, dynasties, and milestones',
       (tester) async {
-    await tester.pumpWidget(MaterialApp(
+    await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
         body: HistoricalArchivePanel(
-          pantheon: const {
+          pantheon: {
             'deceasedPantheon': [
               {
                 'display_name': 'Mira Vance',
@@ -36,7 +36,7 @@ void main() {
               }
             ],
           },
-          events: const [
+          events: [
             {'title': 'City resilience charter adopted', 'game_day': 210}
           ],
         ),

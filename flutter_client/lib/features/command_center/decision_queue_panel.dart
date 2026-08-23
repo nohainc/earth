@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/models/decision_queue_item.dart';
+import '../../shared/design_system/earth_theme_context.dart';
 import '../../shared/widgets/earth_primitives.dart';
 
 class DecisionQueuePanel extends StatefulWidget {
@@ -76,13 +77,13 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
                 decoration: BoxDecoration(
                   color: criticalCount > 0
-                      ? Colors.orangeAccent.withValues(alpha: 0.15)
-                      : const Color(0xFF00E676).withValues(alpha: 0.15),
+                      ? context.errorColor.withValues(alpha: 0.14)
+                      : context.successColor.withValues(alpha: 0.14),
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(
                     color: criticalCount > 0
-                        ? Colors.orangeAccent.withValues(alpha: 0.5)
-                        : const Color(0xFF00E676).withValues(alpha: 0.5),
+                        ? context.errorColor.withValues(alpha: 0.45)
+                        : context.successColor.withValues(alpha: 0.45),
                     width: 1,
                   ),
                 ),
@@ -92,8 +93,8 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                       : 'ALL OBLIGATIONS RESOLVED',
                   style: TextStyle(
                     color: criticalCount > 0
-                        ? Colors.orangeAccent
-                        : const Color(0xFF00E676),
+                        ? context.errorColor
+                        : context.successColor,
                     fontSize: 9.5,
                     fontWeight: FontWeight.w700,
                     letterSpacing: 0.8,
@@ -227,12 +228,12 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Icon(item.categoryIcon, size: 14, color: cyanAccentColor),
+              Icon(item.categoryIcon, size: 14, color: context.mutedColor),
               const SizedBox(width: 6),
               Text(
                 item.category.toUpperCase(),
-                style: const TextStyle(
-                  color: cyanAccentColor,
+                style: TextStyle(
+                  color: context.mutedColor,
                   fontSize: 10,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.0,
@@ -263,8 +264,8 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
           // Main Decision Title
           Text(
             item.title,
-            style: const TextStyle(
-              color: inkColor,
+            style: TextStyle(
+              color: context.inkColor,
               fontSize: 13,
               fontWeight: FontWeight.w700,
               letterSpacing: 0.2,
@@ -278,20 +279,22 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.25),
               borderRadius: BorderRadius.circular(6),
-              border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
+              border: Border.all(color: context.subtleBorderColor),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                const Padding(
-                  padding: EdgeInsets.only(top: 2, right: 6),
-                  child: Icon(Icons.info_outline, size: 12, color: mutedColor),
+                Icon(
+                  Icons.info_outline_rounded,
+                  size: 14,
+                  color: context.mutedColor,
                 ),
+                const SizedBox(width: 6),
                 Expanded(
                   child: Text(
                     item.whyItMatters,
-                    style: const TextStyle(
-                      color: mutedColor,
+                    style: TextStyle(
+                      color: context.mutedColor,
                       fontSize: 11,
                       height: 1.35,
                     ),
@@ -311,13 +314,15 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 icon: Icons.timer_outlined,
                 label: 'DEADLINE',
                 value: item.deadline,
-                valueColor: Colors.amberAccent,
+                valueColor: item.riskLevel.toLowerCase() == 'critical'
+                    ? context.errorColor
+                    : context.warningColor,
               ),
               _buildMetricPill(
                 icon: Icons.electric_bolt_outlined,
                 label: 'EXPECTED IMPACT',
                 value: item.expectedImpact,
-                valueColor: const Color(0xFF00E5FF),
+                valueColor: context.inkColor,
               ),
             ],
           ),

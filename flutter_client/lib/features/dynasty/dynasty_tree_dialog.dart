@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../core/ui_style_tokens.dart';
 
 void showDynastyTreeDialog(
   BuildContext context, {
@@ -182,6 +183,9 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   void _showEditMottoDialog() {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final mottoCtrl =
         TextEditingController(text: _dynasty['motto']?.toString() ?? '');
     final nameCtrl =
@@ -190,16 +194,21 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        backgroundColor: EarthColors.panelSurface,
-        title: const Row(
+        backgroundColor: tokens.color('colors.panel', EarthColors.panelSurface),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
+          side: BorderSide(color: themeColor.withValues(alpha: .35)),
+        ),
+        title: Row(
           children: [
-            Icon(Icons.edit, color: EarthColors.goldMetallic, size: 18),
-            SizedBox(width: 8),
+            Icon(Icons.edit, color: themeColor, size: tokens.number('controls.iconSize', 16)),
+            SizedBox(width: tokens.number('spacing.inline', 8)),
             Text('EDIT DYNASTY CREED',
                 style: TextStyle(
-                    color: EarthColors.goldMetallic,
-                    fontSize: 13,
-                    fontWeight: FontWeight.bold)),
+                    color: themeColor,
+                    fontSize: tokens.number('typography.topicTitle.size', 12),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4))),
           ],
         ),
         content: Column(
@@ -208,58 +217,79 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
           children: [
             TextField(
               controller: nameCtrl,
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 labelText: 'Dynasty Name',
-                labelStyle:
-                    TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                labelStyle: TextStyle(
+                    color: mutedColor,
+                    fontSize: tokens.number('typography.widgetFooter.size', 10)),
               ),
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(
+                  color: inkColor,
+                  fontSize: tokens.number('typography.body.size', 10)),
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: tokens.number('spacing.titleOffset', 12)),
             TextField(
               controller: mottoCtrl,
-              decoration: const InputDecoration(
-                  labelText: 'Dynasty Motto / Creed',
-                labelStyle:
-                    TextStyle(color: EarthColors.textMuted, fontSize: 11),
+              decoration: InputDecoration(
+                labelText: 'Dynasty Motto / Creed',
+                labelStyle: TextStyle(
+                    color: mutedColor,
+                    fontSize: tokens.number('typography.widgetFooter.size', 10)),
               ),
-              style: const TextStyle(color: Colors.white, fontSize: 12),
+              style: TextStyle(
+                  color: inkColor,
+                  fontSize: tokens.number('typography.body.size', 10)),
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('CANCEL',
-                style: TextStyle(color: EarthColors.textMuted, fontSize: 11)),
+            child: Text('CANCEL',
+                style: TextStyle(
+                    color: mutedColor,
+                    fontSize: tokens.number('typography.control.size', 10),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))),
           ),
-          ElevatedButton(
-            key: const Key('btn-save-motto'),
-            onPressed: () async {
-              if (nameCtrl.text.trim().length < 2) return;
-              Navigator.of(ctx).pop();
-              try {
-                await widget.api.updateDynastyMotto(
-                  motto: mottoCtrl.text.trim(),
-                  dynastyName: nameCtrl.text.trim(),
-                );
-                if (mounted) {
-                  setState(() =>
-                      _successMessage = 'Dynasty creed updated successfully.');
-                  await _loadDynastyData();
-                  await widget.onRefresh?.call();
+          SizedBox(
+            height: tokens.number('controls.buttonHeight', 34),
+            child: ElevatedButton(
+              key: const Key('btn-save-motto'),
+              onPressed: () async {
+                if (nameCtrl.text.trim().length < 2) return;
+                Navigator.of(ctx).pop();
+                try {
+                  await widget.api.updateDynastyMotto(
+                    motto: mottoCtrl.text.trim(),
+                    dynastyName: nameCtrl.text.trim(),
+                  );
+                  if (mounted) {
+                    setState(() =>
+                        _successMessage = 'Dynasty creed updated successfully.');
+                    await _loadDynastyData();
+                    await widget.onRefresh?.call();
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    setState(() =>
+                        _error = e.toString().replaceFirst('Exception: ', ''));
+                  }
                 }
-              } catch (e) {
-                if (mounted)
-                  setState(() =>
-                      _error = e.toString().replaceFirst('Exception: ', ''));
-              }
-            },
-            style: ElevatedButton.styleFrom(
-                backgroundColor: EarthColors.goldMetallic,
-                foregroundColor: Colors.black),
-            child: const Text('SAVE CREED',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11)),
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: themeColor,
+                foregroundColor: tokens.color('colors.canvas', canvasColor),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
+                ),
+              ),
+              child: Text('SAVE CREED',
+                  style: TextStyle(
+                      fontWeight: FontWeight.w700,
+                      fontSize: tokens.number('typography.control.size', 10),
+                      letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))),
+            ),
           ),
         ],
       ),
@@ -268,6 +298,8 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
 
   @override
   Widget build(BuildContext context) {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
     final screenSize = MediaQuery.sizeOf(context);
     final dialogWidth = math.min(1060.0, screenSize.width - 24);
     final dialogHeight = math.min(740.0, screenSize.height - 24);
@@ -312,10 +344,13 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     if (!_loading) _buildFamilyIdentity(familyDirection),
-                    if (!_loading && _catalogPerks.isNotEmpty) perks,
+                    if (!_loading && _catalogPerks.isNotEmpty) ...[
+                      if (!_loading) SizedBox(height: tokens.number('spacing.section', 34)),
+                      perks,
+                    ],
                     if (!_loading && _heirlooms.isNotEmpty) ...[
                       if (!_loading && _catalogPerks.isNotEmpty)
-                        const SizedBox(height: 34),
+                        SizedBox(height: tokens.number('spacing.section', 34)),
                       heirlooms,
                     ],
                   ],
@@ -330,15 +365,15 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
           children: [
             lineage,
             if (!_loading) ...[
-              const SizedBox(height: 34),
+              SizedBox(height: tokens.number('spacing.section', 34)),
               _buildFamilyIdentity(familyDirection),
             ],
             if (!_loading && _catalogPerks.isNotEmpty) ...[
-              const SizedBox(height: 34),
+              SizedBox(height: tokens.number('spacing.section', 34)),
               perks,
             ],
             if (!_loading && _heirlooms.isNotEmpty) ...[
-              const SizedBox(height: 34),
+              SizedBox(height: tokens.number('spacing.section', 34)),
               heirlooms,
             ],
           ],
@@ -350,17 +385,17 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
       width: widget.isPageMode ? double.infinity : dialogWidth,
       height: widget.isPageMode ? null : dialogHeight,
       decoration: BoxDecoration(
-        color: widget.isPageMode ? Colors.transparent : canvasColor,
+        color: widget.isPageMode ? Colors.transparent : tokens.color('colors.canvas', canvasColor),
         borderRadius:
-            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(tokens.number('radius.panel', 14)),
         border: widget.isPageMode
             ? null
-            : Border.all(color: EarthColors.goldMetallic.withAlpha(140)),
+            : Border.all(color: themeColor.withValues(alpha: .35)),
         boxShadow: widget.isPageMode
             ? null
             : [
                 BoxShadow(
-                  color: Colors.black.withAlpha(220),
+                  color: Colors.black.withValues(alpha: .85),
                   blurRadius: 36,
                   spreadRadius: 8,
                 ),
@@ -368,7 +403,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
       ),
       child: ClipRRect(
         borderRadius:
-            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(14),
+            widget.isPageMode ? BorderRadius.zero : BorderRadius.circular(tokens.number('radius.panel', 14)),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: widget.isPageMode ? MainAxisSize.min : MainAxisSize.max,
@@ -378,17 +413,17 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             if (_successMessage != null)
               _buildAlertBanner(_successMessage!, isError: false),
             if (_loading && _lineage.isEmpty)
-              const Center(
+              Center(
                   child: Padding(
-                      padding: EdgeInsets.all(24),
+                      padding: EdgeInsets.all(tokens.number('spacing.page', 24)),
                       child: CircularProgressIndicator(
-                          color: EarthColors.goldMetallic)))
+                          color: themeColor)))
             else if (widget.isPageMode)
               topicsList
             else
               Expanded(
                 child: SingleChildScrollView(
-                  padding: const EdgeInsets.only(bottom: 16),
+                  padding: EdgeInsets.only(bottom: tokens.number('spacing.topic', 16)),
                   child: topicsList,
                 ),
               ),
@@ -403,22 +438,31 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
 
     return Dialog(
       backgroundColor: Colors.transparent,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      insetPadding: EdgeInsets.symmetric(
+          horizontal: tokens.number('spacing.titleOffset', 12),
+          vertical: tokens.number('spacing.titleOffset', 12)),
       child: content,
     );
   }
 
   Widget _buildTopHeader(
       String dynastyName, String motto, dynamic legacyPoints) {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     return Container(
       padding: widget.isPageMode
-          ? const EdgeInsets.only(bottom: 12)
-          : const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          ? EdgeInsets.only(bottom: tokens.number('spacing.titleOffset', 12))
+          : EdgeInsets.symmetric(
+              horizontal: tokens.number('spacing.topic', 16),
+              vertical: tokens.number('spacing.titleOffset', 12)),
       decoration: BoxDecoration(
-        color: widget.isPageMode ? Colors.transparent : EarthColors.cardSurface,
+        color: widget.isPageMode
+            ? Colors.transparent
+            : tokens.color('colors.surface', EarthColors.cardSurface),
         border: widget.isPageMode
             ? null
-            : const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+            : const Border(bottom: BorderSide(color: Colors.white12)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -431,32 +475,32 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                 child: Text(
                   dynastyName.toUpperCase(),
                   style: TextStyle(
-                    color: widget.isPageMode
-                        ? EarthColors.textMuted
-                        : EarthColors.goldMetallic,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 14,
-                    letterSpacing: 1.1,
+                    color: themeColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: tokens.number('typography.pageTitle.size', 16),
+                    letterSpacing:
+                        tokens.number('typography.pageTitle.letterSpacing', 1.4),
                   ),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
-              const SizedBox(width: 6),
-              const Text(
+              SizedBox(width: tokens.number('spacing.inline', 8)),
+              Text(
                 'DYNASTY',
                 style: TextStyle(
-                  color: EarthColors.textMuted,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 12,
-                  letterSpacing: 1.0,
+                  color: mutedColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: tokens.number('typography.widgetTitle.size', 10),
+                  letterSpacing: tokens.number('typography.widgetTitle.letterSpacing', 1.4),
                 ),
               ),
               const SizedBox(width: 6),
               InkWell(
                 key: const Key('btn-edit-motto-dialog'),
                 onTap: _showEditMottoDialog,
-                child: const Icon(Icons.edit,
-                    size: 13, color: EarthColors.textMuted),
+                child: Icon(Icons.edit,
+                    size: tokens.number('controls.iconSize', 16),
+                    color: themeColor),
               ),
             ],
           ),
@@ -464,25 +508,27 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
           Text(
             '"$motto"',
             textAlign: TextAlign.center,
-            style: const TextStyle(
-              color: Colors.white70,
-              fontSize: 11,
-              fontStyle: FontStyle.italic,
+            style: TextStyle(
+              color: mutedColor,
+              fontSize: tokens.number('typography.topicTitle.size', 12),
+              fontWeight: FontWeight.w700,
+              letterSpacing:
+                  tokens.number('typography.topicTitle.letterSpacing', 1.4),
             ),
             overflow: TextOverflow.ellipsis,
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: tokens.number('spacing.control', 10)),
           Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               _headerStatPill('LEGACY POINTS', '$legacyPoints LP',
-                  Icons.auto_awesome, EarthColors.goldMetallic),
-              const SizedBox(width: 8),
+                  Icons.auto_awesome, themeColor),
+              SizedBox(width: tokens.number('spacing.inline', 8)),
               _headerStatPill(
                   'GENERATIONS',
                   '${_lineage.isEmpty ? 0 : _lineage.map((m) => _parseInt(m['generation'])).reduce(math.max)}',
                   Icons.groups_outlined,
-                  EarthColors.cyanAccent),
+                  themeColor),
             ],
           ),
         ],
@@ -492,50 +538,71 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
 
   Widget _headerStatPill(
       String label, String value, IconData icon, Color color) {
+    final tokens = UiStyleTokens.current;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
+      padding: EdgeInsets.symmetric(
+          horizontal: tokens.number('spacing.inline', 8), vertical: 4),
       decoration: BoxDecoration(
-        color: color.withAlpha(20),
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: color.withAlpha(80)),
+        color: color.withValues(alpha: .15),
+        borderRadius:
+            BorderRadius.circular(tokens.number('radius.control', 6)),
+        border: Border.all(color: color.withValues(alpha: .35)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 12, color: color),
+          Icon(icon,
+              size: tokens.number('controls.iconSize', 16), color: color),
           const SizedBox(width: 5),
           Text('$label: ',
               style:
-                  const TextStyle(color: EarthColors.textMuted, fontSize: 9.5)),
+                  TextStyle(
+                      color: mutedColor,
+                      fontSize: tokens.number('typography.widgetTitle.size', 10),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: tokens.number(
+                          'typography.widgetTitle.letterSpacing', 1.4))),
           Text(value,
               style: TextStyle(
-                  color: color, fontWeight: FontWeight.bold, fontSize: 10.5)),
+                  color: color,
+                  fontWeight: FontWeight.w700,
+                  fontSize:
+                      tokens.number('typography.widgetValue.size', 12),
+                  letterSpacing: tokens.number(
+                      'typography.widgetValue.letterSpacing', 1.4))),
         ],
       ),
     );
   }
 
   Widget _buildAlertBanner(String message, {required bool isError}) {
-    final color = isError ? Colors.redAccent : EarthColors.cyanAccent;
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final color = isError ? Colors.redAccent : themeColor;
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-      color: color.withAlpha(25),
+      padding: EdgeInsets.symmetric(
+          horizontal: tokens.number('pageTopics.cardPadding', 14), vertical: 6),
+      color: color.withValues(alpha: .15),
       child: Row(
         children: [
           Icon(isError ? Icons.error_outline : Icons.check_circle_outline,
               color: color, size: 15),
-          const SizedBox(width: 8),
+          SizedBox(width: tokens.number('spacing.inline', 8)),
           Expanded(
             child: Text(
               message,
               style: TextStyle(
-                  color: color, fontSize: 11, fontWeight: FontWeight.w600),
+                  color: color,
+                  fontSize: tokens.number('typography.widgetFooter.size', 10),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0)),
             ),
           ),
           IconButton(
             icon:
-                const Icon(Icons.close, size: 14, color: EarthColors.textMuted),
+                Icon(Icons.close, size: 14, color: tokens.color('colors.muted', EarthColors.textMuted)),
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
             onPressed: () => setState(() {
@@ -549,26 +616,29 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   Widget _buildLineageSection() {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         _buildFamilyToday(),
-        const SizedBox(height: 26),
+        SizedBox(height: tokens.number('spacing.titleGap', 24)),
         Row(
           children: [
-            const Text(
+            Text(
               'PEOPLE & RELATIONSHIPS',
               style: TextStyle(
-                color: EarthColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
+                color: mutedColor,
+                fontSize: tokens.number('typography.topicTitle.size', 12),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4),
               ),
             ),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.info_outline,
-                  size: 14, color: EarthColors.textMuted),
+              icon: Icon(Icons.info_outline,
+                  size: tokens.number('controls.iconSize', 16), color: themeColor),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               tooltip: 'Info',
@@ -576,23 +646,37 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    backgroundColor: EarthColors.cardSurface,
-                    title: const Text(
+                    backgroundColor: tokens.color('colors.panel', EarthColors.panelSurface),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
+                      side: BorderSide(color: themeColor.withValues(alpha: .35)),
+                    ),
+                    title: Text(
                       'PEOPLE & RELATIONSHIPS',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: EarthColors.goldMetallic,
+                        fontSize: tokens.number('typography.topicTitle.size', 12),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4),
+                        color: themeColor,
                       ),
                     ),
-                    content: const Text(
+                    content: Text(
                       '• Review the people who carry this family story forward.\n\n• Select a family member to understand their role, history, and readiness to carry responsibility.\n\n• Formal succession choices are managed from Life & Legacy.',
-                      style: TextStyle(fontSize: 11, color: Colors.white70),
+                      style: TextStyle(
+                        fontSize: tokens.number('typography.body.size', 10),
+                        color: inkColor.withValues(alpha: .8),
+                        letterSpacing: tokens.number('typography.body.letterSpacing', 1.0),
+                      ),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('CLOSE'),
+                        child: Text('CLOSE',
+                            style: TextStyle(
+                                color: mutedColor,
+                                fontSize: tokens.number('typography.control.size', 10),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))),
                       ),
                     ],
                   ),
@@ -601,13 +685,13 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.number('spacing.inline', 8)),
         // Ancestor Cards List Container
         Container(
           decoration: BoxDecoration(
-            color: EarthColors.panelSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: tokens.color('colors.surface', EarthColors.cardSurface),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: Colors.white10),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -620,7 +704,7 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                   border: Border(
                     bottom: isLast
                         ? BorderSide.none
-                        : const BorderSide(color: EarthColors.borderSubtle),
+                        : const BorderSide(color: Colors.white10),
                   ),
                 ),
                 child: InkWell(
@@ -631,25 +715,28 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             }).toList(),
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.number('spacing.titleOffset', 12)),
         // Right/Selected Member Dossier Inspector Panel Container
         Container(
           width: double.infinity,
           decoration: BoxDecoration(
-            color: EarthColors.panelSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: tokens.color('colors.surface', EarthColors.cardSurface),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: Colors.white10),
           ),
-          padding: const EdgeInsets.all(16),
+          padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 14)),
           child: _selectedMember != null
               ? _buildMemberInspectorContent(_selectedMember!)
-              : const Center(
+              : Center(
                   child: Padding(
-                    padding: EdgeInsets.all(16),
+                    padding: EdgeInsets.all(tokens.number('spacing.topic', 16)),
                     child: Text(
                       'Select a family member above to inspect their story, responsibilities, and contribution.',
-                      style:
-                          TextStyle(color: EarthColors.textMuted, fontSize: 11),
+                      style: TextStyle(
+                        color: mutedColor,
+                        fontSize: tokens.number('typography.body.size', 10),
+                        letterSpacing: tokens.number('typography.body.letterSpacing', 1.0),
+                      ),
                       textAlign: TextAlign.center,
                     ),
                   ),
@@ -660,6 +747,9 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   Widget _buildFamilyToday() {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final living =
         _lineage.where((member) => member['death_game_day'] == null).toList();
     final incumbents =
@@ -678,47 +768,56 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 14)),
       decoration: BoxDecoration(
-        color: EarthColors.goldMetallic.withAlpha(12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.goldMetallic.withAlpha(75)),
+        color: themeColor.withValues(alpha: .08),
+        borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+        border: Border.all(color: themeColor.withValues(alpha: .25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text('FAMILY TODAY',
+          Text('FAMILY TODAY',
               style: TextStyle(
-                  color: EarthColors.goldMetallic,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.1)),
-          const SizedBox(height: 8),
+                  color: themeColor,
+                  fontSize: tokens.number('typography.widgetTitle.size', 10),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: tokens.number('typography.widgetTitle.letterSpacing', 1.4))),
+          SizedBox(height: tokens.number('spacing.inline', 8)),
           Text(
             incumbent == null
                 ? 'Your family has no recorded current head.'
                 : '${incumbent['name'] ?? 'Current family head'} leads the family today.',
-            style: const TextStyle(
-                color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+            style: TextStyle(
+                color: inkColor,
+                fontSize: tokens.number('typography.widgetValue.size', 12),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number('typography.widgetValue.letterSpacing', 1.4)),
           ),
           const SizedBox(height: 4),
           Text(familyStatus,
-              style: const TextStyle(
-                  color: EarthColors.textMuted, fontSize: 10.5)),
+              style: TextStyle(
+                  color: mutedColor,
+                  fontSize: tokens.number('typography.widgetFooter.size', 10),
+                  letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0))),
           const SizedBox(height: 4),
           Text(successionStatus,
               style: TextStyle(
                   color: successorName == null
-                      ? Colors.orangeAccent
-                      : EarthColors.cyanAccent,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w600)),
+                      ? tokens.color('colors.warning', Colors.orangeAccent)
+                      : themeColor,
+                  fontSize: tokens.number('typography.widgetFooter.size', 10),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0))),
         ],
       ),
     );
   }
 
   Widget _buildFamilyIdentity(String direction) {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final unlocked = _perks
         .map((perk) => perk['perk_name']?.toString())
         .whereType<String>()
@@ -728,63 +827,88 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
       children: [
         Row(
           children: [
-            const Text('FAMILY IDENTITY',
+            Text('FAMILY IDENTITY',
                 style: TextStyle(
-                    color: EarthColors.textMuted,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1)),
+                    color: mutedColor,
+                    fontSize: tokens.number('typography.topicTitle.size', 12),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: tokens.number(
+                        'typography.topicTitle.letterSpacing', 1.4))),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.info_outline,
-                  size: 14, color: EarthColors.textMuted),
+              icon: Icon(Icons.info_outline,
+                  size: tokens.number('controls.iconSize', 16),
+                  color: themeColor),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               tooltip: 'About family identity',
               onPressed: () => showDialog(
                 context: context,
                 builder: (ctx) => AlertDialog(
-                  backgroundColor: EarthColors.cardSurface,
-                  title: const Text('FAMILY IDENTITY',
+                  backgroundColor: tokens.color('colors.panel', EarthColors.panelSurface),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
+                    side: BorderSide(color: themeColor.withValues(alpha: .35)),
+                  ),
+                  title: Text('FAMILY IDENTITY',
                       style: TextStyle(
-                          color: EarthColors.goldMetallic,
-                          fontSize: 12,
-                          fontWeight: FontWeight.bold)),
-                  content: const Text(
+                          color: themeColor,
+                          fontSize: tokens.number('typography.topicTitle.size', 12),
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4))),
+                  content: Text(
                       'Your family identity is shaped by the work, values, and choices you pass forward. It influences the practical advantages, heirlooms, and opportunities available to later generations.',
-                      style: TextStyle(color: Colors.white70, fontSize: 11)),
+                      style: TextStyle(
+                        color: inkColor.withValues(alpha: .8),
+                        fontSize: tokens.number('typography.body.size', 10),
+                        letterSpacing: tokens.number('typography.body.letterSpacing', 1.0),
+                      )),
                   actions: [
                     TextButton(
                         onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('CLOSE'))
+                        child: Text('CLOSE',
+                            style: TextStyle(
+                                color: mutedColor,
+                                fontSize: tokens.number('typography.control.size', 10),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))))
                   ],
                 ),
               ),
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.number('spacing.inline', 8)),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 14)),
           decoration: BoxDecoration(
-              color: EarthColors.panelSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: EarthColors.borderSubtle)),
+              color: tokens.color('colors.surface', EarthColors.cardSurface),
+              borderRadius:
+                  BorderRadius.circular(tokens.number('radius.card', 10)),
+              border: Border.all(color: Colors.white10)),
           child:
               Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Text(direction,
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold)),
+                style: TextStyle(
+                    color: themeColor,
+                    fontSize:
+                        tokens.number('typography.widgetValue.size', 12),
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: tokens.number(
+                        'typography.widgetValue.letterSpacing', 1.4))),
             const SizedBox(height: 6),
             Text(
                 unlocked.isEmpty
                     ? 'No family traditions are active yet.'
                     : 'Active traditions: ${unlocked.join(' · ')}',
-                style: const TextStyle(
-                    color: EarthColors.textMuted, fontSize: 10.5)),
+                style: TextStyle(
+                    color: mutedColor,
+                    fontSize:
+                        tokens.number('typography.widgetFooter.size', 10),
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: tokens.number(
+                        'typography.widgetFooter.letterSpacing', 1.0))),
           ]),
         ),
       ],
@@ -792,6 +916,10 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   Widget _buildMemberNodeCard(Map<String, dynamic> member, bool isSelected) {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final secondaryColor = tokens.color('colors.secondary', violetColor);
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final gen = member['generation'] ?? 1;
     final name = member['name'] ?? 'Dynastic Heir';
     final title = member['title'] ?? 'Dynastic Member';
@@ -802,20 +930,20 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
     final legacy = member['legacy_score'] ?? 0;
 
     final cardBorderColor = isSelected
-        ? EarthColors.goldMetallic
-        : (isIncumbent ? EarthColors.cyanAccent : EarthColors.borderSubtle);
+        ? themeColor
+        : (isIncumbent ? themeColor.withValues(alpha: .5) : Colors.white10);
 
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 10)),
       decoration: BoxDecoration(
-        color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(8),
+        color: tokens.color('colors.surface', EarthColors.cardSurface),
+        borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
         border:
-            Border.all(color: cardBorderColor, width: isSelected ? 2.0 : 1.0),
+            Border.all(color: cardBorderColor, width: isSelected ? 1.5 : 1.0),
         boxShadow: isSelected
             ? [
                 BoxShadow(
-                    color: EarthColors.goldMetallic.withAlpha(60),
+                    color: themeColor.withValues(alpha: .25),
                     blurRadius: 10)
               ]
             : [],
@@ -828,12 +956,12 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               color: isIncumbent
-                  ? EarthColors.cyanAccent.withAlpha(30)
-                  : EarthColors.goldMetallic.withAlpha(20),
+                  ? themeColor.withValues(alpha: .2)
+                  : secondaryColor.withValues(alpha: .15),
               border: Border.all(
                 color: isIncumbent
-                    ? EarthColors.cyanAccent
-                    : EarthColors.goldMetallic,
+                    ? themeColor
+                    : secondaryColor,
                 width: 1.5,
               ),
             ),
@@ -843,16 +971,16 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   color: isIncumbent
-                      ? EarthColors.cyanAccent
-                      : EarthColors.goldMetallic,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 8.5,
+                      ? themeColor
+                      : secondaryColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: tokens.number('typography.caption.size', 8),
                   height: 1.1,
                 ),
               ),
             ),
           ),
-          const SizedBox(width: 12),
+          SizedBox(width: tokens.number('spacing.titleOffset', 12)),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -862,46 +990,61 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                   children: [
                     Text(
                       name,
-                      style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12.5),
+                      style: TextStyle(
+                          color: themeColor,
+                          fontWeight: FontWeight.w700,
+                          fontSize:
+                              tokens.number('typography.widgetValue.size', 12),
+                          letterSpacing: tokens.number(
+                              'typography.widgetValue.letterSpacing', 1.4)),
                     ),
                     if (isIncumbent)
                       Container(
                         padding: const EdgeInsets.symmetric(
                             horizontal: 6, vertical: 2),
                         decoration: BoxDecoration(
-                          color: EarthColors.cyanAccent.withAlpha(25),
-                          borderRadius: BorderRadius.circular(3),
+                          color: themeColor.withValues(alpha: .15),
+                          borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
                           border: Border.all(
-                              color: EarthColors.cyanAccent.withAlpha(100)),
+                              color: themeColor.withValues(alpha: .35)),
                         ),
-                        child: const Text(
+                        child: Text(
                           'ACTIVE HEAD',
                           style: TextStyle(
-                              color: EarthColors.cyanAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 8.5),
+                              color: themeColor,
+                              fontWeight: FontWeight.w700,
+                              fontSize: tokens.number('typography.caption.size', 8),
+                              letterSpacing: tokens.number('typography.caption.letterSpacing', 1.4)),
                         ),
                       )
                     else
                       Text(
                         'Day $birth – Day ${death ?? 'Present'}',
-                        style: const TextStyle(
-                            color: EarthColors.textMuted, fontSize: 9.5),
+                        style: TextStyle(
+                            color: mutedColor,
+                            fontSize: tokens.number(
+                                'typography.widgetFooter.size', 10),
+                            fontWeight: FontWeight.w400,
+                            letterSpacing: tokens.number(
+                                'typography.widgetFooter.letterSpacing', 1.0)),
                       ),
                   ],
                 ),
                 const SizedBox(height: 2),
                 Text(title,
-                    style: const TextStyle(
-                        color: EarthColors.textMuted, fontSize: 10)),
-                const SizedBox(height: 6),
-                Row(
+                    style: TextStyle(
+                        color: mutedColor,
+                        fontSize:
+                            tokens.number('typography.widgetFooter.size', 10),
+                        fontWeight: FontWeight.w400,
+                        letterSpacing: tokens.number(
+                            'typography.widgetFooter.letterSpacing', 1.0))),
+                SizedBox(height: tokens.number('spacing.control', 6)),
+                Wrap(
+                  spacing: tokens.number('spacing.titleOffset', 12),
+                  runSpacing: 4,
                   children: [
                     _nodeMiniStat('Wealth', '${wealth.toStringAsFixed(0)} CR'),
-                    const SizedBox(width: 12),
                     _nodeMiniStat('Legacy Score', '$legacy LP'),
                   ],
                 ),
@@ -914,21 +1057,34 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   Widget _nodeMiniStat(String label, String value) {
+    final tokens = UiStyleTokens.current;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
+    final themeColor = Theme.of(context).colorScheme.primary;
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         Text('$label: ',
-            style: const TextStyle(color: EarthColors.textMuted, fontSize: 9)),
+            style: TextStyle(
+                color: mutedColor,
+                fontSize: tokens.number('typography.widgetTitle.size', 10),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number(
+                    'typography.widgetTitle.letterSpacing', 1.4))),
         Text(value,
-            style: const TextStyle(
-                color: Colors.white70,
-                fontWeight: FontWeight.bold,
-                fontSize: 9.5)),
+            style: TextStyle(
+                color: themeColor,
+                fontWeight: FontWeight.w700,
+                fontSize: tokens.number('typography.widgetValue.size', 12),
+                letterSpacing: tokens.number(
+                    'typography.widgetValue.letterSpacing', 1.4))),
       ],
     );
   }
 
   Widget _buildMemberInspectorContent(Map<String, dynamic> member) {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final gen = member['generation'] ?? 1;
     final name = member['name'] ?? 'Dynastic Heir';
     final title = member['title'] ?? 'Dynastic Member';
@@ -950,48 +1106,55 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
           children: [
             Text(
               'GENERATION $gen DOSSIER',
-              style: const TextStyle(
-                  color: EarthColors.goldMetallic,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8),
+              style: TextStyle(
+                  color: themeColor,
+                  fontSize: tokens.number('typography.widgetTitle.size', 10),
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: tokens.number('typography.widgetTitle.letterSpacing', 1.4)),
             ),
             if (isIncumbent)
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                 decoration: BoxDecoration(
-                  color: EarthColors.cyanAccent.withAlpha(25),
-                  borderRadius: BorderRadius.circular(3),
+                  color: themeColor.withValues(alpha: .15),
+                  borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
                   border:
-                      Border.all(color: EarthColors.cyanAccent.withAlpha(100)),
+                      Border.all(color: themeColor.withValues(alpha: .35)),
                 ),
-                child: const Text(
+                child: Text(
                   'INCUMBENT',
                   style: TextStyle(
-                      color: EarthColors.cyanAccent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 8.5),
+                      color: themeColor,
+                      fontWeight: FontWeight.w700,
+                      fontSize: tokens.number('typography.caption.size', 8),
+                      letterSpacing: tokens.number('typography.caption.letterSpacing', 1.4)),
                 ),
               ),
           ],
         ),
         const SizedBox(height: 6),
         Text(name,
-            style: const TextStyle(
-                color: Colors.white,
-                fontSize: 15,
-                fontWeight: FontWeight.bold)),
+            style: TextStyle(
+                color: inkColor,
+                fontSize: tokens.number('typography.pageTitle.size', 16),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number('typography.pageTitle.letterSpacing', 1.4))),
         const SizedBox(height: 2),
         Text(title,
             style:
-                const TextStyle(color: EarthColors.textMuted, fontSize: 10.5)),
-        const SizedBox(height: 12),
+                TextStyle(
+                  color: mutedColor,
+                  fontSize: tokens.number('typography.widgetFooter.size', 10),
+                  fontWeight: FontWeight.w400,
+                  letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0),
+                )),
+        SizedBox(height: tokens.number('spacing.titleOffset', 12)),
         Container(
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 10)),
           decoration: BoxDecoration(
-            color: EarthColors.panelSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: tokens.color('colors.panel', EarthColors.panelSurface),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: Colors.white10),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1003,46 +1166,49 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             ],
           ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: tokens.number('spacing.titleOffset', 12)),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(10),
+          padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 10)),
           decoration: BoxDecoration(
-            color: EarthColors.goldMetallic.withAlpha(15),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.goldMetallic.withAlpha(80)),
+            color: themeColor.withValues(alpha: .08),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: themeColor.withValues(alpha: .25)),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('ANCESTRAL EPITAPH & WILL',
+              Text('ANCESTRAL EPITAPH & WILL',
                   style: TextStyle(
-                      color: EarthColors.goldMetallic,
-                      fontSize: 9.5,
-                      fontWeight: FontWeight.bold)),
+                      color: themeColor,
+                      fontSize: tokens.number('typography.widgetTitle.size', 10),
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: tokens.number('typography.widgetTitle.letterSpacing', 1.4))),
               const SizedBox(height: 4),
               Text(
                 '"$epitaph"',
-                style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontStyle: FontStyle.italic),
+                style: TextStyle(
+                    color: inkColor,
+                    fontSize: tokens.number('typography.widgetFooter.size', 10),
+                    fontStyle: FontStyle.italic,
+                    letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0)),
               ),
             ],
           ),
         ),
-        const SizedBox(height: 12),
-        const Text('HISTORICAL MILESTONES',
+        SizedBox(height: tokens.number('spacing.titleOffset', 12)),
+        Text('HISTORICAL MILESTONES',
             style: TextStyle(
-                color: Colors.white70,
-                fontSize: 11,
-                fontWeight: FontWeight.bold)),
+                color: inkColor,
+                fontSize: tokens.number('typography.topicTitle.size', 12),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4))),
         const SizedBox(height: 6),
         Container(
           decoration: BoxDecoration(
-            color: EarthColors.panelSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: tokens.color('colors.panel', EarthColors.panelSurface),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: Colors.white10),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -1067,21 +1233,31 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   Widget _inspectorRow(String label, String val) {
+    final tokens = UiStyleTokens.current;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
           child: Text(
             label,
-            style: const TextStyle(color: EarthColors.textMuted, fontSize: 10),
+            style: TextStyle(
+              color: mutedColor,
+              fontSize: tokens.number('typography.widgetFooter.size', 10),
+              fontWeight: FontWeight.w400,
+              letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0),
+            ),
             overflow: TextOverflow.ellipsis,
           ),
         ),
         const SizedBox(width: 8),
         Text(
           val,
-          style: const TextStyle(
-              color: Colors.white, fontWeight: FontWeight.bold, fontSize: 10.5),
+          style: TextStyle(
+              color: inkColor,
+              fontWeight: FontWeight.w700,
+              fontSize: tokens.number('typography.widgetValue.size', 12),
+              letterSpacing: tokens.number('typography.widgetValue.letterSpacing', 1.4)),
         ),
       ],
     );
@@ -1089,35 +1265,47 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
 
   Widget _milestoneTileRow(String label, String value, IconData icon,
       {required bool isLast}) {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+      padding: EdgeInsets.symmetric(
+          horizontal: tokens.number('pageTopics.cardPadding', 10),
+          vertical: tokens.number('spacing.inline', 8)),
       decoration: BoxDecoration(
         border: Border(
           bottom: isLast
               ? BorderSide.none
-              : const BorderSide(color: EarthColors.borderSubtle),
+              : const BorderSide(color: Colors.white10),
         ),
       ),
       child: Row(
         children: [
-          Icon(icon, size: 14, color: EarthColors.cyanAccent),
-          const SizedBox(width: 8),
+          Icon(icon, size: tokens.number('controls.iconSize', 16) - 2, color: themeColor),
+          SizedBox(width: tokens.number('spacing.inline', 8)),
           Expanded(
             child: Text(label,
-                style: const TextStyle(
-                    color: EarthColors.textMuted, fontSize: 10)),
+                style: TextStyle(
+                    color: mutedColor,
+                    fontSize: tokens.number('typography.widgetFooter.size', 10),
+                    fontWeight: FontWeight.w400,
+                    letterSpacing: tokens.number('typography.widgetFooter.letterSpacing', 1.0))),
           ),
           Text(value,
-              style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 10.5)),
+              style: TextStyle(
+                  color: inkColor,
+                  fontWeight: FontWeight.w700,
+                  fontSize: tokens.number('typography.widgetValue.size', 12),
+                  letterSpacing: tokens.number('typography.widgetValue.letterSpacing', 1.4))),
         ],
       ),
     );
   }
 
   Widget _buildPerksSection() {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     final userPoints = _parseInt(_dynasty['legacy_points'], fallback: 0);
 
     return Column(
@@ -1125,19 +1313,21 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               'FAMILY TRADITIONS',
               style: TextStyle(
-                color: EarthColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
+                color: mutedColor,
+                fontSize: tokens.number('typography.topicTitle.size', 12),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number(
+                    'typography.topicTitle.letterSpacing', 1.4),
               ),
             ),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.info_outline,
-                  size: 14, color: EarthColors.textMuted),
+              icon: Icon(Icons.info_outline,
+                  size: tokens.number('controls.iconSize', 16),
+                  color: themeColor),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               tooltip: 'Info',
@@ -1145,23 +1335,37 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    backgroundColor: EarthColors.cardSurface,
-                    title: const Text(
+                    backgroundColor: tokens.color('colors.panel', EarthColors.panelSurface),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
+                      side: BorderSide(color: themeColor.withValues(alpha: .35)),
+                    ),
+                    title: Text(
                       'FAMILY TRADITIONS',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: EarthColors.goldMetallic,
+                        fontSize: tokens.number('typography.topicTitle.size', 12),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4),
+                        color: themeColor,
                       ),
                     ),
-                    content: const Text(
+                    content: Text(
                       '• These traditions describe what your family is becoming known for.\n\n• Choose directions that shape future opportunities, relationships, and the abilities passed to later generations.\n\n• Legacy Points are a measure of influence, not money.',
-                      style: TextStyle(fontSize: 11, color: Colors.white70),
+                      style: TextStyle(
+                        fontSize: tokens.number('typography.body.size', 10),
+                        color: inkColor.withValues(alpha: .8),
+                        letterSpacing: tokens.number('typography.body.letterSpacing', 1.0),
+                      ),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('CLOSE'),
+                        child: Text('CLOSE',
+                            style: TextStyle(
+                                color: mutedColor,
+                                fontSize: tokens.number('typography.control.size', 10),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))),
                       ),
                     ],
                   ),
@@ -1170,12 +1374,12 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.number('spacing.inline', 8)),
         Container(
           decoration: BoxDecoration(
-            color: EarthColors.panelSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: tokens.color('colors.surface', EarthColors.cardSurface),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: Colors.white10),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -1192,13 +1396,14 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
               final canAfford = userPoints >= cost;
 
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: EdgeInsets.symmetric(
+                    horizontal: tokens.number('pageTopics.cardPadding', 12),
+                    vertical: tokens.number('spacing.control', 10)),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: isLast
                         ? BorderSide.none
-                        : const BorderSide(color: EarthColors.borderSubtle),
+                        : const BorderSide(color: Colors.white10),
                   ),
                 ),
                 child: Row(
@@ -1209,23 +1414,23 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                       decoration: BoxDecoration(
                         shape: BoxShape.circle,
                         color: isUnlocked
-                            ? EarthColors.goldMetallic.withAlpha(30)
-                            : EarthColors.cardSurface,
+                            ? themeColor.withValues(alpha: .2)
+                            : tokens.color('colors.panel', EarthColors.panelSurface),
                         border: Border.all(
                           color: isUnlocked
-                              ? EarthColors.goldMetallic
-                              : EarthColors.borderSubtle,
+                              ? themeColor
+                              : Colors.white10,
                         ),
                       ),
                       child: Icon(
                         isUnlocked ? Icons.check_circle : Icons.lock_outline,
                         color: isUnlocked
-                            ? EarthColors.goldMetallic
-                            : EarthColors.textMuted,
+                            ? themeColor
+                            : mutedColor,
                         size: 18,
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: tokens.number('spacing.titleOffset', 12)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1236,66 +1441,95 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                             crossAxisAlignment: WrapCrossAlignment.center,
                             children: [
                               Text(name,
-                                  style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 12)),
+                                  style: TextStyle(
+                                      color: themeColor,
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: tokens.number(
+                                          'typography.widgetValue.size', 12),
+                                      letterSpacing: tokens.number(
+                                          'typography.widgetValue.letterSpacing',
+                                          1.4))),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 5, vertical: 1.5),
                                 decoration: BoxDecoration(
-                                  color: EarthColors.cyanAccent.withAlpha(25),
-                                  borderRadius: BorderRadius.circular(4),
+                                  color: themeColor.withValues(alpha: .15),
+                                  borderRadius: BorderRadius.circular(tokens.number('radius.control', 4)),
                                 ),
                                 child: Text(
                                   category.toUpperCase(),
-                                  style: const TextStyle(
-                                      color: EarthColors.cyanAccent,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: themeColor,
+                                      fontSize: tokens.number('typography.caption.size', 8),
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: tokens.number('typography.caption.letterSpacing', 1.4)),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 2),
                           Text(desc,
-                              style: const TextStyle(
-                                  color: Colors.white70, fontSize: 10.5)),
+                              style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: tokens.number(
+                                      'typography.widgetFooter.size', 10),
+                                  fontWeight: FontWeight.w400,
+                                  letterSpacing: tokens.number(
+                                      'typography.widgetFooter.letterSpacing',
+                                      1.0))),
                           Text('Unlock Requirement: $cost Legacy Points',
-                              style: const TextStyle(
-                                  color: EarthColors.textMuted, fontSize: 9.5)),
+                              style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: tokens.number(
+                                      'typography.widgetFooter.size', 10),
+                                  fontWeight: FontWeight.w400,
+                                  letterSpacing: tokens.number(
+                                      'typography.widgetFooter.letterSpacing',
+                                      1.0))),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
+                    SizedBox(width: tokens.number('spacing.control', 10)),
                     if (isUnlocked)
-                      const Chip(
+                      Chip(
                         label: Text('ACTIVE TRAIT',
                             style: TextStyle(
-                                fontSize: 9,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.black)),
-                        backgroundColor: EarthColors.goldMetallic,
+                                fontSize: tokens.number('typography.caption.size', 8),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 1.0,
+                                color: tokens.color('colors.canvas', canvasColor))),
+                        backgroundColor: themeColor,
                         padding: EdgeInsets.zero,
                         visualDensity: VisualDensity.compact,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
+                        ),
                       )
                     else
-                      ElevatedButton(
-                        key: Key('btn-unlock-perk-$perkKey'),
-                        onPressed: (_isActionInProgress || !canAfford)
-                            ? null
-                            : () => _unlockPerk(perkKey, name),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: EarthColors.goldMetallic,
-                          foregroundColor: Colors.black,
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 6),
-                          textStyle: const TextStyle(
-                              fontWeight: FontWeight.bold, fontSize: 10),
+                      SizedBox(
+                        height: tokens.number('controls.buttonHeight', 34),
+                        child: ElevatedButton(
+                          key: Key('btn-unlock-perk-$perkKey'),
+                          onPressed: (_isActionInProgress || !canAfford)
+                              ? null
+                              : () => _unlockPerk(perkKey, name),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: themeColor,
+                            foregroundColor: tokens.color('colors.canvas', canvasColor),
+                            padding: EdgeInsets.symmetric(
+                                horizontal: tokens.number('spacing.control', 10), vertical: 6),
+                            textStyle: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: tokens.number('typography.control.size', 10),
+                                letterSpacing: tokens.number('typography.control.letterSpacing', 1.4)),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
+                            ),
+                          ),
+                          child: Text(_isActionInProgress
+                              ? 'UNLOCKING...'
+                              : 'UNLOCK ($cost LP)'),
                         ),
-                        child: Text(_isActionInProgress
-                            ? 'UNLOCKING...'
-                            : 'UNLOCK ($cost LP)'),
                       ),
                   ],
                 ),
@@ -1308,24 +1542,29 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   Widget _buildHeirloomsSection() {
+    final tokens = UiStyleTokens.current;
+    final themeColor = Theme.of(context).colorScheme.primary;
+    final mutedColor = tokens.color('colors.muted', EarthColors.textMuted);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           children: [
-            const Text(
+            Text(
               'FAMILY HEIRLOOMS & SHARED ASSETS',
               style: TextStyle(
-                color: EarthColors.textMuted,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1,
+                color: mutedColor,
+                fontSize: tokens.number('typography.topicTitle.size', 12),
+                fontWeight: FontWeight.w700,
+                letterSpacing: tokens.number(
+                    'typography.topicTitle.letterSpacing', 1.4),
               ),
             ),
             const SizedBox(width: 6),
             IconButton(
-              icon: const Icon(Icons.info_outline,
-                  size: 14, color: EarthColors.textMuted),
+              icon: Icon(Icons.info_outline,
+                  size: tokens.number('controls.iconSize', 16),
+                  color: themeColor),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(),
               tooltip: 'Info',
@@ -1333,23 +1572,37 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                 showDialog(
                   context: context,
                   builder: (ctx) => AlertDialog(
-                    backgroundColor: EarthColors.cardSurface,
-                    title: const Text(
+                    backgroundColor: tokens.color('colors.panel', EarthColors.panelSurface),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
+                      side: BorderSide(color: themeColor.withValues(alpha: .35)),
+                    ),
+                    title: Text(
                       'FAMILY HEIRLOOMS & SHARED ASSETS',
                       style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.bold,
-                        color: EarthColors.goldMetallic,
+                        fontSize: tokens.number('typography.topicTitle.size', 12),
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.4),
+                        color: themeColor,
                       ),
                     ),
-                    content: const Text(
+                    content: Text(
                       '• Heirlooms are part of the family story, not ordinary equipment.\n\n• Each item records who created it, why it matters, and who currently carries its responsibility.\n\n• Equipped heirlooms transfer to the next generation through succession or Civic Rebirth and continue providing their gameplay benefit.',
-                      style: TextStyle(fontSize: 11, color: Colors.white70),
+                      style: TextStyle(
+                        fontSize: tokens.number('typography.body.size', 10),
+                        color: inkColor.withValues(alpha: .8),
+                        letterSpacing: tokens.number('typography.body.letterSpacing', 1.0),
+                      ),
                     ),
                     actions: [
                       TextButton(
                         onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('CLOSE'),
+                        child: Text('CLOSE',
+                            style: TextStyle(
+                                color: mutedColor,
+                                fontSize: tokens.number('typography.control.size', 10),
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: tokens.number('typography.control.letterSpacing', 1.4))),
                       ),
                     ],
                   ),
@@ -1358,12 +1611,12 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
             ),
           ],
         ),
-        const SizedBox(height: 8),
+        SizedBox(height: tokens.number('spacing.inline', 8)),
         Container(
           decoration: BoxDecoration(
-            color: EarthColors.panelSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: tokens.color('colors.surface', EarthColors.cardSurface),
+            borderRadius: BorderRadius.circular(tokens.number('radius.card', 10)),
+            border: Border.all(color: Colors.white10),
           ),
           clipBehavior: Clip.antiAlias,
           child: Column(
@@ -1386,13 +1639,14 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                   rawEquipped.toString().trim().isNotEmpty;
 
               return Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                padding: EdgeInsets.symmetric(
+                    horizontal: tokens.number('pageTopics.cardPadding', 12),
+                    vertical: tokens.number('spacing.control', 10)),
                 decoration: BoxDecoration(
                   border: Border(
                     bottom: isLast
                         ? BorderSide.none
-                        : const BorderSide(color: EarthColors.borderSubtle),
+                        : const BorderSide(color: Colors.white10),
                   ),
                 ),
                 child: Row(
@@ -1401,9 +1655,9 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                       width: 40,
                       height: 40,
                       decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(6),
-                        color: Colors.black.withAlpha(180),
-                        border: Border.all(color: EarthColors.goldMetallic),
+                        borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
+                        color: tokens.color('colors.canvas', canvasColor).withValues(alpha: .7),
+                        border: Border.all(color: themeColor.withValues(alpha: .5)),
                       ),
                       child: Center(
                         child: Icon(
@@ -1412,12 +1666,12 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                               : (type == 'pioneer_chronometer'
                                   ? Icons.access_time
                                   : Icons.verified),
-                          color: EarthColors.goldMetallic,
+                          color: themeColor,
                           size: 20,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: tokens.number('spacing.titleOffset', 12)),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1429,63 +1683,85 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
                             children: [
                               Text(
                                 name,
-                                style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.bold,
-                                    fontSize: 12),
+                                style: TextStyle(
+                                    color: themeColor,
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: tokens.number(
+                                        'typography.widgetValue.size', 12),
+                                    letterSpacing: tokens.number(
+                                        'typography.widgetValue.letterSpacing',
+                                        1.4)),
                                 overflow: TextOverflow.ellipsis,
                               ),
                               Container(
                                 padding: const EdgeInsets.symmetric(
                                     horizontal: 5, vertical: 1.5),
                                 decoration: BoxDecoration(
-                                  color: Colors.amberAccent.withAlpha(30),
-                                  borderRadius: BorderRadius.circular(4),
+                                  color: tokens.color('colors.warning', Colors.amberAccent).withValues(alpha: .2),
+                                  borderRadius: BorderRadius.circular(tokens.number('radius.control', 4)),
                                   border: Border.all(
-                                      color: Colors.amberAccent.withAlpha(120)),
+                                      color: tokens.color('colors.warning', Colors.amberAccent).withValues(alpha: .5)),
                                 ),
                                 child: Text(
                                   quality.toUpperCase(),
-                                  style: const TextStyle(
-                                      color: Colors.amberAccent,
-                                      fontSize: 8,
-                                      fontWeight: FontWeight.bold),
+                                  style: TextStyle(
+                                      color: tokens.color('colors.warning', Colors.amberAccent),
+                                      fontSize: tokens.number('typography.caption.size', 8),
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: tokens.number('typography.caption.letterSpacing', 1.4)),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 2),
                           Text('Buff: $statBuff',
-                              style: const TextStyle(
-                                  color: EarthColors.cyanAccent,
-                                  fontWeight: FontWeight.w600,
-                                  fontSize: 10.5)),
+                              style: TextStyle(
+                                  color: themeColor,
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: tokens.number(
+                                      'typography.widgetValue.size', 12),
+                                  letterSpacing: tokens.number(
+                                      'typography.widgetValue.letterSpacing',
+                                      1.4))),
                           Text('"$inscription"',
-                              style: const TextStyle(
-                                  color: EarthColors.textMuted,
-                                  fontSize: 9.5,
+                              style: TextStyle(
+                                  color: mutedColor,
+                                  fontSize: tokens.number(
+                                      'typography.widgetFooter.size', 10),
+                                  fontWeight: FontWeight.w400,
+                                  letterSpacing: tokens.number(
+                                      'typography.widgetFooter.letterSpacing',
+                                      1.0),
                                   fontStyle: FontStyle.italic)),
                         ],
                       ),
                     ),
-                    const SizedBox(width: 10),
-                    ElevatedButton(
-                      key: Key('btn-equip-heirloom-$id'),
-                      onPressed: _isActionInProgress
-                          ? null
-                          : () => _equipHeirloom(id, name),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: isEquipped
-                            ? Colors.grey[800]
-                            : EarthColors.cyanAccent,
-                        foregroundColor:
-                            isEquipped ? Colors.white70 : Colors.black,
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 10, vertical: 6),
-                        textStyle: const TextStyle(
-                            fontWeight: FontWeight.bold, fontSize: 10),
+                    SizedBox(width: tokens.number('spacing.control', 10)),
+                    SizedBox(
+                      height: tokens.number('controls.buttonHeight', 34),
+                      child: ElevatedButton(
+                        key: Key('btn-equip-heirloom-$id'),
+                        onPressed: _isActionInProgress
+                            ? null
+                            : () => _equipHeirloom(id, name),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: isEquipped
+                              ? Colors.grey[800]
+                              : themeColor,
+                          foregroundColor:
+                              isEquipped ? Colors.white70 : tokens.color('colors.canvas', canvasColor),
+                          padding: EdgeInsets.symmetric(
+                              horizontal: tokens.number('spacing.control', 10), vertical: 6),
+                          textStyle: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: tokens.number('typography.control.size', 10),
+                              letterSpacing: tokens.number('typography.control.letterSpacing', 1.4)),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(tokens.number('radius.control', 6)),
+                          ),
+                        ),
+                        child: Text(isEquipped ? 'UNEQUIP' : 'EQUIP TO HEAD'),
                       ),
-                      child: Text(isEquipped ? 'UNEQUIP' : 'EQUIP TO HEAD'),
                     ),
                   ],
                 ),
@@ -1504,32 +1780,12 @@ class _DynastyTreeDialogState extends State<DynastyTreeDialog>
   }
 
   static int _parseInt(dynamic val, {int fallback = 0}) {
-    if (val is num) return val.toInt();
-    if (val is String)
+    if (val is num) {
+      return val.toInt();
+    }
+    if (val is String) {
       return int.tryParse(val) ?? double.tryParse(val)?.toInt() ?? fallback;
+    }
     return fallback;
-  }
-}
-
-class _LineageTreePainter extends CustomPainter {
-  final List<Map<String, dynamic>> members;
-
-  _LineageTreePainter({required this.members});
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    final paint = Paint()
-      ..color = EarthColors.goldMetallic.withAlpha(40)
-      ..strokeWidth = 2.0
-      ..style = PaintingStyle.stroke;
-
-    const startX = 38.0;
-    canvas.drawLine(
-        const Offset(startX, 20), Offset(startX, size.height - 20), paint);
-  }
-
-  @override
-  bool shouldRepaint(covariant _LineageTreePainter oldDelegate) {
-    return oldDelegate.members.length != members.length;
   }
 }

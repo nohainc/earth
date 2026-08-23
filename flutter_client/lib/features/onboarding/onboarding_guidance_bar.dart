@@ -118,10 +118,10 @@ class _OnboardingGuidanceBarState extends State<OnboardingGuidanceBar> {
               // Header & Progress Indicator
               Container(
                 padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                decoration: BoxDecoration(
+                decoration: const BoxDecoration(
                   color: EarthColors.panelSurface,
-                  borderRadius: const BorderRadius.vertical(top: Radius.circular(10)),
-                  border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                  borderRadius: BorderRadius.vertical(top: Radius.circular(10)),
+                  border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,

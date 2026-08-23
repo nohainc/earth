@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../dynasty/dynasty_tree_dialog.dart';
 
@@ -79,125 +79,93 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      backgroundColor: EarthColors.panelSurface,
-      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      backgroundColor: context.panelColor,
+      insetPadding: EdgeInsets.symmetric(
+        horizontal: context.spacingTopic,
+        vertical: context.spacingPage,
+      ),
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(8),
-        side: const BorderSide(color: EarthColors.goldMetallic, width: 1.5),
+        borderRadius: BorderRadius.circular(context.radiusPanel),
+        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
       ),
       child: Container(
         width: 840,
         height: 680,
-        padding: const EdgeInsets.all(20),
+        padding: EdgeInsets.all(context.spacingPage),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
             Row(
               children: [
-                const Icon(Icons.account_balance,
-                    color: EarthColors.goldMetallic, size: 28),
-                const SizedBox(width: 12),
+                Icon(
+                  Icons.account_balance,
+                  color: context.primaryColor,
+                  size: context.iconSize + 4,
+                ),
+                SizedBox(width: context.spacingTitleOffset),
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'PLANETARY PANTHEON & CEMETERY ARCHIVE',
-                        style:
-                            Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: EarthColors.goldMetallic,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1.2,
-                                ),
+                        style: context.pageTitleStyle,
                       ),
                       const SizedBox(height: 2),
                       Text(
                         'Universal civil memorial records, deceased citizens, ancestral lineages, and lifetime achievements.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: EarthColors.textMuted,
-                            ),
+                        style: context.widgetFooterStyle,
                       ),
                     ],
                   ),
                 ),
-                ElevatedButton.icon(
-                  key: const Key('btn-open-dynasty-tree'),
-                  onPressed: () =>
-                      showDynastyTreeDialog(context, api: widget.api),
-                  icon: const Icon(Icons.account_tree_outlined, size: 14),
-                  label: const Text('DYNASTY TREE'),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: EarthColors.goldMetallic,
-                    foregroundColor: Colors.black,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    textStyle: const TextStyle(
-                        fontWeight: FontWeight.bold, fontSize: 10.5),
-                  ),
+                EarthButton(
+                  buttonKey: const Key('btn-open-dynasty-tree'),
+                  label: 'DYNASTY TREE',
+                  icon: Icons.account_tree_outlined,
+                  onPressed: () => showDynastyTreeDialog(context, api: widget.api),
                 ),
-                const SizedBox(width: 8),
+                SizedBox(width: context.spacingInline),
                 IconButton(
-                  icon: const Icon(Icons.close, color: EarthColors.textMuted),
+                  icon: Icon(Icons.close, color: context.mutedColor, size: context.iconSize),
                   onPressed: () => Navigator.of(context).pop(),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: context.spacingTopic),
 
             // Search Bar & Tabs
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    onSubmitted: (_) => _loadData(),
-                    decoration: InputDecoration(
-                      hintText: 'Search citizen name, dynasty, or successor...',
-                      prefixIcon: const Icon(Icons.search,
-                          color: EarthColors.textMuted),
-                      suffixIcon: IconButton(
-                        icon: const Icon(Icons.arrow_forward,
-                            color: EarthColors.cyanAccent),
-                        onPressed: _loadData,
-                      ),
-                      isDense: true,
-                      filled: true,
-                      fillColor: EarthColors.cardSurface,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.circular(6),
-                        borderSide:
-                            const BorderSide(color: EarthColors.borderSubtle),
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            EarthSearchInput(
+              controller: _searchController,
+              hintText: 'Search citizen name, dynasty, or successor...',
+              onChanged: (_) => _loadData(),
+              onClear: _loadData,
             ),
-            const SizedBox(height: 12),
+            SizedBox(height: context.spacingTitleOffset),
 
             TabBar(
               controller: _tabController,
-              indicatorColor: EarthColors.goldMetallic,
-              labelColor: EarthColors.goldMetallic,
-              unselectedLabelColor: EarthColors.textMuted,
+              indicatorColor: context.primaryColor,
+              labelColor: context.primaryColor,
+              unselectedLabelColor: context.mutedColor,
+              labelStyle: context.controlStyle,
+              unselectedLabelStyle: context.controlStyle.copyWith(fontWeight: FontWeight.w500),
               tabs: const [
                 Tab(text: 'ALL CEMETERY MEMORIALS'),
                 Tab(text: 'PANTHEON OF HONORS'),
                 Tab(text: 'DYNASTIC HOUSES'),
               ],
             ),
-            const Divider(color: EarthColors.borderSubtle, height: 1),
-            const SizedBox(height: 12),
+            Divider(color: context.subtleBorderColor, height: 1),
+            SizedBox(height: context.spacingTitleOffset),
 
             // Content Area
             Expanded(
               child: _loading
-                  ? const Center(child: CircularProgressIndicator())
+                  ? Center(child: CircularProgressIndicator(color: context.primaryColor))
                   : _error != null
-                      ? Center(
-                          child: EarthErrorState(
-                              message: _error!, retry: _loadData))
+                      ? Center(child: EarthErrorState(message: _error!, retry: _loadData))
                       : TabBarView(
                           controller: _tabController,
                           children: [
@@ -215,20 +183,15 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
 
   Widget _buildCemeteryList(List<dynamic> profiles) {
     if (profiles.isEmpty) {
-      return Center(
-        child: Text(
-          'No historical records match the query.',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: EarthColors.textMuted),
-        ),
+      return const EarthEmptyState(
+        message: 'No historical records match the query.',
+        icon: Icons.inbox_outlined,
       );
     }
 
     return ListView.separated(
       itemCount: profiles.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, __) => SizedBox(height: context.spacingControl),
       itemBuilder: (ctx, idx) {
         final p = profiles[idx] as Map<String, dynamic>;
         final name = p['display_name']?.toString() ?? 'Citizen Inscription';
@@ -243,11 +206,11 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
         final dynasty = p['dynasty_name']?.toString() ?? 'Founding Dynasty';
 
         return Container(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(context.cardPadding),
           decoration: BoxDecoration(
-            color: EarthColors.cardSurface,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(context.radiusCard),
+            border: Border.all(color: context.subtleBorderColor),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -255,47 +218,32 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
               Row(
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
-                  const Icon(Icons.bookmark,
-                      color: EarthColors.goldMetallic, size: 18),
-                  const SizedBox(width: 8),
+                  Icon(Icons.bookmark,
+                      color: context.primaryColor,
+                      size: context.iconSize),
+                  SizedBox(width: context.spacingInline),
                   Expanded(
                     child: Text(
                       name,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: context.widgetValueStyle,
                     ),
                   ),
-                  Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: EarthColors.goldMetallic.withAlpha(30),
-                      borderRadius: BorderRadius.circular(4),
-                      border: Border.all(
-                          color: EarthColors.goldMetallic.withAlpha(100)),
-                    ),
-                    child: Text(
-                      'LEGACY: $legacy',
-                      style: const TextStyle(
-                          color: EarthColors.goldMetallic,
-                          fontSize: 11,
-                          fontWeight: FontWeight.bold),
-                    ),
+                  EarthStatusPill(
+                    label: 'LEGACY',
+                    value: '$legacy LP',
+                    color: context.primaryColor,
                   ),
                 ],
               ),
               const SizedBox(height: 6),
               Text(
                 '“$epitaph”',
-                style: const TextStyle(
-                  color: EarthColors.cyanAccent,
+                style: context.widgetFooterStyle.copyWith(
+                  color: context.primaryColor,
                   fontStyle: FontStyle.italic,
-                  fontSize: 12,
                 ),
               ),
-              const SizedBox(height: 8),
+              SizedBox(height: context.spacingInline),
               Wrap(
                 spacing: 12,
                 runSpacing: 6,
@@ -317,20 +265,15 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
 
   Widget _buildDynastyList(List<dynamic> dynasties) {
     if (dynasties.isEmpty) {
-      return Center(
-        child: Text(
-          'No dynastic houses registered yet.',
-          style: Theme.of(context)
-              .textTheme
-              .bodyMedium
-              ?.copyWith(color: EarthColors.textMuted),
-        ),
+      return const EarthEmptyState(
+        message: 'No dynastic houses registered yet.',
+        icon: Icons.account_tree_outlined,
       );
     }
 
     return ListView.separated(
       itemCount: dynasties.length,
-      separatorBuilder: (_, __) => const SizedBox(height: 10),
+      separatorBuilder: (_, __) => SizedBox(height: context.spacingControl),
       itemBuilder: (ctx, idx) {
         final d = dynasties[idx] as Map<String, dynamic>;
         final dynastyName = d['dynasty_name']?.toString() ?? 'House of Earth';
@@ -338,33 +281,30 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
         final peakLegacy = d['peak_legacy']?.toString() ?? '0';
 
         return Container(
-          padding: const EdgeInsets.all(14),
+          padding: EdgeInsets.all(context.cardPadding),
           decoration: BoxDecoration(
-            color: EarthColors.cardSurface,
-            borderRadius: BorderRadius.circular(6),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(context.radiusCard),
+            border: Border.all(color: context.subtleBorderColor),
           ),
           child: Row(
             children: [
-              const Icon(Icons.military_tech,
-                  color: EarthColors.goldMetallic, size: 28),
-              const SizedBox(width: 14),
+              Icon(Icons.military_tech,
+                  color: context.primaryColor,
+                  size: context.iconSize),
+              SizedBox(width: context.spacingTitleOffset),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
                       dynastyName,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                            color: Colors.white,
-                            fontWeight: FontWeight.bold,
-                          ),
+                      style: context.widgetValueStyle,
                     ),
                     const SizedBox(height: 2),
                     Text(
                       'Deceased Ancestors Inscribed: $count  •  Peak Ancestral Legacy: $peakLegacy',
-                      style: const TextStyle(
-                          color: EarthColors.textMuted, fontSize: 12),
+                      style: context.widgetFooterStyle,
                     ),
                   ],
                 ),
@@ -380,11 +320,14 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 13, color: EarthColors.textMuted),
+        Icon(icon, size: context.iconSize - 2, color: context.mutedColor),
         const SizedBox(width: 4),
         Text(
           label,
-          style: const TextStyle(color: EarthColors.textMuted, fontSize: 11),
+          style: context.widgetFooterStyle.copyWith(
+            color: context.mutedColor,
+            fontWeight: FontWeight.w500,
+          ),
         ),
       ],
     );

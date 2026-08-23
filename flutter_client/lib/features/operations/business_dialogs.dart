@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/decision_consequence.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/consequence_preview_card.dart';
 
 Future<void> showHireEmployeeDialog(
@@ -16,22 +16,38 @@ Future<void> showHireEmployeeDialog(
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Hire a staff member'),
+            backgroundColor: dialogContext.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+              side: BorderSide(color: dialogContext.subtleBorderColor),
+            ),
+            title: Text('Hire a staff member', style: dialogContext.pageTitleStyle),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(controller: name, decoration: const InputDecoration(labelText: 'Name')),
+              const SizedBox(height: 8),
               TextField(controller: role, decoration: const InputDecoration(labelText: 'Role')),
-              TextField(controller: wage, keyboardType: const TextInputType.numberWithOptions(decimal: true), decoration: const InputDecoration(labelText: 'Wage / cycle')),
+              const SizedBox(height: 8),
+              TextField(
+                controller: wage,
+                keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                decoration: const InputDecoration(labelText: 'Wage / cycle (C)'),
+              ),
             ]),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(dialogContext), child: const Text('CANCEL')),
-              FilledButton(
+              EarthButton(
+                label: 'CANCEL',
+                variant: EarthButtonVariant.neutral,
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              EarthButton(
+                label: 'HIRE',
+                variant: EarthButtonVariant.primary,
                 onPressed: () async {
                   final amount = double.tryParse(wage.text.trim());
                   if (name.text.trim().length < 2 || role.text.trim().length < 2 || amount == null || amount <= 0) return;
                   Navigator.pop(dialogContext);
                   await action(() => const EarthApi().hireEmployee(businessId, name.text, role.text, amount));
                 },
-                child: const Text('HIRE'),
               ),
             ],
           ));
@@ -46,25 +62,34 @@ Future<void> showBusinessManagerDialog(
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Appoint business manager'),
+            backgroundColor: dialogContext.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+              side: BorderSide(color: dialogContext.subtleBorderColor),
+            ),
+            title: Text('Appoint business manager', style: dialogContext.pageTitleStyle),
             content: TextField(
                 controller: manager,
                 textCapitalization: TextCapitalization.characters,
                 decoration:
                     const InputDecoration(labelText: 'Manager Human ID')),
             actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('CANCEL')),
-              FilledButton(
-                  onPressed: () async {
-                    final targetManager = manager.text.trim();
-                    if (targetManager.isEmpty) return;
-                    Navigator.pop(dialogContext);
-                    await action(() => const EarthApi()
-                        .appointBusinessManager(businessId, targetManager));
-                  },
-                  child: const Text('APPOINT')),
+              EarthButton(
+                label: 'CANCEL',
+                variant: EarthButtonVariant.neutral,
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              EarthButton(
+                label: 'APPOINT',
+                variant: EarthButtonVariant.primary,
+                onPressed: () async {
+                  final targetManager = manager.text.trim();
+                  if (targetManager.isEmpty) return;
+                  Navigator.pop(dialogContext);
+                  await action(() => const EarthApi()
+                      .appointBusinessManager(businessId, targetManager));
+                },
+              ),
             ],
           ));
 }
@@ -78,32 +103,42 @@ Future<void> showBusinessLiquidationDialog(
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Liquidate business?'),
+            backgroundColor: dialogContext.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+              side: BorderSide(color: dialogContext.errorColor.withValues(alpha: 0.5)),
+            ),
+            title: Text('Liquidate business?', style: dialogContext.pageTitleStyle.copyWith(color: dialogContext.errorColor)),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text(
-                  'This permanently closes the business. Its machines will be detached and preserved for future disposition; financial and production history remains recorded.',
-                  style: TextStyle(color: mutedColor, fontSize: 12)),
+              Text(
+                'This permanently closes the business. Its machines will be detached and preserved for future disposition; financial and production history remains recorded.',
+                style: dialogContext.widgetFooterStyle,
+              ),
               const SizedBox(height: 12),
               TextField(
-                  controller: otp,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(
-                      labelText: 'Authenticator code (if enabled)')),
+                controller: otp,
+                keyboardType: TextInputType.number,
+                decoration: const InputDecoration(
+                  labelText: 'Authenticator code (if enabled)',
+                ),
+              ),
             ]),
             actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('CANCEL')),
-              FilledButton(
-                  onPressed: () async {
-                    final otpCode = otp.text.trim();
-                    Navigator.pop(dialogContext);
-                    await action(() => const EarthApi()
-                        .liquidateBusiness(businessId, otp: otpCode));
-                  },
-                  style:
-                      FilledButton.styleFrom(backgroundColor: Colors.redAccent),
-                  child: const Text('LIQUIDATE')),
+              EarthButton(
+                label: 'CANCEL',
+                variant: EarthButtonVariant.neutral,
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              EarthButton(
+                label: 'LIQUIDATE',
+                variant: EarthButtonVariant.danger,
+                onPressed: () async {
+                  final otpCode = otp.text.trim();
+                  Navigator.pop(dialogContext);
+                  await action(() => const EarthApi()
+                      .liquidateBusiness(businessId, otp: otpCode));
+                },
+              ),
             ],
           ));
 }
@@ -121,23 +156,32 @@ Future<void> showBusinessConstitutionDialog(
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Business Constitution'),
+            backgroundColor: dialogContext.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+              side: BorderSide(color: dialogContext.subtleBorderColor),
+            ),
+            title: Text('Business Constitution', style: dialogContext.pageTitleStyle),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
-              const Text(
-                  'Separate ownership from management with explicit approval thresholds and dilution notice.',
-                  style: TextStyle(color: mutedColor, fontSize: 12)),
+              Text(
+                'Separate ownership from management with explicit approval thresholds and dilution notice.',
+                style: dialogContext.widgetFooterStyle,
+              ),
+              const SizedBox(height: 10),
               TextField(
                   controller: shareholder,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Shareholder vote threshold (0–1)')),
+              const SizedBox(height: 8),
               TextField(
                   controller: board,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration: const InputDecoration(
                       labelText: 'Board approval threshold (0–1)')),
+              const SizedBox(height: 8),
               TextField(
                   controller: notice,
                   keyboardType: TextInputType.number,
@@ -145,27 +189,31 @@ Future<void> showBusinessConstitutionDialog(
                       labelText: 'Dilution notice (days)')),
             ]),
             actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('CANCEL')),
-              FilledButton(
-                  onPressed: () async {
-                    final shareValue = double.tryParse(shareholder.text.trim());
-                    final boardValue = double.tryParse(board.text.trim());
-                    final noticeValue = int.tryParse(notice.text.trim());
-                    final businessId = business['id'] as String?;
-                    if (businessId == null ||
-                        shareValue == null ||
-                        boardValue == null ||
-                        noticeValue == null) {
-                      return;
-                    }
-                    Navigator.pop(dialogContext);
-                    await action(() => const EarthApi()
-                        .updateBusinessConstitution(
-                            businessId, shareValue, boardValue, noticeValue));
-                  },
-                  child: const Text('SAVE CONSTITUTION')),
+              EarthButton(
+                label: 'CANCEL',
+                variant: EarthButtonVariant.neutral,
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              EarthButton(
+                label: 'SAVE CONSTITUTION',
+                variant: EarthButtonVariant.primary,
+                onPressed: () async {
+                  final shareValue = double.tryParse(shareholder.text.trim());
+                  final boardValue = double.tryParse(board.text.trim());
+                  final noticeValue = int.tryParse(notice.text.trim());
+                  final businessId = business['id'] as String?;
+                  if (businessId == null ||
+                      shareValue == null ||
+                      boardValue == null ||
+                      noticeValue == null) {
+                    return;
+                  }
+                  Navigator.pop(dialogContext);
+                  await action(() => const EarthApi()
+                      .updateBusinessConstitution(
+                          businessId, shareValue, boardValue, noticeValue));
+                },
+              ),
             ],
           ));
 }
@@ -179,7 +227,12 @@ Future<void> showShareTransferDialog(BuildContext context,
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Transfer business shares'),
+            backgroundColor: dialogContext.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+              side: BorderSide(color: dialogContext.subtleBorderColor),
+            ),
+            title: Text('Transfer business shares', style: dialogContext.pageTitleStyle),
             content: SizedBox(
               width: 420,
               child: Column(mainAxisSize: MainAxisSize.min, children: [
@@ -203,25 +256,27 @@ Future<void> showShareTransferDialog(BuildContext context,
               ]),
             ),
             actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                  onPressed: () async {
-                    final amount = int.tryParse(shares.text.trim());
-                    final targetRecipient = recipient.text.trim();
-                    if (targetRecipient.isEmpty ||
-                        amount == null ||
-                        amount < 1) {
-                      return;
-                    }
-                    final otpCode = otp.text.trim();
-                    Navigator.pop(dialogContext);
-                    await action(() => const EarthApi()
-                        .transferShares(targetRecipient, amount,
-                            otp: otpCode, businessId: businessId));
-                  },
-                  child: const Text('Transfer')),
+              EarthButton(
+                label: 'CANCEL',
+                variant: EarthButtonVariant.neutral,
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              EarthButton(
+                label: 'Transfer',
+                variant: EarthButtonVariant.primary,
+                onPressed: () async {
+                  final amount = int.tryParse(shares.text.trim());
+                  final targetRecipient = recipient.text.trim();
+                  if (targetRecipient.isEmpty || amount == null || amount < 1) {
+                    return;
+                  }
+                  final otpCode = otp.text.trim();
+                  Navigator.pop(dialogContext);
+                  await action(() => const EarthApi()
+                      .transferShares(targetRecipient, amount,
+                          otp: otpCode, businessId: businessId));
+                },
+              ),
             ],
           ));
 }
@@ -238,22 +293,30 @@ Future<void> showShareIssueDialog(
   await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-            title: const Text('Issue business shares'),
+            backgroundColor: dialogContext.panelColor,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+              side: BorderSide(color: dialogContext.subtleBorderColor),
+            ),
+            title: Text('Issue business shares', style: dialogContext.pageTitleStyle),
             content: Column(mainAxisSize: MainAxisSize.min, children: [
               TextField(
                   controller: recipient,
                   decoration:
                       const InputDecoration(labelText: 'Buyer Human ID')),
+              const SizedBox(height: 8),
               TextField(
                   controller: shares,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Shares')),
+              const SizedBox(height: 8),
               TextField(
                   controller: price,
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   decoration:
                       const InputDecoration(labelText: 'Price per share')),
+              const SizedBox(height: 8),
               TextField(
                   controller: otp,
                   keyboardType: TextInputType.number,
@@ -261,28 +324,32 @@ Future<void> showShareIssueDialog(
                       labelText: 'Authenticator code (if enabled)')),
             ]),
             actions: [
-              TextButton(
-                  onPressed: () => Navigator.pop(dialogContext),
-                  child: const Text('Cancel')),
-              FilledButton(
-                  onPressed: () async {
-                    final count = int.tryParse(shares.text.trim());
-                    final value = double.tryParse(price.text.trim());
-                    final targetRecipient = recipient.text.trim();
-                    if (targetRecipient.isEmpty ||
-                        count == null ||
-                        count < 1 ||
-                        value == null ||
-                        value <= 0) {
-                      return;
-                    }
-                    final otpCode = otp.text.trim();
-                    Navigator.pop(dialogContext);
-                    await action(() => const EarthApi().issueShares(
-                        businessId, targetRecipient, count, value,
-                        otp: otpCode));
-                  },
-                  child: const Text('Issue')),
+              EarthButton(
+                label: 'Cancel',
+                variant: EarthButtonVariant.neutral,
+                onPressed: () => Navigator.pop(dialogContext),
+              ),
+              EarthButton(
+                label: 'Issue',
+                variant: EarthButtonVariant.primary,
+                onPressed: () async {
+                  final count = int.tryParse(shares.text.trim());
+                  final value = double.tryParse(price.text.trim());
+                  final targetRecipient = recipient.text.trim();
+                  if (targetRecipient.isEmpty ||
+                      count == null ||
+                      count < 1 ||
+                      value == null ||
+                      value <= 0) {
+                    return;
+                  }
+                  final otpCode = otp.text.trim();
+                  Navigator.pop(dialogContext);
+                  await action(() => const EarthApi().issueShares(
+                      businessId, targetRecipient, count, value,
+                      otp: otpCode));
+                },
+              ),
             ],
           ));
 }
@@ -325,7 +392,12 @@ Future<void> showBusinessComposerDialog(BuildContext context,
       context: context,
       builder: (dialogContext) => StatefulBuilder(
           builder: (context, setState) => AlertDialog(
-                title: const Text('Register a Business'),
+                backgroundColor: dialogContext.panelColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+                  side: BorderSide(color: dialogContext.subtleBorderColor),
+                ),
+                title: Text('Register a Business', style: dialogContext.pageTitleStyle),
                 content: Column(mainAxisSize: MainAxisSize.min, children: [
                   TextField(
                       controller: name,
@@ -338,10 +410,12 @@ Future<void> showBusinessComposerDialog(BuildContext context,
                           .map((item) => DropdownMenuItem(value: item.key, child: Text(item.key)))
                           .toList(),
                       onChanged: (value) {
-                        if (value != null) setState(() {
-                          group = value;
-                          sector = groups[group]!.firstWhere(sectors.contains);
-                        });
+                        if (value != null) {
+                          setState(() {
+                            group = value;
+                            sector = groups[group]!.firstWhere(sectors.contains);
+                          });
+                        }
                       },
                       decoration: const InputDecoration(labelText: 'Business group')),
                   const SizedBox(height: 8),
@@ -358,18 +432,22 @@ Future<void> showBusinessComposerDialog(BuildContext context,
                       decoration: const InputDecoration(labelText: 'Specialization')),
                 ]),
                 actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text('Cancel')),
-                  FilledButton(
-                      onPressed: () async {
-                        final bName = name.text.trim();
-                        if (bName.length < 3) return;
-                        Navigator.pop(dialogContext);
-                        await action(() => const EarthApi()
-                            .createBusiness(bName, sector));
-                      },
-                      child: const Text('Register')),
+                  EarthButton(
+                    label: 'Cancel',
+                    variant: EarthButtonVariant.neutral,
+                    onPressed: () => Navigator.pop(dialogContext),
+                  ),
+                  EarthButton(
+                    label: 'Register',
+                    variant: EarthButtonVariant.primary,
+                    onPressed: () async {
+                      final bName = name.text.trim();
+                      if (bName.length < 3) return;
+                      Navigator.pop(dialogContext);
+                      await action(() => const EarthApi()
+                          .createBusiness(bName, sector));
+                    },
+                  ),
                 ],
               )));
 }
@@ -386,7 +464,12 @@ Future<void> showDividendDialog(
       builder: (context, setState) {
         final parsedAmount = double.tryParse(amount.text.trim()) ?? 100.0;
         return AlertDialog(
-          title: const Text('Distribute dividends'),
+          backgroundColor: dialogContext.panelColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+            side: BorderSide(color: dialogContext.subtleBorderColor),
+          ),
+          title: Text('Distribute dividends', style: dialogContext.pageTitleStyle),
           content: SizedBox(
             width: 520,
             child: SingleChildScrollView(
@@ -413,19 +496,21 @@ Future<void> showDividendDialog(
             ),
           ),
           actions: [
-            TextButton(
+            EarthButton(
+              label: 'CANCEL',
+              variant: EarthButtonVariant.neutral,
               onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('CANCEL'),
             ),
-            FilledButton(
+            EarthButton(
+              label: 'DISTRIBUTE',
+              variant: EarthButtonVariant.primary,
               onPressed: () async {
-                final value = double.tryParse(amount.text.trim());
-                if (value == null || value <= 0) return;
+                final val = double.tryParse(amount.text.trim());
+                if (val == null || val <= 0) return;
                 Navigator.pop(dialogContext);
                 await action(() => const EarthApi().distributeDividends(
-                    businessId, value));
+                    businessId, val));
               },
-              child: const Text('DISTRIBUTE'),
             ),
           ],
         );
@@ -444,19 +529,26 @@ Future<void> showMergerDialog(
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Propose merger tender offer'),
+      backgroundColor: dialogContext.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+        side: BorderSide(color: dialogContext.subtleBorderColor),
+      ),
+      title: Text('Propose merger tender offer', style: dialogContext.pageTitleStyle),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          const Text(
+          Text(
             'The target owner must accept the offer before ownership and assets transfer.',
-            style: TextStyle(color: mutedColor, fontSize: 12),
+            style: dialogContext.widgetFooterStyle,
           ),
+          const SizedBox(height: 10),
           TextField(
             controller: target,
             textCapitalization: TextCapitalization.characters,
             decoration: const InputDecoration(labelText: 'Target business ID'),
           ),
+          const SizedBox(height: 8),
           TextField(
             controller: price,
             keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -465,11 +557,14 @@ Future<void> showMergerDialog(
         ],
       ),
       actions: [
-        TextButton(
+        EarthButton(
+          label: 'CANCEL',
+          variant: EarthButtonVariant.neutral,
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('CANCEL'),
         ),
-        FilledButton(
+        EarthButton(
+          label: 'PROPOSE',
+          variant: EarthButtonVariant.primary,
           onPressed: () async {
             final value = double.tryParse(price.text.trim());
             final targetId = target.text.trim();
@@ -486,7 +581,6 @@ Future<void> showMergerDialog(
               return const EarthApi().world();
             });
           },
-          child: const Text('PROPOSE'),
         ),
       ],
     ),
@@ -507,15 +601,20 @@ Future<void> showShareholderResolutionDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('Propose shareholder resolution'),
+        backgroundColor: dialogContext.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+          side: BorderSide(color: dialogContext.subtleBorderColor),
+        ),
+        title: Text('Propose shareholder resolution', style: dialogContext.pageTitleStyle),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Shareholder resolutions protect minority equity holders. Supermajority (>66.7%) approval across all voting shares is legally required for equity dilution or charter changes.',
-                style: TextStyle(color: mutedColor, fontSize: 11.5),
+                style: dialogContext.widgetFooterStyle,
               ),
               const SizedBox(height: 12),
               DropdownButtonFormField<String>(
@@ -550,18 +649,21 @@ Future<void> showShareholderResolutionDialog(
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: violetColor.withValues(alpha: .1),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: violetColor.withValues(alpha: .3)),
+                  color: dialogContext.secondaryColor.withValues(alpha: .1),
+                  borderRadius: BorderRadius.circular(dialogContext.radiusControl),
+                  border: Border.all(color: dialogContext.secondaryColor.withValues(alpha: .3)),
                 ),
-                child: const Row(
+                child: Row(
                   children: [
-                    Icon(Icons.shield_outlined, size: 14, color: violetColor),
-                    SizedBox(width: 6),
+                    Icon(Icons.shield_outlined, size: dialogContext.iconSize, color: dialogContext.secondaryColor),
+                    SizedBox(width: dialogContext.spacingInline),
                     Expanded(
                       child: Text(
                         'Statutory requirement: >66.7% Supermajority Approval (Spec §1.12.2)',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: violetColor),
+                        style: dialogContext.widgetFooterStyle.copyWith(
+                          color: dialogContext.secondaryColor,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ],
@@ -571,17 +673,19 @@ Future<void> showShareholderResolutionDialog(
           ),
         ),
         actions: [
-          TextButton(
+          EarthButton(
+            label: 'CANCEL',
+            variant: EarthButtonVariant.neutral,
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CANCEL'),
           ),
-          FilledButton(
+          EarthButton(
+            label: 'TABLE RESOLUTION',
+            variant: EarthButtonVariant.primary,
             onPressed: () async {
               if (titleController.text.trim().isEmpty) return;
               Navigator.pop(dialogContext);
               await action(() => const EarthApi().world());
             },
-            child: const Text('TABLE RESOLUTION'),
           ),
         ],
       ),
@@ -602,39 +706,44 @@ Future<void> showAiAssistantConfigDialog(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setDialogState) => AlertDialog(
-        title: const Text('AI Operational Assistant'),
+        backgroundColor: dialogContext.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+          side: BorderSide(color: dialogContext.subtleBorderColor),
+        ),
+        title: Text('AI Operational Assistant', style: dialogContext.pageTitleStyle),
         content: SingleChildScrollView(
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
+              Text(
                 'Deploy automated synthetic operational routines powered by continuous COMP (Compute) resource allocation (Spec §1.13.2).',
-                style: TextStyle(color: mutedColor, fontSize: 11.5),
+                style: dialogContext.widgetFooterStyle,
               ),
               const SizedBox(height: 12),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Automated Machine Maintenance', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Execute repairs when machine wear drops below 80%', style: TextStyle(fontSize: 10, color: mutedColor)),
+                title: Text('Automated Machine Maintenance', style: dialogContext.widgetTitleStyle),
+                subtitle: Text('Execute repairs when machine wear drops below 80%', style: dialogContext.widgetFooterStyle),
                 value: autoMaintenance,
-                activeThumbColor: cyanAccentColor,
+                activeThumbColor: dialogContext.primaryColor,
                 onChanged: (val) => setDialogState(() => autoMaintenance = val),
               ),
               SwitchListTile(
                 contentPadding: EdgeInsets.zero,
-                title: const Text('Automated Feedstock Reordering', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600)),
-                subtitle: const Text('Place batch buy orders when raw materials < 24-hr buffer', style: TextStyle(fontSize: 10, color: mutedColor)),
+                title: Text('Automated Feedstock Reordering', style: dialogContext.widgetTitleStyle),
+                subtitle: Text('Place batch buy orders when raw materials < 24-hr buffer', style: dialogContext.widgetFooterStyle),
                 value: autoFeedstock,
-                activeThumbColor: cyanAccentColor,
+                activeThumbColor: dialogContext.primaryColor,
                 onChanged: (val) => setDialogState(() => autoFeedstock = val),
               ),
               const SizedBox(height: 8),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Allocated Compute Power:', style: TextStyle(fontSize: 11, color: mutedColor)),
-                  Text('${computeUnits.toStringAsFixed(1)} COMP / cycle', style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: cyanAccentColor)),
+                  Text('Allocated Compute Power:', style: dialogContext.widgetFooterStyle),
+                  Text('${computeUnits.toStringAsFixed(1)} COMP / cycle', style: dialogContext.widgetTitleStyle.copyWith(color: dialogContext.primaryColor)),
                 ],
               ),
               Slider(
@@ -642,23 +751,25 @@ Future<void> showAiAssistantConfigDialog(
                 min: 0.5,
                 max: 10.0,
                 divisions: 19,
-                activeColor: cyanAccentColor,
+                activeColor: dialogContext.primaryColor,
                 onChanged: (val) => setDialogState(() => computeUnits = val),
               ),
             ],
           ),
         ),
         actions: [
-          TextButton(
+          EarthButton(
+            label: 'CANCEL',
+            variant: EarthButtonVariant.neutral,
             onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('CANCEL'),
           ),
-          FilledButton(
+          EarthButton(
+            label: 'SAVE AI CONFIG',
+            variant: EarthButtonVariant.primary,
             onPressed: () async {
               Navigator.pop(dialogContext);
               await action(() => const EarthApi().world());
             },
-            child: const Text('SAVE AI CONFIG'),
           ),
         ],
       ),
@@ -675,33 +786,38 @@ Future<void> showReceivershipRestructuringDialog(
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
-      title: const Text('Corporate Insolvency & Restructuring'),
+      backgroundColor: dialogContext.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(dialogContext.radiusPanel),
+        side: BorderSide(color: dialogContext.subtleBorderColor),
+      ),
+      title: Text('Corporate Insolvency & Restructuring', style: dialogContext.pageTitleStyle),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
+            Text(
               'Under UC High Court Receivership (Spec §1.16), equity dividends are frozen. Asset liquidations follow strict statutory creditor seniority:',
-              style: TextStyle(color: mutedColor, fontSize: 11.5),
+              style: dialogContext.widgetFooterStyle,
             ),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(10),
               decoration: BoxDecoration(
-                color: surfaceColor,
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
+                color: dialogContext.surfaceColor,
+                borderRadius: BorderRadius.circular(dialogContext.radiusCard),
+                border: Border.all(color: dialogContext.subtleBorderColor),
               ),
-              child: const Column(
+              child: Column(
                 children: [
-                  _SeniorityRow(tier: '1', title: 'MUNICIPAL & UC TAX AUTHORITIES', subtitle: 'Senior priority claim on all liquidated assets', color: Colors.redAccent),
-                  Divider(height: 12, color: Colors.white10),
-                  _SeniorityRow(tier: '2', title: 'SECURED LENDERS & CREDITORS', subtitle: 'Collateralized loans and equipment debentures', color: Colors.orangeAccent),
-                  Divider(height: 12, color: Colors.white10),
-                  _SeniorityRow(tier: '3', title: 'TRADE SUPPLIERS & CONTRACTORS', subtitle: 'Unpaid raw feedstock and power utility bills', color: Colors.amberAccent),
-                  Divider(height: 12, color: Colors.white10),
-                  _SeniorityRow(tier: '4', title: 'COMMON EQUITY SHAREHOLDERS', subtitle: 'Residual equity claim after all liabilities satisfied', color: mutedColor),
+                  _SeniorityRow(tier: '1', title: 'MUNICIPAL & UC TAX AUTHORITIES', subtitle: 'Senior priority claim on all liquidated assets', color: dialogContext.errorColor),
+                  Divider(height: 12, color: dialogContext.subtleBorderColor),
+                  _SeniorityRow(tier: '2', title: 'SECURED LENDERS & CREDITORS', subtitle: 'Collateralized loans and equipment debentures', color: dialogContext.warningColor),
+                  Divider(height: 12, color: dialogContext.subtleBorderColor),
+                  _SeniorityRow(tier: '3', title: 'TRADE SUPPLIERS & CONTRACTORS', subtitle: 'Unpaid raw feedstock and power utility bills', color: dialogContext.warningColor),
+                  Divider(height: 12, color: dialogContext.subtleBorderColor),
+                  _SeniorityRow(tier: '4', title: 'COMMON EQUITY SHAREHOLDERS', subtitle: 'Residual equity claim after all liabilities satisfied', color: dialogContext.mutedColor),
                 ],
               ),
             ),
@@ -709,16 +825,18 @@ Future<void> showReceivershipRestructuringDialog(
         ),
       ),
       actions: [
-        TextButton(
+        EarthButton(
+          label: 'CLOSE',
+          variant: EarthButtonVariant.neutral,
           onPressed: () => Navigator.pop(dialogContext),
-          child: const Text('CLOSE'),
         ),
-        FilledButton(
+        EarthButton(
+          label: 'SUBMIT WORKOUT PLAN',
+          variant: EarthButtonVariant.primary,
           onPressed: () async {
             Navigator.pop(dialogContext);
             await action(() => const EarthApi().world());
           },
-          child: const Text('SUBMIT WORKOUT PLAN'),
         ),
       ],
     ),
@@ -748,8 +866,8 @@ class _SeniorityRow extends StatelessWidget {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(title, style: TextStyle(fontSize: 10, fontWeight: FontWeight.w700, color: color)),
-              Text(subtitle, style: const TextStyle(fontSize: 9, color: mutedColor)),
+              Text(title, style: context.widgetTitleStyle.copyWith(color: color, fontSize: 10)),
+              Text(subtitle, style: context.widgetFooterStyle),
             ],
           ),
         ),

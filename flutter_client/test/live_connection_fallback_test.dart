@@ -38,8 +38,8 @@ void main() {
       }
 
       expect(LiveConnectionStatus.live.shortLabel, 'LIVE');
-      expect(LiveConnectionStatus.reconnecting.shortLabel, 'RECONNECTING');
-      expect(LiveConnectionStatus.polling.shortLabel, 'POLLING');
+      expect(LiveConnectionStatus.reconnecting.shortLabel, 'RETRY');
+      expect(LiveConnectionStatus.polling.shortLabel, 'POLL');
       expect(LiveConnectionStatus.offline.shortLabel, 'OFFLINE');
 
       expect(LiveConnectionStatus.polling.description, contains('delayed'));
@@ -60,9 +60,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text(LiveConnectionStatus.live.label), findsOneWidget);
+      expect(find.text(LiveConnectionStatus.live.shortLabel), findsOneWidget);
     });
 
     testWidgets('renders POLLING status pill when in fallback mode',
@@ -78,9 +76,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text(LiveConnectionStatus.polling.label), findsOneWidget);
+      expect(find.text(LiveConnectionStatus.polling.shortLabel), findsOneWidget);
     });
 
     testWidgets('renders OFFLINE status pill when disconnected',
@@ -96,9 +92,7 @@ void main() {
         ),
       );
 
-      await tester.tap(find.byIcon(Icons.notifications_none_outlined));
-      await tester.pumpAndSettle();
-      expect(find.text(LiveConnectionStatus.offline.label), findsOneWidget);
+      expect(find.text(LiveConnectionStatus.offline.shortLabel), findsOneWidget);
     });
   });
 

@@ -88,6 +88,14 @@ extension EarthApiComm on EarthApi {
     );
   }
 
+  Future<void> archiveCommDispatch(String dispatchId, {bool archived = true}) async {
+    await _request(
+      '/api/comm/dispatches/archive',
+      method: 'POST',
+      body: {'dispatchId': dispatchId, 'archived': archived},
+    );
+  }
+
   Future<Map<String, dynamic>> commMetrics() async {
     return (await _request('/api/comm/metrics')) as Map<String, dynamic>;
   }

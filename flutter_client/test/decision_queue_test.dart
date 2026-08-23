@@ -5,7 +5,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/command_center/decision_queue_panel.dart';
 
 void main() {
-  final testState = EarthState(const {
+  final testState = const EarthState({
     'clock': {'day': 185, 'minute': 400},
     'world': {'health': 80, 'livingCostIndex': 1.1},
     'human': {'id': 'H-0044', 'name': 'Amara Vance', 'credits': 2400.0},
@@ -64,7 +64,7 @@ void main() {
       expect(fromJson.whyItMatters, 'Energy reserves are critically depleted.');
       expect(fromJson.riskLevel, 'critical');
       expect(fromJson.riskLabel, 'CRITICAL RISK');
-      expect(fromJson.riskColor, const Color(0xFFFF5252));
+      expect(fromJson.riskColor, const Color(0xFFEF4444));
       expect(fromJson.primaryActionLabel, 'Procure Energy');
       expect(fromJson.targetSection, 'market');
       expect(fromJson.categoryIcon, Icons.business_center_outlined);

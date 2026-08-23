@@ -1,157 +1,159 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
-import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/design_system/design_system.dart';
 
 class HistoricalArchivePanel extends StatelessWidget {
   final Map<String, dynamic> pantheon;
   final List<dynamic> events;
 
-  const HistoricalArchivePanel(
-      {super.key, required this.pantheon, this.events = const []});
+  const HistoricalArchivePanel({
+    super.key,
+    required this.pantheon,
+    this.events = const [],
+  });
 
   @override
   Widget build(BuildContext context) {
-    final deceased =
-        _list(pantheon['deceasedPantheon'] ?? pantheon['deceased']);
-    final dynasties =
-        _list(pantheon['dynasties'] ?? pantheon['dynasticHouses']);
+    final deceased = _list(pantheon['deceasedPantheon'] ?? pantheon['deceased']);
+    final dynasties = _list(pantheon['dynasties'] ?? pantheon['dynasticHouses']);
     final milestones = events.whereType<Map>().take(12).toList();
-    return Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-      EarthPanel(
-        title: 'HISTORICAL ARCHIVE',
-        showSurface: false,
-        contentPadding: EdgeInsets.zero,
-        helpAfterTitle: true,
-        titleColor: mutedColor,
-        infoDescription:
-            '• The archive preserves people, dynasties, and world decisions after they leave the active command loop.\n\n• Use it to understand what earlier generations built and which civic choices shaped the present.\n\n• This is historical context, not another action queue.',
-        child: Wrap(spacing: 10, runSpacing: 10, children: [
-          _metric('ARCHIVED CITIZENS', deceased.length.toString(),
-              Icons.account_box_outlined, cyanAccentColor),
-          _metric('RECORDED DYNASTIES', dynasties.length.toString(),
-              Icons.account_tree_outlined, violetColor),
-          _metric('VISIBLE MILESTONES', milestones.length.toString(),
-              Icons.public_outlined, Colors.amberAccent),
-        ]),
+
+    return SingleChildScrollView(
+      child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        EarthSection(
+          title: 'HISTORICAL ARCHIVE',
+          showSurface: false,
+          infoBulletPoints: const [
+            'The archive preserves people, dynasties, and world decisions after they leave the active command loop.',
+            'Use it to understand what earlier generations built and which civic choices shaped the present.',
+            'This is historical context, not another action queue.',
+          ],
+          child: EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'ARCHIVED CITIZENS',
+                value: deceased.length.toString(),
+                icon: Icons.account_box_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'RECORDED DYNASTIES',
+                value: dynasties.length.toString(),
+                icon: Icons.account_tree_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'VISIBLE MILESTONES',
+                value: milestones.length.toString(),
+                icon: Icons.public_outlined,
+                accentColor: context.primaryColor,
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: context.spacingSection),
+        EarthSection(
+          title: 'ANCESTORS & PANTHEON',
+          showSurface: false,
+          child: deceased.isEmpty
+              ? const EarthEmptyState(
+                  message: 'No citizens have entered the public archive yet.',
+                  icon: Icons.account_box_outlined,
+                )
+              : EarthDataList(
+                  children: deceased.take(12).indexed.map((indexed) {
+                    final raw = indexed.$2;
+                    final isLast = indexed.$1 == deceased.take(12).length - 1;
+                    final row = raw is Map
+                        ? Map<String, dynamic>.from(raw)
+                        : const <String, dynamic>{};
+                    final name =
+                        (row['display_name'] ?? row['name'] ?? 'Archived citizen').toString();
+                    final subtitle =
+                        'Day ${row['death_game_day'] ?? row['game_day'] ?? '—'} · ${row['dynasty_name'] ?? row['dynasty'] ?? 'Unknown house'}';
+                    return EarthDataRow(
+                      title: name,
+                      subtitle: subtitle,
+                      leading: Icon(
+                        Icons.person_outline,
+                        size: context.iconSize,
+                        color: context.primaryColor,
+                      ),
+                      showDivider: !isLast,
+                    );
+                  }).toList(),
+                ),
+        ),
+        SizedBox(height: context.spacingSection),
+        EarthSection(
+          title: 'RECORDED DYNASTIES',
+          showSurface: false,
+          child: dynasties.isEmpty
+              ? const EarthEmptyState(
+                  message: 'No dynasties have been archived yet.',
+                  icon: Icons.account_tree_outlined,
+                )
+              : EarthDataList(
+                  children: dynasties.take(12).indexed.map((indexed) {
+                    final raw = indexed.$2;
+                    final isLast = indexed.$1 == dynasties.take(12).length - 1;
+                    final row = raw is Map
+                        ? Map<String, dynamic>.from(raw)
+                        : const <String, dynamic>{};
+                    final name =
+                        (row['dynasty_name'] ?? row['name'] ?? 'Dynastic house').toString();
+                    final subtitle =
+                        '${row['deceased_count'] ?? row['generations'] ?? row['generation'] ?? '—'} generations/records · ${row['peak_legacy'] ?? row['legacy_points'] ?? '—'} legacy';
+                    return EarthDataRow(
+                      title: name,
+                      subtitle: subtitle,
+                      leading: Icon(
+                        Icons.account_tree_outlined,
+                        size: context.iconSize,
+                        color: context.secondaryColor,
+                      ),
+                      showDivider: !isLast,
+                    );
+                  }).toList(),
+                ),
+        ),
+        SizedBox(height: context.spacingSection),
+        EarthSection(
+          title: 'WORLD MILESTONES',
+          showSurface: false,
+          child: milestones.isEmpty
+              ? const EarthEmptyState(
+                  message: 'World milestones will appear as the persistent world advances.',
+                  icon: Icons.public_outlined,
+                )
+              : EarthDataList(
+                  children: milestones.indexed.map((indexed) {
+                    final raw = indexed.$2;
+                    final isLast = indexed.$1 == milestones.length - 1;
+                    final row = Map<String, dynamic>.from(raw);
+                    final title =
+                        (row['title'] ?? row['event_type'] ?? 'World event').toString();
+                    final subtitle = 'Game day ${row['game_day'] ?? '—'}';
+                    return EarthDataRow(
+                      title: title,
+                      subtitle: subtitle,
+                      leading: Icon(
+                        Icons.public_outlined,
+                        size: context.iconSize,
+                        color: context.warningColor,
+                      ),
+                      showDivider: !isLast,
+                    );
+                  }).toList(),
+                ),
+        ),
+      ],
       ),
-      const SizedBox(height: 24),
-      _section(
-          'ANCESTORS & PANTHEON',
-          Icons.account_box_outlined,
-          deceased.isEmpty
-              ? _empty('No citizens have entered the public archive yet.')
-              : Column(children: deceased.take(12).map(_personRow).toList()),
-          showInnerTitle: false),
-      const SizedBox(height: 24),
-      _section(
-          'WORLD MILESTONES',
-          Icons.public_outlined,
-          milestones.isEmpty
-              ? _empty(
-                  'World milestones will appear as the persistent world advances.')
-              : Column(children: milestones.map(_eventRow).toList()),
-          showInnerTitle: false),
-    ]);
+    );
   }
 
   List<dynamic> _list(dynamic value) => value is List ? value : const [];
-
-  Widget _section(String title, IconData icon, Widget child,
-          {bool showInnerTitle = true}) => EarthPanel(
-      title: title,
-      showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      titleColor: mutedColor,
-      child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-        if (showInnerTitle) Row(children: [
-          Icon(icon, size: 16, color: cyanAccentColor),
-          const SizedBox(width: 7),
-          Text(title,
-              style: const TextStyle(
-                  color: inkColor, fontSize: 11, fontWeight: FontWeight.w800))
-        ]),
-        if (showInnerTitle) const SizedBox(height: 10),
-        child,
-      ]));
-
-  Widget _metric(String label, String value, IconData icon, Color color) =>
-      Container(
-          width: 170,
-          padding: const EdgeInsets.all(11),
-          decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .65),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: color.withValues(alpha: .28))),
-          child: Row(children: [
-            Icon(icon, size: 18, color: color),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(value,
-                      style: TextStyle(
-                          color: color,
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16)),
-                  Text(label,
-                      style: const TextStyle(color: mutedColor, fontSize: 8.5))
-                ]))
-          ]));
-
-  Widget _personRow(dynamic raw) {
-    final row =
-        raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
-    return _row(
-        Icons.person_outline,
-        (row['display_name'] ?? row['name'] ?? 'Archived citizen').toString(),
-        'Day ${row['death_game_day'] ?? row['game_day'] ?? '—'} · ${row['dynasty_name'] ?? row['dynasty'] ?? 'Unknown house'}',
-        cyanAccentColor);
-  }
-
-  Widget _dynastyRow(dynamic raw) {
-    final row =
-        raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
-    return _row(
-        Icons.account_tree_outlined,
-        (row['dynasty_name'] ?? row['name'] ?? 'Dynastic house').toString(),
-        '${row['deceased_count'] ?? row['generations'] ?? row['generation'] ?? '—'} generations/records · ${row['peak_legacy'] ?? row['legacy_points'] ?? '—'} legacy',
-        violetColor);
-  }
-
-  Widget _eventRow(dynamic raw) {
-    final row =
-        raw is Map ? Map<String, dynamic>.from(raw) : const <String, dynamic>{};
-    return _row(
-        Icons.public_outlined,
-        (row['title'] ?? row['event_type'] ?? 'World event').toString(),
-        'Game day ${row['game_day'] ?? '—'}',
-        Colors.amberAccent);
-  }
-
-  Widget _row(IconData icon, String title, String subtitle, Color color) =>
-      Padding(
-          padding: const EdgeInsets.symmetric(vertical: 6),
-          child: Row(children: [
-            Icon(icon, size: 16, color: color),
-            const SizedBox(width: 9),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 11, fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 2),
-                  Text(subtitle,
-                      style: const TextStyle(color: mutedColor, fontSize: 9.5))
-                ]))
-          ]));
-
-  Widget _empty(String text) => Padding(
-      padding: const EdgeInsets.symmetric(vertical: 12),
-      child: Text(text,
-          style: const TextStyle(color: mutedColor, fontSize: 10.5)));
 }
 
 class HistoricalDynastiesPanel extends StatelessWidget {
@@ -162,36 +164,31 @@ class HistoricalDynastiesPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final rows = pantheon['dynasties'] ?? pantheon['dynasticHouses'];
     final dynasties = rows is List ? rows : const <dynamic>[];
-    return EarthPanel(
+    return EarthSection(
       title: 'DYNASTIES',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      titleColor: mutedColor,
       child: dynasties.isEmpty
-          ? const Text('No dynasty records are available yet.',
-              style: TextStyle(color: mutedColor, fontSize: 10.5))
-          : Column(
-              children: dynasties.take(12).map((raw) {
+          ? const EarthEmptyState(
+              message: 'No dynasty records are available yet.',
+              icon: Icons.account_tree_outlined,
+            )
+          : EarthDataList(
+              children: dynasties.take(12).indexed.map((indexed) {
+                final raw = indexed.$2;
+                final isLast = indexed.$1 == dynasties.take(12).length - 1;
                 final row = raw is Map
                     ? Map<String, dynamic>.from(raw)
                     : const <String, dynamic>{};
-                return Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 6),
-                  child: Row(children: [
-                    const Icon(Icons.account_tree_outlined,
-                        size: 16, color: violetColor),
-                    const SizedBox(width: 9),
-                    Expanded(
-                        child: Text(
-                            (row['dynasty_name'] ?? row['name'] ??
-                                    'Dynastic house')
-                                .toString(),
-                            style: const TextStyle(
-                                fontSize: 11, fontWeight: FontWeight.w700))),
-                    Text(
-                        '${row['deceased_count'] ?? row['generations'] ?? row['generation'] ?? '—'} records',
-                        style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-                  ]),
+                return EarthDataRow(
+                  title: (row['dynasty_name'] ?? row['name'] ?? 'Dynastic house').toString(),
+                  subtitle:
+                      '${row['deceased_count'] ?? row['generations'] ?? row['generation'] ?? '—'} records',
+                  leading: Icon(
+                    Icons.account_tree_outlined,
+                    size: context.iconSize,
+                    color: context.secondaryColor,
+                  ),
+                  showDivider: !isLast,
                 );
               }).toList(),
             ),

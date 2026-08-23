@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
-import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'machines_dialogs.dart';
 
@@ -41,303 +41,279 @@ class MachinesPanel extends StatelessWidget {
         : activeMachines.fold<double>(
                 0, (sum, raw) => sum + asDoubleOr((raw as Map)['condition'], 100)) /
             activeMachines.length;
-    return EarthPanel(
+
+    return EarthSection(
       title: 'AUTOMATION / MACHINE INVENTORY',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Fleet Inventory: Total count of active, idle, and decommissioned machines.\n\n• Machine Telemetry Indicators:\n  - Physical Condition: Structural wear percentage. Below 35% risks critical failure; below 75% increases power draw.\n  - Utilization Rate: Current workload percentage relative to maximum operational speed.\n  - Productive Capacity: Output scaling multiplier.\n  - Conversion Rates: Required input raw materials consumed per cycle to synthesize output products.\n  - Maintenance Due: Countdown of operational cycles until compulsory preventative overhaul.\n\n• Fleet Actions: Dispatch maintenance, acquire new machinery from the catalog, assign units to a business workplace, or sell idle units. Machine upgrades are researched and authorized through a city affiliation.',
+      infoBulletPoints: const [
+        'Fleet Inventory: Total count of active, idle, and decommissioned machines.',
+        'Physical Condition: Structural wear percentage. Below 35% risks critical failure; below 75% increases power draw.',
+        'Utilization Rate: Current workload percentage relative to maximum operational speed.',
+        'Productive Capacity: Output scaling multiplier.',
+        'Conversion Rates: Required input raw materials consumed per cycle to synthesize output products.',
+        'Maintenance Due: Countdown of operational cycles until compulsory preventative overhaul.',
+        'Fleet Actions: Dispatch maintenance, acquire new machinery from the catalog, assign units to a business workplace, or sell idle units.',
+      ],
+      trailing: EarthButton(
+        label: 'ACQUIRE MACHINE',
+        icon: Icons.add_circle_outline,
+        variant: EarthButtonVariant.primary,
+        onPressed: busy
+            ? null
+            : () {
+                EarthAudioEngine.instance.playClick();
+                showMachineAcquisitionDialog(context, action, productionCatalog);
+              },
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${machines.length} units deployed',
-                  style: const TextStyle(color: mutedColor, fontSize: 11),
-                ),
+          EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'FLEET UNITS',
+                value: '${machines.length} DEPLOYED',
+                icon: Icons.precision_manufacturing_outlined,
+                accentColor: context.primaryColor,
               ),
-              const SizedBox(width: 8),
-              OutlinedButton(
-                onPressed: busy
-                    ? null
-                    : () => showMachineAcquisitionDialog(
-                        context, action, productionCatalog),
-                child: const Text('ACQUIRE MACHINE'),
+              EarthMetricTile(
+                label: 'ACTIVE CAPACITY',
+                value: '${totalCapacity.toStringAsFixed(1)}x',
+                icon: Icons.speed_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'UTILIZATION',
+                value: '${averageUtilization.toStringAsFixed(0)}%',
+                icon: Icons.bolt_outlined,
+                accentColor: context.secondaryColor,
+              ),
+              EarthMetricTile(
+                label: 'FLEET CONDITION',
+                value: '${averageCondition.toStringAsFixed(0)}%',
+                icon: Icons.health_and_safety_outlined,
+                accentColor: averageCondition > 75
+                    ? context.successColor
+                    : averageCondition > 40
+                        ? context.warningColor
+                        : context.errorColor,
               ),
             ],
           ),
-          const SizedBox(height: 14),
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .7),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white10),
-            ),
-            child: Wrap(
-              spacing: 24,
-              runSpacing: 10,
-              children: [
-                _capacityMetric('ACTIVE CAPACITY', '${totalCapacity.toStringAsFixed(1)}x', Icons.speed_outlined),
-                _capacityMetric('UTILIZATION', '${averageUtilization.toStringAsFixed(0)}%', Icons.bolt_outlined),
-                _capacityMetric('FLEET CONDITION', '${averageCondition.toStringAsFixed(0)}%', Icons.health_and_safety_outlined),
-                _capacityMetric('GROWTH DECISION', activeMachines.isEmpty ? 'START FLEET' : 'EXPAND OR OPTIMIZE', Icons.trending_up_outlined),
-              ],
-            ),
-          ),
-          const SizedBox(height: 10),
+          SizedBox(height: context.spacingTopic),
           if (machines.isEmpty)
-            const Text(
-              'No registered machines in active inventory.',
-              style: TextStyle(color: mutedColor, fontSize: 11),
+            const EarthEmptyState(
+              message: 'No registered machines in active inventory.',
+              icon: Icons.precision_manufacturing_outlined,
             )
           else
-            ...machines.map((raw) {
-              final machine = raw as Map<String, dynamic>;
-              final id = machine['id']?.toString() ?? '';
-              final name = machine['name']?.toString() ?? 'Machine';
-              final machineType =
-                  (machine['machine_type']?.toString() ?? 'fabrication-rig')
-                      .toUpperCase();
-              final condition = asIntOr(machine['condition'], 100);
-              final utilization = asIntOr(machine['utilization'], 25);
-              final capacity =
-                  asDoubleOr(machine['productive_capacity'], 1.0);
-              final maintenanceDue = asIntOr(machine['maintenance_due'], 0);
-              final inputResource =
-                  (machine['input_resource']?.toString() ?? 'material')
-                      .toUpperCase();
-              final outputResource =
-                  (machine['output_resource']?.toString() ?? 'components')
-                      .toUpperCase();
-              final status =
-                  (machine['status']?.toString() ?? 'active').toLowerCase();
-              final businessName = machine['business_name']?.toString();
-              final workplace = businessName == null || businessName.isEmpty
-                  ? 'PERSONAL WORK UNIT'
-                  : 'WORKPLACE · $businessName';
-              final businessId = (activeBusiness ?? state.business)['id']?.toString();
+            Column(
+              children: machines.map((raw) {
+                final machine = raw as Map<String, dynamic>;
+                final id = machine['id']?.toString() ?? '';
+                final name = machine['name']?.toString() ?? 'Machine';
+                final machineType =
+                    (machine['machine_type']?.toString() ?? 'fabrication-rig')
+                        .toUpperCase();
+                final condition = asIntOr(machine['condition'], 100);
+                final utilization = asIntOr(machine['utilization'], 25);
+                final capacity =
+                    asDoubleOr(machine['productive_capacity'], 1.0);
+                final maintenanceDue = asIntOr(machine['maintenance_due'], 0);
+                final inputResource =
+                    (machine['input_resource']?.toString() ?? 'material')
+                        .toUpperCase();
+                final outputResource =
+                    (machine['output_resource']?.toString() ?? 'components')
+                        .toUpperCase();
+                final status =
+                    (machine['status']?.toString() ?? 'active').toLowerCase();
+                final businessName = machine['business_name']?.toString();
+                final workplace = businessName == null || businessName.isEmpty
+                    ? 'PERSONAL WORK UNIT'
+                    : 'WORKPLACE · $businessName';
+                final businessId = (activeBusiness ?? state.business)['id']?.toString();
 
-              final isInactive = status == 'sold' ||
-                  status == 'recycled' ||
-                  status == 'decommissioned';
+                final isInactive = status == 'sold' ||
+                    status == 'recycled' ||
+                    status == 'decommissioned';
 
-              Color conditionColor = cyanAccentColor;
-              if (condition < 35) {
-                conditionColor = Colors.redAccent;
-              } else if (condition < 75) {
-                conditionColor = Colors.orangeAccent;
-              }
+                Color conditionColor = context.primaryColor;
+                if (condition < 35) {
+                  conditionColor = context.errorColor;
+                } else if (condition < 75) {
+                  conditionColor = context.warningColor;
+                }
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.white.withAlpha(6),
-                  borderRadius: BorderRadius.circular(6),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: EdgeInsets.all(context.cardPadding),
+                  decoration: BoxDecoration(
+                    color: context.surfaceColor,
+                    borderRadius: BorderRadius.circular(context.radiusCard),
+                    border: Border.all(color: context.subtleBorderColor),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '$name ($machineType)',
+                                  style: context.widgetTitleStyle,
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Flow: $inputResource → $outputResource · Capacity: ${capacity.toStringAsFixed(1)}x',
+                                  style: context.widgetFooterStyle,
+                                ),
+                                const SizedBox(height: 3),
+                                Text(
+                                  workplace,
+                                  style: context.captionStyle.copyWith(
+                                    color: businessName == null
+                                        ? context.warningColor
+                                        : context.primaryColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.end,
                             children: [
                               Text(
-                                '$name ($machineType)',
-                                style: const TextStyle(
-                                    fontWeight: FontWeight.w700, fontSize: 12),
+                                '$condition% COND',
+                                style: context.widgetValueStyle.copyWith(color: conditionColor),
                               ),
-                              const SizedBox(height: 2),
-                              Text(
-                                'Flow: $inputResource → $outputResource · Capacity: ${capacity.toStringAsFixed(1)}x',
-                                style: const TextStyle(
-                                    fontSize: 10, color: mutedColor),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                workplace,
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  letterSpacing: .6,
-                                  fontWeight: FontWeight.w700,
-                                  color: businessName == null
-                                      ? Colors.orangeAccent
-                                      : cyanAccentColor,
-                                ),
+                              EarthBadge(
+                                label: status.toUpperCase(),
+                                variant: isInactive ? EarthBadgeVariant.danger : EarthBadgeVariant.success,
                               ),
                             ],
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        'Maintenance due: ${maintenanceDue > 0 ? '$maintenanceDue game days' : 'Current'} · Utilization: $utilization%',
+                        style: context.widgetFooterStyle,
+                      ),
+                      if (!isInactive) ...[
+                        SizedBox(height: context.spacingControl),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          crossAxisAlignment: WrapCrossAlignment.center,
                           children: [
-                            Text(
-                              '$condition% COND',
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w800,
-                                color: conditionColor,
+                            Text('UTILIZATION:', style: context.captionStyle),
+                            for (final level in [0, 25, 50, 75, 100])
+                              InkWell(
+                                onTap: busy
+                                    ? null
+                                    : () {
+                                        EarthAudioEngine.instance.playClick();
+                                        action(() => const EarthApi().setMachineUtilization(id, level));
+                                      },
+                                borderRadius: BorderRadius.circular(context.radiusControl),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                                  decoration: BoxDecoration(
+                                    color: utilization == level
+                                        ? context.primaryColor.withValues(alpha: .2)
+                                        : context.surfaceColor,
+                                    borderRadius: BorderRadius.circular(context.radiusControl),
+                                    border: Border.all(
+                                      color: utilization == level
+                                          ? context.primaryColor
+                                          : context.subtleBorderColor,
+                                    ),
+                                  ),
+                                  child: Text(
+                                    '$level%',
+                                    style: context.captionStyle.copyWith(
+                                      color: utilization == level ? context.primaryColor : context.mutedColor,
+                                      fontWeight: utilization == level ? FontWeight.bold : FontWeight.normal,
+                                    ),
+                                  ),
+                                ),
                               ),
+                          ],
+                        ),
+                        SizedBox(height: context.spacingControl),
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 6,
+                          children: [
+                            EarthButton(
+                              label: 'MAINTAIN (10 COMP)',
+                              variant: EarthButtonVariant.primary,
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      EarthAudioEngine.instance.playClick();
+                                      action(() => const EarthApi().maintainMachine(id));
+                                    },
                             ),
-                            Text(
-                              status.toUpperCase(),
-                              style: TextStyle(
-                                fontSize: 9,
-                                color:
-                                    isInactive ? Colors.redAccent : mutedColor,
+                            EarthButton(
+                              label: 'UPGRADE (+0.2x)',
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      EarthAudioEngine.instance.playClick();
+                                      showMachineUpgradeDialog(context, action, id);
+                                    },
+                            ),
+                            EarthButton(
+                              label: 'SELL MACHINE',
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      EarthAudioEngine.instance.playClick();
+                                      showMachineSaleDialog(context, action, id);
+                                    },
+                            ),
+                            if (businessId != null && businessId.isNotEmpty)
+                              EarthButton(
+                                label: businessName == null || businessName.isEmpty
+                                    ? 'ASSIGN TO BUSINESS'
+                                    : 'RELEASE TO PERSONAL',
+                                onPressed: busy
+                                    ? null
+                                    : () {
+                                        EarthAudioEngine.instance.playClick();
+                                        action(() => const EarthApi().assignMachineToBusiness(
+                                              id,
+                                              businessName == null || businessName.isEmpty ? businessId : null,
+                                            ));
+                                      },
                               ),
+                            EarthButton(
+                              label: 'RECYCLE',
+                              variant: EarthButtonVariant.danger,
+                              onPressed: busy
+                                  ? null
+                                  : () {
+                                      EarthAudioEngine.instance.playClick();
+                                      showDecommissionDialog(context, action, id);
+                                    },
                             ),
                           ],
                         ),
                       ],
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      'Maintenance due: ${maintenanceDue > 0 ? '$maintenanceDue game days' : 'Current'} · Utilization: $utilization%',
-                      style: const TextStyle(fontSize: 10, color: mutedColor),
-                    ),
-                    if (!isInactive) ...[
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 6,
-                        children: [
-                          const Text('UTILIZATION:',
-                              style: TextStyle(
-                                  color: mutedColor,
-                                  fontSize: 10,
-                                  height: 2.2)),
-                          for (final level in [0, 25, 50, 75, 100])
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 2),
-                                backgroundColor: utilization == level
-                                    ? Colors.white12
-                                    : null,
-                              ),
-                              onPressed: busy
-                                  ? null
-                                  : () => action(() => const EarthApi()
-                                      .setMachineUtilization(id, level)),
-                              child: Text('$level%',
-                                  style: const TextStyle(fontSize: 10)),
-                            ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 6,
-                        children: [
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                            ),
-                            onPressed: busy
-                                ? null
-                                : () => action(
-                                    () => const EarthApi().maintainMachine(id)),
-                            child: const Text('MAINTAIN (10 COMP)',
-                                style: TextStyle(fontSize: 10)),
-                          ),
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                            ),
-                            onPressed: busy
-                                ? null
-                                : () => showMachineUpgradeDialog(
-                                    context, action, id),
-                            child: const Text('UPGRADE (+0.2x)',
-                                style: TextStyle(fontSize: 10)),
-                          ),
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                            ),
-                            onPressed: busy
-                                ? null
-                                : () =>
-                                    showMachineSaleDialog(context, action, id),
-                            child: const Text('SELL MACHINE',
-                                style: TextStyle(fontSize: 10)),
-                          ),
-                          if (businessId != null && businessId.isNotEmpty)
-                            OutlinedButton(
-                              style: OutlinedButton.styleFrom(
-                                visualDensity: VisualDensity.compact,
-                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                              ),
-                              onPressed: busy
-                                  ? null
-                                  : () => action(() => const EarthApi().assignMachineToBusiness(
-                                        id,
-                                        businessName == null || businessName.isEmpty ? businessId : null,
-                                      )),
-                              child: Text(
-                                businessName == null || businessName.isEmpty ? 'ASSIGN TO BUSINESS' : 'RELEASE TO PERSONAL',
-                                style: const TextStyle(fontSize: 10),
-                              ),
-                            ),
-                          OutlinedButton(
-                            style: OutlinedButton.styleFrom(
-                              visualDensity: VisualDensity.compact,
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 10, vertical: 4),
-                            ),
-                            onPressed: busy
-                                ? null
-                                : () =>
-                                    showDecommissionDialog(context, action, id),
-                            child: const Text('RECYCLE',
-                                style: TextStyle(fontSize: 10)),
-                          ),
-                        ],
-                      ),
                     ],
-                  ],
-                ),
-              );
-            }),
+                  ),
+                );
+              }).toList(),
+            ),
         ],
       ),
-    );
-  }
-
-  Widget _capacityMetric(String label, String value, IconData icon) {
-    return Row(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        Icon(icon, size: 15, color: cyanAccentColor),
-        const SizedBox(width: 6),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(label, style: const TextStyle(fontSize: 8.5, color: mutedColor, letterSpacing: .6)),
-            const SizedBox(height: 2),
-            Text(value, style: const TextStyle(fontSize: 10.5, fontWeight: FontWeight.w800)),
-          ],
-        ),
-      ],
     );
   }
 }
@@ -350,21 +326,21 @@ class ProductionEventsPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final events = state.productionEvents;
-    return EarthPanel(
+    return EarthSection(
       title: 'INDUSTRIAL PRODUCTION / EVENT STREAM',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Production Audit Stream: Immutable chronological record of manufacturing, fabrication, and chemical synthesis runs executed across your automated machine fleet.\n\n• Event Indicators:\n  - Cycle Day: Canonical game day when the production run settled.\n  - Machine Class: Model of fabrication rig or synthesis reactor.\n  - Yield & Resource: Net units produced and specific commodity type (Food, Materials, Energy, Components, Compute).',
+      infoBulletPoints: const [
+        'Production Audit Stream: Immutable chronological record of manufacturing, fabrication, and chemical synthesis runs executed across your automated machine fleet.',
+        'Cycle Day: Canonical game day when the production run settled.',
+        'Machine Class: Model of fabrication rig or synthesis reactor.',
+        'Yield & Resource: Net units produced and specific commodity type (Food, Materials, Energy, Components, Compute).',
+      ],
       child: events.isEmpty
-          ? const Text(
-              'No production cycle events recorded.',
-              style: TextStyle(color: mutedColor, fontSize: 11),
+          ? const EarthEmptyState(
+              message: 'No production cycle events recorded.',
+              icon: Icons.precision_manufacturing_outlined,
             )
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+          : EarthDataList(
               children: events.take(8).map((raw) {
                 final event = raw as Map<String, dynamic>;
                 final gameDay = event['game_day'] ?? state.clock['day'] ?? 184;
@@ -375,76 +351,15 @@ class ProductionEventsPanel extends StatelessWidget {
                 final machineType =
                     (event['machine_name']?.toString() ?? event['machine_type']?.toString() ?? 'RIG').toUpperCase();
 
-                Color resColor = cyanAccentColor;
-                if (outputResource.contains('ENERGY'))
-                  resColor = Colors.amberAccent;
-                if (outputResource.contains('FOOD'))
-                  resColor = Colors.lightGreenAccent;
-                if (outputResource.contains('COMPUTE')) resColor = violetColor;
-                if (outputResource.contains('COMPONENT'))
-                  resColor = Colors.tealAccent;
-
-                return Container(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: surfaceColor.withValues(alpha: .6),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: Colors.white10),
-                  ),
-                  child: Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: .06),
-                          borderRadius: BorderRadius.circular(4),
-                        ),
-                        child: Text(
-                          'DAY $gameDay',
-                          style: const TextStyle(
-                            fontSize: 9,
-                            fontWeight: FontWeight.w800,
-                            color: mutedColor,
-                            letterSpacing: .6,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          'Machine $machineType Cycle',
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: inkColor,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 8, vertical: 2.5),
-                        decoration: BoxDecoration(
-                          color: resColor.withValues(alpha: .15),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                              color: resColor.withValues(alpha: .35)),
-                        ),
-                        child: Text(
-                          '+$outputAmount $outputResource',
-                          style: TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w800,
-                            color: resColor,
-                            letterSpacing: .5,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
+                return EarthDataRow(
+                  title: 'Machine $machineType Cycle',
+                  subtitle: 'Day $gameDay settlement',
+                  badges: [
+                    EarthBadge(
+                      label: '+$outputAmount $outputResource',
+                      variant: EarthBadgeVariant.success,
+                    ),
+                  ],
                 );
               }).toList(),
             ),

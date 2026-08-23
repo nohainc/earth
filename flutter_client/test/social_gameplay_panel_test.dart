@@ -13,7 +13,7 @@ class FakeSocialTransport extends EarthApiTransport {
       {String method = 'GET', Map<String, dynamic>? body}) async {
     calls.add('$method $path');
     if (fail) throw Exception('Social action failed');
-    if (path.startsWith('/api/social/directory'))
+    if (path.startsWith('/api/social/directory')) {
       return {
         'humans': [
           {
@@ -30,11 +30,13 @@ class FakeSocialTransport extends EarthApiTransport {
           }
         ]
       };
-    if (path == '/api/social/initiatives')
+    }
+    if (path == '/api/social/initiatives') {
       return {
         'ok': true,
         'initiative': {'id': 'social-new'}
       };
+    }
     if (path.contains('/accept')) return {'ok': true};
     if (path.contains('/contribute')) return {'ok': true};
     if (path == '/api/social/timeline') return {'timeline': []};

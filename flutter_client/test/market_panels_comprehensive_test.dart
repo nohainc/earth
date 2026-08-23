@@ -55,7 +55,7 @@ void main() {
           body: SingleChildScrollView(
             child: Column(
               children: [
-                MarketOrderBookPanel(state: state),
+                const MarketOrderBookPanel(state: state),
                 MyMarketOrdersPanel(
                   state: state,
                   busy: false,

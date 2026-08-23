@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/audio/earth_audio_engine.dart';
+import '../../shared/design_system/design_system.dart';
 
 void showThemeCustomizerDialog(BuildContext context) {
   showDialog(
@@ -9,45 +10,62 @@ void showThemeCustomizerDialog(BuildContext context) {
   );
 }
 
-class ThemeCustomizerDialog extends StatelessWidget {
+class ThemeCustomizerDialog extends StatefulWidget {
   const ThemeCustomizerDialog({super.key});
+
+  @override
+  State<ThemeCustomizerDialog> createState() => _ThemeCustomizerDialogState();
+}
+
+class _ThemeCustomizerDialogState extends State<ThemeCustomizerDialog> {
+  Offset _windowOffset = Offset.zero;
 
   @override
   Widget build(BuildContext context) {
     return AnimatedBuilder(
       animation: EarthThemeController.instance,
-      builder: (context, _) {
+      builder: (dialogContext, _) {
         final currentMode = EarthThemeController.instance.mode;
 
         return Dialog(
           backgroundColor: Colors.transparent,
-          insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
-          child: Container(
-            width: 620,
-            constraints: const BoxConstraints(maxHeight: 700),
+          insetPadding:
+              const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+          child: Transform.translate(
+            offset: _windowOffset,
+            child: Container(
+            width: 660,
+            constraints: const BoxConstraints(maxHeight: 760),
             decoration: BoxDecoration(
-              color: EarthColors.panelSurface,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: EarthThemeController.instance.primaryAccent.withAlpha(100), width: 1.5),
+              color: currentMode.panel,
+              borderRadius: BorderRadius.circular(context.radiusPanel),
+              border: Border.all(
+                color: currentMode.primary.withValues(alpha: .35),
+                width: 1.5,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: EarthThemeController.instance.primaryAccent.withAlpha(40),
-                  blurRadius: 24,
+                  color: currentMode.primary.withValues(alpha: .15),
+                  blurRadius: 28,
                   spreadRadius: 2,
                 ),
               ],
             ),
-            child: Column(
+                child: Column(
               mainAxisSize: MainAxisSize.min,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                // Modal Header
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                // Modal Header — drag this area to move the window.
+                GestureDetector(
+                  onPanUpdate: (details) {
+                    setState(() => _windowOffset += details.delta);
+                  },
+                  child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   decoration: BoxDecoration(
-                    color: EarthColors.cardSurface,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(11)),
-                    border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                    color: currentMode.surface,
+                    borderRadius: BorderRadius.vertical(top: Radius.circular(context.radiusPanel - 1)),
+                    border: Border(bottom: BorderSide(color: currentMode.primary.withValues(alpha: .2))),
                   ),
                   child: Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -55,8 +73,8 @@ class ThemeCustomizerDialog extends StatelessWidget {
                       Expanded(
                         child: Row(
                           children: [
-                            Icon(Icons.palette_outlined, color: EarthThemeController.instance.primaryAccent, size: 20),
-                            const SizedBox(width: 10),
+                            Icon(Icons.palette_outlined, color: currentMode.primary, size: 22),
+                            const SizedBox(width: 12),
                             Expanded(
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,16 +82,17 @@ class ThemeCustomizerDialog extends StatelessWidget {
                                   Text(
                                     'COMMAND CENTER AESTHETICS & THEMES',
                                     style: TextStyle(
-                                      color: EarthThemeController.instance.primaryAccent,
+                                      color: currentMode.primary,
                                       fontWeight: FontWeight.bold,
-                                      fontSize: 12.5,
-                                      letterSpacing: 1.1,
+                                      fontSize: 13,
+                                      letterSpacing: 1.2,
                                     ),
                                     overflow: TextOverflow.ellipsis,
                                   ),
-                                  const Text(
+                                  const SizedBox(height: 2),
+                                  Text(
                                     'Select your preferred tactical interface palette & visual radiance.',
-                                    style: TextStyle(color: EarthColors.textMuted, fontSize: 10),
+                                    style: TextStyle(color: context.mutedColor, fontSize: 11),
                                     overflow: TextOverflow.ellipsis,
                                   ),
                                 ],
@@ -84,15 +103,16 @@ class ThemeCustomizerDialog extends StatelessWidget {
                       ),
                       const SizedBox(width: 8),
                       IconButton(
-                        icon: const Icon(Icons.close, color: EarthColors.textMuted, size: 18),
+                        icon: Icon(Icons.close, color: context.mutedColor, size: 20),
                         padding: EdgeInsets.zero,
                         constraints: const BoxConstraints(),
                         onPressed: () {
                           EarthAudioEngine.instance.playClick();
-                          Navigator.of(context).pop();
+                          Navigator.of(dialogContext).pop();
                         },
                       ),
                     ],
+                  ),
                   ),
                 ),
 
@@ -112,64 +132,95 @@ class ThemeCustomizerDialog extends StatelessWidget {
                           EarthAudioEngine.instance.playChime();
                           EarthThemeController.instance.setMode(themeMode);
                         },
-                        borderRadius: BorderRadius.circular(8),
+                        borderRadius: BorderRadius.circular(context.radiusCard),
                         child: Container(
                           margin: const EdgeInsets.only(bottom: 12),
                           padding: const EdgeInsets.all(14),
                           decoration: BoxDecoration(
                             color: isSelected
-                                ? themeMode.primary.withAlpha(25)
-                                : EarthColors.cardSurface,
-                            borderRadius: BorderRadius.circular(8),
+                                ? themeMode.surface
+                                : currentMode.surface.withValues(alpha: .6),
+                            borderRadius: BorderRadius.circular(context.radiusCard),
                             border: Border.all(
-                              color: isSelected ? themeMode.primary : EarthColors.borderSubtle,
+                              color: isSelected ? themeMode.primary : Colors.white12,
                               width: isSelected ? 1.5 : 1.0,
                             ),
                           ),
                           child: Row(
                             children: [
-                              // Palette Preview Swatches
+                              // Interactive Mini Tactical UI Preview
                               Container(
-                                width: 56,
-                                height: 56,
+                                width: 90,
+                                height: 64,
                                 decoration: BoxDecoration(
                                   color: themeMode.canvas,
                                   borderRadius: BorderRadius.circular(6),
-                                  border: Border.all(color: Colors.white24),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? themeMode.primary.withValues(alpha: .5)
+                                        : Colors.white24,
+                                  ),
                                 ),
                                 padding: const EdgeInsets.all(6),
                                 child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Expanded(
-                                      child: Row(
-                                        children: [
-                                          Expanded(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: themeMode.primary,
-                                                borderRadius: BorderRadius.circular(3),
-                                              ),
+                                    Row(
+                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Container(
+                                          width: 8,
+                                          height: 8,
+                                          decoration: BoxDecoration(
+                                            color: themeMode.primary,
+                                            shape: BoxShape.circle,
+                                          ),
+                                        ),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                          decoration: BoxDecoration(
+                                            color: themeMode.secondary.withValues(alpha: .25),
+                                            borderRadius: BorderRadius.circular(2),
+                                          ),
+                                          child: Text(
+                                            'LIVE',
+                                            style: TextStyle(
+                                              fontSize: 6,
+                                              fontWeight: FontWeight.bold,
+                                              color: themeMode.secondary,
                                             ),
                                           ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Container(
-                                              decoration: BoxDecoration(
-                                                color: themeMode.secondary,
-                                                borderRadius: BorderRadius.circular(3),
-                                              ),
+                                        ),
+                                      ],
+                                    ),
+                                    Container(
+                                      padding: const EdgeInsets.all(3),
+                                      decoration: BoxDecoration(
+                                        color: themeMode.panel,
+                                        borderRadius: BorderRadius.circular(3),
+                                        border: Border.all(color: themeMode.primary.withValues(alpha: .3)),
+                                      ),
+                                      child: Row(
+                                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                        children: [
+                                          Container(
+                                            width: 24,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                              color: themeMode.primary,
+                                              borderRadius: BorderRadius.circular(1),
+                                            ),
+                                          ),
+                                          Container(
+                                            width: 12,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                              color: themeMode.gold,
+                                              borderRadius: BorderRadius.circular(1),
                                             ),
                                           ),
                                         ],
-                                      ),
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Expanded(
-                                      child: Container(
-                                        decoration: BoxDecoration(
-                                          color: themeMode.surface,
-                                          borderRadius: BorderRadius.circular(3),
-                                        ),
                                       ),
                                     ),
                                   ],
@@ -197,7 +248,7 @@ class ThemeCustomizerDialog extends StatelessWidget {
                                           Container(
                                             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                                             decoration: BoxDecoration(
-                                              color: themeMode.primary.withAlpha(40),
+                                              color: themeMode.primary.withValues(alpha: .2),
                                               borderRadius: BorderRadius.circular(4),
                                               border: Border.all(color: themeMode.primary),
                                             ),
@@ -217,27 +268,30 @@ class ThemeCustomizerDialog extends StatelessWidget {
                                     const SizedBox(height: 4),
                                     Text(
                                       themeMode.description,
-                                      style: const TextStyle(color: EarthColors.textMuted, fontSize: 10.5),
+                                      style: TextStyle(color: context.mutedColor, fontSize: 11),
                                     ),
                                   ],
                                 ),
                               ),
 
+                              const SizedBox(width: 8),
+
                               // Radio Indicator
                               Icon(
                                 isSelected ? Icons.radio_button_checked : Icons.radio_button_unchecked,
-                                color: isSelected ? themeMode.primary : EarthColors.textMuted,
+                                color: isSelected ? themeMode.primary : context.mutedColor,
                                 size: 20,
                               ),
                             ],
                           ),
-                        ),
-                      );
+            ),
+          );
                     },
                   ),
                 ),
               ],
             ),
+          ),
           ),
         );
       },

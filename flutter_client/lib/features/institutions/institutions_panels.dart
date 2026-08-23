@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
-import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'institutions_dialogs.dart';
 
@@ -19,8 +18,7 @@ class CorporationDirectoryPanel extends StatefulWidget {
   });
 
   @override
-  State<CorporationDirectoryPanel> createState() =>
-      _CorporationDirectoryPanelState();
+  State<CorporationDirectoryPanel> createState() => _CorporationDirectoryPanelState();
 }
 
 class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
@@ -41,8 +39,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   @override
   void didUpdateWidget(covariant CorporationDirectoryPanel oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.state.membership?['corporation_id'] !=
-        widget.state.membership?['corporation_id']) {
+    if (oldWidget.state.membership?['corporation_id'] != widget.state.membership?['corporation_id']) {
       _load();
     }
   }
@@ -61,8 +58,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final generation = ++_searchGeneration;
     setState(() => _loading = true);
     try {
-      final rows =
-          await const EarthApi().listCorporations(search: _search.text);
+      final rows = await const EarthApi().listCorporations(search: _search.text);
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
         _corporations = rows;
@@ -70,8 +66,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             ? null
             : (_selected == null
                 ? rows.first
-                : rows.firstWhere((row) => row['id'] == _selected!['id'],
-                    orElse: () => rows.first));
+                : rows.firstWhere((row) => row['id'] == _selected!['id'], orElse: () => rows.first));
         _loading = false;
       });
     } catch (_) {
@@ -84,71 +79,87 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   Future<void> _join() async {
     final id = _selected?['id']?.toString();
     if (id == null) return;
-    await widget
-        .action(() => const EarthApi().joinCorporation(corporationId: id));
+    await widget.action(() => const EarthApi().joinCorporation(corporationId: id));
   }
 
   Future<void> _confirmLeave(BuildContext context) async {
     final id = widget.state.membership?['corporation_id']?.toString();
     if (id == null) return;
     final corporation = widget.state.institutions['corporation'] is Map
-        ? Map<String, dynamic>.from(
-            widget.state.institutions['corporation'] as Map)
+        ? Map<String, dynamic>.from(widget.state.institutions['corporation'] as Map)
         : const <String, dynamic>{};
     final name = corporation['name']?.toString() ?? 'your corporation';
-    final confirmation = TextEditingController();
     var confirmed = false;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Leave corporation?'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(
+          backgroundColor: context.panelColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(context.radiusPanel),
+            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+          ),
+          title: Text(
+            'Leave Corporation?',
+            style: context.topicTitleStyle.copyWith(color: context.warningColor),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
                 'This will remove you from $name and its current city. Your businesses and personal assets remain yours.',
-                style: const TextStyle(fontSize: 11)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmation,
-              onChanged: (value) => setState(() => confirmed = value.trim() == name),
-              decoration: InputDecoration(labelText: 'Type "$name" to confirm'),
-            ),
-          ]),
+                style: context.widgetFooterStyle,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                style: context.bodyStyle.copyWith(color: context.inkColor),
+                onChanged: (value) => setState(() {
+                  confirmed = value.trim() == name;
+                }),
+                decoration: InputDecoration(
+                  labelText: 'Type "$name" to confirm',
+                  labelStyle: context.widgetFooterStyle,
+                ),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('CANCEL')),
-            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+            ),
+            EarthButton(
+              label: 'LEAVE CORPORATION',
+              variant: EarthButtonVariant.danger,
               onPressed: confirmed
                   ? () async {
                       Navigator.pop(dialogContext);
-                      await widget.action(() => const EarthApi()
-                          .leaveCorporation(corporationId: id));
+                      await widget.action(() => const EarthApi().leaveCorporation(corporationId: id));
                     }
                   : null,
-              child: const Text('LEAVE CORPORATION'),
             ),
           ],
         ),
       ),
     );
-    confirmation.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final current = widget.state.institutions['corporation'] is Map
-        ? Map<String, dynamic>.from(
-            widget.state.institutions['corporation'] as Map)
+        ? Map<String, dynamic>.from(widget.state.institutions['corporation'] as Map)
         : const <String, dynamic>{};
-    return EarthPanel(
+
+    return EarthSection(
       title: 'FIND YOUR CORPORATION',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Independent people can compare active corporations and choose a network.\n\n• Every corporation has a capital city. Joining places you there automatically.\n\n• Open corporations accept members immediately; approval corporations create a request for their administrators.\n\n• Once affiliated, leave your current corporation before choosing another one.',
+      infoBulletPoints: const [
+        'Independent people can compare active corporations and choose a network.',
+        'Every corporation has a capital city. Joining places you there automatically.',
+        'Open corporations accept members immediately; approval corporations create a request for their administrators.',
+        'Once affiliated, leave your current corporation before choosing another one.',
+      ],
       child: _isMember ? _memberView(current) : _directoryView(),
     );
   }
@@ -158,190 +169,110 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     final city = current['capital_city_name']?.toString() ??
         widget.state.membership?['city_id']?.toString() ??
         'capital city';
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      _statusCard(Icons.verified_user_outlined, 'AFFILIATED',
-          'You are a member of $name. Your corporation membership places you in its capital city: $city.'),
-      const SizedBox(height: 14),
-      OutlinedButton.icon(
-        onPressed: widget.busy ? null : () => _confirmLeave(context),
-        icon: const Icon(Icons.logout, size: 15),
-        label: const Text('LEAVE CORPORATION'),
-      ),
-      const SizedBox(height: 7),
-      const Text(
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: EdgeInsets.all(context.cardPadding),
+          decoration: BoxDecoration(
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(context.radiusCard),
+            border: Border.all(color: context.primaryColor.withValues(alpha: .3)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.verified_user_outlined, size: context.iconSize + 2, color: context.primaryColor),
+              SizedBox(width: context.spacingInline),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('AFFILIATED', style: context.widgetValueStyle.copyWith(color: context.primaryColor)),
+                    const SizedBox(height: 4),
+                    Text(
+                      'You are a member of $name. Your corporation membership places you in its capital city: $city.',
+                      style: context.widgetFooterStyle,
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(height: context.spacingTitleOffset),
+        EarthButton(
+          label: 'LEAVE CORPORATION',
+          icon: Icons.logout,
+          variant: EarthButtonVariant.danger,
+          onPressed: widget.busy ? null : () => _confirmLeave(context),
+        ),
+        const SizedBox(height: 7),
+        Text(
           'Leaving ends the corporation-city affiliation and returns you to the independent ruleset.',
-          style: TextStyle(color: mutedColor, fontSize: 10)),
-    ]);
+          style: context.widgetFooterStyle,
+        ),
+      ],
+    );
   }
 
   Widget _directoryView() {
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        Expanded(
-          child: TextField(
-            controller: _search,
-            onChanged: (_) => _load(),
-            decoration: const InputDecoration(
-              prefixIcon: Icon(Icons.search, size: 17),
-              hintText: 'Search corporations',
-              isDense: true,
-            ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        EarthSearchInput(
+          controller: _search,
+          hintText: 'Search corporations...',
+          onChanged: (_) => _load(),
+          onClear: _load,
+        ),
+        SizedBox(height: context.spacingTitleOffset),
+        if (_loading)
+          Center(child: CircularProgressIndicator(color: context.primaryColor))
+        else if (_corporations.isEmpty)
+          const EarthEmptyState(
+            message: 'No corporations found. You can found a new one from your capital city.',
+            icon: Icons.domain_disabled_outlined,
+          )
+        else
+          EarthDataList(
+            children: _corporations.map((row) {
+              final id = row['id']?.toString() ?? '';
+              final name = row['name']?.toString() ?? id;
+              final city = row['capital_city_name']?.toString() ?? 'capital city';
+              final members = row['member_count'] ?? 0;
+              final isSelected = _selected?['id'] == id;
+
+              return EarthDataRow(
+                title: name,
+                subtitle: 'Capital: $city · $members members',
+                leading: Icon(
+                  Icons.domain,
+                  size: context.iconSize,
+                  color: isSelected ? context.primaryColor : context.mutedColor,
+                ),
+                isSelected: isSelected,
+                onTap: () => setState(() => _selected = row),
+                trailing: EarthButton(
+                  label: 'JOIN',
+                  variant: isSelected ? EarthButtonVariant.primary : EarthButtonVariant.secondary,
+                  onPressed: widget.busy ? null : () => setState(() => _selected = row),
+                ),
+              );
+            }).toList(),
           ),
-        ),
-        const SizedBox(width: 8),
-        IconButton(
-            onPressed: _loading ? null : _load,
-            icon: const Icon(Icons.refresh, size: 18)),
-      ]),
-      const SizedBox(height: 12),
-      if (_loading)
-        const LinearProgressIndicator()
-      else if (_corporations.isEmpty)
-        _statusCard(Icons.search_off, 'NO MATCHES',
-            'No active corporations match this search.')
-      else
-        Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Expanded(
-              child: Column(
-                  children: _corporations.map(_corporationRow).toList())),
-          if (_selected != null) ...[
-            const SizedBox(width: 14),
-            Expanded(child: _details(_selected!)),
-          ],
-        ]),
-      const SizedBox(height: 14),
-      FilledButton.icon(
-        onPressed: widget.busy
-            ? null
-            : () => showCorporationWithCapitalDialog(context, widget.action),
-        icon: const Icon(Icons.add_business, size: 16),
-        label: const Text('CREATE CORPORATION'),
-      ),
-      const Padding(
-        padding: EdgeInsets.only(top: 7),
-        child: Text(
-            'Founding creates the corporation and its capital city together.',
-            style: TextStyle(color: mutedColor, fontSize: 10)),
-      ),
-    ]);
-  }
-
-  Widget _corporationRow(Map<String, dynamic> row) {
-    final selected = _selected?['id'] == row['id'];
-    return InkWell(
-      onTap: () => setState(() => _selected = row),
-      child: Container(
-        width: double.infinity,
-        margin: const EdgeInsets.only(bottom: 7),
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: selected
-              ? cyanAccentColor.withValues(alpha: .10)
-              : surfaceColor.withValues(alpha: .65),
-          borderRadius: BorderRadius.circular(8),
-          border:
-              Border.all(color: selected ? cyanAccentColor : Colors.white12),
-        ),
-        child: Row(children: [
-          const Icon(Icons.account_balance_outlined,
-              size: 16, color: cyanAccentColor),
-          const SizedBox(width: 8),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(
-                    row['name']?.toString() ??
-                        row['id']?.toString() ??
-                        'Corporation',
-                    style: const TextStyle(
-                        fontSize: 11, fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(
-                    '${row['member_count'] ?? 0} members · ${row['capital_city_name'] ?? 'capital city'}',
-                    style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-              ])),
-        ]),
-      ),
-    );
-  }
-
-  Widget _details(Map<String, dynamic> row) {
-    final approval = row['admission_policy']?.toString() == 'approval';
-    final rules = row['rules'] is Map
-        ? Map<String, dynamic>.from(row['rules'] as Map)
-        : const <String, dynamic>{};
-    String tax(String key) {
-      final basisPoints = asDouble(rules[key]);
-      return basisPoints == null
-          ? 'default'
-          : '${(basisPoints / 100).toStringAsFixed(2)}%';
-    }
-    return Container(
-      padding: const EdgeInsets.all(13),
-      decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .75),
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(color: violetColor.withValues(alpha: .28))),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(row['name']?.toString() ?? 'Corporation',
-            style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 8),
-        Text('Capital city: ${row['capital_city_name'] ?? 'not assigned'}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        Text('Network cities: ${row['city_count'] ?? 0}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        Text('Members: ${row['member_count'] ?? 0}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        const SizedBox(height: 8),
-        const Text('CORPORATION RULES',
-            style: TextStyle(
-                color: inkColor, fontSize: 9, fontWeight: FontWeight.w800)),
-        const SizedBox(height: 3),
-        Text(
-            'Income tax: ${tax('incomeTaxBps')} · Sales tax: ${tax('salesTaxBps')}',
-            style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-        Text(
-            'Corporate tax: ${tax('corporateTaxBps')} · Property tax: ${tax('propertyTaxBps')}',
-            style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-        const SizedBox(height: 10),
-        Text(approval ? 'ADMISSION: ADMIN APPROVAL' : 'ADMISSION: OPEN',
-            style: TextStyle(
-                color: approval ? Colors.orangeAccent : Colors.tealAccent,
-                fontSize: 9,
-                fontWeight: FontWeight.w800)),
-        const SizedBox(height: 12),
-        FilledButton(
+        if (_selected != null) ...[
+          SizedBox(height: context.spacingTitleOffset),
+          EarthButton(
+            label: 'JOIN ${_selected!['name']?.toString().toUpperCase()}',
+            variant: EarthButtonVariant.primary,
             onPressed: widget.busy ? null : _join,
-            child: Text(approval ? 'REQUEST MEMBERSHIP' : 'JOIN CORPORATION')),
-      ]),
+          ),
+        ],
+      ],
     );
   }
-
-  Widget _statusCard(IconData icon, String label, String text) => Container(
-        width: double.infinity,
-        padding: const EdgeInsets.all(13),
-        decoration: BoxDecoration(
-            color: cyanAccentColor.withValues(alpha: .07),
-            borderRadius: BorderRadius.circular(10),
-            border: Border.all(color: cyanAccentColor.withValues(alpha: .22))),
-        child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Icon(icon, color: cyanAccentColor, size: 19),
-          const SizedBox(width: 9),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(label,
-                    style: const TextStyle(
-                        color: cyanAccentColor,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 4),
-                Text(text, style: const TextStyle(fontSize: 11, height: 1.3)),
-              ])),
-        ]),
-      );
 }
 
 class CivicRankingsPanel extends StatelessWidget {
@@ -350,83 +281,99 @@ class CivicRankingsPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return EarthPanel(
+    return EarthSection(
       title: 'CIVIC / CORPORATION & CITY RANKINGS',
       showSurface: false,
-      showTitle: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          'Compare institutions by the measures that shape civic life: productive membership, city services, and resilience—not treasury alone.',
-      child: LayoutBuilder(builder: (context, constraints) {
-        final corp = _rows(state.rankings['corporations']);
-        final cities = _rows(state.rankings['cities']);
-        final wide = constraints.maxWidth > 700;
-        final children = [
-          _rankingColumn(
-              'CORPORATIONS', corp, Icons.account_balance_outlined, 'members'),
-          _rankingColumn(
-              'CITIES', cities, Icons.location_city_outlined, 'residents'),
-        ];
-        return wide
-            ? Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: children[0]),
-                const SizedBox(width: 18),
-                Expanded(child: children[1])
-              ])
-            : Column(children: [
-                children[0],
-                const SizedBox(height: 18),
-                children[1]
-              ]);
-      }),
+      infoBulletPoints: const [
+        'Compare institutions by the measures that shape civic life: productive membership, city services, and resilience—not treasury alone.',
+      ],
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final corp = _rows(state.rankings['corporations']);
+          final cities = _rows(state.rankings['cities']);
+          final wide = constraints.maxWidth > 700;
+
+          final col1 = _rankingColumn(context, 'CORPORATIONS', corp, Icons.account_balance_outlined, 'members');
+          final col2 = _rankingColumn(context, 'CITIES', cities, Icons.location_city_outlined, 'residents');
+
+          if (wide) {
+            return Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(child: col1),
+                SizedBox(width: context.spacingTopic),
+                Expanded(child: col2),
+              ],
+            );
+          }
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              col1,
+              SizedBox(height: context.spacingTopic),
+              col2,
+            ],
+          );
+        },
+      ),
     );
   }
 
   List<Map<String, dynamic>> _rows(dynamic value) => value is List
-      ? value
-          .whereType<Map>()
-          .map((row) => Map<String, dynamic>.from(row))
-          .take(10)
-          .toList()
+      ? value.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).take(10).toList()
       : const [];
 
-  Widget _rankingColumn(String title, List<Map<String, dynamic>> rows,
-          IconData icon, String secondary) =>
-      Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title,
-            style: const TextStyle(
-                color: mutedColor,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1)),
-        const SizedBox(height: 7),
+  Widget _rankingColumn(
+    BuildContext context,
+    String title,
+    List<Map<String, dynamic>> rows,
+    IconData icon,
+    String secondary,
+  ) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(title, style: context.widgetTitleStyle),
+        SizedBox(height: context.spacingControl),
         if (rows.isEmpty)
-          const Text('No ranking data available.',
-              style: TextStyle(color: mutedColor, fontSize: 10)),
-        ...rows.asMap().entries.map((entry) => Padding(
-            padding: const EdgeInsets.symmetric(vertical: 4),
-            child: Row(children: [
-              Text('#${entry.key + 1}',
-                  style: const TextStyle(
-                      color: cyanAccentColor,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800)),
-              const SizedBox(width: 8),
-              Icon(icon, size: 14, color: mutedColor),
-              const SizedBox(width: 6),
-              Expanded(
-                  child: Text(
-                      entry.value['name']?.toString() ??
-                          entry.value['id']?.toString() ??
-                          'Institution',
-                      style: const TextStyle(fontSize: 10.5))),
-              Text(
-                  '${entry.value[secondary] ?? entry.value['member_count'] ?? 0}',
-                  style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-            ]))),
-      ]);
+          const EarthEmptyState(
+            message: 'No ranking data available.',
+            icon: Icons.leaderboard_outlined,
+          )
+        else
+          EarthDataList(
+            children: rows.asMap().entries.map((entry) {
+              final idx = entry.key + 1;
+              final row = entry.value;
+              final name = row['name']?.toString() ?? row['id']?.toString() ?? 'Institution';
+              final count = row[secondary] ?? row['member_count'] ?? 0;
+
+              return EarthDataRow(
+                title: name,
+                subtitle: '$count $secondary',
+                leading: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    SizedBox(
+                      width: 24,
+                      child: Text(
+                        '#$idx',
+                        style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                      ),
+                    ),
+                    Icon(icon, size: context.iconSize, color: context.mutedColor),
+                  ],
+                ),
+                trailing: EarthBadge(
+                  label: '$count $secondary',
+                  variant: idx <= 3 ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
+                ),
+              );
+            }).toList(),
+          ),
+      ],
+    );
+  }
 }
 
 class CorporationOverviewPanel extends StatelessWidget {
@@ -434,8 +381,12 @@ class CorporationOverviewPanel extends StatelessWidget {
   final bool busy;
   final Future<void> Function(Future<EarthState> Function())? action;
 
-  const CorporationOverviewPanel(
-      {super.key, required this.state, this.busy = false, this.action});
+  const CorporationOverviewPanel({
+    super.key,
+    required this.state,
+    this.busy = false,
+    this.action,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -452,6 +403,7 @@ class CorporationOverviewPanel extends StatelessWidget {
         ? state.technology['corporationSharedPatents'] as List
         : const <dynamic>[];
     final isMember = membership['corporation_id'] != null;
+
     final canAdoptCity = state.roles.any((raw) {
       if (raw is! Map) return false;
       final role = raw['role_name'] ?? raw['name'] ?? raw['role'];
@@ -460,274 +412,256 @@ class CorporationOverviewPanel extends StatelessWidget {
     });
 
     if (!isMember) {
-      return EarthPanel(
+      return EarthSection(
         title: 'MEMBERSHIP',
         showSurface: false,
-        contentPadding: EdgeInsets.zero,
-        helpAfterTitle: true,
-        titleColor: mutedColor,
-        infoDescription:
-            '• Corporation membership is optional. Independent people use Earth default rules until they choose a corporation.',
-        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          const Text('You are currently independent.',
-              style: TextStyle(
-                  color: Colors.orangeAccent,
-                  fontSize: 13,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 5),
-          const Text(
+        infoBulletPoints: const [
+          'Corporation membership is optional. Independent people use Earth default rules until they choose a corporation.',
+        ],
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('You are currently independent.',
+                style: context.widgetValueStyle.copyWith(color: context.warningColor)),
+            const SizedBox(height: 5),
+            Text(
               'Join a corporation to access shared cities, technologies, contracts, and civic influence.',
-              style: TextStyle(color: mutedColor, fontSize: 11)),
-        ]),
+              style: context.widgetFooterStyle,
+            ),
+          ],
+        ),
       );
     }
 
-    return EarthPanel(
+    return EarthSection(
       title: 'CORPORATION',
-      showTitle: false,
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Corporation membership determines which shared rules, cities, technologies, contracts, and services are available to you.\n\n• A city belongs to a corporation: moving between cities changes your local services and opportunities while preserving corporation membership.\n\n• Independent people use Earth default rules and do not participate in corporation decisions.',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Center(
-          child: Text(name.toUpperCase(),
+      infoBulletPoints: const [
+        'Corporation membership determines which shared rules, cities, technologies, contracts, and services are available to you.',
+        'A city belongs to a corporation: moving between cities changes your local services and opportunities while preserving corporation membership.',
+        'Independent people use Earth default rules and do not participate in corporation decisions.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Center(
+            child: Text(
+              name.toUpperCase(),
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                  color: cyanAccentColor,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w900,
-                  letterSpacing: .8)),
-        ),
-        const SizedBox(height: 12),
-        const SizedBox(height: 14),
-        Wrap(spacing: 10, runSpacing: 10, children: [
-          _metric('CORPORATION', '$name\n$id', Icons.account_balance_outlined,
-              cyanAccentColor),
-          _metric(
-              'MEMBERS', '$memberCount', Icons.groups_outlined, violetColor),
-          _metric(
-              'TREASURY',
-              treasury == null
-                  ? 'UNAVAILABLE'
-                  : '${formatWholeNumber(treasury)} C',
-              Icons.account_balance_wallet_outlined,
-              Colors.amberAccent),
-        ]),
-        const SizedBox(height: 16),
-        Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(12),
-          decoration: BoxDecoration(
-            color: cyanAccentColor.withValues(alpha: .06),
-            borderRadius: BorderRadius.circular(9),
-            border: Border.all(color: cyanAccentColor.withValues(alpha: .22)),
+              style: context.pageTitleStyle,
+            ),
           ),
-          child: Row(children: [
-            const Icon(Icons.hub_outlined, size: 18, color: cyanAccentColor),
-            const SizedBox(width: 9),
-            Expanded(
-                child: Column(
+          SizedBox(height: context.spacingTitleOffset),
+          EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'AFFILIATION',
+                value: name,
+                subtitle: 'ID: $id',
+                icon: Icons.account_balance_outlined,
+                accentColor: context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'MEMBERS',
+                value: '$memberCount',
+                subtitle: 'Active citizens',
+                icon: Icons.groups_outlined,
+                accentColor: context.secondaryColor,
+              ),
+              EarthMetricTile(
+                label: 'TREASURY',
+                value: treasury == null ? 'UNAVAILABLE' : '${formatWholeNumber(treasury)} C',
+                subtitle: 'Sovereign reserves',
+                icon: Icons.account_balance_wallet_outlined,
+                accentColor: context.warningColor,
+              ),
+            ],
+          ),
+          SizedBox(height: context.spacingTopic),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(context.cardPadding),
+            decoration: BoxDecoration(
+              color: context.primaryColor.withValues(alpha: .06),
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.primaryColor.withValues(alpha: .22)),
+            ),
+            child: Row(
+              children: [
+                Icon(Icons.hub_outlined, size: context.iconSize + 2, color: context.primaryColor),
+                SizedBox(width: context.spacingInline),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                  const Text('CORPORATION RESEARCH COMMONS',
-                      style: TextStyle(
-                          color: cyanAccentColor,
-                          fontSize: 9.5,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: .5)),
-                  const SizedBox(height: 3),
-                  Text(
-                      sharedPatents.isEmpty
-                          ? 'No shared patents are visible yet.'
-                          : '${sharedPatents.length} shared capabilities available to this corporation network.',
-                      style: const TextStyle(color: mutedColor, fontSize: 10)),
-                ])),
-          ]),
-        ),
-        const SizedBox(height: 16),
-        const Text('CORPORATION DECISIONS',
-            style: TextStyle(
-                color: mutedColor,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.0)),
-        const SizedBox(height: 5),
-        const Text(
-            'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
-            style: TextStyle(color: mutedColor, fontSize: 10.5)),
-        if (isMember && id != '—') ...[
-          const SizedBox(height: 12),
-          OutlinedButton.icon(
-            onPressed: busy
-                ? null
-                : () => showTaxCharterDialog(
-                    context, action ?? ((_) async {}), id,
-                    corporation: true),
-            icon: const Icon(Icons.gavel_outlined, size: 14),
-            label: const Text('CORPORATION RULES'),
-          ),
-          if (canAdoptCity) ...[
-            const SizedBox(height: 8),
-            OutlinedButton.icon(
-              onPressed: busy
-                  ? null
-                  : () => showAdmissionPolicyDialog(
-                        context,
-                        action ?? ((_) async {}),
-                        id,
-                        currentPolicy:
-                            corporation['admission_policy']?.toString() ??
-                                'open',
+                      Text(
+                        'CORPORATION RESEARCH COMMONS',
+                        style: context.captionStyle.copyWith(color: context.primaryColor),
                       ),
-              icon: const Icon(Icons.how_to_reg_outlined, size: 14),
-              label: Text(
-                  corporation['admission_policy']?.toString() == 'approval'
-                      ? 'ADMISSION: APPROVAL'
-                      : 'ADMISSION: OPEN'),
+                      const SizedBox(height: 3),
+                      Text(
+                        sharedPatents.isEmpty
+                            ? 'No shared patents are visible yet.'
+                            : '${sharedPatents.length} shared capabilities available to this corporation network.',
+                        style: context.widgetFooterStyle,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          SizedBox(height: context.spacingTopic),
+          Text('CORPORATION DECISIONS', style: context.widgetTitleStyle),
+          const SizedBox(height: 5),
+          Text(
+            'Choose belonging · compare cities · support or challenge corporation rules · use shared technology · build a business network · move when another city offers a better future.',
+            style: context.widgetFooterStyle,
+          ),
+          if (isMember && id != '—') ...[
+            SizedBox(height: context.spacingTitleOffset),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              children: [
+                EarthButton(
+                  label: 'CORPORATION RULES',
+                  icon: Icons.gavel_outlined,
+                  variant: EarthButtonVariant.secondary,
+                  onPressed: busy
+                      ? null
+                      : () => showTaxCharterDialog(context, action ?? ((_) async {}), id, corporation: true),
+                ),
+                if (canAdoptCity)
+                  EarthButton(
+                    label: corporation['admission_policy']?.toString() == 'approval'
+                        ? 'ADMISSION: APPROVAL'
+                        : 'ADMISSION: OPEN',
+                    icon: Icons.how_to_reg_outlined,
+                    variant: EarthButtonVariant.secondary,
+                    onPressed: busy
+                        ? null
+                        : () => showAdmissionPolicyDialog(
+                              context,
+                              action ?? ((_) async {}),
+                              id,
+                              currentPolicy: corporation['admission_policy']?.toString() ?? 'open',
+                            ),
+                  ),
+                EarthButton(
+                  label: 'LEAVE CORPORATION',
+                  icon: Icons.logout,
+                  variant: EarthButtonVariant.danger,
+                  onPressed: busy ? null : () => _confirmLeave(context, name, id),
+                ),
+              ],
+            ),
+          ],
+          if (isMember && state.rankings['cities'] is List && (state.rankings['cities'] as List).isNotEmpty) ...[
+            SizedBox(height: context.spacingTopic),
+            Text('CORPORATION CITY NETWORK', style: context.widgetTitleStyle),
+            const SizedBox(height: 4),
+            Text('Rules apply across the corporation network.', style: context.widgetFooterStyle),
+            SizedBox(height: context.spacingControl),
+            EarthDataList(
+              children: (state.rankings['cities'] as List).take(8).map((raw) {
+                final row = Map<String, dynamic>.from(raw as Map);
+                final city = row['id']?.toString() ?? 'City';
+                final owner = row['corporation_id']?.toString();
+                final belongsToUs = owner == id;
+                final unclaimed = owner == null || owner.isEmpty;
+
+                return EarthDataRow(
+                  title: '${row['name'] ?? city}',
+                  subtitle: '${row['residents'] ?? 0} residents',
+                  leading: Icon(
+                    belongsToUs ? Icons.domain : Icons.location_city_outlined,
+                    size: context.iconSize,
+                    color: belongsToUs ? context.primaryColor : context.mutedColor,
+                  ),
+                  trailing: isMember && belongsToUs && city != cityId
+                      ? EarthButton(
+                          label: 'MOVE',
+                          variant: EarthButtonVariant.primary,
+                          onPressed: busy
+                              ? null
+                              : () => action?.call(() => const EarthApi().joinCity(cityId: city)),
+                        )
+                      : (isMember && unclaimed && canAdoptCity
+                          ? EarthButton(
+                              label: 'ADOPT',
+                              variant: EarthButtonVariant.secondary,
+                              onPressed: busy
+                                  ? null
+                                  : () => action?.call(() => const EarthApi()
+                                      .adoptCityForCorporation(corporationId: id, cityId: city)),
+                            )
+                          : EarthBadge(
+                              label: owner ?? 'UNCLAIMED',
+                              variant: belongsToUs ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
+                            )),
+                );
+              }).toList(),
             ),
           ],
         ],
-        const SizedBox(height: 12),
-        OutlinedButton.icon(
-          onPressed: busy ? null : () => _confirmLeave(context, name, id),
-          icon: const Icon(Icons.logout, size: 14),
-          label: const Text('LEAVE CORPORATION'),
-        ),
-        if (isMember &&
-            state.rankings['cities'] is List &&
-            (state.rankings['cities'] as List).isNotEmpty) ...[
-          const SizedBox(height: 16),
-          const Text('CORPORATION CITY NETWORK',
-              style: TextStyle(
-                  color: mutedColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.0)),
-          const SizedBox(height: 6),
-          const Text('Rules apply across the corporation network.',
-              style: TextStyle(color: mutedColor, fontSize: 10.5)),
-          const SizedBox(height: 6),
-          ...(state.rankings['cities'] as List).take(8).map((raw) {
-            final row = Map<String, dynamic>.from(raw as Map);
-            final city = row['id']?.toString() ?? 'City';
-            final owner = row['corporation_id']?.toString();
-            final belongsToUs = owner == id;
-            final unclaimed = owner == null || owner.isEmpty;
-            return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 3),
-              child: Row(children: [
-                Icon(belongsToUs ? Icons.domain : Icons.location_city_outlined,
-                    size: 14,
-                    color: belongsToUs ? cyanAccentColor : mutedColor),
-                const SizedBox(width: 7),
-                Expanded(
-                    child: Text(
-                  '${row['name'] ?? city} · ${row['residents'] ?? 0} residents',
-                  style: const TextStyle(fontSize: 10.5),
-                )),
-                if (isMember && belongsToUs && city != cityId)
-                  TextButton(
-                    onPressed: busy
-                        ? null
-                        : () => action?.call(
-                            () => const EarthApi().joinCity(cityId: city)),
-                    child: const Text('MOVE', style: TextStyle(fontSize: 9)),
-                  )
-                else if (isMember && unclaimed && canAdoptCity)
-                  TextButton(
-                    onPressed: busy
-                        ? null
-                        : () => action?.call(() => const EarthApi()
-                            .adoptCityForCorporation(
-                                corporationId: id, cityId: city)),
-                    child: const Text('ADOPT', style: TextStyle(fontSize: 9)),
-                  )
-                else
-                  Text(owner == null ? 'UNCLAIMED' : owner,
-                      style: TextStyle(
-                          fontSize: 9,
-                          color: belongsToUs ? cyanAccentColor : mutedColor)),
-              ]),
-            );
-          }),
-        ],
-      ]),
+      ),
     );
   }
 
-  Future<void> _confirmLeave(
-      BuildContext context, String corporationName, String corporationId) async {
-    final confirmation = TextEditingController();
+  Future<void> _confirmLeave(BuildContext context, String corporationName, String corporationId) async {
     var confirmed = false;
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Leave corporation?'),
-          content: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(
+          backgroundColor: context.panelColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(context.radiusPanel),
+            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+          ),
+          title: Text(
+            'Leave Corporation?',
+            style: context.topicTitleStyle.copyWith(color: context.warningColor),
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Text(
                 'Leaving $corporationName removes your corporation and city affiliation. Your personal assets remain yours.',
-                style: const TextStyle(fontSize: 11)),
-            const SizedBox(height: 12),
-            TextField(
-              controller: confirmation,
-              onChanged: (value) =>
-                  setState(() => confirmed = value.trim() == corporationName),
-              decoration: InputDecoration(
-                  labelText: 'Type "$corporationName" to confirm'),
-            ),
-          ]),
+                style: context.widgetFooterStyle,
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                style: context.bodyStyle.copyWith(color: context.inkColor),
+                onChanged: (value) => setState(() => confirmed = value.trim() == corporationName),
+                decoration: InputDecoration(
+                  labelText: 'Type "$corporationName" to confirm',
+                  labelStyle: context.widgetFooterStyle,
+                ),
+              ),
+            ],
+          ),
           actions: [
             TextButton(
-                onPressed: () => Navigator.pop(dialogContext),
-                child: const Text('CANCEL')),
-            FilledButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+            ),
+            EarthButton(
+              label: 'LEAVE CORPORATION',
+              variant: EarthButtonVariant.danger,
               onPressed: confirmed
                   ? () async {
                       Navigator.pop(dialogContext);
-                      await (action ?? ((_) async {}))(() => const EarthApi()
-                          .leaveCorporation(corporationId: corporationId));
+                      await (action ?? ((_) async {}))(
+                          () => const EarthApi().leaveCorporation(corporationId: corporationId));
                     }
                   : null,
-              child: const Text('LEAVE CORPORATION'),
             ),
           ],
         ),
       ),
-    );
-    confirmation.dispose();
-  }
-
-  Widget _metric(String label, String value, IconData icon, Color color) {
-    return Container(
-      width: 175,
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .75),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: color.withValues(alpha: .28))),
-      child: Row(children: [
-        Icon(icon, size: 15, color: color),
-        const SizedBox(width: 7),
-        Expanded(
-            child:
-                Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Text(label,
-              style: const TextStyle(
-                  color: mutedColor,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.w800)),
-          const SizedBox(height: 3),
-          Text(value,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-              style: TextStyle(
-                  color: color, fontSize: 11, fontWeight: FontWeight.w800)),
-        ])),
-      ]),
     );
   }
 }
@@ -757,39 +691,26 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final housingCap = asIntOr(city['housing_capacity'], 120);
     final energyCap = asIntOr(city['energy_capacity'], 200);
 
-    final corp = state.institutions['corporation'] is Map<String, dynamic>
-        ? (state.institutions['corporation'] as Map<String, dynamic>)
-        : <String, dynamic>{};
-    final corporationId = corp['id']?.toString() ?? 'CORP-001';
-    final corpName =
-        (corp['name']?.toString() ?? 'CARTHAGE DYNAMICS').toUpperCase();
-    final corpMembers = asIntOr(corp['member_count'], 42);
-    final corpVersion = corp['constitution_version'] ?? 1;
-
     final isCityResident = state.membership?['city_id'] != null;
-    final isCorpMember = state.membership?['corporation_id'] != null;
 
-    final housingRatio =
-        formatPercent(state.world['serviceRatios']?['housing']);
+    final housingRatio = formatPercent(state.world['serviceRatios']?['housing']);
     final energyRatio = formatPercent(state.world['serviceRatios']?['energy']);
-    final connectRatio =
-        formatPercent(state.world['serviceRatios']?['connectivity']);
+    final connectRatio = formatPercent(state.world['serviceRatios']?['connectivity']);
     final healthRatio = formatPercent(state.world['serviceRatios']?['health']);
     final cityMembers = state.json['cityMembers'] is List
         ? List<dynamic>.from(state.json['cityMembers'] as List)
         : const <dynamic>[];
     final playerId = state.human['id']?.toString();
-    final playerRank = cityMembers.indexWhere(
-            (raw) => raw is Map && raw['id']?.toString() == playerId) +
-        1;
+    final playerRank = cityMembers.indexWhere((raw) => raw is Map && raw['id']?.toString() == playerId) + 1;
 
-    return EarthPanel(
+    return EarthSection(
       key: panelKey,
-      title: 'INSTITUTIONS / CITY & CORP',
+      title: 'INSTITUTIONS / CITY & SERVICES',
       showSurface: false,
-      showTitle: false,
-      contentPadding: EdgeInsets.zero,
-      titleColor: mutedColor,
+      infoBulletPoints: const [
+        'Municipal Administration & Service Capacity: Oversight of public housing, energy grid, connectivity, and healthcare.',
+        'City Standing: Civic prestige and influence among resident citizens.',
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -797,23 +718,19 @@ class InstitutionsCapacityPanel extends StatelessWidget {
             child: Text(
               cityName,
               textAlign: TextAlign.center,
-              style: const TextStyle(
-                color: cyanAccentColor,
-                fontSize: 16,
-                fontWeight: FontWeight.w900,
-                letterSpacing: .8,
-              ),
+              style: context.pageTitleStyle,
             ),
           ),
-          const SizedBox(height: 12),
-          // 1. CITY ADMINISTRATION COCKPIT CARD
+          SizedBox(height: context.spacingTitleOffset),
+
+          // City Administration Card
           Container(
             width: double.infinity,
-            padding: const EdgeInsets.all(16),
+            padding: EdgeInsets.all(context.cardPadding),
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .85),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -824,13 +741,12 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                     Container(
                       padding: const EdgeInsets.all(8),
                       decoration: BoxDecoration(
-                        color: cyanAccentColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(8),
+                        color: context.primaryColor.withValues(alpha: .15),
+                        borderRadius: BorderRadius.circular(context.radiusControl),
                       ),
-                      child: const Icon(Icons.location_city_outlined,
-                          size: 20, color: cyanAccentColor),
+                      child: Icon(Icons.location_city_outlined, size: context.iconSize + 4, color: context.primaryColor),
                     ),
-                    const SizedBox(width: 12),
+                    SizedBox(width: context.spacingTitleOffset),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -838,54 +754,18 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                           Row(
                             children: [
                               Expanded(
-                                child: Text(
-                                  cityId,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                    color: inkColor,
-                                  ),
-                                ),
+                                child: Text(cityId, style: context.widgetValueStyle),
                               ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color: (isCityResident
-                                          ? cyanAccentColor
-                                          : mutedColor)
-                                      .withValues(alpha: .15),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: (isCityResident
-                                            ? cyanAccentColor
-                                            : mutedColor)
-                                        .withValues(alpha: .35),
-                                  ),
-                                ),
-                                child: Text(
-                                  isCityResident ? 'RESIDENT' : 'NON-RESIDENT',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: .8,
-                                    color: isCityResident
-                                        ? cyanAccentColor
-                                        : mutedColor,
-                                  ),
-                                ),
+                              EarthBadge(
+                                label: isCityResident ? 'RESIDENT' : 'NON-RESIDENT',
+                                variant: isCityResident ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           Text(
                             '$residents residents · Housing cap: $housingCap · Energy cap: $energyCap',
-                            style: const TextStyle(
-                              color: mutedColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
+                            style: context.widgetFooterStyle,
                           ),
                         ],
                       ),
@@ -893,345 +773,97 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                   ],
                 ),
 
-                const SizedBox(height: 12),
+                SizedBox(height: context.spacingTitleOffset),
 
                 // Service Pressure Gauges Box
                 Container(
                   width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                   decoration: BoxDecoration(
                     color: Colors.white.withValues(alpha: .03),
-                    borderRadius: BorderRadius.circular(6),
+                    borderRadius: BorderRadius.circular(context.radiusControl),
                   ),
                   child: Text(
                     'Service pressure: Housing $housingRatio · Energy $energyRatio · Connect $connectRatio · Health $healthRatio',
-                    style: const TextStyle(
-                      color: inkColor,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    style: context.widgetFooterStyle.copyWith(color: context.inkColor),
                   ),
                 ),
 
                 if (isCityResident && cityMembers.isNotEmpty) ...[
-                  const SizedBox(height: 14),
-                  const Text('CITY STANDING',
-                      style: TextStyle(
-                          color: inkColor,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800)),
-                  const SizedBox(height: 5),
+                  SizedBox(height: context.spacingTitleOffset),
+                  Text('CITY STANDING', style: context.widgetTitleStyle),
+                  const SizedBox(height: 4),
                   Text(
                     playerRank > 0
                         ? 'You rank #$playerRank among active residents by civic standing.'
                         : 'Resident standings are being established for this city.',
-                    style: const TextStyle(color: mutedColor, fontSize: 10.5),
+                    style: context.widgetFooterStyle,
                   ),
-                  const SizedBox(height: 6),
-                  ...cityMembers.take(5).toList().asMap().entries.map((entry) {
-                    final member =
-                        Map<String, dynamic>.from(entry.value as Map);
-                    final isPlayer = member['id']?.toString() == playerId;
-                    return Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 2),
-                      child: Row(children: [
-                        SizedBox(
-                            width: 24,
-                            child: Text('#${entry.key + 1}',
-                                style: const TextStyle(
-                                    color: cyanAccentColor, fontSize: 10))),
-                        Expanded(
-                            child: Text(
-                                member['display_name']?.toString() ??
-                                    member['id']?.toString() ??
-                                    'Resident',
-                                style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: isPlayer
-                                        ? FontWeight.w800
-                                        : FontWeight.w500,
-                                    color: isPlayer ? inkColor : mutedColor))),
-                        Text('${member['standing'] ?? 0}',
-                            style: const TextStyle(
-                                color: mutedColor, fontSize: 10)),
-                      ]),
-                    );
-                  }),
+                  SizedBox(height: context.spacingControl),
+                  EarthDataList(
+                    children: cityMembers.take(5).toList().asMap().entries.map((entry) {
+                      final member = Map<String, dynamic>.from(entry.value as Map);
+                      final isPlayer = member['id']?.toString() == playerId;
+                      final name = member['display_name']?.toString() ?? member['id']?.toString() ?? 'Resident';
+
+                      return EarthDataRow(
+                        title: name,
+                        subtitle: 'Standing: ${member['standing'] ?? 0}',
+                        leading: Text('#${entry.key + 1}',
+                            style: context.widgetTitleStyle.copyWith(color: context.primaryColor)),
+                        badges: [
+                          if (isPlayer) const EarthBadge(label: 'YOU', variant: EarthBadgeVariant.primary),
+                        ],
+                      );
+                    }).toList(),
+                  ),
                 ],
 
-                const SizedBox(height: 12),
+                SizedBox(height: context.spacingTitleOffset),
 
-                // City Action Buttons Hub
+                // City Action Buttons
                 Wrap(
                   spacing: 8,
                   runSpacing: 6,
                   children: [
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: isCityResident
-                            ? Colors.orangeAccent
-                            : cyanAccentColor,
-                        side: BorderSide(
-                          color: (isCityResident
-                                  ? Colors.orangeAccent
-                                  : cyanAccentColor)
-                              .withValues(alpha: .35),
-                        ),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () => showCityChangeDialog(
-                              context, state, cityId, action),
-                      child: const Text(
-                        'CHANGE CITY',
-                        style: const TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w700),
-                      ),
+                    EarthButton(
+                      label: 'CHANGE CITY',
+                      variant: isCityResident ? EarthButtonVariant.secondary : EarthButtonVariant.primary,
+                      onPressed: busy ? null : () => showCityChangeDialog(context, state, cityId, action),
                     ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: inkColor,
-                        side: const BorderSide(color: Colors.white24),
-                      ),
+                    EarthButton(
+                      label: 'PROPOSE BUDGET',
+                      icon: Icons.account_balance_wallet_outlined,
+                      variant: EarthButtonVariant.secondary,
                       onPressed: busy
                           ? null
-                          : () => action(() => const EarthApi()
-                              .setCityBudget('maintenance', cityId: cityId)),
-                      icon: const Icon(Icons.account_balance_wallet_outlined,
-                          size: 14),
-                      label: const Text(
-                        'PROPOSE BUDGET',
-                        style: TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w700),
-                      ),
+                          : () => action(() => const EarthApi().setCityBudget('maintenance', cityId: cityId)),
                     ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: violetColor,
-                        side: BorderSide(
-                            color: violetColor.withValues(alpha: .35)),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () => showTaxCharterDialog(context, action, cityId),
-                      icon: const Icon(Icons.receipt_long_outlined, size: 14),
-                      label: const Text(
-                        'TAX CHARTER',
-                        style: TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w700),
-                      ),
+                    EarthButton(
+                      label: 'TAX CHARTER',
+                      icon: Icons.receipt_long_outlined,
+                      variant: EarthButtonVariant.secondary,
+                      onPressed: busy ? null : () => showTaxCharterDialog(context, action, cityId),
                     ),
                     if (state.communities.isNotEmpty)
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: cyanAccentColor,
-                          foregroundColor: Colors.black,
-                        ),
+                      EarthButton(
+                        label: 'FORM CITY',
+                        icon: Icons.add_business_outlined,
+                        variant: EarthButtonVariant.primary,
                         onPressed: busy
                             ? null
                             : () => showFormationComposer(
                                   context,
                                   action,
                                   city: true,
-                                  communityId: (state.communities.first
-                                      as Map<String, dynamic>)['id'] as String,
+                                  communityId: (state.communities.first as Map<String, dynamic>)['id'] as String,
                                 ),
-                        icon: const Icon(Icons.add_business_outlined, size: 14),
-                        label: const Text(
-                          'FORM CITY',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w800),
-                        ),
                       ),
                   ],
                 ),
               ],
             ),
           ),
-
-          const SizedBox(height: 16),
-
-          if (false) ...[
-          // 2. CORPORATION ENTERPRISE COCKPIT CARD
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .85),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: violetColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: const Icon(Icons.domain_outlined,
-                          size: 20, color: violetColor),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'CORPORATION: $corpName ($corporationId)',
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w800,
-                                    fontSize: 13,
-                                    color: inkColor,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Container(
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 8, vertical: 3),
-                                decoration: BoxDecoration(
-                                  color:
-                                      (isCorpMember ? violetColor : mutedColor)
-                                          .withValues(alpha: .15),
-                                  borderRadius: BorderRadius.circular(4),
-                                  border: Border.all(
-                                    color: (isCorpMember
-                                            ? violetColor
-                                            : mutedColor)
-                                        .withValues(alpha: .35),
-                                  ),
-                                ),
-                                child: Text(
-                                  isCorpMember ? 'MEMBER' : 'INDEPENDENT',
-                                  style: TextStyle(
-                                    fontSize: 9.5,
-                                    fontWeight: FontWeight.w800,
-                                    letterSpacing: .8,
-                                    color:
-                                        isCorpMember ? violetColor : mutedColor,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '$corpMembers members · Constitution v$corpVersion · Status: ${isCorpMember ? 'MEMBER' : 'INDEPENDENT'}',
-                            style: const TextStyle(
-                              color: mutedColor,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w500,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 14),
-
-                // Corporate Action Buttons Hub
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    OutlinedButton(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor:
-                            isCorpMember ? Colors.orangeAccent : violetColor,
-                        side: BorderSide(
-                          color:
-                              (isCorpMember ? Colors.orangeAccent : violetColor)
-                                  .withValues(alpha: .35),
-                        ),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () => action(() => isCorpMember
-                              ? const EarthApi().leaveCorporation(
-                                  corporationId: corporationId)
-                              : const EarthApi().joinCorporation(
-                                  corporationId: corporationId)),
-                      child: Text(
-                        isCorpMember ? 'LEAVE CORP' : 'JOIN CORP',
-                        style: const TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: cyanAccentColor,
-                        side: BorderSide(
-                            color: cyanAccentColor.withValues(alpha: .35)),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () => action(() => const EarthApi()
-                              .spendCorporationTreasury(100,
-                                  corporationId: corporationId)),
-                      icon: const Icon(Icons.send_rounded, size: 14),
-                      label: const Text(
-                        'FUND SERVICES · 100 C',
-                        style: TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    OutlinedButton.icon(
-                      style: OutlinedButton.styleFrom(
-                        foregroundColor: Colors.tealAccent,
-                        side: BorderSide(
-                            color: Colors.tealAccent.withValues(alpha: .35)),
-                      ),
-                      onPressed: busy
-                          ? null
-                          : () => action(() => const EarthApi()
-                              .contributeCorporation(100,
-                                  corporationId: corporationId)),
-                      icon: const Icon(Icons.savings_outlined, size: 14),
-                      label: const Text(
-                        'CONTRIBUTE · 100 C',
-                        style: TextStyle(
-                            fontSize: 10.5, fontWeight: FontWeight.w700),
-                      ),
-                    ),
-                    if (isCityResident)
-                      FilledButton.icon(
-                        style: FilledButton.styleFrom(
-                          backgroundColor: violetColor,
-                          foregroundColor: Colors.white,
-                        ),
-                        onPressed: busy
-                            ? null
-                            : () => showFormationComposer(
-                                  context,
-                                  action,
-                                  city: false,
-                                  cityId: cityId,
-                                ),
-                        icon:
-                            const Icon(Icons.corporate_fare_outlined, size: 14),
-                        label: const Text(
-                          'FORM CORP',
-                          style: TextStyle(
-                              fontSize: 10.5, fontWeight: FontWeight.w800),
-                        ),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          ],
         ],
       ),
     );
@@ -1251,47 +883,11 @@ class CityImpactPanel extends StatelessWidget {
     final ratios = state.world['serviceRatios'] is Map
         ? Map<String, dynamic>.from(state.world['serviceRatios'] as Map)
         : const <String, dynamic>{};
-    final pressure =
-        asDouble(city['service_pressure'] ?? city['servicePressure']);
+    final pressure = asDouble(city['service_pressure'] ?? city['servicePressure']);
     final taxRate = asDouble(city['tax_rate'] ?? city['taxRate']);
     final business = state.business;
-    final operatingEffect = asDouble(business['city_operating_modifier'] ??
-        business['cityOperatingModifier']);
-    final metrics = <(String, String, String, IconData, Color)>[
-      (
-        'CITY PRESSURE',
-        pressure == null ? 'UNAVAILABLE' : '${pressure.toStringAsFixed(0)}%',
-        pressure == null
-            ? 'Pressure data unavailable'
-            : pressure > 70
-                ? 'Costs and services under strain'
-                : 'Services within normal load',
-        Icons.speed_outlined,
-        pressure != null && pressure > 70
-            ? Colors.orangeAccent
-            : cyanAccentColor,
-      ),
-      (
-        'BUSINESS EFFECT',
-        operatingEffect == null
-            ? 'UNAVAILABLE'
-            : '${operatingEffect >= 0 ? '+' : ''}${operatingEffect.toStringAsFixed(1)}%',
-        operatingEffect == null
-            ? 'No business modifier reported'
-            : 'Operating cost modifier',
-        Icons.storefront_outlined,
-        operatingEffect != null && operatingEffect > 0
-            ? Colors.orangeAccent
-            : Colors.lightGreenAccent,
-      ),
-      (
-        'CITY TAX',
-        taxRate == null ? 'UNAVAILABLE' : '${taxRate.toStringAsFixed(1)}%',
-        taxRate == null ? 'Tax rate unavailable' : 'Current resident rate',
-        Icons.receipt_long_outlined,
-        violetColor,
-      ),
-    ];
+    final operatingEffect = asDouble(business['city_operating_modifier'] ?? business['cityOperatingModifier']);
+
     final services = [
       ('HOUSING', ratios['housing']),
       ('ENERGY', ratios['energy']),
@@ -1299,14 +895,14 @@ class CityImpactPanel extends StatelessWidget {
       ('HEALTH', ratios['health']),
     ];
 
-    return EarthPanel(
+    return EarthSection(
       title: 'CITY EFFECTS / LIFE & BUSINESS',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• City conditions affect your life and businesses through services, taxes, workforce quality, and operating costs.\n\n• Pressure above the city baseline can increase friction and reduce service reliability.\n\n• Values marked unavailable require current city or business data; they are not estimates.',
+      infoBulletPoints: const [
+        'City conditions affect your life and businesses through services, taxes, workforce quality, and operating costs.',
+        'Pressure above the city baseline can increase friction and reduce service reliability.',
+        'Values marked unavailable require current city or business data; they are not estimates.',
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
@@ -1314,87 +910,53 @@ class CityImpactPanel extends StatelessWidget {
             city['name'] == null
                 ? 'No city effect is currently reported.'
                 : 'Living in ${city['name']} changes your services, costs, and opportunities.',
-            style: const TextStyle(color: mutedColor, fontSize: 11),
+            style: context.widgetFooterStyle,
           ),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: metrics.map((metric) {
-              return SizedBox(
-                width: 180,
-                child: Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: surfaceColor.withValues(alpha: .75),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: metric.$5.withValues(alpha: .28)),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(children: [
-                        Icon(metric.$4, size: 14, color: metric.$5),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(metric.$1,
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(
-                                  color: mutedColor,
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.w800)),
-                        ),
-                      ]),
-                      const SizedBox(height: 5),
-                      Text(metric.$2,
-                          style: TextStyle(
-                              color: metric.$5,
-                              fontSize: 16,
-                              fontWeight: FontWeight.w800)),
-                      const SizedBox(height: 2),
-                      Text(metric.$3,
-                          style:
-                              const TextStyle(color: mutedColor, fontSize: 9.5),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis),
-                    ],
-                  ),
-                ),
-              );
-            }).toList(),
+          SizedBox(height: context.spacingTitleOffset),
+          EarthMetricGrid(
+            metrics: [
+              EarthMetricTile(
+                label: 'CITY PRESSURE',
+                value: pressure == null ? 'UNAVAILABLE' : '${pressure.toStringAsFixed(0)}%',
+                subtitle: pressure == null
+                    ? 'Pressure data unavailable'
+                    : (pressure > 70 ? 'Costs under strain' : 'Normal service load'),
+                icon: Icons.speed_outlined,
+                accentColor: pressure != null && pressure > 70 ? context.warningColor : context.primaryColor,
+              ),
+              EarthMetricTile(
+                label: 'BUSINESS EFFECT',
+                value: operatingEffect == null
+                    ? 'UNAVAILABLE'
+                    : '${operatingEffect >= 0 ? '+' : ''}${operatingEffect.toStringAsFixed(1)}%',
+                subtitle: operatingEffect == null ? 'No modifier reported' : 'Operating cost modifier',
+                icon: Icons.storefront_outlined,
+                accentColor: operatingEffect != null && operatingEffect > 0 ? context.warningColor : context.successColor,
+              ),
+              EarthMetricTile(
+                label: 'CITY TAX',
+                value: taxRate == null ? 'UNAVAILABLE' : '${taxRate.toStringAsFixed(1)}%',
+                subtitle: 'Current resident rate',
+                icon: Icons.receipt_long_outlined,
+                accentColor: context.secondaryColor,
+              ),
+            ],
           ),
-          const SizedBox(height: 12),
-          const Text('SERVICE CONDITIONS',
-              style: TextStyle(
-                  color: mutedColor,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: .8)),
-          const SizedBox(height: 7),
+          SizedBox(height: context.spacingTopic),
+          Text('SERVICE CONDITIONS', style: context.widgetTitleStyle),
+          SizedBox(height: context.spacingControl),
           Wrap(
             spacing: 8,
             runSpacing: 6,
             children: services.map((service) {
               final value = asDouble(service.$2);
-              final color = value == null
-                  ? mutedColor
-                  : value < .5
-                      ? Colors.redAccent
-                      : value < .75
-                          ? Colors.orangeAccent
-                          : Colors.tealAccent;
-              return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
-                decoration: BoxDecoration(
-                    color: color.withValues(alpha: .1),
-                    borderRadius: BorderRadius.circular(6),
-                    border: Border.all(color: color.withValues(alpha: .28))),
-                child: Text(
-                    '${service.$1} · ${value == null ? 'UNAVAILABLE' : '${(value * 100).round()}%'}',
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 9.5,
-                        fontWeight: FontWeight.w700)),
+              return EarthBadge(
+                label: '${service.$1} · ${value == null ? 'UNAVAILABLE' : '${(value * 100).round()}%'}',
+                variant: value == null
+                    ? EarthBadgeVariant.neutral
+                    : (value < .5
+                        ? EarthBadgeVariant.error
+                        : (value < .75 ? EarthBadgeVariant.warning : EarthBadgeVariant.success)),
               );
             }).toList(),
           ),
@@ -1419,184 +981,70 @@ class CommunitiesPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final communities = state.communities;
-    return EarthPanel(
+
+    return EarthSection(
       title: 'COMMUNITIES / SHARED LIFE',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, and shared municipal governance.\n\n• Membership & Contributions:\n  - JOIN / LEAVE: Free association allowing citizens to participate in community governance and welfare dividends.\n  - CONTRIBUTE: Voluntary treasury contributions funding local public projects and communal resources.',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Expanded(
-                child: Text(
-                  '${communities.length} registered communities',
-                  style: const TextStyle(
-                    color: mutedColor,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              OutlinedButton.icon(
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: cyanAccentColor,
-                  side:
-                      BorderSide(color: cyanAccentColor.withValues(alpha: .35)),
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  visualDensity: VisualDensity.compact,
-                ),
-                onPressed:
-                    busy ? null : () => showCommunityComposer(context, action),
-                icon: const Icon(Icons.add_rounded, size: 14),
-                label: const Text('FOUND COMMUNITY',
-                    style:
-                        TextStyle(fontSize: 10, fontWeight: FontWeight.w700)),
-              ),
-            ],
-          ),
-          const SizedBox(height: 10),
-          if (communities.isEmpty)
-            const Text('No communities registered yet.',
-                style: TextStyle(color: mutedColor, fontSize: 11))
-          else
-            ...communities.take(4).map((raw) {
-              final community = raw as Map<String, dynamic>;
-              final id = community['id']?.toString() ?? 'COM-001';
-              final name = community['name']?.toString() ?? 'Community';
-              final status =
-                  (community['status']?.toString() ?? 'active').toUpperCase();
-              final members = asIntOr(community['member_count'], 12);
+      infoBulletPoints: const [
+        'Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, and shared municipal governance.',
+        'Membership & Contributions: Join or leave freely; voluntary treasury contributions fund local public projects and communal resources.',
+      ],
+      trailing: EarthButton(
+        label: 'FOUND COMMUNITY',
+        icon: Icons.add_rounded,
+        onPressed: busy ? null : () => showCommunityComposer(context, action),
+      ),
+      child: communities.isEmpty
+          ? const EarthEmptyState(
+              message: 'No communities registered yet. You can found the first one.',
+              icon: Icons.groups_outlined,
+            )
+          : EarthDataList(
+              children: communities.take(6).map((raw) {
+                final community = raw as Map<String, dynamic>;
+                final id = community['id']?.toString() ?? 'COM-001';
+                final name = community['name']?.toString() ?? 'Community';
+                final status = (community['status']?.toString() ?? 'active').toUpperCase();
+                final members = asIntOr(community['member_count'], 12);
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 10),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: .75),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(5),
-                          decoration: BoxDecoration(
-                            color: Colors.tealAccent.withValues(alpha: .15),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: const Icon(Icons.groups_outlined,
-                              size: 15, color: Colors.tealAccent),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            '$name ($id)',
-                            style: const TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.w700,
-                              color: inkColor,
-                            ),
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 6, vertical: 2),
-                          decoration: BoxDecoration(
-                            color: cyanAccentColor.withValues(alpha: .15),
-                            borderRadius: BorderRadius.circular(4),
-                            border: Border.all(
-                                color: cyanAccentColor.withValues(alpha: .3)),
-                          ),
-                          child: Text(
-                            status,
-                            style: const TextStyle(
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                              color: cyanAccentColor,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      '$members active members',
-                      style: const TextStyle(fontSize: 10.5, color: mutedColor),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 6,
-                      runSpacing: 4,
-                      children: [
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            foregroundColor: cyanAccentColor,
-                            side: BorderSide(
-                                color: cyanAccentColor.withValues(alpha: .3)),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 2),
-                          ),
-                          onPressed: busy
-                              ? null
-                              : () => action(
-                                  () => const EarthApi().joinCommunity(id)),
-                          child: const Text('JOIN',
-                              style: TextStyle(
-                                  fontSize: 10, fontWeight: FontWeight.w700)),
-                        ),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            foregroundColor: Colors.orangeAccent,
-                            side: BorderSide(
-                                color:
-                                    Colors.orangeAccent.withValues(alpha: .3)),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 2),
-                          ),
-                          onPressed: busy
-                              ? null
-                              : () => action(
-                                  () => const EarthApi().leaveCommunity(id)),
-                          child: const Text('LEAVE',
-                              style: TextStyle(
-                                  fontSize: 10, fontWeight: FontWeight.w700)),
-                        ),
-                        OutlinedButton(
-                          style: OutlinedButton.styleFrom(
-                            visualDensity: VisualDensity.compact,
-                            foregroundColor: violetColor,
-                            side: BorderSide(
-                                color: violetColor.withValues(alpha: .3)),
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 10, vertical: 2),
-                          ),
-                          onPressed: busy
-                              ? null
-                              : () => showCommunityContributionDialog(
-                                  context, action, id),
-                          child: const Text('CONTRIBUTE',
-                              style: TextStyle(
-                                  fontSize: 10, fontWeight: FontWeight.w700)),
-                        ),
-                      ],
+                return EarthDataRow(
+                  title: '$name ($id)',
+                  subtitle: '$members active members',
+                  leading: Icon(
+                    Icons.groups_outlined,
+                    size: context.iconSize,
+                    color: context.primaryColor,
+                  ),
+                  badges: [
+                    EarthBadge(
+                      label: status,
+                      variant: status == 'ACTIVE' ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
                     ),
                   ],
-                ),
-              );
-            }),
-        ],
-      ),
+                  trailing: Wrap(
+                    spacing: 6,
+                    runSpacing: 4,
+                    children: [
+                      EarthButton(
+                        label: 'JOIN',
+                        variant: EarthButtonVariant.primary,
+                        onPressed: busy ? null : () => action(() => const EarthApi().joinCommunity(id)),
+                      ),
+                      EarthButton(
+                        label: 'LEAVE',
+                        variant: EarthButtonVariant.danger,
+                        onPressed: busy ? null : () => action(() => const EarthApi().leaveCommunity(id)),
+                      ),
+                      EarthButton(
+                        label: 'CONTRIBUTE',
+                        variant: EarthButtonVariant.secondary,
+                        onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
+                      ),
+                    ],
+                  ),
+                );
+              }).toList(),
+            ),
     );
   }
 }

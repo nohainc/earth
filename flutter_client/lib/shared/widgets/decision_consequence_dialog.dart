@@ -27,7 +27,7 @@ class DecisionConsequenceDialog extends StatefulWidget {
 }
 
 class _DecisionConsequenceDialogState extends State<DecisionConsequenceDialog> {
-  bool _confirming = false;
+  final bool _confirming = false;
 
   @override
   Widget build(BuildContext context) {
@@ -57,10 +57,10 @@ class _DecisionConsequenceDialogState extends State<DecisionConsequenceDialog> {
             // Modal Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: EarthColors.cardSurface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+                border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
               ),
               child: Row(
                 children: [
@@ -110,10 +110,10 @@ class _DecisionConsequenceDialogState extends State<DecisionConsequenceDialog> {
             // Footer Actions
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: EarthColors.cardSurface,
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(13)),
-                border: const Border(top: BorderSide(color: EarthColors.borderSubtle)),
+                borderRadius: BorderRadius.vertical(bottom: Radius.circular(13)),
+                border: Border(top: BorderSide(color: EarthColors.borderSubtle)),
               ),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'app/earth_app.dart';
+import 'core/ui_style_tokens.dart';
 
 export 'app/earth_app.dart';
 export 'app/theme.dart';
@@ -13,4 +14,8 @@ export 'features/command_center/hero_card.dart';
 export 'shared/widgets/earth_primitives.dart';
 export 'shared/widgets/format_helpers.dart';
 
-void main() => runApp(const EarthApp());
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await UiStyleTokens.load();
+  runApp(const EarthApp());
+}

@@ -388,10 +388,10 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
         children: [
           const Icon(Icons.emoji_events, color: EarthColors.goldMetallic, size: 24),
           const SizedBox(width: 10),
-          Expanded(
+          const Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
-              children: const [
+              children: [
                 Text(
                   'CIVILIZATIONAL LEADERBOARDS & RANKINGS',
                   style: TextStyle(

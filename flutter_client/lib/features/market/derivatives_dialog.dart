@@ -702,10 +702,10 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Flexible(
+              const Flexible(
                 child: Text(
                   'MY DERIVATIVES & FUTURES PORTFOLIO',
-                  style: const TextStyle(
+                  style: TextStyle(
                     color: EarthColors.textMuted,
                     fontSize: 10,
                     fontWeight: FontWeight.bold,

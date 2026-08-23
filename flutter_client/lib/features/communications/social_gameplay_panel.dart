@@ -1,19 +1,22 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
-import '../../shared/widgets/earth_primitives.dart';
+import '../../core/audio/earth_audio_engine.dart';
+import '../../shared/design_system/design_system.dart';
 
 class SocialGameplayPanel extends StatefulWidget {
   final List<dynamic> initiatives;
   final int gameDay;
   final EarthApi api;
   final VoidCallback? onChanged;
-  const SocialGameplayPanel(
-      {super.key,
-      this.initiatives = const [],
-      this.gameDay = 1,
-      this.api = const EarthApi(),
-      this.onChanged});
+
+  const SocialGameplayPanel({
+    super.key,
+    this.initiatives = const [],
+    this.gameDay = 1,
+    this.api = const EarthApi(),
+    this.onChanged,
+  });
+
   @override
   State<SocialGameplayPanel> createState() => _SocialGameplayPanelState();
 }
@@ -37,7 +40,6 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
   bool loading = false;
   String? error;
 
-  Color get _groupSurface => EarthThemeController.instance.cardSurface;
   @override
   void initState() {
     super.initState();
@@ -75,8 +77,9 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         });
       }
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     }
   }
 
@@ -94,11 +97,12 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     try {
       final r = await Future.wait(
           [widget.api.socialTimeline(), widget.api.socialRelationships()]);
-      if (mounted)
+      if (mounted) {
         setState(() {
           timeline = r[0];
           relationships = r[1];
         });
+      }
     } catch (_) {}
   }
 
@@ -141,16 +145,26 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
-                title: const Text('Preview social proposal'),
+                backgroundColor: ctx.panelColor,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(ctx.radiusPanel),
+                  side: BorderSide(color: ctx.subtleBorderColor),
+                ),
+                title: Text('Preview social proposal', style: ctx.pageTitleStyle),
                 content: Text(
-                    'Partner: ${selectedPerson?['display_name'] ?? targetId}\nType: ${kind.replaceAll('_', ' ')}\n${kind == 'shared_project' ? 'Institution: ${institution.text.trim()}\nEffect: ${effect.replaceAll('_', ' ')} +$effectAmount\n' : ''}Escrow: $credit Credits\nDeadline: game day ${widget.gameDay + day}\nCompletion target: $targetProgress%\n\nAccepting this proposal will update both players\' trust. Escrow is released on completion or forfeited at the deadline.'),
+                    'Partner: ${selectedPerson?['display_name'] ?? targetId}\nType: ${kind.replaceAll('_', ' ')}\n${kind == 'shared_project' ? 'Institution: ${institution.text.trim()}\nEffect: ${effect.replaceAll('_', ' ')} +$effectAmount\n' : ''}Escrow: $credit Credits\nDeadline: game day ${widget.gameDay + day}\nCompletion target: $targetProgress%\n\nAccepting this proposal will update both players\' trust. Escrow is released on completion or forfeited at the deadline.',
+                    style: ctx.widgetFooterStyle),
                 actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: const Text('EDIT')),
-                  FilledButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: const Text('SEND PROPOSAL'))
+                  EarthButton(
+                    label: 'EDIT',
+                    variant: EarthButtonVariant.neutral,
+                    onPressed: () => Navigator.pop(ctx, false),
+                  ),
+                  EarthButton(
+                    label: 'SEND PROPOSAL',
+                    variant: EarthButtonVariant.primary,
+                    onPressed: () => Navigator.pop(ctx, true),
+                  ),
                 ]));
     if (confirmed != true) return;
     setState(() {
@@ -177,8 +191,9 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
       body.clear();
       widget.onChanged?.call();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }
@@ -192,8 +207,9 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
       await widget.api.respondToSocialInitiative(id, accept: accept);
       widget.onChanged?.call();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     }
   }
 
@@ -203,19 +219,28 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
         builder: (ctx) {
           final c = TextEditingController(text: '10');
           return AlertDialog(
-              title: const Text('Contribute to project'),
+              backgroundColor: ctx.panelColor,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(ctx.radiusPanel),
+                side: BorderSide(color: ctx.subtleBorderColor),
+              ),
+              title: Text('Contribute to project', style: ctx.pageTitleStyle),
               content: TextField(
                   controller: c,
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(
                       labelText: 'Progress contribution (1–100)')),
               actions: [
-                TextButton(
-                    onPressed: () => Navigator.pop(ctx),
-                    child: const Text('CANCEL')),
-                FilledButton(
-                    onPressed: () => Navigator.pop(ctx, int.tryParse(c.text)),
-                    child: const Text('CONTRIBUTE'))
+                EarthButton(
+                  label: 'CANCEL',
+                  variant: EarthButtonVariant.neutral,
+                  onPressed: () => Navigator.pop(ctx),
+                ),
+                EarthButton(
+                  label: 'CONTRIBUTE',
+                  variant: EarthButtonVariant.primary,
+                  onPressed: () => Navigator.pop(ctx, int.tryParse(c.text)),
+                ),
               ]);
         });
     if (amount == null) return;
@@ -223,69 +248,106 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
       await widget.api.contributeToSocialInitiative(id, amount);
       widget.onChanged?.call();
     } catch (e) {
-      if (mounted)
+      if (mounted) {
         setState(() => error = e.toString().replaceFirst('Exception: ', ''));
+      }
     }
   }
 
   List<Widget> _historyWidgets() {
     final result = <Widget>[];
     if (relationships.isEmpty) {
-      result.add(const Padding(
-        padding: EdgeInsets.only(bottom: 12),
+      result.add(Padding(
+        padding: const EdgeInsets.only(bottom: 12),
         child: Text('No relationship history yet.',
-            style: TextStyle(color: mutedColor, fontSize: 11)),
+            style: context.widgetFooterStyle),
       ));
     } else {
-      result.addAll(relationships.map((r) => ListTile(
-          leading: const Icon(Icons.handshake_outlined),
-          title: Text(r['display_name']?.toString() ??
-              r['other_human_id']?.toString() ??
-              ''),
-          subtitle: Text(
-              'Trust ${r['trust'] ?? 0} · reputation ${r['public_reputation'] ?? 0} · completed ${r['completed_agreements'] ?? 0} · broken ${r['broken_commitments'] ?? 0}'))));
+      result.add(
+        EarthDataList(
+          children: relationships.map((r) {
+            final name = r['display_name']?.toString() ??
+                r['other_human_id']?.toString() ??
+                '';
+            final trust = r['trust'] ?? 0;
+            final rep = r['public_reputation'] ?? 0;
+            final comp = r['completed_agreements'] ?? 0;
+            final broken = r['broken_commitments'] ?? 0;
+
+            return EarthDataRow(
+              title: name,
+              subtitle: 'Trust $trust · Reputation $rep · Completed $comp · Broken $broken',
+              leading: Icon(Icons.handshake_outlined, size: context.iconSize, color: context.primaryColor),
+            );
+          }).toList(),
+        ),
+      );
     }
+
     if (timeline.isEmpty) {
-      result.add(const Text('No social timeline events yet.',
-          style: TextStyle(color: mutedColor, fontSize: 11)));
+      result.add(Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text('No social timeline events yet.',
+            style: context.widgetFooterStyle),
+      ));
     } else {
-      result.addAll(timeline.map((e) => ListTile(
-          leading: const Icon(Icons.timeline),
-          title: Text(e['title']?.toString() ?? 'Social event'),
-          subtitle: Text('Game day ${e['game_day'] ?? '—'}'))));
+      result.add(
+        Padding(
+          padding: const EdgeInsets.only(top: 8),
+          child: EarthDataList(
+            children: timeline.map((e) {
+              final title = e['title']?.toString() ?? 'Social event';
+              final day = e['game_day'] ?? '—';
+              return EarthDataRow(
+                title: title,
+                subtitle: 'Game day $day',
+                leading: Icon(Icons.timeline, size: context.iconSize, color: context.secondaryColor),
+              );
+            }).toList(),
+          ),
+        ),
+      );
     }
     return result;
   }
 
   @override
   Widget build(BuildContext context) {
-    return EarthPanel(
+    return EarthSection(
       title: 'COLLABORATIVE INITIATIVES',
       showSurface: false,
-      showTitle: false,
-      contentPadding: EdgeInsets.zero,
-      infoDescription:
-          '• Find other citizens and form initiatives that build trust and reputation.\n'
-          '• Review invitations and contribute to active shared projects.',
+      infoBulletPoints: const [
+        'Find other citizens and form projects that build trust and reputation.',
+        'Review invitations and contribute to active shared projects.',
+      ],
+      trailing: EarthButton(
+        label: 'REFRESH',
+        icon: Icons.refresh_rounded,
+        onPressed: widget.onChanged,
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildTopicHeading(context),
           if (error != null) ...[
-            Text(error!,
-                style: const TextStyle(color: Colors.redAccent, fontSize: 11)),
-            const SizedBox(height: 10),
+            Container(
+              padding: const EdgeInsets.all(10),
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: context.errorColor.withValues(alpha: .15),
+                borderRadius: BorderRadius.circular(context.radiusControl),
+                border: Border.all(color: context.errorColor.withValues(alpha: .4)),
+              ),
+              child: Text(error!, style: context.widgetFooterStyle.copyWith(color: context.errorColor)),
+            ),
           ],
           _buildInitiatives(),
-          const SizedBox(height: 12),
+          SizedBox(height: context.spacingTopic),
           _buildComposer(),
-          const SizedBox(height: 20),
-          const Text('RELATIONSHIPS & HISTORY',
-              style: TextStyle(
-                  color: mutedColor,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 1.1)),
+          SizedBox(height: context.spacingTopic),
+          Text(
+            'RELATIONSHIPS & HISTORY',
+            style: context.widgetTitleStyle,
+          ),
           const SizedBox(height: 8),
           ..._historyWidgets(),
         ],
@@ -293,73 +355,15 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     );
   }
 
-  Widget _buildTopicHeading(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(bottom: 10),
-        child: Row(children: [
-          const Flexible(
-            child: Text('COLLABORATIVE INITIATIVES',
-                style: TextStyle(
-                    color: mutedColor,
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 1.1)),
-          ),
-          const SizedBox(width: 5),
-          IconButton(
-            tooltip: 'About social commons',
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
-            icon: Icon(Icons.info_outline,
-                size: 14, color: mutedColor.withValues(alpha: .8)),
-            onPressed: () => showEarthInfoDialog(
-              context,
-              title: 'COLLABORATIVE INITIATIVES',
-              description:
-                  '• Find other citizens and form initiatives that build trust and reputation.\n\n'
-                  '• Review invitations and contribute to active shared projects.',
-            ),
-          ),
-        ]),
-      );
-
   Widget _buildInitiatives() {
     if (widget.initiatives.isEmpty) {
-      return Row(
-        children: [
-          const Expanded(
-            child: Text('No active initiatives yet.',
-                style: TextStyle(color: mutedColor, fontSize: 11)),
-          ),
-          IconButton(
-            tooltip: 'Refresh initiatives',
-            onPressed: widget.onChanged,
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-          ),
-        ],
+      return const EarthEmptyState(
+        message: 'No active initiatives yet.',
+        icon: Icons.handshake_outlined,
       );
     }
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(children: [
-          Expanded(
-            child: Text(
-                '${widget.initiatives.length} ACTIVE INITIATIVE${widget.initiatives.length == 1 ? '' : 'S'}',
-                style: const TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: .7,
-                    color: mutedColor)),
-          ),
-          IconButton(
-            tooltip: 'Refresh initiatives',
-            onPressed: widget.onChanged,
-            icon: const Icon(Icons.refresh_rounded, size: 16),
-          ),
-        ]),
-        const SizedBox(height: 18),
-        ...widget.initiatives.map(_buildInitiative),
-      ],
+    return EarthDataList(
+      children: widget.initiatives.map(_buildInitiative).toList(),
     );
   }
 
@@ -374,74 +378,58 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     final deadlineDay = int.tryParse('${i['deadline_game_day'] ?? ''}');
     final remaining = deadlineDay == null ? null : deadlineDay - widget.gameDay;
     final isInvited = memberStatus == 'invited';
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _groupSurface,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-            color: isInvited
-                ? EarthThemeController.instance.primaryAccent
-                    .withValues(alpha: .4)
-                : EarthColors.borderSubtle),
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Icon(Icons.handshake_outlined, size: 17, color: mutedColor),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+
+    final kindTitle = (i['kind'] ?? 'social').toString().replaceAll('_', ' ').toUpperCase();
+    final projectTitle = '${i['title'] ?? ''}';
+    final escrow = i['escrow_amount'] ?? terms['creditAmount'] ?? 0;
+    final progress = i['progress'] ?? 0;
+    final targetProgress = terms['contributionTarget'] ?? 100;
+
+    return EarthDataRow(
+      title: '$kindTitle · $projectTitle',
+      subtitle: '${(i['body']?.toString() ?? '').isNotEmpty ? '${i['body']}\n' : ''}$status · $progress% progress · ${remaining == null ? 'no deadline' : remaining <= 0 ? 'deadline passed' : '$remaining game days remaining'} · Escrow: $escrow CR · Target $targetProgress%${i['kind']?.toString() == 'shared_project' && terms['institutionId'] != null ? '\nInstitution effect: ${terms['projectEffect'] ?? 'development'} +${terms['projectAmount'] ?? 0}' : ''}',
+      leading: Icon(Icons.handshake_outlined, size: context.iconSize, color: context.primaryColor),
+      badges: [
+        EarthBadge(
+          label: status.toUpperCase(),
+          variant: status == 'active' ? EarthBadgeVariant.success : EarthBadgeVariant.primary,
+        ),
+      ],
+      trailing: isInvited
+          ? Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                    '${(i['kind'] ?? 'social').toString().replaceAll('_', ' ').toUpperCase()} · ${i['title'] ?? ''}',
-                    style: const TextStyle(
-                        fontSize: 11.5, fontWeight: FontWeight.w700)),
-                if ((i['body']?.toString() ?? '').isNotEmpty) ...[
-                  const SizedBox(height: 3),
-                  Text(i['body'].toString(),
-                      style:
-                          const TextStyle(fontSize: 10.5, color: mutedColor)),
-                ],
-                const SizedBox(height: 5),
-                Text(
-                    '$status · ${i['progress'] ?? 0}% progress · ${remaining == null ? 'no deadline' : remaining <= 0 ? 'deadline passed' : '$remaining game days remaining'}',
-                    style: const TextStyle(fontSize: 10, color: mutedColor)),
-                Text(
-                    'Escrow: ${i['escrow_amount'] ?? terms['creditAmount'] ?? 0} credits · target ${terms['contributionTarget'] ?? 100}%',
-                    style: const TextStyle(fontSize: 10, color: mutedColor)),
-                if (i['kind']?.toString() == 'shared_project' &&
-                    terms['institutionId'] != null) ...[
-                  const SizedBox(height: 2),
-                  Text(
-                    'Institution effect: ${terms['projectEffect'] ?? 'development'} +${terms['projectAmount'] ?? 0}',
-                    style: const TextStyle(fontSize: 10, color: cyanAccentColor),
-                  ),
-                ],
+                EarthButton(
+                  label: 'ACCEPT',
+                  icon: Icons.check_rounded,
+                  variant: EarthButtonVariant.primary,
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    _respond(id, true);
+                  },
+                ),
+                const SizedBox(width: 4),
+                EarthButton(
+                  label: 'DECLINE',
+                  icon: Icons.close_rounded,
+                  variant: EarthButtonVariant.danger,
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    _respond(id, false);
+                  },
+                ),
               ],
-            ),
-          ),
-          if (isInvited)
-            Row(children: [
-              IconButton(
-                  tooltip: 'Accept',
-                  onPressed: () => _respond(id, true),
-                  icon:
-                      const Icon(Icons.check_rounded, color: cyanAccentColor)),
-              IconButton(
-                  tooltip: 'Decline',
-                  onPressed: () => _respond(id, false),
-                  icon:
-                      const Icon(Icons.close_rounded, color: Colors.redAccent)),
-            ])
-          else if (status == 'active')
-            TextButton(
-                onPressed: () => _contribute(id),
-                child: const Text('CONTRIBUTE')),
-        ],
-      ),
+            )
+          : status == 'active'
+              ? EarthButton(
+                  label: 'CONTRIBUTE',
+                  variant: EarthButtonVariant.primary,
+                  onPressed: () {
+                    EarthAudioEngine.instance.playClick();
+                    _contribute(id);
+                  },
+                )
+              : null,
     );
   }
 
@@ -449,20 +437,18 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text('CREATE AN INITIATIVE',
-            style: TextStyle(
-                color: mutedColor,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1)),
+        Text(
+          'CREATE A PROJECT',
+          style: context.widgetTitleStyle,
+        ),
         const SizedBox(height: 8),
         Container(
           width: double.infinity,
-          padding: const EdgeInsets.all(12),
+          padding: EdgeInsets.all(context.cardPadding),
           decoration: BoxDecoration(
-            color: _groupSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: EarthColors.borderSubtle),
+            color: context.surfaceColor,
+            borderRadius: BorderRadius.circular(context.radiusCard),
+            border: Border.all(color: context.subtleBorderColor),
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -472,40 +458,42 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                 child: Column(
                   children: [
                     TextField(
-                        controller: search,
-                        onChanged: _onPartnerSearch,
-                        decoration: const InputDecoration(
-                          labelText: 'Search citizens or dynasties',
-                          prefixIcon:
-                              Icon(Icons.search, size: 16, color: mutedColor),
-                        )),
-                    if (partnerSearchScope.hasFocus &&
-                        search.text.trim().isNotEmpty) ...[
+                      controller: search,
+                      onChanged: _onPartnerSearch,
+                      decoration: const InputDecoration(
+                        labelText: 'Search citizens or dynasties',
+                        prefixIcon: Icon(Icons.search, size: 16),
+                      ),
+                    ),
+                    if (partnerSearchScope.hasFocus && search.text.trim().isNotEmpty) ...[
                       const SizedBox(height: 10),
                       SizedBox(
                         height: 74,
                         child: people.isEmpty
-                            ? const Center(
+                            ? Center(
                                 child: Text(
-                                    'No public citizens match this search.',
-                                    style: TextStyle(
-                                        color: mutedColor, fontSize: 11)))
+                                  'No public citizens match this search.',
+                                  style: context.widgetFooterStyle,
+                                ),
+                              )
                             : ListView(
                                 scrollDirection: Axis.horizontal,
                                 children: people.map((raw) {
-                                  final p =
-                                      Map<String, dynamic>.from(raw as Map);
-                                  final selected =
-                                      p['id']?.toString() == targetId;
+                                  final p = Map<String, dynamic>.from(raw as Map);
+                                  final selected = p['id']?.toString() == targetId;
                                   return Padding(
-                                      padding: const EdgeInsets.only(right: 8),
-                                      child: ChoiceChip(
-                                        selected: selected,
-                                        label: Text(
-                                            '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}'),
-                                        onSelected: (_) => _selectPartner(p),
-                                      ));
-                                }).toList()),
+                                    padding: const EdgeInsets.only(right: 8),
+                                    child: ChoiceChip(
+                                      selected: selected,
+                                      label: Text(
+                                        '${p['display_name'] ?? p['id']}\nStanding ${p['standing'] ?? 0}',
+                                        style: context.captionStyle,
+                                      ),
+                                      onSelected: (_) => _selectPartner(p),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
                       ),
                     ],
                   ],
@@ -518,48 +506,54 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                   SizedBox(
                     width: controlWidth,
                     child: DropdownButtonFormField<String>(
-                        value: kind,
-                        isExpanded: true,
-                        decoration:
-                            const InputDecoration(labelText: 'Initiative type'),
-                        items: const [
-                          'alliance',
-                          'negotiation',
-                          'campaign',
-                          'announcement',
-                          'lobbying',
-                          'shared_project',
-                          'agreement'
-                        ]
-                            .map((v) => DropdownMenuItem(
-                                value: v,
-                                child: Text(
-                                    v.replaceAll('_', ' ').toUpperCase(),
-                                    style: const TextStyle(fontSize: 11))))
-                            .toList(),
-                        onChanged: (v) => setState(() => kind = v ?? kind)),
+                      initialValue: kind,
+                      isExpanded: true,
+                      decoration: const InputDecoration(labelText: 'Project type'),
+                      items: const [
+                        'alliance',
+                        'negotiation',
+                        'campaign',
+                        'announcement',
+                        'lobbying',
+                        'shared_project',
+                        'agreement'
+                      ]
+                          .map((v) => DropdownMenuItem(
+                              value: v,
+                              child: Text(
+                                v.replaceAll('_', ' ').toUpperCase(),
+                                style: context.captionStyle,
+                              )))
+                          .toList(),
+                      onChanged: (v) {
+                        if (v != null) setState(() => kind = v);
+                      },
+                    ),
                   ),
                   SizedBox(
-                      width: controlWidth,
-                      child: TextField(
-                          controller: credits,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Escrow credits'))),
+                    width: controlWidth,
+                    child: TextField(
+                      controller: credits,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Escrow credits (CR)'),
+                    ),
+                  ),
                   SizedBox(
-                      width: controlWidth,
-                      child: TextField(
-                          controller: deadline,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Days to complete'))),
+                    width: controlWidth,
+                    child: TextField(
+                      controller: deadline,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Days to complete'),
+                    ),
+                  ),
                   SizedBox(
-                      width: controlWidth,
-                      child: TextField(
-                          controller: target,
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Progress target'))),
+                    width: controlWidth,
+                    child: TextField(
+                      controller: target,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'Progress target %'),
+                    ),
+                  ),
                 ];
                 return Wrap(spacing: 8, runSpacing: 8, children: controls);
               }),
@@ -579,9 +573,8 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                   SizedBox(
                     width: 190,
                     child: DropdownButtonFormField<String>(
-                      value: _selectedProjectEffect,
-                      decoration:
-                          const InputDecoration(labelText: 'Project effect'),
+                      initialValue: _selectedProjectEffect,
+                      decoration: const InputDecoration(labelText: 'Project effect'),
                       items: const [
                         'housing',
                         'energy',
@@ -592,8 +585,9 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                           .map((v) => DropdownMenuItem(
                               value: v, child: Text(v.replaceAll('_', ' '))))
                           .toList(),
-                      onChanged: (v) => setState(() =>
-                          _selectedProjectEffect = v ?? _selectedProjectEffect),
+                      onChanged: (v) {
+                        if (v != null) setState(() => _selectedProjectEffect = v);
+                      },
                     ),
                   ),
                   SizedBox(
@@ -601,40 +595,44 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                     child: TextField(
                       controller: projectAmount,
                       keyboardType: TextInputType.number,
-                      decoration:
-                          const InputDecoration(labelText: 'Effect amount'),
+                      decoration: const InputDecoration(labelText: 'Effect amount'),
                     ),
                   ),
                 ]),
               ],
               const SizedBox(height: 16),
               TextField(
-                  controller: title,
-                  decoration: const InputDecoration(
-                    labelText: 'What are you proposing?',
-                  )),
+                controller: title,
+                decoration: const InputDecoration(
+                  labelText: 'What are you proposing?',
+                ),
+              ),
               const SizedBox(height: 16),
               TextField(
-                  controller: body,
-                  minLines: 1,
-                  maxLines: 3,
-                  decoration: const InputDecoration(
-                    labelText: 'Describe the goal and public terms',
-                  )),
+                controller: body,
+                minLines: 1,
+                maxLines: 3,
+                decoration: const InputDecoration(
+                  labelText: 'Describe the goal and public terms',
+                ),
+              ),
               Align(
-                  alignment: Alignment.centerRight,
-                  child: Padding(
-                      padding: const EdgeInsets.only(top: 22),
-                      child: FilledButton.icon(
-                          onPressed: loading ? null : _create,
-                          icon: const Icon(Icons.send, size: 16),
-                          label: const Text('PREVIEW & PROPOSE'),
-                          style: FilledButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(
-                                horizontal: 12, vertical: 8),
-                            textStyle: const TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.bold),
-                          )))),
+                alignment: Alignment.centerRight,
+                child: Padding(
+                  padding: const EdgeInsets.only(top: 22),
+                  child: EarthButton(
+                    label: 'PREVIEW & PROPOSE',
+                    icon: Icons.send,
+                    variant: EarthButtonVariant.primary,
+                    onPressed: loading
+                        ? null
+                        : () {
+                            EarthAudioEngine.instance.playClick();
+                            _create();
+                          },
+                  ),
+                ),
+              ),
             ],
           ),
         ),

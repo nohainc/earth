@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/design_system/earth_theme_context.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
@@ -39,18 +40,18 @@ class CommandCenter extends StatefulWidget {
 class _CommandCenterState extends State<CommandCenter> {
   final api = const EarthApi();
   final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
-  final _sectionKeys = <String, GlobalKey>{
-    'command': GlobalKey(),
-    'market': GlobalKey(),
-    'business': GlobalKey(),
-    'civic': GlobalKey(),
-    'corporation': GlobalKey(),
-    'city': GlobalKey(),
-    'technology': GlobalKey(),
-    'life': GlobalKey(),
-    'finance': GlobalKey(),
-    'contracts': GlobalKey(),
-    'activity': GlobalKey(),
+  final _sectionKeys = <String, Key>{
+    'command': const ValueKey('section-command'),
+    'market': const ValueKey('section-market'),
+    'business': const ValueKey('section-business'),
+    'civic': const ValueKey('section-civic'),
+    'corporation': const ValueKey('section-corporation'),
+    'city': const ValueKey('section-city'),
+    'technology': const ValueKey('section-technology'),
+    'life': const ValueKey('section-life'),
+    'finance': const ValueKey('section-finance'),
+    'contracts': const ValueKey('section-contracts'),
+    'activity': const ValueKey('section-activity'),
   };
   EarthState? state;
   String? error;
@@ -500,6 +501,8 @@ class _CommandCenterState extends State<CommandCenter> {
                     activeBusiness: _activeBusiness(current),
                     selectedSection: selectedSection,
                     busy: busy,
+                    unreadNotifications: unreadNotifications,
+                    unreadCommMessages: unreadCommMessages,
                     onLogout: () async {
                       await api.logout();
                       if (mounted) widget.onLogout();
@@ -527,9 +530,14 @@ class _CommandCenterState extends State<CommandCenter> {
             : RefreshIndicator(
                 onRefresh: () async => _run(api.world),
                 child: Container(
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
+                    color: context.canvasColor,
                     gradient: LinearGradient(
-                      colors: [canvasColor, Color(0xff171936), canvasColor],
+                      colors: [
+                        context.canvasColor,
+                        context.surfaceColor.withValues(alpha: 0.5),
+                        context.canvasColor,
+                      ],
                       begin: Alignment.topLeft,
                       end: Alignment.bottomRight,
                     ),
@@ -567,10 +575,13 @@ class _CommandCenterState extends State<CommandCenter> {
                           children: [
                             if (!compact)
                               Sidebar(
+                                key: ValueKey<String>(selectedSection),
                                 state: current,
                                 activeBusiness: _activeBusiness(current),
                                 selectedSection: selectedSection,
                                 busy: busy,
+                                unreadNotifications: unreadNotifications,
+                                unreadCommMessages: unreadCommMessages,
                                 onLogout: () async {
                                   await api.logout();
                                   if (mounted) widget.onLogout();

@@ -39,10 +39,10 @@ class OnboardingCompletionDialog extends StatelessWidget {
             // Header
             Container(
               padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: EarthColors.cardSurface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(12)),
-                border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(12)),
+                border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
               ),
               child: Column(
                 children: [

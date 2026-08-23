@@ -662,7 +662,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       size: 16, color: cyanAccentColor),
                 ),
                 const SizedBox(width: 10),
-                Expanded(
+                const Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -670,7 +670,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         crossAxisAlignment: WrapCrossAlignment.center,
                         spacing: 8,
                         children: [
-                          const Text(
+                          Text(
                             'PERIODIC BATCH AUCTION',
                             style: TextStyle(
                               fontSize: 10.5,
@@ -681,11 +681,11 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 2),
-                      const Text(
+                      SizedBox(height: 2),
+                      Text(
                         'Uniform clearing price (P*) · Zero slippage',
                         style:
-                            const TextStyle(fontSize: 9.5, color: mutedColor),
+                            TextStyle(fontSize: 9.5, color: mutedColor),
                         overflow: TextOverflow.ellipsis,
                       ),
                     ],
@@ -1149,8 +1149,9 @@ class _MiniTrendBadge extends StatelessWidget {
     if (points.length < 2) return const SizedBox.shrink();
     final latest = asDouble(points.first['price']);
     final oldest = asDouble(points.last['price']);
-    if (latest == null || oldest == null || oldest == 0)
+    if (latest == null || oldest == null || oldest == 0) {
       return const SizedBox.shrink();
+    }
     final change = latest - oldest;
     final pct = (change / oldest) * 100;
     final isPos = change >= 0;
@@ -1169,32 +1170,6 @@ class _MiniTrendBadge extends StatelessWidget {
           fontWeight: FontWeight.w700,
           color: isPos ? Colors.tealAccent : Colors.orangeAccent,
         ),
-      ),
-    );
-  }
-}
-
-class _PriceTrendText extends StatelessWidget {
-  final dynamic history;
-
-  const _PriceTrendText({required this.history});
-
-  @override
-  Widget build(BuildContext context) {
-    if (history is! Map || history['history'] is! List) {
-      return const SizedBox.shrink();
-    }
-    final points = (history['history'] as List).whereType<Map>().toList();
-    if (points.length < 2) return const SizedBox.shrink();
-    final latest = asDouble(points.first['price']);
-    final oldest = asDouble(points.last['price']);
-    if (latest == null || oldest == null) return const SizedBox.shrink();
-    final change = latest - oldest;
-    return Text(
-      '${change >= 0 ? '▲' : '▼'} ${change.abs().toStringAsFixed(2)} C / ${points.length}d',
-      style: TextStyle(
-        fontSize: 10,
-        color: change >= 0 ? Colors.tealAccent : Colors.orangeAccent,
       ),
     );
   }
@@ -1380,10 +1355,11 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
       final status = (raw['status']?.toString() ?? 'open').toLowerCase();
       if (_filter == 'active') return status == 'open' || status == 'partial';
       if (_filter == 'filled') return status == 'filled';
-      if (_filter == 'cancelled')
+      if (_filter == 'cancelled') {
         return status == 'cancelled' ||
             status == 'refunded' ||
             status == 'rejected';
+      }
       return true;
     }).toList();
 
@@ -1464,8 +1440,9 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
               if (status == 'open') statusColor = Colors.lightBlueAccent;
               if (status == 'partial') statusColor = Colors.orangeAccent;
               if (status == 'filled') statusColor = cyanAccentColor;
-              if (status == 'cancelled' || status == 'rejected')
+              if (status == 'cancelled' || status == 'rejected') {
                 statusColor = Colors.redAccent;
+              }
               if (status == 'refunded') statusColor = Colors.tealAccent;
 
               return Container(

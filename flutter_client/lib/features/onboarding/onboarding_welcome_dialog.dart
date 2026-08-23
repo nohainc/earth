@@ -41,11 +41,11 @@ class OnboardingWelcomeDialog extends StatelessWidget {
             // Modal Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: EarthColors.cardSurface,
                 borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(13)),
-                border: const Border(
+                    BorderRadius.vertical(top: Radius.circular(13)),
+                border: Border(
                     bottom: BorderSide(color: EarthColors.borderSubtle)),
               ),
               child: Row(
@@ -121,11 +121,11 @@ class OnboardingWelcomeDialog extends StatelessWidget {
             // Bottom Actions
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: EarthColors.cardSurface,
                 borderRadius:
-                    const BorderRadius.vertical(bottom: Radius.circular(13)),
-                border: const Border(
+                    BorderRadius.vertical(bottom: Radius.circular(13)),
+                border: Border(
                     top: BorderSide(color: EarthColors.borderSubtle)),
               ),
               child: Row(

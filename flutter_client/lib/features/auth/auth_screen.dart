@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
+import '../../shared/design_system/earth_logo.dart';
 import 'admin_email_deliveries_dialog.dart';
 
 String? validateAuthInput({
@@ -250,6 +251,13 @@ class _AuthScreenState extends State<AuthScreen> {
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
+                      const Center(
+                        child: EarthLogo(
+                          size: 68,
+                          showGlow: true,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
                       const Text('EARTH',
                           style: TextStyle(
                               fontSize: 30,

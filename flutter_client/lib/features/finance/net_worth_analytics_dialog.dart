@@ -190,10 +190,10 @@ class _NetWorthAnalyticsDialogState extends State<NetWorthAnalyticsDialog> {
           Expanded(
             child: Row(
               children: [
-                Flexible(
+                const Flexible(
                   child: Text(
                     'PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS',
-                    style: const TextStyle(
+                    style: TextStyle(
                       color: EarthColors.textMuted,
                       fontWeight: FontWeight.bold,
                       fontSize: 10,

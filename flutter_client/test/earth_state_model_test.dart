@@ -41,7 +41,7 @@ void main() {
       'membership': {'city_id': 'CITY-1'},
     };
 
-    final state = EarthState(raw);
+    final state = const EarthState(raw);
 
     expect(state.clock['day'], 10);
     expect(state.human['id'], 'H-1');

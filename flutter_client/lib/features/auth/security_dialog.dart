@@ -147,11 +147,11 @@ Future<void> showSecurityDialog(
         surfaceTintColor: Colors.transparent,
         shape: _securityDialogShape,
         insetPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-        title: Row(
+        title: const Row(
           children: [
-            const Icon(Icons.shield_outlined, color: violetColor, size: 20),
-            const SizedBox(width: 10),
-            const Text('Account security', style: _securityTitleStyle),
+            Icon(Icons.shield_outlined, color: violetColor, size: 20),
+            SizedBox(width: 10),
+            Text('Account security', style: _securityTitleStyle),
           ],
         ),
         content: SizedBox(

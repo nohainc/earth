@@ -30,8 +30,10 @@ class MockDbClient {
 
 test('listCities and listCorporations return rows from database', async () => {
   const client = new MockDbClient({
-    'FROM cities': { rows: [{ id: 'CITY-01', name: 'New Kyoto' }], rowCount: 1 },
-    'SELECT * FROM corporations': { rows: [{ id: 'CORP-01', name: 'Aether Dynamics' }], rowCount: 1 },
+    'FROM cities': (sql) => sql.includes('FROM corporations')
+      ? { rows: [{ id: 'CORP-01', name: 'Aether Dynamics' }], rowCount: 1 }
+      : { rows: [{ id: 'CITY-01', name: 'New Kyoto' }], rowCount: 1 },
+    'FROM corporations': { rows: [{ id: 'CORP-01', name: 'Aether Dynamics' }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 
@@ -156,7 +158,7 @@ test('corporation members cannot retain a corporation while moving outside its c
 
 test('leaving a corporation also clears the affiliated city', async () => {
   const client = new MockDbClient({
-    'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
+    'SELECT id, capital_city_id, admission_policy FROM corporations': { rows: [{ id: 'CORP-01', capital_city_id: 'CITY-01', admission_policy: 'open' }], rowCount: 1 },
     "SELECT id FROM humans": { rows: [{ id: 'H-01' }], rowCount: 1 },
     'SELECT corporation_id, city_id FROM memberships': { rows: [{ corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
     'SELECT COALESCE(MAX(game_day), 1) AS game_day': { rows: [{ game_day: 100 }], rowCount: 1 },

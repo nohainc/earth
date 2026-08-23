@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
+import '../../core/ui_style_tokens.dart';
 
 void showEarthInfoDialog(
   BuildContext context, {
@@ -143,6 +144,7 @@ class EarthPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = UiStyleTokens.current;
     final muted = Theme.of(context).textTheme.bodySmall?.color ??
         Theme.of(context).colorScheme.onSurfaceVariant;
     final hasInfo =
@@ -163,8 +165,8 @@ class EarthPanel extends StatelessWidget {
                   child: Text(title,
                       style: TextStyle(
                         color: titleColor ?? muted,
-                        fontSize: 10,
-                        letterSpacing: 1.1,
+                        fontSize: tokens.number('typography.topicTitle.size', 10),
+                        letterSpacing: tokens.number('typography.topicTitle.letterSpacing', 1.1),
                         fontWeight: FontWeight.w700,
                       ),
                       overflow: TextOverflow.ellipsis),
@@ -188,7 +190,7 @@ class EarthPanel extends StatelessWidget {
                 ],
               ],
             ),
-            const SizedBox(height: 14),
+            SizedBox(height: tokens.number('spacing.topic', 14)),
           ],
           child,
         ],
@@ -202,11 +204,11 @@ class EarthPanel extends StatelessWidget {
         height: height,
         child: showSurface
             ? Card(
-                color: surfaceColor.withValues(alpha: .72),
+                color: tokens.color('colors.surface', surfaceColor).withValues(alpha: .72),
                 surfaceTintColor: Colors.transparent,
                 elevation: 0,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
                   side: const BorderSide(color: Colors.white12),
                 ),
                 child: content,
@@ -239,18 +241,19 @@ class EarthMetric extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final tokens = UiStyleTokens.current;
     final metricCard = SizedBox(
       width: width ?? 210,
       child: Card(
-        color: surfaceColor.withValues(alpha: .72),
+        color: tokens.color('colors.surface', surfaceColor).withValues(alpha: .72),
         surfaceTintColor: Colors.transparent,
         elevation: 0,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(tokens.number('radius.panel', 14)),
           side: const BorderSide(color: Colors.white12),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(18),
+          padding: EdgeInsets.all(tokens.number('pageTopics.cardPadding', 18)),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -273,8 +276,8 @@ class EarthMetric extends StatelessWidget {
                           child: Text(
                             label,
                             style: TextStyle(
-                              fontSize: 10,
-                              letterSpacing: 1,
+                              fontSize: tokens.number('typography.caption.size', 10),
+                              letterSpacing: tokens.number('typography.caption.letterSpacing', 1),
                               color: accent,
                               fontWeight: FontWeight.w700,
                             ),

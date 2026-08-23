@@ -4,8 +4,10 @@ import { spawn } from 'node:child_process';
 
 const port = 8899;
 let processHandle;
+let sessionCookie = '';
 const request = async (path, options = {}) => {
   const headers = { accept: 'application/json', ...(options.headers || {}) };
+  if (sessionCookie && !Object.prototype.hasOwnProperty.call(headers, 'cookie')) headers.cookie = sessionCookie;
   const response = await fetch(`http://127.0.0.1:${port}${path}`, { ...options, headers });
   const body = await response.json();
   return { status: response.status, body, headers: response.headers };
@@ -20,7 +22,17 @@ before(async () => {
   for (let i = 0; i < 40; i++) {
     try {
       const res = await fetch(`http://127.0.0.1:${port}/api/health`);
-      if (res.ok) return;
+      if (res.ok) {
+        const login = await fetch(`http://127.0.0.1:${port}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ email: 'amara@earthuc.com', password: 'password123456' }),
+        });
+        const setCookie = login.headers.get('set-cookie');
+        sessionCookie = setCookie?.split(';')[0] || '';
+        assert.equal(login.status, 200);
+        return;
+      }
     } catch {}
     await new Promise((r) => setTimeout(r, 150));
   }
@@ -135,7 +147,7 @@ test('new user-facing product copy uses UC terminology', async () => {
 
 test('authentication flow supports register, login, session lookup, and logout', async () => {
   // 1. Unauthenticated /api/auth/me returns authenticated: false
-  const unauthMe = await request('/api/auth/me');
+  const unauthMe = await request('/api/auth/me', { headers: { cookie: '' } });
   assert.equal(unauthMe.status, 200);
   assert.equal(unauthMe.body.authenticated, false);
   assert.equal(unauthMe.body.human, null);

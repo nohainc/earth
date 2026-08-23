@@ -10,7 +10,7 @@ import 'package:earth_client/features/market/derivatives_dialog.dart';
 import 'package:earth_client/features/finance/net_worth_analytics_dialog.dart';
 
 void main() {
-  final sampleState = EarthState({
+  final sampleState = const EarthState({
     'status': {'phase': 'Operational'},
     'player': {
       'id': 'p1',
@@ -108,11 +108,11 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
 
       await tester.pumpWidget(
-        MaterialApp(
+        const MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
               child: NetWorthAnalyticsDialog(
-                api: const EarthApi(),
+                api: EarthApi(),
                 isPageMode: true,
               ),
             ),

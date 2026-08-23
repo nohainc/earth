@@ -1,7 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/models/player_objective.dart';
-import '../../shared/widgets/earth_primitives.dart';
+import '../../shared/design_system/design_system.dart';
 
 class ObjectivesPanel extends StatefulWidget {
   final List<PlayerObjective> objectives;
@@ -66,69 +65,60 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
             totalCount
         : 0.0;
 
-    return EarthPanel(
+    return EarthSection(
       title: 'CURRENT DIRECTION',
       showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Current Direction: Choose the kind of manager and citizen you want to become.\n\n• Direction Tracks:\n  - Enterprise: Build profitable businesses and productive organizations.\n  - Civic: Improve your city and shape its laws.\n  - Dynasty: Build a lasting family and preserve your estate.\n  - Technology: Develop capabilities and earn licensing income.\n  - Finance: Achieve personal independence.\n\n• Progression: Directions track against live world metrics and unlock practical rewards, titles, and new opportunities.',
-      width: double.infinity,
+      infoBulletPoints: const [
+        'Current Direction: Choose the kind of manager and citizen you want to become.',
+        'Direction Tracks: Enterprise (profitable businesses), Civic (city laws & capacity), Dynasty (family succession), Technology (capabilities & patents), Finance (solvency & independence).',
+        'Progression: Directions track against live world metrics and unlock practical rewards, titles, and new opportunities.',
+      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header Global Ambition Gauge
           Container(
-            padding: const EdgeInsets.all(12),
+            padding: EdgeInsets.all(context.cardPadding),
             decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: 0.7),
-              borderRadius: BorderRadius.circular(10),
-              border: Border.all(color: Colors.white12),
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
             ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
                   children: [
-                    const Icon(Icons.stars, color: Color(0xFFFFD54F), size: 16),
-                    const SizedBox(width: 6),
+                    Icon(Icons.stars, color: context.warningColor, size: context.iconSize),
+                    SizedBox(width: context.spacingInline),
                     Text(
                       '$completedCount OF $totalCount DIRECTIONS COMPLETED',
-                      style: const TextStyle(
-                        color: Color(0xFFFFD54F),
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
+                      style: context.widgetTitleStyle.copyWith(
+                        color: context.warningColor,
                         letterSpacing: 0.8,
                       ),
                     ),
                     const Spacer(),
                     Text(
                       '${overallProgress.round()}% OVERALL PROGRESS',
-                      style: const TextStyle(
-                        color: inkColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                      ),
+                      style: context.widgetTitleStyle.copyWith(color: context.inkColor),
                     ),
                   ],
                 ),
-                const SizedBox(height: 8),
+                SizedBox(height: context.spacingControl),
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
                     value: (overallProgress / 100.0).clamp(0.0, 1.0),
                     minHeight: 6,
                     backgroundColor: Colors.white10,
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      Color(0xFFFFD54F),
-                    ),
+                    valueColor: AlwaysStoppedAnimation<Color>(context.warningColor),
                   ),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: context.spacingTitleOffset),
 
           // Filter Tab Pills
           SingleChildScrollView(
@@ -147,57 +137,21 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
               ],
             ),
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: context.spacingTitleOffset),
 
           // Objectives Cards List
           if (_filteredObjectives.isEmpty)
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: 0.4),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white10),
-              ),
-              child: const Column(
-                children: [
-                  Icon(Icons.flag_outlined, color: mutedColor, size: 28),
-                  SizedBox(height: 8),
-                  Text(
-                    'No objectives in this category.',
-                    style: TextStyle(
-                      color: inkColor,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
+            const EarthEmptyState(
+              message: 'No objectives in this category.',
+              icon: Icons.flag_outlined,
             )
           else
-            Container(
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: 0.65),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
-              ),
-              clipBehavior: Clip.antiAlias,
-              child: Column(
-                children: _filteredObjectives.indexed.map((indexed) {
-                  final item = indexed.$2;
-                  final isLast = indexed.$1 == _filteredObjectives.length - 1;
-                  return Container(
-                    decoration: BoxDecoration(
-                      border: Border(
-                        bottom: isLast
-                            ? BorderSide.none
-                            : const BorderSide(color: Colors.white10),
-                      ),
-                    ),
-                    child: _buildObjectiveCardContent(item),
-                  );
-                }).toList(),
-              ),
+            EarthDataList(
+              children: _filteredObjectives.indexed.map((indexed) {
+                final item = indexed.$2;
+                final isLast = indexed.$1 == _filteredObjectives.length - 1;
+                return _buildObjectiveCardContent(item, isLast);
+              }).toList(),
             ),
         ],
       ),
@@ -208,26 +162,25 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
     final isSelected = _selectedCategory == categoryKey;
     return InkWell(
       onTap: () => setState(() => _selectedCategory = categoryKey),
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(context.radiusControl),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
         decoration: BoxDecoration(
           color: isSelected
-              ? cyanAccentColor.withValues(alpha: 0.18)
-              : surfaceColor.withValues(alpha: 0.5),
-          borderRadius: BorderRadius.circular(6),
+              ? context.primaryColor.withValues(alpha: 0.18)
+              : context.surfaceColor,
+          borderRadius: BorderRadius.circular(context.radiusControl),
           border: Border.all(
             color: isSelected
-                ? cyanAccentColor.withValues(alpha: 0.8)
-                : Colors.white12,
+                ? context.primaryColor.withValues(alpha: 0.8)
+                : context.subtleBorderColor,
             width: 1,
           ),
         ),
         child: Text(
           label,
-          style: TextStyle(
-            color: isSelected ? cyanAccentColor : mutedColor,
-            fontSize: 10,
+          style: context.captionStyle.copyWith(
+            color: isSelected ? context.primaryColor : context.mutedColor,
             fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
           ),
         ),
@@ -235,83 +188,50 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
     );
   }
 
-  Widget _buildObjectiveCardContent(PlayerObjective objective) {
+  Widget _buildObjectiveCardContent(PlayerObjective objective, bool isLast) {
     final catColor = objective.categoryColor;
     final isDone = objective.isCompleted;
 
-    return Padding(
-      padding: const EdgeInsets.all(12),
+    return Container(
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        border: Border(
+          bottom: isLast ? BorderSide.none : BorderSide(color: context.subtleBorderColor),
+        ),
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           // Header Category & Status Row
           Row(
             children: [
-              Icon(objective.categoryIcon, size: 14, color: catColor),
-              const SizedBox(width: 6),
+              Icon(objective.categoryIcon, size: context.iconSize, color: catColor),
+              SizedBox(width: context.spacingInline),
               Text(
                 objective.categoryLabel,
-                style: TextStyle(
+                style: context.captionStyle.copyWith(
                   color: catColor,
-                  fontSize: 9.5,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.8,
                 ),
               ),
               const Spacer(),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: isDone
-                      ? const Color(0xFF00E676).withValues(alpha: 0.15)
-                      : surfaceColor,
-                  borderRadius: BorderRadius.circular(4),
-                  border: Border.all(
-                    color: isDone
-                        ? const Color(0xFF00E676).withValues(alpha: 0.6)
-                        : Colors.white24,
-                  ),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (isDone) ...[
-                      const Icon(Icons.check,
-                          size: 10, color: Color(0xFF00E676)),
-                      const SizedBox(width: 3),
-                    ],
-                    Text(
-                      isDone ? 'MASTERED' : 'IN PROGRESS',
-                      style: TextStyle(
-                        color: isDone ? const Color(0xFF00E676) : mutedColor,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
-                  ],
-                ),
+              EarthBadge(
+                label: isDone ? 'MASTERED' : 'IN PROGRESS',
+                variant: isDone ? EarthBadgeVariant.success : EarthBadgeVariant.neutral,
               ),
             ],
           ),
           const SizedBox(height: 6),
 
           // Title & Description
-          Text(
-            objective.title,
-            style: const TextStyle(
-              color: inkColor,
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
+          Text(objective.title, style: context.widgetValueStyle),
           const SizedBox(height: 4),
           Text(
             objective.description,
-            style:
-                const TextStyle(color: mutedColor, fontSize: 11, height: 1.3),
+            style: context.widgetFooterStyle.copyWith(height: 1.3),
           ),
-          const SizedBox(height: 10),
+          SizedBox(height: context.spacingInline),
 
           // Progress Gauge & Metric Label
           Row(
@@ -319,19 +239,11 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
             children: [
               Text(
                 objective.metricLabel,
-                style: TextStyle(
-                  color: catColor,
-                  fontSize: 10.5,
-                  fontWeight: FontWeight.w700,
-                ),
+                style: context.widgetTitleStyle.copyWith(color: catColor),
               ),
               Text(
                 '${objective.progressPercentage.round()}%',
-                style: const TextStyle(
-                  color: inkColor,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w800,
-                ),
+                style: context.widgetTitleStyle.copyWith(color: context.inkColor),
               ),
             ],
           ),
@@ -343,67 +255,41 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
               minHeight: 5,
               backgroundColor: Colors.white10,
               valueColor: AlwaysStoppedAnimation<Color>(
-                isDone ? const Color(0xFF00E676) : catColor,
+                isDone ? context.successColor : catColor,
               ),
             ),
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: context.spacingControl),
 
           // Rewards Banner & Action CTA
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: Colors.black.withValues(alpha: 0.25),
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: BorderRadius.circular(context.radiusControl),
               border: Border.all(color: Colors.white.withValues(alpha: 0.05)),
             ),
             child: Row(
               children: [
-                const Icon(Icons.military_tech_outlined,
-                    size: 14, color: Color(0xFFFFD54F)),
-                const SizedBox(width: 6),
+                Icon(Icons.military_tech_outlined, size: context.iconSize, color: context.warningColor),
+                SizedBox(width: context.spacingInline),
                 Expanded(
                   child: Text(
                     objective.rewardDescription,
-                    style: const TextStyle(
-                      color: Color(0xFFFFD54F),
-                      fontSize: 10,
+                    style: context.widgetFooterStyle.copyWith(
+                      color: context.warningColor,
                       fontWeight: FontWeight.w600,
                     ),
                   ),
                 ),
-                const SizedBox(width: 8),
-                InkWell(
-                  onTap: widget.onNavigate != null
+                SizedBox(width: context.spacingInline),
+                EarthButton(
+                  label: 'PURSUE',
+                  icon: Icons.arrow_forward,
+                  variant: EarthButtonVariant.primary,
+                  onPressed: widget.onNavigate != null
                       ? () => widget.onNavigate!(objective.targetSection)
                       : null,
-                  borderRadius: BorderRadius.circular(4),
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: catColor.withValues(alpha: 0.15),
-                      borderRadius: BorderRadius.circular(4),
-                      border:
-                          Border.all(color: catColor.withValues(alpha: 0.5)),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          'PURSUE',
-                          style: TextStyle(
-                            color: catColor,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: 0.6,
-                          ),
-                        ),
-                        const SizedBox(width: 3),
-                        Icon(Icons.arrow_forward, size: 10, color: catColor),
-                      ],
-                    ),
-                  ),
                 ),
               ],
             ),
@@ -423,36 +309,29 @@ Future<void> showObjectivesDialog(
     showDialog(
       context: context,
       builder: (ctx) => Dialog(
-        backgroundColor: canvasColor,
+        backgroundColor: context.panelColor,
         insetPadding: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-          side: const BorderSide(color: Colors.white24),
+          borderRadius: BorderRadius.circular(context.radiusPanel),
+          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
         ),
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: 680, maxHeight: 720),
           child: Column(
             children: [
               Padding(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                 child: Row(
                   children: [
-                    const Icon(Icons.stars, color: Color(0xFFFFD54F), size: 20),
-                    const SizedBox(width: 8),
-                    const Text(
+                    Icon(Icons.stars, color: context.warningColor, size: context.iconSize + 4),
+                    SizedBox(width: context.spacingInline),
+                    Text(
                       'LONG-TERM STRATEGIC OBJECTIVES',
-                      style: TextStyle(
-                        color: inkColor,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
+                      style: context.topicTitleStyle.copyWith(color: context.primaryColor),
                     ),
                     const Spacer(),
                     IconButton(
-                      icon:
-                          const Icon(Icons.close, color: mutedColor, size: 20),
+                      icon: Icon(Icons.close, color: context.mutedColor, size: 20),
                       onPressed: () => Navigator.of(ctx).pop(),
                     ),
                   ],

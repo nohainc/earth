@@ -86,10 +86,10 @@ class _AdminEmailDeliveriesDialogState extends State<AdminEmailDeliveriesDialog>
             // Modal Header
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
-              decoration: BoxDecoration(
+              decoration: const BoxDecoration(
                 color: EarthColors.cardSurface,
-                borderRadius: const BorderRadius.vertical(top: Radius.circular(13)),
-                border: const Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
+                borderRadius: BorderRadius.vertical(top: Radius.circular(13)),
+                border: Border(bottom: BorderSide(color: EarthColors.borderSubtle)),
               ),
               child: Row(
                 children: [

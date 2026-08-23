@@ -32,6 +32,20 @@ test('API Security Boundaries and Request Hardening', async () => {
     assert.ok(ready, 'Server must start and report healthy');
 
     const baseUrl = `http://127.0.0.1:${port}`;
+    let sessionCookie = '';
+    try {
+      const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'amara@earthuc.com', password: 'password123456' }),
+      });
+      sessionCookie = loginRes.headers.get('set-cookie')?.split(';')[0] || '';
+    } catch {}
+
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      ...(sessionCookie ? { cookie: sessionCookie } : {}),
+    };
 
     // 1. Unauthenticated mutation attempts must return safe 401 error envelope
     const unauthOrderRes = await fetch(`${baseUrl}/api/market/orders`, {
@@ -46,7 +60,7 @@ test('API Security Boundaries and Request Hardening', async () => {
     // 2. Client-supplied weight forging in governance voting must be ignored
     const voteRes = await fetch(`${baseUrl}/api/governance/proposals/042/vote`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'sec-vote-test-1' },
+      headers: { ...authHeaders, 'Idempotency-Key': 'sec-vote-test-1' },
       body: JSON.stringify({ vote: 'support', weight: 1000000, humanId: 'H-9999' }),
     });
     const voteJson = await voteRes.json();
@@ -57,7 +71,7 @@ test('API Security Boundaries and Request Hardening', async () => {
     // 3. Client-supplied actorId in business policy must not allow unauthorized mutation
     const policyRes = await fetch(`${baseUrl}/api/businesses/B-1048/policy`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'sec-policy-test-1' },
+      headers: { ...authHeaders, 'Idempotency-Key': 'sec-policy-test-1' },
       body: JSON.stringify({ policy: 'margin', ownerId: 'H-9999' }),
     });
     const policyJson = await policyRes.json();

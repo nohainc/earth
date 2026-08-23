@@ -62,11 +62,11 @@ class _NetWorthChartWidgetState extends State<NetWorthChartWidget> {
           // Top HUD
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
+            decoration: const BoxDecoration(
               color: EarthColors.cardSurface,
               borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(8)),
-              border: const Border(
+                  BorderRadius.vertical(top: Radius.circular(8)),
+              border: Border(
                   bottom: BorderSide(color: EarthColors.borderSubtle)),
             ),
             child: Row(

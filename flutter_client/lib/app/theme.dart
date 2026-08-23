@@ -1,22 +1,84 @@
 import 'package:flutter/material.dart';
+import '../core/ui_style_tokens.dart';
 
 // Default static constants for backward compatibility
 const violetColor = Color(0xff8b7cf6);
-const inkColor = Color(0xfff1f0ff);
-const canvasColor = Color(0xff111327);
-const surfaceColor = Color(0xff1b1e38);
-const mutedColor = Color(0xff9698b5);
+const inkColor = Color(0xfff1f5f9);
+const canvasColor = Color(0xff070a12);
+const surfaceColor = Color(0xff0d121f);
+const mutedColor = Color(0xff94a3b8);
 const cyanAccentColor = Color(0xff55d8b2);
 
 /// Stable semantic colors for the six player resources.
 /// Use these colors for resource icons; keep numeric values neutral.
 class EarthResourceColors {
-  static const Color credits = Color(0xffa78bfa);
-  static const Color food = Color(0xff86efac);
-  static const Color energy = Color(0xfffbbf24);
-  static const Color materials = Color(0xffd6a15d);
-  static const Color components = Color(0xff38bdf8);
-  static const Color compute = Color(0xffc084fc);
+  static const Color credits = Color(0xfff59e0b); // Gold credits
+  static const Color food = Color(0xff34d399); // Biosphere emerald
+  static const Color energy = Color(0xfffbbf24); // Solar amber
+  static const Color materials = Color(0xff94a3b8); // Slate titanium
+  static const Color components = Color(0xff38bdf8); // Sky components
+  static const Color compute = Color(0xff818cf8); // Quantum indigo
+}
+
+/// ThemeExtension to propagate dynamic surfaces, panels, cards, and accents throughout the UI.
+class EarthThemeExtension extends ThemeExtension<EarthThemeExtension> {
+  final Color primary;
+  final Color secondary;
+  final Color canvas;
+  final Color surface;
+  final Color panel;
+  final Color card;
+  final Color accent;
+  final Color gold;
+
+  const EarthThemeExtension({
+    required this.primary,
+    required this.secondary,
+    required this.canvas,
+    required this.surface,
+    required this.panel,
+    required this.card,
+    required this.accent,
+    required this.gold,
+  });
+
+  @override
+  EarthThemeExtension copyWith({
+    Color? primary,
+    Color? secondary,
+    Color? canvas,
+    Color? surface,
+    Color? panel,
+    Color? card,
+    Color? accent,
+    Color? gold,
+  }) {
+    return EarthThemeExtension(
+      primary: primary ?? this.primary,
+      secondary: secondary ?? this.secondary,
+      canvas: canvas ?? this.canvas,
+      surface: surface ?? this.surface,
+      panel: panel ?? this.panel,
+      card: card ?? this.card,
+      accent: accent ?? this.accent,
+      gold: gold ?? this.gold,
+    );
+  }
+
+  @override
+  EarthThemeExtension lerp(ThemeExtension<EarthThemeExtension>? other, double t) {
+    if (other is! EarthThemeExtension) return this;
+    return EarthThemeExtension(
+      primary: Color.lerp(primary, other.primary, t) ?? primary,
+      secondary: Color.lerp(secondary, other.secondary, t) ?? secondary,
+      canvas: Color.lerp(canvas, other.canvas, t) ?? canvas,
+      surface: Color.lerp(surface, other.surface, t) ?? surface,
+      panel: Color.lerp(panel, other.panel, t) ?? panel,
+      card: Color.lerp(card, other.card, t) ?? card,
+      accent: Color.lerp(accent, other.accent, t) ?? accent,
+      gold: Color.lerp(gold, other.gold, t) ?? gold,
+    );
+  }
 }
 
 enum EarthThemeMode {
@@ -24,66 +86,85 @@ enum EarthThemeMode {
     id: 'zenith_cyan',
     name: 'Zenith Ice Cyan',
     description:
-        'High-clarity tactical cybernetic palette with ice-cyan primary & deep space canvas.',
+        'Planetary Command & Tactical Interface with ice-cyan clarity and deep obsidian space.',
     primary: Color(0xff55d8b2),
     secondary: Color(0xff8b7cf6),
-    canvas: Color(0xff111327),
-    surface: Color(0xff1b1e38),
-    card: Color(0xff222646),
+    canvas: Color(0xff070a12),
+    surface: Color(0xff0d121f),
+    panel: Color(0xff111828),
+    card: Color(0xff161f33),
     accent: Color(0xff55d8b2),
     gold: Color(0xffeab308),
   ),
   solarGold(
     id: 'solar_gold',
-    name: 'Deep Solar Gold',
+    name: 'Sovereign Solar Gold',
     description:
-        'Imperial solar gold accents for prestigious dynasties and high-stakes finance.',
+        'Imperial solar gold and regal crimson for prestigious dynasties and high-stakes finance.',
     primary: Color(0xfff59e0b),
-    secondary: Color(0xfffbbf24),
-    canvas: Color(0xff0f0e0c),
-    surface: Color(0xff1c1917),
-    card: Color(0xff292524),
+    secondary: Color(0xffe11d48),
+    canvas: Color(0xff070a12),
+    surface: Color(0xff0d121f),
+    panel: Color(0xff111828),
+    card: Color(0xff161f33),
     accent: Color(0xfffbbf24),
     gold: Color(0xfffbbf24),
   ),
-  matrixAmber(
-    id: 'matrix_amber',
-    name: 'Matrix Phosphor Amber',
+  foundryCrimson(
+    id: 'foundry_crimson',
+    name: 'Foundry Magma Crimson',
     description:
-        'Retro-futuristic tactical terminal palette with CRT phosphor amber radiance.',
-    primary: Color(0xffffb300),
-    secondary: Color(0xffff8f00),
-    canvas: Color(0xff0d0f0c),
-    surface: Color(0xff181a17),
-    card: Color(0xff242722),
-    accent: Color(0xffffca28),
-    gold: Color(0xffffb300),
+        'Heavy industrial magma crimson and forge amber for blast furnaces and automated manufacturing.',
+    primary: Color(0xffff4d4d),
+    secondary: Color(0xfff97316),
+    canvas: Color(0xff070a12),
+    surface: Color(0xff0d121f),
+    panel: Color(0xff111828),
+    card: Color(0xff161f33),
+    accent: Color(0xffff6b6b),
+    gold: Color(0xfff59e0b),
   ),
   orbitalViolet(
     id: 'orbital_violet',
     name: 'Orbital Neon Synth',
     description:
-        'Hyper-advanced deep violet and electric purple synthwave void.',
+        'Hyper-advanced cosmic violet and electric magenta synthwave for deep AI and transhumanism.',
     primary: Color(0xffa855f7),
     secondary: Color(0xffec4899),
-    canvas: Color(0xff0e0b1f),
-    surface: Color(0xff1a1438),
-    card: Color(0xff271e54),
+    canvas: Color(0xff070a12),
+    surface: Color(0xff0d121f),
+    panel: Color(0xff111828),
+    card: Color(0xff161f33),
     accent: Color(0xffc084fc),
     gold: Color(0xfffacc15),
   ),
-  midnightEmerald(
-    id: 'midnight_emerald',
-    name: 'Midnight Biotech Emerald',
+  biosphereEmerald(
+    id: 'biosphere_emerald',
+    name: 'Biosphere Emerald',
     description:
-        'Biotech vertical farm and hydroponic energy aesthetic with emerald luster.',
+        'Biotech vertical farm and hydroponic energy aesthetic with vibrant emerald and aqua.',
     primary: Color(0xff10b981),
     secondary: Color(0xff06b6d4),
-    canvas: Color(0xff091410),
-    surface: Color(0xff12231c),
-    card: Color(0xff1b3329),
+    canvas: Color(0xff070a12),
+    surface: Color(0xff0d121f),
+    panel: Color(0xff111828),
+    card: Color(0xff161f33),
     accent: Color(0xff34d399),
     gold: Color(0xffeab308),
+  ),
+  tacticalTitanium(
+    id: 'tactical_titanium',
+    name: 'Tactical Titanium Slate',
+    description:
+        'Ultra-clean titanium platinum and tactical sky-blue for zero-fatigue high-contrast command.',
+    primary: Color(0xffe2e8f0),
+    secondary: Color(0xff38bdf8),
+    canvas: Color(0xff070a12),
+    surface: Color(0xff0d121f),
+    panel: Color(0xff111828),
+    card: Color(0xff161f33),
+    accent: Color(0xff38bdf8),
+    gold: Color(0xfffacc15),
   );
 
   final String id;
@@ -93,6 +174,7 @@ enum EarthThemeMode {
   final Color secondary;
   final Color canvas;
   final Color surface;
+  final Color panel;
   final Color card;
   final Color accent;
   final Color gold;
@@ -105,12 +187,15 @@ enum EarthThemeMode {
     required this.secondary,
     required this.canvas,
     required this.surface,
+    required this.panel,
     required this.card,
     required this.accent,
     required this.gold,
   });
 
   static EarthThemeMode fromId(String? id) {
+    if (id == 'matrix_amber') return EarthThemeMode.foundryCrimson;
+    if (id == 'midnight_emerald') return EarthThemeMode.biosphereEmerald;
     return EarthThemeMode.values.firstWhere(
       (m) => m.id == id,
       orElse: () => EarthThemeMode.zenithCyan,
@@ -170,20 +255,31 @@ class EarthTypography {
   );
 }
 
-ThemeData createEarthTheme([EarthThemeMode mode = EarthThemeMode.zenithCyan]) =>
-    ThemeData(
+ThemeData createEarthTheme([EarthThemeMode mode = EarthThemeMode.zenithCyan]) {
+  final ext = EarthThemeExtension(
+    primary: mode.primary,
+    secondary: mode.secondary,
+    canvas: mode.canvas,
+    surface: mode.surface,
+    panel: mode.panel,
+    card: mode.card,
+    accent: mode.accent,
+    gold: mode.gold,
+  );
+  return ThemeData(
+    brightness: Brightness.dark,
+    scaffoldBackgroundColor: mode.canvas,
+    canvasColor: mode.canvas,
+    cardColor: mode.card,
+    colorScheme: ColorScheme.fromSeed(
+      seedColor: mode.secondary,
+      primary: mode.primary,
+      secondary: mode.secondary,
       brightness: Brightness.dark,
-      scaffoldBackgroundColor: mode.canvas,
-      canvasColor: mode.canvas,
-      cardColor: mode.surface,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: mode.secondary,
-        primary: mode.primary,
-        secondary: mode.secondary,
-        brightness: Brightness.dark,
-        surface: mode.surface,
-      ),
-      fontFamily: 'Manrope',
+      surface: mode.surface,
+    ),
+    extensions: [ext],
+      fontFamily: UiStyleTokens.current.value('font.family', 'Manrope'),
       useMaterial3: true,
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.transparent,
@@ -205,3 +301,4 @@ ThemeData createEarthTheme([EarthThemeMode mode = EarthThemeMode.zenithCyan]) =>
             displayColor: inkColor,
           ),
     );
+}

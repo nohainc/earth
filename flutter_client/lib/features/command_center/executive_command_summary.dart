@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/daily_briefing.dart';
 import '../../core/models/decision_queue_item.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../../core/audio/earth_audio_engine.dart';
 
@@ -25,8 +25,7 @@ class ExecutiveCommandSummary extends StatefulWidget {
   });
 
   @override
-  State<ExecutiveCommandSummary> createState() =>
-      _ExecutiveCommandSummaryState();
+  State<ExecutiveCommandSummary> createState() => _ExecutiveCommandSummaryState();
 }
 
 class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
@@ -41,113 +40,37 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Text(
-          'EXECUTIVE OVERVIEW',
-          style: TextStyle(
-            color: EarthColors.textMuted,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-          ),
-        ),
-        const SizedBox(height: 8),
-        // ====================================================================
         // QUESTION 1: WHAT IS MY CURRENT SITUATION?
-        // ====================================================================
-        _buildCleanTopicHeader(
-          context,
+        EarthSection(
           title: 'WHAT IS MY CURRENT SITUATION?',
-          infoTitle: 'WHAT IS MY CURRENT SITUATION?',
-          infoText:
-              '• Situation Matrix & Core Metrics: Real-time overview of spendable capital reserves, enterprise solvency & fleet condition, biological energy & vitality status, and active strategic ambition progress.\n\n• Actionable Drill-Down: Select any matrix item to jump directly to its management interface.',
+          showSurface: false,
+          infoBulletPoints: const [
+            'Situation Matrix & Core Metrics: Real-time overview of spendable capital reserves, enterprise solvency, workforce capacity, machine fleet condition, and municipal pressure.',
+            'Actionable Drill-Down: Tap any metric tile to jump directly to its detailed management interface.',
+          ],
+          child: _buildSituationMatrix(context),
         ),
-        const SizedBox(height: 8),
-        _buildSituationMatrix(),
-        const SizedBox(height: 34),
+        SizedBox(height: context.spacingTopic),
 
-        // ====================================================================
         // QUESTION 2: WHAT CHANGED SINCE MY LAST VISIT?
-        // ====================================================================
-        _buildCleanTopicHeader(
-          context,
+        EarthSection(
           title: 'WHAT CHANGED SINCE MY LAST VISIT?',
-          infoTitle: 'WHAT CHANGED SINCE MY LAST VISIT?',
-          infoText:
-              '• Nightly Cycle & Overnight Intelligence: Summary of net worth changes, overnight revenue & operating expenses, commodity market price swings, and passed civic referendums since your previous login session.',
+          showSurface: false,
+          infoBulletPoints: const [
+            'Nightly Cycle & Overnight Intelligence: Summary of net wealth shifts, overnight revenue & operating expenses, and passed civic referendums since your previous login session.',
+          ],
+          child: _buildWhatChangedCard(context, briefing),
         ),
-        const SizedBox(height: 8),
-        _buildWhatChangedCard(briefing),
-        const SizedBox(height: 34),
+        SizedBox(height: context.spacingTopic),
 
-        // ====================================================================
         // QUESTION 3: WHAT DECISION SHOULD I MAKE NEXT?
-        // ====================================================================
-        _buildCleanTopicHeader(
-          context,
+        EarthSection(
           title: 'WHAT DECISION SHOULD I MAKE NEXT?',
-          infoTitle: 'WHAT DECISION SHOULD I MAKE NEXT?',
-          infoText:
-              '• Prioritized Decision Queue & Opportunities: Actionable operational alerts, critical risk warnings, pending contract obligations, and live market arbitrage opportunities requiring your executive decision.',
-        ),
-        const SizedBox(height: 8),
-        _buildWhatDecisionNextCard(decisionItems, opportunities),
-      ],
-    );
-  }
-
-  // ==========================================================================
-  // SECTION HEADERS
-  // ==========================================================================
-  Widget _buildCleanTopicHeader(
-    BuildContext context, {
-    required String title,
-    required String infoTitle,
-    required String infoText,
-  }) {
-    return Row(
-      children: [
-        Text(
-          title,
-          style: const TextStyle(
-            color: EarthColors.textMuted,
-            fontSize: 10,
-            fontWeight: FontWeight.bold,
-            letterSpacing: 1.1,
-          ),
-        ),
-        const SizedBox(width: 6),
-        IconButton(
-          icon: const Icon(Icons.info_outline,
-              size: 14, color: EarthColors.textMuted),
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          tooltip: 'Info',
-          onPressed: () {
-            showDialog(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                backgroundColor: EarthColors.cardSurface,
-                title: Text(
-                  infoTitle,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                    color: EarthColors.cyanAccent,
-                  ),
-                ),
-                content: Text(
-                  infoText,
-                  style: const TextStyle(fontSize: 11, color: Colors.white70),
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.of(ctx).pop(),
-                    child: const Text('CLOSE'),
-                  ),
-                ],
-              ),
-            );
-          },
+          showSurface: false,
+          infoBulletPoints: const [
+            'Prioritized Decision Queue & Opportunities: Actionable operational alerts, critical risk warnings, pending contract obligations, and live market arbitrage opportunities.',
+          ],
+          child: _buildWhatDecisionNextCard(context, decisionItems, opportunities),
         ),
       ],
     );
@@ -156,10 +79,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // ==========================================================================
   // 1. SITUATION MATRIX
   // ==========================================================================
-  Widget _buildSituationMatrix() {
+  Widget _buildSituationMatrix(BuildContext context) {
     final business = widget.businessFinancials['business'] is Map
-        ? Map<String, dynamic>.from(
-            widget.businessFinancials['business'] as Map)
+        ? Map<String, dynamic>.from(widget.businessFinancials['business'] as Map)
         : widget.state.business;
     final credits = asDouble(widget.state.human['credits']) ??
         asDouble(widget.state.json['player'] is Map
@@ -170,191 +92,96 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     final workforce = widget.state.json['workforce'] is List
         ? (widget.state.json['workforce'] as List)
         : const [];
-    final activeStaff =
-        workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
-    final capacity =
-        asInt(business['workforceCapacity'] ?? business['staffCapacity']);
+    final activeStaff = workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
+    final capacity = asInt(business['workforceCapacity'] ?? business['staffCapacity']);
     final machines = widget.state.machines;
     final degradedMachines = machines.where((machine) {
       return machine is Map && (asDouble(machine['condition']) ?? 100) < 60;
     }).length;
     final city = widget.state.institutions['city'];
-    final cityMap = city is Map
-        ? Map<String, dynamic>.from(city)
-        : const <String, dynamic>{};
-    final cityPressure =
-        asDouble(cityMap['service_pressure'] ?? cityMap['servicePressure']);
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final isNarrow = constraints.maxWidth < 650;
-        final itemWidth = isNarrow
-            ? (constraints.maxWidth - 8) / 2
-            : (constraints.maxWidth - 32) / 5;
+    final cityMap = city is Map ? Map<String, dynamic>.from(city) : const <String, dynamic>{};
+    final cityPressure = asDouble(cityMap['service_pressure'] ?? cityMap['servicePressure']);
 
-        return Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            _situationPill(
-              width: itemWidth,
-              label: 'LIQUID CAPITAL',
-              value: credits == null
-                  ? 'UNAVAILABLE'
-                  : '${formatWholeNumber(credits)} CR',
-              subvalue: 'Spendable now',
-              icon: Icons.account_balance_wallet_outlined,
-              accent: EarthColors.cyanAccent,
-              onTap: () => widget.onNavigate?.call('finance'),
-            ),
-            _situationPill(
-              width: itemWidth,
-              label: 'ENTERPRISE HEALTH',
-              value: profit == null
-                  ? 'UNAVAILABLE'
-                  : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
-              subvalue: margin == null
-                  ? 'Profit data unavailable'
-                  : '${margin.toStringAsFixed(1)}% margin',
-              icon: Icons.storefront_outlined,
-              accent: profit == null || profit >= 0
-                  ? const Color(0xFF00E676)
-                  : Colors.orangeAccent,
-              onTap: () => widget.onNavigate?.call('business'),
-            ),
-            _situationPill(
-              width: itemWidth,
-              label: 'WORKFORCE',
-              value: activeStaff == 0 && capacity == null
-                  ? 'UNAVAILABLE'
-                  : '$activeStaff STAFF',
-              subvalue: capacity == null
-                  ? 'Capacity unavailable'
-                  : '$capacity capacity',
-              icon: Icons.groups_outlined,
-              accent: Colors.lightBlueAccent,
-              onTap: () => widget.onNavigate?.call('business'),
-            ),
-            _situationPill(
-              width: itemWidth,
-              label: 'OPERATIONS',
-              value: machines.isEmpty
-                  ? 'NO MACHINES'
-                  : '${machines.length} MACHINES',
-              subvalue: degradedMachines == 0
-                  ? 'Running normally'
-                  : '$degradedMachines need attention',
-              icon: Icons.precision_manufacturing_outlined,
-              accent:
-                  degradedMachines == 0 ? cyanAccentColor : Colors.orangeAccent,
-              onTap: () => widget.onNavigate?.call('business'),
-            ),
-            _situationPill(
-              width: itemWidth,
-              label: 'CITY EFFECT',
-              value: cityMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
-              subvalue: cityPressure == null
-                  ? 'Pressure unavailable'
-                  : 'Pressure ${cityPressure.toStringAsFixed(0)}%',
-              icon: Icons.location_city_outlined,
-              accent: cityPressure != null && cityPressure > 70
-                  ? Colors.orangeAccent
-                  : Colors.tealAccent,
-              onTap: () => widget.onNavigate?.call('city'),
-            ),
-          ],
-        );
-      },
-    );
-  }
-
-  Widget _situationPill({
-    required double width,
-    required String label,
-    required String value,
-    required String subvalue,
-    required IconData icon,
-    required Color accent,
-    required VoidCallback onTap,
-  }) {
-    return SizedBox(
-      width: width,
-      child: InkWell(
-        onTap: () {
-          EarthAudioEngine.instance.playClick();
-          onTap();
-        },
-        borderRadius: BorderRadius.circular(8),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-          decoration: BoxDecoration(
-            color: EarthColors.cardSurface,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: accent.withValues(alpha: 0.25)),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, size: 12, color: accent),
-                  const SizedBox(width: 5),
-                  Expanded(
-                    child: Text(
-                      label,
-                      style: const TextStyle(
-                        color: EarthColors.textMuted,
-                        fontSize: 9,
-                        fontWeight: FontWeight.bold,
-                        letterSpacing: 0.8,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-              const SizedBox(height: 2),
-              Text(
-                subvalue,
-                style: TextStyle(
-                  color: accent,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w600,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ],
-          ),
+    return EarthMetricGrid(
+      metrics: [
+        EarthMetricTile(
+          label: 'LIQUID CAPITAL',
+          value: credits == null ? 'UNAVAILABLE' : '${formatWholeNumber(credits)} C',
+          subtitle: 'Spendable now',
+          icon: Icons.account_balance_wallet_outlined,
+          accentColor: context.primaryColor,
+          onTap: () {
+            EarthAudioEngine.instance.playClick();
+            widget.onNavigate?.call('finance');
+          },
         ),
-      ),
+        EarthMetricTile(
+          label: 'ENTERPRISE HEALTH',
+          value: profit == null
+              ? 'UNAVAILABLE'
+              : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} CR',
+          subtitle: margin == null ? 'Profit unavailable' : '${margin.toStringAsFixed(1)}% margin',
+          icon: Icons.storefront_outlined,
+          accentColor: profit == null || profit >= 0 ? context.successColor : context.warningColor,
+          onTap: () {
+            EarthAudioEngine.instance.playClick();
+            widget.onNavigate?.call('business');
+          },
+        ),
+        EarthMetricTile(
+          label: 'WORKFORCE',
+          value: activeStaff == 0 && capacity == null ? 'UNAVAILABLE' : '$activeStaff STAFF',
+          subtitle: capacity == null ? 'Capacity unavailable' : '$capacity capacity',
+          icon: Icons.groups_outlined,
+          accentColor: context.primaryColor,
+          onTap: () {
+            EarthAudioEngine.instance.playClick();
+            widget.onNavigate?.call('business');
+          },
+        ),
+        EarthMetricTile(
+          label: 'OPERATIONS',
+          value: machines.isEmpty ? 'NO MACHINES' : '${machines.length} MACHINES',
+          subtitle: degradedMachines == 0 ? 'Running normally' : '$degradedMachines need attention',
+          icon: Icons.precision_manufacturing_outlined,
+          accentColor: degradedMachines == 0 ? context.successColor : context.warningColor,
+          onTap: () {
+            EarthAudioEngine.instance.playClick();
+            widget.onNavigate?.call('business');
+          },
+        ),
+        EarthMetricTile(
+          label: 'CITY EFFECT',
+          value: cityMap['name']?.toString().toUpperCase() ?? 'UNAVAILABLE',
+          subtitle: cityPressure == null
+              ? 'Pressure unavailable'
+              : 'Pressure ${cityPressure.toStringAsFixed(0)}%',
+          icon: Icons.location_city_outlined,
+          accentColor: cityPressure != null && cityPressure > 70 ? context.warningColor : context.successColor,
+          onTap: () {
+            EarthAudioEngine.instance.playClick();
+            widget.onNavigate?.call('city');
+          },
+        ),
+      ],
     );
   }
 
   // ==========================================================================
   // 2. WHAT CHANGED SINCE MY LAST VISIT
   // ==========================================================================
-  Widget _buildWhatChangedCard(DailyBriefingReport briefing) {
+  Widget _buildWhatChangedCard(BuildContext context, DailyBriefingReport briefing) {
     final netDelta = briefing.netWealthDelta;
     final isPositiveDelta = netDelta.delta >= 0;
     final sign = isPositiveDelta ? '+' : '';
 
     return Container(
       width: double.infinity,
-      padding: const EdgeInsets.all(14),
+      padding: EdgeInsets.all(context.cardPadding),
       decoration: BoxDecoration(
-        color: EarthColors.panelSurface,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: EarthColors.borderSubtle),
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -366,14 +193,13 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: EarthColors.goldMetallic.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: EarthColors.borderSubtle),
+                  color: context.warningColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(context.radiusControl),
+                  border: Border.all(color: context.warningColor.withValues(alpha: .3)),
                 ),
-                child: const Icon(Icons.newspaper_outlined,
-                    size: 20, color: EarthColors.goldMetallic),
+                child: Icon(Icons.newspaper_outlined, size: context.iconSize + 4, color: context.warningColor),
               ),
-              const SizedBox(width: 10),
+              SizedBox(width: context.spacingInline),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -382,19 +208,16 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                       children: [
                         Text(
                           'DAY ${briefing.gameDay} CHRONICLE',
-                          style: const TextStyle(
-                            color: EarthColors.goldMetallic,
-                            fontSize: 12,
-                            fontWeight: FontWeight.bold,
+                          style: context.widgetTitleStyle.copyWith(
+                            color: context.warningColor,
                             letterSpacing: 0.8,
                           ),
                         ),
                         const SizedBox(width: 8),
                         Flexible(
                           child: Text(
-                            '•  Summary since the previous cycle',
-                            style: TextStyle(
-                                color: EarthColors.textMuted, fontSize: 10.5),
+                            '• Summary since the previous cycle',
+                            style: context.widgetFooterStyle,
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -402,13 +225,9 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR (${sign}${netDelta.deltaPct.toStringAsFixed(1)}%)  ·  Cashflow Net: +${formatWholeNumber(briefing.cashflow.netProfit)} CR/day',
-                      style: TextStyle(
-                        color: isPositiveDelta
-                            ? const Color(0xFF00E676)
-                            : Colors.redAccent,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
+                      'Net Wealth Shift: $sign${formatWholeNumber(netDelta.delta)} CR ($sign${netDelta.deltaPct.toStringAsFixed(1)}%) · Cashflow Net: +${formatWholeNumber(briefing.cashflow.netProfit)} CR/day',
+                      style: context.widgetValueStyle.copyWith(
+                        color: isPositiveDelta ? context.successColor : context.errorColor,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -417,7 +236,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               ),
             ],
           ),
-          const SizedBox(height: 12),
+          SizedBox(height: context.spacingTitleOffset),
 
           // Operational and civic headline changes
           Wrap(
@@ -426,53 +245,60 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             children: [
               if (briefing.businessSummary.degradedMachinesCount > 0)
                 _headlineChip(
+                  context,
                   Icons.precision_manufacturing_outlined,
                   '${briefing.businessSummary.degradedMachinesCount} machine${briefing.businessSummary.degradedMachinesCount == 1 ? '' : 's'} need attention',
-                  Colors.orangeAccent,
+                  context.warningColor,
                 ),
               if (briefing.businessSummary.pendingContractsCount > 0)
                 _headlineChip(
+                  context,
                   Icons.description_outlined,
                   '${briefing.businessSummary.pendingContractsCount} contract${briefing.businessSummary.pendingContractsCount == 1 ? '' : 's'} pending',
-                  EarthColors.cyanAccent,
+                  context.primaryColor,
                 ),
               if (briefing.civicSummary.recentCivicEvents.isNotEmpty)
                 _headlineChip(
-                    Icons.gavel,
-                    briefing.civicSummary.recentCivicEvents.first,
-                    EarthColors.goldMetallic),
+                  context,
+                  Icons.gavel,
+                  briefing.civicSummary.recentCivicEvents.first,
+                  context.warningColor,
+                ),
             ],
           ),
 
-          const SizedBox(height: 12),
-          const Divider(color: EarthColors.borderSubtle, height: 1),
-          const SizedBox(height: 10),
+          SizedBox(height: context.spacingTitleOffset),
+          Divider(color: context.subtleBorderColor, height: 1),
+          SizedBox(height: context.spacingControl),
           Row(
             children: [
               Expanded(
                 child: _microStat(
+                  context,
                   'OVERNIGHT REVENUE',
                   '+${formatWholeNumber(briefing.cashflow.totalIncome)} CR',
                   'Dividends & Market Sales',
-                  const Color(0xFF00E676),
+                  context.successColor,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: context.spacingControl),
               Expanded(
                 child: _microStat(
+                  context,
                   'OVERNIGHT EXPENSES',
                   '-${formatWholeNumber(briefing.cashflow.totalExpenses)} CR',
                   'Maintenance & Taxes',
-                  Colors.orangeAccent,
+                  context.warningColor,
                 ),
               ),
-              const SizedBox(width: 8),
+              SizedBox(width: context.spacingControl),
               Expanded(
                 child: _microStat(
+                  context,
                   'ACTIVE CITIZEN RESIDENCY',
                   briefing.civicSummary.cityResidency,
                   'Tax Rate: ${briefing.civicSummary.cityTaxRatePct.toStringAsFixed(1)}%',
-                  EarthColors.cyanAccent,
+                  context.primaryColor,
                 ),
               ),
             ],
@@ -482,50 +308,43 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     );
   }
 
-  Widget _microStat(String label, String value, String sub, Color color) {
+  Widget _microStat(BuildContext context, String label, String value, String sub, Color color) {
     return Container(
       padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
-        borderRadius: BorderRadius.circular(6),
+        color: context.panelColor,
+        borderRadius: BorderRadius.circular(context.radiusControl),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label,
-              style: const TextStyle(
-                  color: EarthColors.textMuted,
-                  fontSize: 8.5,
-                  fontWeight: FontWeight.bold)),
+          Text(label, style: context.captionStyle),
           const SizedBox(height: 2),
-          Text(value,
-              style: TextStyle(
-                  color: color, fontSize: 11, fontWeight: FontWeight.bold)),
+          Text(
+            value,
+            style: context.widgetTitleStyle.copyWith(color: color),
+          ),
           const SizedBox(height: 1),
-          Text(sub,
-              style: const TextStyle(color: Colors.white54, fontSize: 9),
-              overflow: TextOverflow.ellipsis),
+          Text(sub, style: context.widgetFooterStyle, overflow: TextOverflow.ellipsis),
         ],
       ),
     );
   }
 
-  Widget _headlineChip(IconData icon, String text, Color color) {
+  Widget _headlineChip(BuildContext context, IconData icon, String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
-        borderRadius: BorderRadius.circular(6),
-        border: Border.all(color: EarthColors.borderSubtle),
+        color: context.panelColor,
+        borderRadius: BorderRadius.circular(context.radiusControl),
+        border: Border.all(color: color.withValues(alpha: .3)),
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(icon, size: 10, color: color),
+          Icon(icon, size: 12, color: color),
           const SizedBox(width: 4),
-          Text(text,
-              style: TextStyle(
-                  color: color, fontSize: 10, fontWeight: FontWeight.bold)),
+          Text(text, style: context.widgetFooterStyle.copyWith(color: color, fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -535,6 +354,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // 3. WHAT DECISION SHOULD I MAKE NEXT?
   // ==========================================================================
   Widget _buildWhatDecisionNextCard(
+    BuildContext context,
     List<DecisionQueueItem> decisionItems,
     List<dynamic> opportunities,
   ) {
@@ -544,85 +364,56 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Filter Tabs Row
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              child: Row(
-                children: [
-                  _filterChip(
-                      'ALL', 'ALL (${decisionItems.length + opportunities.length})'),
-                  const SizedBox(width: 6),
-                  _filterChip('CRITICAL', 'CRITICAL',
-                      color: Colors.orangeAccent),
-                  const SizedBox(width: 6),
-                  _filterChip('CORPORATION', 'ENTERPRISE',
-                      color: EarthColors.cyanAccent),
-                  const SizedBox(width: 6),
-                  _filterChip('CIVIC', 'CIVIC & DYNASTY',
-                      color: EarthColors.goldMetallic),
-                ],
-              ),
-            ),
-          ],
+        SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: Row(
+            children: [
+              _filterChip(context, 'ALL', 'ALL (${decisionItems.length + opportunities.length})'),
+              const SizedBox(width: 6),
+              _filterChip(context, 'CRITICAL', 'CRITICAL', color: context.warningColor),
+              const SizedBox(width: 6),
+              _filterChip(context, 'CORPORATION', 'ENTERPRISE', color: context.primaryColor),
+              const SizedBox(width: 6),
+              _filterChip(context, 'CIVIC', 'CIVIC & DYNASTY', color: context.secondaryColor),
+            ],
+          ),
         ),
-        const SizedBox(height: 12),
+        SizedBox(height: context.spacingTitleOffset),
 
         // Render Decision Items
         if (filteredDecisions.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 20),
-            child: Center(
-              child: Text(
-                'No pending critical obligations. Your enterprise and civic standing are fully optimized.',
-                style: TextStyle(color: EarthColors.textMuted, fontSize: 11),
-              ),
-            ),
+          const EarthEmptyState(
+            message: 'No pending critical obligations. Your enterprise and civic standing are fully optimized.',
+            icon: Icons.check_circle_outline,
           )
         else
-          Container(
-            decoration: BoxDecoration(
-              color: EarthColors.panelSurface,
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: EarthColors.borderSubtle),
-            ),
-            child: ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Column(
-                children: List.generate(filteredDecisions.length, (index) {
-                  final item = filteredDecisions[index];
-                  final isLast = index == filteredDecisions.length - 1;
-                  return _buildUnifiedDecisionItem(item, isLast: isLast);
-                }),
-              ),
-            ),
+          EarthDataList(
+            children: List.generate(filteredDecisions.length, (index) {
+              final item = filteredDecisions[index];
+              final isLast = index == filteredDecisions.length - 1;
+              return _buildUnifiedDecisionItem(context, item, isLast: isLast);
+            }),
           ),
 
         // Merged Live Opportunity Signals
         if (opportunities.isNotEmpty) ...[
-          const SizedBox(height: 10),
-          const Divider(color: EarthColors.borderSubtle, height: 1),
-          const SizedBox(height: 10),
-          const Row(
+          SizedBox(height: context.spacingTitleOffset),
+          Divider(color: context.subtleBorderColor, height: 1),
+          SizedBox(height: context.spacingControl),
+          Row(
             children: [
-              Icon(Icons.trending_up, size: 13, color: EarthColors.cyanAccent),
-              SizedBox(width: 6),
+              Icon(Icons.trending_up, size: context.iconSize, color: context.primaryColor),
+              SizedBox(width: context.spacingInline),
               Text(
                 'LIVE STRATEGIC OPPORTUNITIES',
-                style: TextStyle(
-                  color: EarthColors.cyanAccent,
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  letterSpacing: 0.8,
-                ),
+                style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
               ),
             ],
           ),
-          const SizedBox(height: 8),
+          SizedBox(height: context.spacingControl),
           ...opportunities.map((opp) {
             final mapOpp = Map<String, dynamic>.from(opp as Map);
-            return _buildOpportunityStrip(mapOpp);
+            return _buildOpportunityStrip(context, mapOpp);
           }),
         ],
       ],
@@ -634,8 +425,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       case 'CRITICAL':
         return items
             .where((i) =>
-                i.riskLevel.toLowerCase() == 'critical' ||
-                i.riskLevel.toLowerCase() == 'high')
+                i.riskLevel.toLowerCase() == 'critical' || i.riskLevel.toLowerCase() == 'high')
             .toList();
       case 'CORPORATION':
         return items
@@ -660,33 +450,30 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     }
   }
 
-  Widget _filterChip(String filterKey, String label, {Color? color}) {
+  Widget _filterChip(BuildContext context, String filterKey, String label, {Color? color}) {
     final isSelected = _selectedActionFilter == filterKey;
-    final activeColor = color ?? EarthColors.cyanAccent;
+    final activeColor = color ?? context.primaryColor;
 
     return InkWell(
       onTap: () {
         EarthAudioEngine.instance.playClick();
         setState(() => _selectedActionFilter = filterKey);
       },
-      borderRadius: BorderRadius.circular(6),
+      borderRadius: BorderRadius.circular(context.radiusControl),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 4),
         decoration: BoxDecoration(
-          color: isSelected
-              ? activeColor.withValues(alpha: 0.18)
-              : EarthColors.cardSurface,
-          borderRadius: BorderRadius.circular(6),
+          color: isSelected ? activeColor.withValues(alpha: 0.18) : context.surfaceColor,
+          borderRadius: BorderRadius.circular(context.radiusControl),
           border: Border.all(
-            color: isSelected ? activeColor : EarthColors.borderSubtle,
+            color: isSelected ? activeColor : context.subtleBorderColor,
             width: isSelected ? 1.2 : 1.0,
           ),
         ),
         child: Text(
           label,
-          style: TextStyle(
-            color: isSelected ? activeColor : EarthColors.textMuted,
-            fontSize: 9.5,
+          style: context.captionStyle.copyWith(
+            color: isSelected ? activeColor : context.mutedColor,
             fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
           ),
         ),
@@ -694,145 +481,68 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     );
   }
 
-  Widget _buildUnifiedDecisionItem(DecisionQueueItem item,
-      {bool isLast = false}) {
+  Widget _buildUnifiedDecisionItem(
+    BuildContext context,
+    DecisionQueueItem item, {
+    bool isLast = false,
+  }) {
     final isCritical = item.riskLevel.toLowerCase() == 'critical' ||
         item.riskLevel.toLowerCase() == 'high';
-    final categoryColor = _getDecisionCategoryColor(item);
+    final categoryColor = _getDecisionCategoryColor(context, item);
     final categoryIcon = _getDecisionCategoryIcon(item);
 
-    return Container(
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: EarthColors.cardSurface,
-        border: Border(
-          bottom: isLast
-              ? BorderSide.none
-              : const BorderSide(color: EarthColors.borderSubtle),
+    return EarthDataRow(
+      title: item.title,
+      subtitle: '${item.whyItMatters}\nDeadline: ${item.deadline} · Impact: ${item.expectedImpact}',
+      leading: Icon(categoryIcon, size: context.iconSize, color: categoryColor),
+      badges: [
+        EarthBadge(
+          label: item.riskLevel.toUpperCase(),
+          variant: isCritical ? EarthBadgeVariant.warning : EarthBadgeVariant.neutral,
+        ),
+      ],
+      trailing: ElevatedButton(
+        style: ElevatedButton.styleFrom(
+          backgroundColor: isCritical ? context.errorColor : context.primaryColor,
+          foregroundColor: isCritical ? Colors.white : context.canvasColor,
+          elevation: 0,
+          padding: EdgeInsets.symmetric(horizontal: context.spacingControl),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(context.radiusControl),
+          ),
+        ),
+        onPressed: () {
+          EarthAudioEngine.instance.playClick();
+          if (widget.onExecuteDecision != null) {
+            widget.onExecuteDecision!(item);
+          } else if (widget.onNavigate != null) {
+            widget.onNavigate!(item.targetSection);
+          }
+        },
+        child: Text(
+          item.primaryActionLabel,
+          style: context.controlStyle.copyWith(
+            color: isCritical ? Colors.white : context.canvasColor,
+          ),
         ),
       ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.center,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: categoryColor.withValues(alpha: 0.12),
-              borderRadius: BorderRadius.circular(6),
-            ),
-            child: Icon(categoryIcon, size: 16, color: categoryColor),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Flexible(
-                      child: Text(
-                        item.title,
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 11.5,
-                          fontWeight: FontWeight.bold,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 5, vertical: 1),
-                      decoration: BoxDecoration(
-                        color: isCritical
-                            ? Colors.orangeAccent.withValues(alpha: 0.15)
-                            : Colors.white10,
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                      child: Text(
-                        item.riskLevel.toUpperCase(),
-                        style: TextStyle(
-                          color:
-                              isCritical ? Colors.orangeAccent : Colors.white60,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  item.whyItMatters,
-                  style: const TextStyle(
-                      color: EarthColors.textMuted, fontSize: 10),
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 2),
-                Row(
-                  children: [
-                    Text(
-                      'Deadline: ${item.deadline}',
-                      style:
-                          const TextStyle(color: Colors.white54, fontSize: 9),
-                    ),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        '•  Impact: ${item.expectedImpact}',
-                        style: TextStyle(
-                            color: categoryColor,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(width: 8),
-          ElevatedButton(
-            onPressed: () {
-              EarthAudioEngine.instance.playClick();
-              if (widget.onExecuteDecision != null) {
-                widget.onExecuteDecision!(item);
-              } else if (widget.onNavigate != null) {
-                widget.onNavigate!(item.targetSection);
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor:
-                  isCritical ? Colors.orangeAccent : EarthColors.cyanAccent,
-              foregroundColor: Colors.black,
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              visualDensity: VisualDensity.compact,
-            ),
-            child: Text(
-              item.primaryActionLabel,
-              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold),
-            ),
-          ),
-        ],
-      ),
+      showDivider: !isLast,
     );
   }
 
-  Color _getDecisionCategoryColor(DecisionQueueItem item) {
+  Color _getDecisionCategoryColor(BuildContext context, DecisionQueueItem item) {
     switch (item.category.toLowerCase()) {
       case 'business':
       case 'machines':
-        return Colors.orangeAccent;
+        return context.warningColor;
       case 'governance':
       case 'civic':
-        return EarthColors.goldMetallic;
+        return context.secondaryColor;
       case 'technology':
       case 'market':
-        return EarthColors.cyanAccent;
+        return context.primaryColor;
       default:
-        return EarthColors.cyanAccent;
+        return context.primaryColor;
     }
   }
 
@@ -854,73 +564,57 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     }
   }
 
-  Widget _buildOpportunityStrip(Map<String, dynamic> opp) {
+  Widget _buildOpportunityStrip(BuildContext context, Map<String, dynamic> opp) {
     final title = opp['title']?.toString() ?? 'Strategic Opportunity';
     final detail = opp['detail']?.toString() ?? '';
     final signal = opp['signal']?.toString() ?? 'market';
 
     String targetSection = 'market';
-    if (signal.contains('gov') || signal.contains('civic'))
+    if (signal.contains('gov') || signal.contains('civic')) {
       targetSection = 'civic';
-    if (signal.contains('tech') || signal.contains('research'))
+    }
+    if (signal.contains('tech') || signal.contains('research')) {
       targetSection = 'technology';
+    }
     if (signal.contains('business')) targetSection = 'business';
 
     return Container(
       margin: const EdgeInsets.only(bottom: 6),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      padding: EdgeInsets.symmetric(horizontal: context.tokens.number('pageTopics.cardPadding', 10), vertical: 6),
       decoration: BoxDecoration(
-        color: EarthColors.cardSurface.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(6),
-        border:
-            Border.all(color: EarthColors.cyanAccent.withValues(alpha: 0.2)),
+        color: context.surfaceColor.withValues(alpha: 0.6),
+        borderRadius: BorderRadius.circular(context.radiusControl),
+        border: Border.all(color: context.primaryColor.withValues(alpha: 0.2)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.flash_on, size: 12, color: EarthColors.cyanAccent),
-          const SizedBox(width: 6),
+          Icon(Icons.flash_on, size: context.iconSize, color: context.primaryColor),
+          SizedBox(width: context.spacingInline),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.bold),
+                  style: context.widgetTitleStyle.copyWith(color: context.inkColor),
                   overflow: TextOverflow.ellipsis,
                 ),
                 Text(
                   detail,
-                  style: const TextStyle(
-                      color: EarthColors.textMuted, fontSize: 9.5),
+                  style: context.widgetFooterStyle,
                   overflow: TextOverflow.ellipsis,
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 8),
-          InkWell(
-            onTap: () {
+          SizedBox(width: context.spacingInline),
+          EarthButton(
+            label: 'EXPLOIT',
+            variant: EarthButtonVariant.primary,
+            onPressed: () {
               EarthAudioEngine.instance.playClick();
               widget.onNavigate?.call(targetSection);
             },
-            borderRadius: BorderRadius.circular(4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-              decoration: BoxDecoration(
-                color: EarthColors.cyanAccent.withValues(alpha: 0.12),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: const Text(
-                'EXPLOIT',
-                style: TextStyle(
-                    color: EarthColors.cyanAccent,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold),
-              ),
-            ),
           ),
         ],
       ),

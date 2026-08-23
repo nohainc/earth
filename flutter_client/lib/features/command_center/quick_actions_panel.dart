@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../app/theme.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 class QuickActionsPanel extends StatelessWidget {
@@ -17,19 +17,20 @@ class QuickActionsPanel extends StatelessWidget {
         : state.technology;
     final researchProgress = asDoubleOr(research['progress'], 0);
     final successor = state.life['successor'];
+
     final actions = <({
       String label,
       String detail,
       String section,
       IconData icon,
-      Color color
+      Color color,
     })>[
       (
         label: 'RUN THE BUSINESS',
         detail: '${state.businesses.length} active operations',
         section: 'business',
         icon: Icons.storefront_outlined,
-        color: cyanAccentColor
+        color: context.primaryColor,
       ),
       (
         label: 'CHECK CITY SERVICES',
@@ -38,15 +39,14 @@ class QuickActionsPanel extends StatelessWidget {
             : 'Review local capacity and projects',
         section: 'city',
         icon: Icons.location_city_outlined,
-        color: Colors.tealAccent
+        color: context.successColor,
       ),
       (
         label: 'DIRECT RESEARCH',
-        detail:
-            '${researchProgress.toStringAsFixed(0)}% current project progress',
+        detail: '${researchProgress.toStringAsFixed(0)}% current project progress',
         section: 'technology',
         icon: Icons.biotech_outlined,
-        color: violetColor
+        color: context.secondaryColor,
       ),
       (
         label: 'PROTECT THE DYNASTY',
@@ -55,78 +55,94 @@ class QuickActionsPanel extends StatelessWidget {
             : 'Register a continuity plan',
         section: successor is Map && successor.isNotEmpty ? 'dynasty' : 'life',
         icon: Icons.account_tree_outlined,
-        color: Colors.amberAccent
+        color: context.warningColor,
       ),
       (
         label: 'OPEN MESSAGES',
         detail: 'Review people, invitations, and decisions',
         section: 'messages',
         icon: Icons.settings_input_antenna,
-        color: Colors.lightBlueAccent
+        color: context.primaryColor,
       ),
     ];
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Row(children: [
-        const Text('QUICK ACTIONS',
-            style: TextStyle(
-                color: mutedColor,
-                fontSize: 10,
-                fontWeight: FontWeight.w800,
-                letterSpacing: 1.1)),
-        const SizedBox(width: 8),
-        Text('Choose the next meaningful move',
-            style: TextStyle(
-                color: mutedColor.withValues(alpha: .75), fontSize: 10))
-      ]),
-      const SizedBox(height: 10),
-      Wrap(
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text('QUICK ACTIONS', style: context.topicTitleStyle),
+            SizedBox(width: context.spacingInline),
+            Text(
+              'Choose the next meaningful move',
+              style: context.widgetFooterStyle.copyWith(
+                color: context.mutedColor.withValues(alpha: .75),
+              ),
+            ),
+          ],
+        ),
+        SizedBox(height: context.spacingControl),
+        Wrap(
           spacing: 10,
           runSpacing: 10,
-          children: actions.map((item) => _action(item)).toList()),
-    ]);
+          children: actions.map((item) => _action(context, item)).toList(),
+        ),
+      ],
+    );
   }
 
   Widget _action(
-          ({
-            String label,
-            String detail,
-            String section,
-            IconData icon,
-            Color color
-          }) item) =>
-      SizedBox(
-        width: 205,
-        child: InkWell(
-          onTap: onNavigate == null ? null : () => onNavigate!(item.section),
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-                color: item.color.withValues(alpha: .07),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: item.color.withValues(alpha: .24))),
-            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-              Icon(item.icon, size: 18, color: item.color),
-              const SizedBox(width: 9),
+    BuildContext context,
+    ({
+      String label,
+      String detail,
+      String section,
+      IconData icon,
+      Color color,
+    }) item,
+  ) {
+    return SizedBox(
+      width: 205,
+      child: InkWell(
+        onTap: onNavigate == null ? null : () => onNavigate!(item.section),
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        child: Container(
+          padding: EdgeInsets.all(context.cardPadding),
+          decoration: BoxDecoration(
+            color: item.color.withValues(alpha: .07),
+            borderRadius: BorderRadius.circular(context.radiusCard),
+            border: Border.all(color: item.color.withValues(alpha: .24)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(item.icon, size: context.iconSize, color: item.color),
+              SizedBox(width: context.spacingInline),
               Expanded(
-                  child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                    Text(item.label,
-                        style: TextStyle(
-                            color: item.color,
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w800,
-                            letterSpacing: .4)),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      item.label,
+                      style: context.widgetTitleStyle.copyWith(
+                        color: item.color,
+                        letterSpacing: .4,
+                      ),
+                    ),
                     const SizedBox(height: 4),
-                    Text(item.detail,
-                        maxLines: 2,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            const TextStyle(color: mutedColor, fontSize: 9.5))
-                  ]))
-            ]),
+                    Text(
+                      item.detail,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: context.widgetFooterStyle,
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
         ),
-      );
+      ),
+    );
+  }
 }

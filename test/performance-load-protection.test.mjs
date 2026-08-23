@@ -26,10 +26,24 @@ test('Performance and Load Protection for Worker and PostgreSQL', async () => {
     }
 
     const baseUrl = `http://127.0.0.1:${port}`;
+    let sessionCookie = '';
+    try {
+      const loginRes = await fetch(`${baseUrl}/api/auth/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email: 'amara@earthuc.com', password: 'password123456' }),
+      });
+      sessionCookie = loginRes.headers.get('set-cookie')?.split(';')[0] || '';
+    } catch {}
+
+    const authHeaders = {
+      'Content-Type': 'application/json',
+      ...(sessionCookie ? { cookie: sessionCookie } : {}),
+    };
 
     // 1. Measure latency for public read operations
     const start = performance.now();
-    const worldRes = await fetch(`${baseUrl}/api/world`);
+    const worldRes = await fetch(`${baseUrl}/api/world`, { headers: authHeaders });
     const duration = performance.now() - start;
     assert.equal(worldRes.status, 200);
     assert.ok(duration < 500, `World read latency must stay within 500ms (got ${duration}ms)`);
@@ -45,7 +59,7 @@ test('Performance and Load Protection for Worker and PostgreSQL', async () => {
     const orderPromises = Array.from({ length: 10 }, (_, i) =>
       fetch(`${baseUrl}/api/market/orders`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': `load-order-${Date.now()}-${i}` },
+        headers: { ...authHeaders, 'Idempotency-Key': `load-order-${Date.now()}-${i}` },
         body: JSON.stringify({ product: 'energy', quantity: 1, limitPrice: 0.9, side: 'buy' }),
       })
     );
