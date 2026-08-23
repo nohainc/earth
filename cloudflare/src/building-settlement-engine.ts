@@ -215,7 +215,11 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
           gross_revenue_crd, operating_costs_crd, net_surplus_crd,
           condition_start, condition_end, auto_repaired
         ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ON CONFLICT (id) DO NOTHING`,
+        ON CONFLICT (building_id, day) DO UPDATE SET
+          gross_revenue_crd = EXCLUDED.gross_revenue_crd,
+          operating_costs_crd = EXCLUDED.operating_costs_crd,
+          net_surplus_crd = EXCLUDED.net_surplus_crd,
+          condition_end = EXCLUDED.condition_end`,
         [
           `JOURNAL-${bld.id}-${day}`,
           bld.id,
@@ -275,6 +279,13 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
           const revCents = BigInt(Math.round(outAmt * 100));
           actualGrossRevenueCrd = outAmt;
 
+          // 1. Economic Clearing: Fund the clearing account from consumer/market demand
+          await tx.query(
+            'UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2',
+            [centsToMoney(revCents), 'account-market-clearing'],
+          );
+
+          // 2. Clear funds to the recipient
           if (oClass === 'private') {
             const ownerAccount = await tx.query<{ account_id: string }>(
               "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
@@ -347,6 +358,14 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
       const rev = (isCreditOutput ? Number(bld.resource_output_amount || 0) : 0) * effectiveYield;
       if (rev > 0) {
         actualGrossRevenueCrd = rev;
+        const revCents = BigInt(Math.round(rev * 100));
+
+        // Fund clearing account from market commerce
+        await tx.query(
+          'UPDATE account_balances SET balance = balance + $1 WHERE account_id = $2',
+          [centsToMoney(revCents), 'account-market-clearing'],
+        );
+
         const sharesQuery = await tx.query<{
           investor_id: string;
           shares_owned: number;
@@ -399,7 +418,11 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
         gross_revenue_crd, operating_costs_crd, net_surplus_crd,
         condition_start, condition_end, auto_repaired
       ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-      ON CONFLICT (id) DO NOTHING`,
+      ON CONFLICT (building_id, day) DO UPDATE SET
+        gross_revenue_crd = EXCLUDED.gross_revenue_crd,
+        operating_costs_crd = EXCLUDED.operating_costs_crd,
+        net_surplus_crd = EXCLUDED.net_surplus_crd,
+        condition_end = EXCLUDED.condition_end`,
       [
         `JOURNAL-${bld.id}-${day}`,
         bld.id,

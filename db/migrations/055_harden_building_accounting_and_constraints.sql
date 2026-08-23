@@ -41,13 +41,14 @@ CREATE TABLE IF NOT EXISTS building_settlement_journals (
   city_id TEXT NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
   day INTEGER NOT NULL,
   ownership_class TEXT NOT NULL,
-  gross_revenue_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
-  operating_costs_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
-  net_surplus_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
+  gross_revenue_crd NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (gross_revenue_crd >= 0),
+  operating_costs_crd NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (operating_costs_crd >= 0),
+  net_surplus_crd NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (net_surplus_crd >= 0),
   condition_start NUMERIC(5,2) NOT NULL,
   condition_end NUMERIC(5,2) NOT NULL,
   auto_repaired BOOLEAN NOT NULL DEFAULT FALSE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CONSTRAINT uq_building_settlement_journal_day UNIQUE (building_id, day)
 );
 
 CREATE INDEX IF NOT EXISTS idx_bld_settle_city_day ON building_settlement_journals (city_id, day);
