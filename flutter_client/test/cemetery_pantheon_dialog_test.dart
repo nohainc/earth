@@ -89,7 +89,9 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: CemeteryPantheonDialog(api: api),
+          body: SingleChildScrollView(
+            child: CemeteryPantheonDialog(api: api),
+          ),
         ),
       ),
     );

@@ -71,58 +71,54 @@ class _CemeteryPantheonDialogState extends State<CemeteryPantheonDialog>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-        width: 840,
-        height: 680,
-        padding: EdgeInsets.all(context.spacingPage),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildLineageTree(),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildLineageTree(),
 
-            // Search Bar & Tabs
-            EarthSearchInput(
-              controller: _searchController,
-              hintText: 'Search citizen name, dynasty, or successor...',
-              onChanged: (_) => _loadData(),
-              onClear: _loadData,
-            ),
-            SizedBox(height: context.spacingTitleOffset),
+        // Search Bar & Tabs
+        EarthSearchInput(
+          controller: _searchController,
+          hintText: 'Search citizen name, dynasty, or successor...',
+          onChanged: (_) => _loadData(),
+          onClear: _loadData,
+        ),
+        SizedBox(height: context.spacingTitleOffset),
 
-            TabBar(
-              controller: _tabController,
-              indicatorColor: context.primaryColor,
-              labelColor: context.primaryColor,
-              unselectedLabelColor: context.mutedColor,
-              labelStyle: context.controlStyle,
-              unselectedLabelStyle: context.controlStyle.copyWith(fontWeight: FontWeight.w500),
-              tabs: const [
-                Tab(text: 'ALL CEMETERY MEMORIALS'),
-                Tab(text: 'PANTHEON OF HONORS'),
-                Tab(text: 'DYNASTIC HOUSES'),
-              ],
-            ),
-            Divider(color: context.subtleBorderColor, height: 1),
-            SizedBox(height: context.spacingTitleOffset),
-
-            // Content Area
-            Expanded(
-              child: _loading
-                  ? Center(child: CircularProgressIndicator(color: context.primaryColor))
-                  : _error != null
-                      ? Center(child: EarthErrorState(message: _error!, retry: _loadData))
-                      : TabBarView(
-                          controller: _tabController,
-                          children: [
-                            _buildCemeteryList(_cemeteryProfiles),
-                            _buildCemeteryList(_pantheonLeaders),
-                            _buildDynastyList(_dynasticHouses),
-                          ],
-                        ),
-            ),
+        TabBar(
+          controller: _tabController,
+          indicatorColor: context.primaryColor,
+          labelColor: context.primaryColor,
+          unselectedLabelColor: context.mutedColor,
+          labelStyle: context.controlStyle,
+          unselectedLabelStyle: context.controlStyle.copyWith(fontWeight: FontWeight.w500),
+          tabs: const [
+            Tab(text: 'ALL CEMETERY MEMORIALS'),
+            Tab(text: 'PANTHEON OF HONORS'),
+            Tab(text: 'DYNASTIC HOUSES'),
           ],
         ),
-      );
+        Divider(color: context.subtleBorderColor, height: 1),
+        SizedBox(height: context.spacingTitleOffset),
+
+        // Content Area
+        SizedBox(
+          height: 600,
+          child: _loading
+              ? Center(child: CircularProgressIndicator(color: context.primaryColor))
+              : _error != null
+                  ? Center(child: EarthErrorState(message: _error!, retry: _loadData))
+                  : TabBarView(
+                      controller: _tabController,
+                      children: [
+                        _buildCemeteryList(_cemeteryProfiles),
+                        _buildCemeteryList(_pantheonLeaders),
+                        _buildDynastyList(_dynasticHouses),
+                      ],
+                    ),
+        ),
+      ],
+    );
   }
 
   Widget _buildLineageTree() {

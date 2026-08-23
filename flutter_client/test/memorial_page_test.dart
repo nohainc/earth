@@ -20,7 +20,7 @@ void main() {
       ], 'dynasticHouses': [{'dynasty_name': 'Vance Dynasty', 'deceased_count': 1, 'peak_legacy': 5400}]}), 200, headers: {'content-type': 'application/nanomarkup'});
     });
     final api = EarthApi(transport: EarthApiTransport(baseUrl: 'http://memorial.test', client: client));
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CemeteryPantheonDialog(
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child: CemeteryPantheonDialog(
       api: api,
       lineageSource: const {
         'deceasedPantheon': [
@@ -30,7 +30,7 @@ void main() {
           {'display_name': 'Amara Vance', 'generation': 2, 'legacy': 1200},
         ],
       },
-    ))));
+    )))));
     await tester.pumpAndSettle();
     expect(find.text('PLANETARY PANTHEON & CEMETERY ARCHIVE'), findsNothing);
     expect(find.textContaining('Founder Marcus Vance'), findsWidgets);
