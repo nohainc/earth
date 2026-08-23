@@ -35,43 +35,55 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<EarthState> assignBuildingStaff({
+  Future<EarthState> repairBuilding({
     required String buildingId,
-    required String staffType,
-    String? machineId,
-    String? employeeId,
   }) async {
     final res = await _request(
-      '/api/real-estate/assign-staff',
+      '/api/real-estate/repair',
+      method: 'POST',
+      body: {'buildingId': buildingId},
+    );
+    return EarthState(res as Map<String, dynamic>);
+  }
+
+  Future<EarthState> setBuildingOperatingPolicy({
+    required String buildingId,
+    required String policy,
+  }) async {
+    final res = await _request(
+      '/api/real-estate/policy',
       method: 'POST',
       body: {
         'buildingId': buildingId,
-        'staffType': staffType,
-        if (machineId != null) 'machineId': machineId,
-        if (employeeId != null) 'employeeId': employeeId,
+        'policy': policy,
       },
     );
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<EarthState> registerMunicipalLabor({
-    required String machineId,
+  Future<EarthState> investInPublicBuilding({
+    required String buildingId,
+    required int sharesCount,
   }) async {
     final res = await _request(
-      '/api/municipal-labor/register',
+      '/api/real-estate/invest',
       method: 'POST',
-      body: {'machineId': machineId},
+      body: {
+        'buildingId': buildingId,
+        'sharesCount': sharesCount,
+        'correlationId': 'INVEST-BLD-${DateTime.now().millisecondsSinceEpoch}',
+      },
     );
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<EarthState> withdrawMunicipalLabor({
-    required String machineId,
+  Future<EarthState> demolishBuilding({
+    required String buildingId,
   }) async {
     final res = await _request(
-      '/api/municipal-labor/withdraw',
+      '/api/real-estate/demolish',
       method: 'POST',
-      body: {'machineId': machineId},
+      body: {'buildingId': buildingId},
     );
     return EarthState(res as Map<String, dynamic>);
   }

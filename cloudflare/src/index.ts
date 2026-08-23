@@ -33,7 +33,7 @@ import { createSocialInitiative, listSocialInitiatives, listSocialDirectory, lis
 import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { toNanoMarkup } from './nano-markup.ts';
-import { purchaseBuilding, upgradeBuilding, assignBuildingStaff, registerMunicipalLabor, withdrawMunicipalLabor, contributeCorporateResearch } from './real-estate-postgres.ts';
+import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch } from './real-estate-postgres.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -962,7 +962,7 @@ const worker = {
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!buildingType || !correlationId) return Response.json({ ok: false, error: 'Building type and correlation ID are required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => purchaseBuilding(repository, { ownerId: viewer.id, cityId, buildingType, name, businessId: body.businessId, correlationId }));
+        const result = await withRepository(env, (repository) => purchasePrivatePlotAndConstruct(repository, { ownerId: viewer.id, cityId, buildingType, name, businessId: body.businessId, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {
@@ -986,51 +986,90 @@ const worker = {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 });
       }
     }
-    if (url.pathname === '/api/real-estate/assign-staff' && request.method === 'POST') {
+    if (url.pathname === '/api/real-estate/repair' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ buildingId?: string; staffType?: string; machineId?: string; employeeId?: string }>(request);
+      const parsed = await parseJsonBody<{ buildingId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const buildingId = parsed.value.buildingId?.trim() ?? '';
+      if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => repairBuilding(repository, { humanId: viewer.id, buildingId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Repair failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/policy' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ buildingId?: string; policy?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const buildingId = parsed.value.buildingId?.trim() ?? '';
+      const policy = (parsed.value.policy?.trim() ?? 'balanced') as any;
+      if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => setBuildingOperatingPolicy(repository, { humanId: viewer.id, buildingId, policy }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Policy update failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/invest' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ buildingId?: string; sharesCount?: number; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const buildingId = body.buildingId?.trim() ?? '';
-      const staffType = (body.staffType?.trim() ?? 'machine') as 'machine' | 'employee';
+      const sharesCount = Math.max(1, Math.floor(body.sharesCount ?? 1));
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!buildingId || !correlationId) return Response.json({ ok: false, error: 'Building ID and correlation ID are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => investInPublicBuilding(repository, { humanId: viewer.id, buildingId, sharesCount, correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share investment failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/demolish' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ buildingId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const buildingId = parsed.value.buildingId?.trim() ?? '';
       if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => assignBuildingStaff(repository, { humanId: viewer.id, buildingId, staffType, machineId: body.machineId, employeeId: body.employeeId }));
+        const result = await withRepository(env, (repository) => demolishBuilding(repository, { humanId: viewer.id, buildingId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Staff assignment failed' }, { status: 409 });
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Demolition failed' }, { status: 409 });
       }
     }
-    if (url.pathname === '/api/municipal-labor/register' && request.method === 'POST') {
+    if (url.pathname === '/api/real-estate/zoning' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ machineId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const machineId = parsed.value.machineId?.trim() ?? '';
-      if (!machineId) return Response.json({ ok: false, error: 'Machine ID is required' }, { status: 400 });
+      const cityId = url.searchParams.get('cityId')?.trim() ?? 'CITY-0084';
       try {
-        const result = await withRepository(env, (repository) => registerMunicipalLabor(repository, { humanId: viewer.id, machineId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+        const result = await withRepository(env, (repository) => getCityDistrictZoning(repository, cityId));
+        return Response.json({ ok: true, zoning: result, persistence: 'planetscale-postgres' });
       } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Municipal labor registration failed' }, { status: 409 });
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Zoning query failed' }, { status: 409 });
       }
     }
-    if (url.pathname === '/api/municipal-labor/withdraw' && request.method === 'POST') {
+    if (url.pathname === '/api/real-estate/dividends' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ machineId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const machineId = parsed.value.machineId?.trim() ?? '';
-      if (!machineId) return Response.json({ ok: false, error: 'Machine ID is required' }, { status: 400 });
+      const cityId = url.searchParams.get('cityId')?.trim() ?? 'CITY-0084';
       try {
-        const result = await withRepository(env, (repository) => withdrawMunicipalLabor(repository, { humanId: viewer.id, machineId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+        const result = await withRepository(env, (repository) => getCivicDividendHistory(repository, cityId, viewer.id));
+        return Response.json({ ok: true, dividends: result, persistence: 'planetscale-postgres' });
       } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Municipal labor withdrawal failed' }, { status: 409 });
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Dividend query failed' }, { status: 409 });
       }
     }
     if (url.pathname === '/api/corporate-research/contribute' && request.method === 'POST') {

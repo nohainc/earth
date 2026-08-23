@@ -56,7 +56,9 @@ class EarthState {
   List<dynamic> get contracts => _toList(json['contracts']);
   List<dynamic> get roles => _toList(json['roles']);
   List<dynamic> get buildings => _toList(json['buildings']);
-  List<dynamic> get municipalLabor => _toList(json['municipalLabor']);
+  Map<String, dynamic> get districtZoning => _toMap(json['districtZoning']);
+  List<dynamic> get investmentShares => _toList(json['investmentShares']);
+  List<dynamic> get civicDividends => _toList(json['civicDividends']);
   List<dynamic> get corporateResearch => _toList(json['corporateResearch']);
   List<dynamic> get buildingCatalog => _toList(json['buildingCatalog']);
   Map<String, dynamic>? get membership =>

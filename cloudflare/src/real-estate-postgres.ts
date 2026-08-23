@@ -1,10 +1,88 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
-import { BUILDING_CATALOG } from './real-estate-catalog.ts';
-import { toNanoMarkup } from './nano-markup.ts';
+import { BUILDING_CATALOG, type OperatingPolicy, type OwnershipClass } from './real-estate-catalog.ts';
 
-export async function purchaseBuilding(
+export interface DistrictZoningSummary {
+  cityId: string;
+  cityName: string;
+  population: number;
+  totalSlots: number;
+  civicReservedSlots: number;
+  usedPrivateSlots: number;
+  usedCivicSlots: number;
+  availablePrivateSlots: number;
+  availableCivicSlots: number;
+  buildingsCount: number;
+}
+
+/**
+ * Calculates authoritative dynamic city zoning slots and anti-monopoly quotas.
+ * Total Slots = 8 + floor(activePopulation / 5) + infrastructureBonuses.
+ * Minimum 30% of total slots are reserved exclusively for Civic & Public Megaprojects.
+ */
+export async function getCityDistrictZoning(
+  repository: PostgresRepository,
+  cityId: string,
+): Promise<DistrictZoningSummary> {
+  const cityRes = await repository.query<{ id: string; name: string }>(
+    'SELECT id, name FROM cities WHERE id = $1',
+    [cityId],
+  );
+  const city = cityRes.rows[0];
+  const cityName = city?.name ?? 'Metropolitan District';
+
+  const popRes = await repository.query<{ count: string }>(
+    "SELECT COUNT(*)::integer AS count FROM memberships WHERE city_id = $1 AND status = 'active'",
+    [cityId],
+  );
+  const population = Number(popRes.rows[0]?.count ?? 1);
+
+  // Dynamic capacity formula: 8 + floor(pop / 5)
+  const totalSlots = 8 + Math.floor(population / 5);
+  const civicReservedSlots = Math.max(2, Math.ceil(totalSlots * 0.30));
+
+  const bldRes = await repository.query<{
+    slot_footprint: number;
+    ownership_class: string;
+    ownership_type: string;
+  }>(
+    "SELECT slot_footprint, ownership_class, ownership_type FROM buildings WHERE city_id = $1 AND status NOT IN ('closed', 'foreclosed')",
+    [cityId],
+  );
+
+  let usedPrivateSlots = 0;
+  let usedCivicSlots = 0;
+
+  for (const row of bldRes.rows) {
+    const footprint = Math.max(1, Number(row.slot_footprint || 1));
+    const oClass = (row.ownership_class || row.ownership_type || 'private').toLowerCase();
+    if (oClass === 'private') {
+      usedPrivateSlots += footprint;
+    } else {
+      usedCivicSlots += footprint;
+    }
+  }
+
+  const maxPrivatePermitted = Math.max(0, totalSlots - civicReservedSlots);
+  const availablePrivateSlots = Math.max(0, maxPrivatePermitted - usedPrivateSlots);
+  const availableCivicSlots = Math.max(0, totalSlots - usedCivicSlots - usedPrivateSlots);
+
+  return {
+    cityId,
+    cityName,
+    population,
+    totalSlots,
+    civicReservedSlots,
+    usedPrivateSlots,
+    usedCivicSlots,
+    availablePrivateSlots,
+    availableCivicSlots,
+    buildingsCount: bldRes.rows.length,
+  };
+}
+
+export async function purchasePrivatePlotAndConstruct(
   repository: PostgresRepository,
   input: {
     ownerId: string;
@@ -27,8 +105,8 @@ export async function purchaseBuilding(
 
     const spec = BUILDING_CATALOG[input.buildingType];
     if (!spec) throw new Error('Unknown building archetype');
-    if (spec.category === 'municipal_megaproject') {
-      throw new Error('Municipal megaprojects must be procured via Democratic City Referendum');
+    if (spec.defaultOwnershipClass === 'civic') {
+      throw new Error('Civic utility buildings must be procured via Democratic City Referendum');
     }
 
     const membership = await tx.query<{ city_id: string | null; corporation_id: string | null }>(
@@ -37,6 +115,14 @@ export async function purchaseBuilding(
     );
     const citizenCityId = membership.rows[0]?.city_id ?? input.cityId;
 
+    // Check District Zoning Capacity
+    const zoning = await getCityDistrictZoning(repository, citizenCityId);
+    if (zoning.availablePrivateSlots < spec.slotFootprint) {
+      throw new Error(
+        `City district capacity exceeded. This building requires ${spec.slotFootprint} slots, but only ${zoning.availablePrivateSlots} private slots are available in ${zoning.cityName}.`,
+      );
+    }
+
     // Check Credits
     const creditCostCents = BigInt(Math.round(spec.baseCreditCost * 100));
     const account = await tx.query<{ account_id: string; balance: string }>(
@@ -44,7 +130,7 @@ export async function purchaseBuilding(
       [input.ownerId],
     );
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
-      throw new Error(`Insufficient Credits for building acquisition (Requires ${spec.baseCreditCost} CRD)`);
+      throw new Error(`Insufficient Credits for plot and construction (Requires ${spec.baseCreditCost} CRD)`);
     }
 
     // Check Materials
@@ -72,7 +158,7 @@ export async function purchaseBuilding(
       amount: costMoney,
       reasonType: 'building_purchase',
       reasonId: buildingId,
-      ruleVersion: 'real-estate-v1',
+      ruleVersion: 'real-estate-v2',
       correlationId: input.correlationId,
     });
 
@@ -82,14 +168,17 @@ export async function purchaseBuilding(
       [materialCost, input.ownerId],
     );
 
-    // Insert Building
+    // Insert Self-Contained Building
     await tx.query(
       `INSERT INTO buildings (
-        id, city_id, owner_id, ownership_type, business_id,
-        building_type, name, tier, condition, max_staff_slots,
+        id, city_id, owner_id, ownership_type, ownership_class, business_id,
+        building_type, name, tier, condition, slot_footprint,
+        operating_policy, auto_repair_enabled,
         upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
-        base_revenue_crd, status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100, $8, $9, $10, $11, $12, $13, $14, 'active', $15)`,
+        daily_operating_credits, base_revenue_crd,
+        resource_output_type, resource_output_amount,
+        status, created_game_day
+      ) VALUES ($1, $2, $3, 'private', 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, 'active', $18)`,
       [
         buildingId,
         citizenCityId,
@@ -98,13 +187,16 @@ export async function purchaseBuilding(
         input.buildingType,
         input.name.trim() || spec.name,
         spec.tier,
-        spec.maxStaffSlots,
-        spec.upkeepEnergy,
-        spec.upkeepFood,
-        spec.upkeepMaterials,
-        spec.upkeepComponents,
-        spec.upkeepCompute,
-        spec.baseDailyRevenueCrd,
+        spec.slotFootprint,
+        spec.dailyEnergyUpkeep,
+        spec.dailyFoodUpkeep,
+        spec.dailyMaterialsUpkeep,
+        spec.dailyComponentsUpkeep,
+        spec.dailyComputeUpkeep,
+        spec.dailyStaffingCredits,
+        spec.dailyCreditRevenue,
+        spec.resourceOutputType,
+        spec.resourceOutputAmount,
         day,
       ],
     );
@@ -142,18 +234,18 @@ export async function upgradeBuilding(
       city_id: string;
       building_type: string;
       tier: number;
-      max_staff_slots: number;
       base_revenue_crd: string;
+      resource_output_amount: string;
       status: string;
     }>('SELECT * FROM buildings WHERE id = $1 FOR UPDATE', [input.buildingId]);
     const bld = bldRes.rows[0];
     if (!bld) throw new Error('Building not found');
     if (bld.owner_id !== input.humanId) throw new Error('Only the property owner can upgrade this facility');
-    if (bld.tier >= 5) throw new Error('Building is already at maximum infrastructure tier (Tier 5)');
+    if (bld.tier >= 4) throw new Error('Building is already at maximum engineering tier (Tier 4)');
 
     const nextTier = bld.tier + 1;
-    const upgradeCreditCost = 4500 * nextTier;
-    const upgradeCompCost = 20 * nextTier;
+    const upgradeCreditCost = 4800 * nextTier;
+    const upgradeCompCost = 25 * nextTier;
 
     const creditCostCents = BigInt(upgradeCreditCost * 100);
     const account = await tx.query<{ account_id: string; balance: string }>(
@@ -183,7 +275,7 @@ export async function upgradeBuilding(
       amount: centsToMoney(creditCostCents),
       reasonType: 'building_upgrade',
       reasonId: bld.id,
-      ruleVersion: 'real-estate-v1',
+      ruleVersion: 'real-estate-v2',
       correlationId: input.correlationId,
     });
 
@@ -192,18 +284,18 @@ export async function upgradeBuilding(
       [upgradeCompCost, input.humanId],
     );
 
-    const newSlots = bld.max_staff_slots + 4;
-    const newRevenue = Number(bld.base_revenue_crd) * 1.35;
+    const newRevenue = Number(bld.base_revenue_crd) * 1.30;
+    const newOutputAmount = Number(bld.resource_output_amount || 0) * 1.30;
 
     await tx.query(
       `UPDATE buildings SET
         tier = $1,
-        max_staff_slots = $2,
-        base_revenue_crd = $3,
-        condition = LEAST(100, condition + 15),
+        base_revenue_crd = $2,
+        resource_output_amount = $3,
+        condition = LEAST(100, condition + 20),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $4`,
-      [nextTier, newSlots, newRevenue, bld.id],
+      [nextTier, newRevenue, newOutputAmount, bld.id],
     );
 
     const updated = await tx.query('SELECT * FROM buildings WHERE id = $1', [bld.id]);
@@ -211,111 +303,212 @@ export async function upgradeBuilding(
   });
 }
 
-export async function assignBuildingStaff(
+export async function setBuildingOperatingPolicy(
   repository: PostgresRepository,
   input: {
     humanId: string;
     buildingId: string;
-    staffType: 'machine' | 'employee';
-    machineId?: string;
-    employeeId?: string;
+    policy: OperatingPolicy;
   },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const bld = await tx.query<{ id: string; owner_id: string; max_staff_slots: number }>(
-      'SELECT id, owner_id, max_staff_slots FROM buildings WHERE id = $1 FOR UPDATE',
+    const bld = await tx.query<{ id: string; owner_id: string }>(
+      'SELECT id, owner_id FROM buildings WHERE id = $1',
       [input.buildingId],
     );
     if (!bld.rows[0]) throw new Error('Building not found');
     if (bld.rows[0].owner_id !== input.humanId) throw new Error('Unauthorized');
 
-    const currentStaffCount = await tx.query<{ count: string }>(
-      "SELECT COUNT(*)::integer AS count FROM building_staff_assignments WHERE building_id = $1 AND status = 'active'",
+    await tx.query(
+      'UPDATE buildings SET operating_policy = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
+      [input.policy, input.buildingId],
+    );
+
+    return { ok: true, buildingId: input.buildingId, policy: input.policy };
+  });
+}
+
+export async function repairBuilding(
+  repository: PostgresRepository,
+  input: {
+    humanId: string;
+    buildingId: string;
+  },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const bld = await tx.query<{ id: string; owner_id: string; condition: string; tier: number }>(
+      'SELECT id, owner_id, condition, tier FROM buildings WHERE id = $1 FOR UPDATE',
       [input.buildingId],
     );
-    if (Number(currentStaffCount.rows[0]?.count ?? 0) >= bld.rows[0].max_staff_slots) {
-      throw new Error('Building staff capacity is full. Upgrade the building tier to add more slots.');
-    }
+    if (!bld.rows[0]) throw new Error('Building not found');
+    if (bld.rows[0].owner_id !== input.humanId) throw new Error('Unauthorized');
 
-    if (input.staffType === 'machine') {
-      if (!input.machineId) throw new Error('machineId is required');
-      const machine = await tx.query<{ id: string; owner_id: string }>(
-        'SELECT id, owner_id FROM machines WHERE id = $1',
-        [input.machineId],
-      );
-      if (!machine.rows[0] || machine.rows[0].owner_id !== input.humanId) {
-        throw new Error('You do not own this machine');
-      }
-      const existing = await tx.query(
-        "SELECT id FROM building_staff_assignments WHERE machine_id = $1 AND status = 'active'",
-        [input.machineId],
-      );
-      if (existing.rows[0]) throw new Error('Machine is already assigned to a facility');
-    }
+    const currentCondition = Number(bld.rows[0].condition);
+    if (currentCondition >= 100) return { ok: true, condition: 100, message: 'Facility is already in pristine condition' };
 
-    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    const day = Number(world.rows[0]?.game_day ?? 1);
-    const assignId = `STF-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    const missingCondition = 100 - currentCondition;
+    const requiredComponents = Math.max(1, Math.ceil((missingCondition / 10) * bld.rows[0].tier));
 
-    await tx.query(
-      `INSERT INTO building_staff_assignments (id, building_id, staff_type, machine_id, employee_id, assigned_by, assigned_game_day)
-       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
-      [assignId, input.buildingId, input.staffType, input.machineId ?? null, input.employeeId ?? null, input.humanId, day],
-    );
-
-    return { ok: true, assignmentId: assignId };
-  });
-}
-
-export async function registerMunicipalLabor(
-  repository: PostgresRepository,
-  input: { humanId: string; machineId: string },
-): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const member = await tx.query<{ city_id: string | null }>(
-      'SELECT city_id FROM memberships WHERE human_id = $1',
+    const compBal = await tx.query<{ amount: string }>(
+      "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE",
       [input.humanId],
     );
-    const cityId = member.rows[0]?.city_id;
-    if (!cityId) throw new Error('You must belong to a City to participate in the Municipal Labor Pool');
-
-    const machine = await tx.query<{ id: string; owner_id: string; condition: string }>(
-      'SELECT id, owner_id, condition FROM machines WHERE id = $1',
-      [input.machineId],
-    );
-    if (!machine.rows[0] || machine.rows[0].owner_id !== input.humanId) {
-      throw new Error('You do not own this machine');
+    if (Number(compBal.rows[0]?.amount ?? 0) < requiredComponents) {
+      throw new Error(`Repair requires ${requiredComponents} Components to restore to 100%`);
     }
-    if (Number(machine.rows[0].condition) < 30) {
-      throw new Error('Machine condition is too degraded for municipal certification (<30% condition)');
+
+    await tx.query(
+      "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components'",
+      [requiredComponents, input.humanId],
+    );
+
+    await tx.query(
+      "UPDATE buildings SET condition = 100.0, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
+      [input.buildingId],
+    );
+
+    return { ok: true, buildingId: input.buildingId, condition: 100.0, componentsUsed: requiredComponents };
+  });
+}
+
+export async function investInPublicBuilding(
+  repository: PostgresRepository,
+  input: {
+    humanId: string;
+    buildingId: string;
+    sharesCount: number;
+    correlationId: string;
+  },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query<{ reason_id: string }>(
+      "SELECT reason_id FROM ledger_entries WHERE reason_type = 'public_building_investment' AND correlation_id = $1",
+      [input.correlationId],
+    );
+    if (prior.rows[0]) {
+      const shareRecord = await tx.query(
+        'SELECT * FROM building_investment_shares WHERE building_id = $1 AND investor_id = $2',
+        [input.buildingId, input.humanId],
+      );
+      return { ok: true, alreadyProcessed: true, shares: shareRecord.rows[0], correlationId: input.correlationId };
+    }
+
+    const bldRes = await tx.query<{
+      id: string;
+      city_id: string;
+      ownership_class: string;
+      name: string;
+      base_revenue_crd: string;
+    }>('SELECT * FROM buildings WHERE id = $1', [input.buildingId]);
+    const bld = bldRes.rows[0];
+    if (!bld) throw new Error('Public investment facility not found');
+    if (bld.ownership_class !== 'public_investment') {
+      throw new Error('This facility is not an open public investment project');
+    }
+
+    const sharePrice = 500; // 500 Credits per share
+    const totalCredits = input.sharesCount * sharePrice;
+    const creditCostCents = BigInt(totalCredits * 100);
+
+    const account = await tx.query<{ account_id: string; balance: string }>(
+      "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+      [input.humanId],
+    );
+    if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCostCents) {
+      throw new Error(`Insufficient Credits for share investment (Requires ${totalCredits} CRD)`);
     }
 
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 1);
-    const poolId = `MLP-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
+    await transferCredits(tx, {
+      ledgerId: crypto.randomUUID(),
+      gameDay: day,
+      debitAccount: account.rows[0].account_id,
+      creditAccount: `account-city-${bld.city_id}`,
+      amount: centsToMoney(creditCostCents),
+      reasonType: 'public_building_investment',
+      reasonId: bld.id,
+      ruleVersion: 'real-estate-v2',
+      correlationId: input.correlationId,
+    });
+
+    const shareId = `SHR-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await tx.query(
-      `INSERT INTO municipal_labor_pool (id, city_id, human_id, machine_id, registered_game_day, status)
-       VALUES ($1, $2, $3, $4, $5, 'active')
-       ON CONFLICT (city_id, machine_id) DO UPDATE SET status = 'active', updated_at = CURRENT_TIMESTAMP`,
-      [poolId, cityId, input.humanId, input.machineId, day],
+      `INSERT INTO building_investment_shares (
+        id, building_id, investor_id, shares_owned, total_shares_issued, invested_credits, created_game_day
+      ) VALUES ($1, $2, $3, $4, 1000, $5, $6)
+      ON CONFLICT (building_id, investor_id) DO UPDATE SET
+        shares_owned = building_investment_shares.shares_owned + EXCLUDED.shares_owned,
+        invested_credits = building_investment_shares.invested_credits + EXCLUDED.invested_credits,
+        updated_at = CURRENT_TIMESTAMP`,
+      [shareId, bld.id, input.humanId, input.sharesCount, totalCredits, day],
     );
 
-    return { ok: true, cityId, machineId: input.machineId, status: 'active' };
+    const updated = await tx.query(
+      'SELECT * FROM building_investment_shares WHERE building_id = $1 AND investor_id = $2',
+      [bld.id, input.humanId],
+    );
+
+    return { ok: true, shares: updated.rows[0], correlationId: input.correlationId };
   });
 }
 
-export async function withdrawMunicipalLabor(
+export async function demolishBuilding(
   repository: PostgresRepository,
-  input: { humanId: string; machineId: string },
+  input: {
+    humanId: string;
+    buildingId: string;
+  },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    await tx.query(
-      "UPDATE municipal_labor_pool SET status = 'withdrawn', updated_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND machine_id = $2",
-      [input.humanId, input.machineId],
+    const bld = await tx.query<{ id: string; owner_id: string; building_type: string; slot_footprint: number }>(
+      'SELECT id, owner_id, building_type, slot_footprint FROM buildings WHERE id = $1 FOR UPDATE',
+      [input.buildingId],
     );
-    return { ok: true, machineId: input.machineId, status: 'withdrawn' };
+    if (!bld.rows[0]) throw new Error('Building not found');
+    if (bld.rows[0].owner_id !== input.humanId) throw new Error('Only the owner can demolish this facility');
+
+    const spec = BUILDING_CATALOG[bld.rows[0].building_type];
+    const recycledMaterials = Math.floor((spec?.baseMaterialCost ?? 100) * 0.30);
+
+    // Recycle materials back to owner
+    await tx.query(
+      "UPDATE resource_balances SET amount = amount + $1 WHERE owner_id = $2 AND resource = 'material'",
+      [recycledMaterials, input.humanId],
+    );
+
+    await tx.query("UPDATE buildings SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [
+      input.buildingId,
+    ]);
+
+    return { ok: true, buildingId: input.buildingId, recycledMaterials, freedSlots: bld.rows[0].slot_footprint };
   });
+}
+
+export async function getCivicDividendHistory(
+  repository: PostgresRepository,
+  cityId: string,
+  humanId: string,
+): Promise<Record<string, unknown>> {
+  const payouts = await repository.query(
+    'SELECT * FROM civic_dividend_payouts WHERE city_id = $1 ORDER BY day DESC LIMIT 10',
+    [cityId],
+  );
+
+  const myShares = await repository.query(
+    `SELECT s.*, b.name AS building_name, b.building_type, b.condition
+     FROM building_investment_shares s
+     JOIN buildings b ON s.building_id = b.id
+     WHERE s.investor_id = $1 AND b.city_id = $2`,
+    [humanId, cityId],
+  );
+
+  return {
+    cityId,
+    recentPayouts: payouts.rows,
+    myShares: myShares.rows,
+  };
 }
 
 export async function contributeCorporateResearch(
@@ -417,3 +610,4 @@ export async function contributeCorporateResearch(
     return { ok: true, pool: updated.rows[0], completed, correlationId: input.correlationId };
   });
 }
+

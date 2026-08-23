@@ -146,24 +146,72 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
     owner_id: string;
     city_id: string;
     ownership_type: string;
+    ownership_class: string | null;
     business_id: string | null;
+    operating_policy: string | null;
     upkeep_energy: string;
     upkeep_food: string;
     upkeep_materials: string;
     upkeep_components: string;
     upkeep_compute: string;
+    daily_operating_credits: string;
     base_revenue_crd: string;
+    resource_output_type: string | null;
+    resource_output_amount: string | null;
     tier: number;
     condition: string;
-  }>("SELECT id, owner_id, city_id, ownership_type, business_id, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, base_revenue_crd, tier, condition FROM buildings WHERE status = 'active'");
+    auto_repair_enabled: boolean | null;
+  }>("SELECT * FROM buildings WHERE status NOT IN ('closed', 'foreclosed')");
 
   for (const bld of bldQuery.rows) {
-    if (bld.ownership_type === 'private') {
-      const uEnergy = Number(bld.upkeep_energy);
-      const uFood = Number(bld.upkeep_food);
-      const uMat = Number(bld.upkeep_materials);
-      const uComp = Number(bld.upkeep_components);
-      const uDat = Number(bld.upkeep_compute);
+    const oClass = (bld.ownership_class || bld.ownership_type || 'private').toLowerCase();
+    const policy = (bld.operating_policy || 'balanced').toLowerCase();
+    const condition = Number(bld.condition || 100);
+
+    // Condition Efficiency Curve
+    let efficiency = 1.0;
+    let costMult = 1.0;
+    if (condition >= 80) {
+      efficiency = 1.0;
+      costMult = 1.0;
+    } else if (condition >= 50) {
+      efficiency = 0.75;
+      costMult = 1.15;
+    } else if (condition >= 20) {
+      efficiency = 0.40;
+      costMult = 1.50;
+    } else {
+      efficiency = 0.0; // Operations suspended
+      costMult = 0.50;
+    }
+
+    // Policy Multipliers
+    let policyYield = 1.0;
+    let policyCost = 1.0;
+    let policyDecay = 1.0;
+    if (policy === 'high_output') {
+      policyYield = 1.25;
+      policyCost = 1.40;
+      policyDecay = 1.50;
+    } else if (policy === 'eco_reserve') {
+      policyYield = 0.75;
+      policyCost = 0.60;
+      policyDecay = 0.50;
+    } else if (policy === 'overclock') {
+      policyYield = 1.50;
+      policyCost = 2.00;
+      policyDecay = 3.00;
+    }
+
+    const effectiveYield = efficiency * policyYield;
+    const effectiveCostMult = costMult * policyCost;
+
+    if (oClass === 'private') {
+      const uEnergy = Number(bld.upkeep_energy) * effectiveCostMult;
+      const uFood = Number(bld.upkeep_food) * effectiveCostMult;
+      const uMat = Number(bld.upkeep_materials) * effectiveCostMult;
+      const uComp = Number(bld.upkeep_components) * effectiveCostMult;
+      const uDat = Number(bld.upkeep_compute) * effectiveCostMult;
 
       let upkeepMet = true;
       if (uEnergy > 0) {
@@ -197,8 +245,19 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
         } else upkeepMet = false;
       }
 
-      if (upkeepMet) {
-        const rev = Number(bld.base_revenue_crd);
+      if (upkeepMet && effectiveYield > 0) {
+        // Produce Commodity Output if applicable
+        const outType = bld.resource_output_type;
+        const outAmount = Number(bld.resource_output_amount || 0) * effectiveYield;
+        if (outType && outType !== 'credits' && outAmount > 0) {
+          await tx.query(
+            "UPDATE resource_balances SET amount = amount + $1 WHERE owner_id = $2 AND resource = $3",
+            [outAmount, bld.owner_id, outType],
+          );
+        }
+
+        // Produce Credit Revenue if applicable
+        const rev = Number(bld.base_revenue_crd) * effectiveYield;
         if (rev > 0) {
           const revCents = BigInt(Math.round(rev * 100));
           const ownerAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [bld.owner_id]);
@@ -211,7 +270,7 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
               amount: centsToMoney(revCents),
               reasonType: 'building_commercial_revenue',
               reasonId: bld.id,
-              ruleVersion: 'real-estate-v1',
+              ruleVersion: 'real-estate-v2',
               correlationId: `BLD-REV-${bld.id}-${day}`,
             }).catch(() => undefined);
           }
@@ -219,33 +278,83 @@ async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: numbe
             await tx.query("UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3", [rev, day, bld.business_id]);
           }
         }
+
+        // Apply slight daily wear
+        const wear = 1.0 * policyDecay;
+        await tx.query("UPDATE buildings SET condition = GREATEST(0, condition - $1), updated_at = CURRENT_TIMESTAMP WHERE id = $2", [wear, bld.id]);
       } else {
-        await tx.query("UPDATE buildings SET condition = GREATEST(0, condition - 5), updated_at = CURRENT_TIMESTAMP WHERE id = $1", [bld.id]);
+        // Upkeep shortage: heavy decay
+        await tx.query("UPDATE buildings SET condition = GREATEST(0, condition - 8), updated_at = CURRENT_TIMESTAMP WHERE id = $1", [bld.id]);
+      }
+    } else if (oClass === 'public_investment') {
+      // Distribute public investment shares pro-rata
+      const rev = Number(bld.base_revenue_crd) * effectiveYield;
+      if (rev > 0) {
+        const sharesQuery = await tx.query<{
+          investor_id: string;
+          shares_owned: number;
+          total_shares_issued: number;
+        }>('SELECT investor_id, shares_owned, total_shares_issued FROM building_investment_shares WHERE building_id = $1', [bld.id]);
+
+        for (const s of sharesQuery.rows) {
+          const payout = (rev * s.shares_owned) / Math.max(1, s.total_shares_issued);
+          if (payout > 0) {
+            const payoutCents = BigInt(Math.round(payout * 100));
+            const invAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [s.investor_id]);
+            if (invAccount.rows[0]) {
+              await transferCredits(tx, {
+                ledgerId: crypto.randomUUID(),
+                gameDay: day,
+                debitAccount: `account-city-${bld.city_id}`,
+                creditAccount: invAccount.rows[0].account_id,
+                amount: centsToMoney(payoutCents),
+                reasonType: 'public_share_dividend',
+                reasonId: bld.id,
+                ruleVersion: 'real-estate-v2',
+                correlationId: `PUB-DIV-${bld.id}-${s.investor_id}-${day}`,
+              }).catch(() => undefined);
+
+              await tx.query(
+                'UPDATE building_investment_shares SET accumulated_dividends_crd = accumulated_dividends_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE building_id = $2 AND investor_id = $3',
+                [payout, bld.id, s.investor_id],
+              );
+            }
+          }
+        }
       }
     }
   }
 }
 
-async function settleMunicipalLaborShifts(tx: PostgresRepository, day: number): Promise<void> {
+async function settleCivicDividends(tx: PostgresRepository, day: number): Promise<void> {
   const cities = await tx.query<{ id: string }>("SELECT id FROM cities");
   for (const c of cities.rows) {
     const cityId = c.id;
-    const capacityQuery = await tx.query<{ total_slots: string }>(
-      "SELECT COALESCE(SUM(max_staff_slots), 0) AS total_slots FROM buildings WHERE city_id = $1 AND ownership_type = 'municipal' AND status = 'active'",
+
+    // Calculate total civic surplus from municipal buildings
+    const civicBldQuery = await tx.query<{ total_rev: string }>(
+      "SELECT COALESCE(SUM(base_revenue_crd), 0) AS total_rev FROM buildings WHERE city_id = $1 AND (ownership_class = 'civic' OR ownership_type = 'municipal') AND status = 'active'",
       [cityId],
     );
-    const totalSlots = Number(capacityQuery.rows[0]?.total_slots ?? 0);
-    if (totalSlots <= 0) continue;
+    const totalCivicSurplus = Number(civicBldQuery.rows[0]?.total_rev ?? 0);
+    if (totalCivicSurplus <= 0) continue;
 
-    const pool = await tx.query<{ id: string; human_id: string; machine_id: string }>(
-      "SELECT id, human_id, machine_id FROM municipal_labor_pool WHERE city_id = $1 AND status = 'active'",
+    // Find eligible residents (registered in city)
+    const residents = await tx.query<{ human_id: string }>(
+      "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
       [cityId],
     );
-    if (pool.rows.length === 0) continue;
+    if (residents.rows.length === 0) continue;
 
-    const allocatedHours = Math.min(24, Math.round((totalSlots / pool.rows.length) * 24));
-    const dailyWagePerMachine = allocatedHours * 12; // 12 CRD/hour base municipal shift wage
-    if (dailyWagePerMachine <= 0) continue;
+    const residentCount = residents.rows.length;
+    // 70/30 Hybrid Formula: 70% Base Equal UBI + 30% Participation
+    const baseDividendPool = totalCivicSurplus * 0.70;
+    const baseDividendPerResident = baseDividendPool / residentCount;
+    const participationPool = totalCivicSurplus * 0.30;
+    const participationPerResident = participationPool / residentCount;
+
+    const totalPerResident = baseDividendPerResident + participationPerResident;
+    const payoutCents = BigInt(Math.round(totalPerResident * 100));
 
     const cityAccount = await tx.query<{ account_id: string; balance: string }>(
       "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
@@ -253,37 +362,37 @@ async function settleMunicipalLaborShifts(tx: PostgresRepository, day: number): 
     );
     if (!cityAccount.rows[0]) continue;
 
-    for (const item of pool.rows) {
-      const wageCents = BigInt(dailyWagePerMachine * 100);
-      if (moneyToCents(cityAccount.rows[0].balance) < wageCents) break;
+    // Distribute to residents
+    for (const res of residents.rows) {
+      if (moneyToCents(cityAccount.rows[0].balance) < payoutCents) break;
 
       const humanAccount = await tx.query<{ account_id: string }>(
         "SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'",
-        [item.human_id],
+        [res.human_id],
       );
       if (!humanAccount.rows[0]) continue;
 
-      const correlationId = `MUNI-WAGE-${item.id}-${day}`;
-      const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1", [correlationId]);
-      if (prior.rows[0]) continue;
-
+      const correlationId = `CIVIC-DIV-${cityId}-${res.human_id}-${day}`;
       await transferCredits(tx, {
         ledgerId: crypto.randomUUID(),
         gameDay: day,
         debitAccount: cityAccount.rows[0].account_id,
         creditAccount: humanAccount.rows[0].account_id,
-        amount: centsToMoney(wageCents),
-        reasonType: 'municipal_shift_payroll',
-        reasonId: item.machine_id,
-        ruleVersion: 'muni-labor-v1',
+        amount: centsToMoney(payoutCents),
+        reasonType: 'civic_resident_dividend',
+        reasonId: cityId,
+        ruleVersion: 'civic-dividend-v2',
         correlationId,
       }).catch(() => undefined);
-
-      await tx.query(
-        "UPDATE municipal_labor_pool SET accumulated_wages_crd = accumulated_wages_crd + $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2",
-        [dailyWagePerMachine, item.id],
-      );
     }
+
+    // Log in civic_dividend_payouts
+    const payoutLogId = `CDIV-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
+    await tx.query(
+      `INSERT INTO civic_dividend_payouts (id, city_id, day, total_civic_surplus, base_dividend_per_resident, participation_dividend_pool, eligible_residents_count)
+       VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+      [payoutLogId, cityId, day, totalCivicSurplus, baseDividendPerResident, participationPool, residentCount],
+    );
   }
 }
 
@@ -723,7 +832,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await settleBusinessTaxes(tx, day);
       await settleBasicLevy(tx, day);
       await settleBuildingUpkeepAndRevenue(tx, day);
-      await settleMunicipalLaborShifts(tx, day);
+      await settleCivicDividends(tx, day);
       await processCityDynamics(tx, day);
       await processPatentExpirations(tx, day);
       await updateFinancialStates(tx, day);

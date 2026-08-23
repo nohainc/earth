@@ -10,80 +10,120 @@ Future<void> showBuildingAcquisitionDialog(
   Future<void> Function(Future<EarthState> Function()) action,
   List<dynamic> buildingCatalog,
   String cityId,
+  int availablePrivateSlots,
 ) async {
   final catalog = buildingCatalog.isNotEmpty
       ? buildingCatalog.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
       : <Map<String, dynamic>>[
           {
             'type': 'restaurant',
-            'name': 'Bistro & Molecular Restaurant',
+            'name': 'Bistro & Molecular Diner',
             'category': 'commercial',
-            'tier': 1,
+            'slotFootprint': 1,
             'baseCreditCost': 8500,
             'baseMaterialCost': 120,
-            'maxStaffSlots': 4,
-            'upkeepEnergy': 0.50,
-            'upkeepFood': 0.25,
-            'baseDailyRevenueCrd': 450,
-            'description': 'Specialized molecular dining establishment that converts energy and biomass into liquid credit revenue.',
+            'dailyOperatingCredits': 60,
+            'dailyInputEnergy': 0.50,
+            'dailyInputFood': 0.25,
+            'dailyOutputCredits': 620,
+            'description': 'Compact molecular dining eatery converting local energy and agro-protein into liquid credit turnover.',
           },
           {
             'type': 'retail-store',
-            'name': 'Retail Boutique & Department Store',
+            'name': 'Department Store & Boutique',
             'category': 'commercial',
-            'tier': 1,
+            'slotFootprint': 1,
             'baseCreditCost': 9200,
             'baseMaterialCost': 140,
-            'maxStaffSlots': 4,
-            'upkeepEnergy': 0.40,
-            'upkeepComponents': 0.15,
-            'baseDailyRevenueCrd': 520,
-            'description': 'Consumer goods outlet offering manufactured components and standard tools to city dwellers.',
+            'dailyOperatingCredits': 80,
+            'dailyInputEnergy': 0.40,
+            'dailyInputComponents': 0.15,
+            'dailyOutputCredits': 710,
+            'description': 'Direct consumer outlet providing manufactured tools, wearables, and domestic amenities.',
+          },
+          {
+            'type': 'solar-array-complex',
+            'name': 'Solar Concentrator Array',
+            'category': 'energy',
+            'slotFootprint': 2,
+            'baseCreditCost': 10500,
+            'baseMaterialCost': 190,
+            'dailyOperatingCredits': 40,
+            'dailyInputComponents': 0.10,
+            'dailyOutputResourceType': 'energy',
+            'dailyOutputResourceAmount': 4.5,
+            'description': 'High-yield photovoltaic field harvesting solar irradiation for regional grid distribution.',
+          },
+          {
+            'type': 'vertical-farm',
+            'name': 'Aeroponic Vertical Farm',
+            'category': 'food',
+            'slotFootprint': 2,
+            'baseCreditCost': 11200,
+            'baseMaterialCost': 180,
+            'dailyOperatingCredits': 50,
+            'dailyInputEnergy': 1.20,
+            'dailyOutputResourceType': 'food',
+            'dailyOutputResourceAmount': 3.8,
+            'description': 'Multi-tiered indoor vertical farm producing organic biomass and fresh protein.',
           },
           {
             'type': 'fabrication-plant',
-            'name': 'Automated Fabrication Plant',
-            'category': 'industrial',
-            'tier': 1,
-            'baseCreditCost': 11000,
-            'baseMaterialCost': 180,
-            'maxStaffSlots': 6,
-            'upkeepEnergy': 2.00,
-            'upkeepMaterials': 1.50,
-            'baseDailyRevenueCrd': 750,
-            'description': 'Industrial manufacturing facility engineered to house precision CNC cells and assembly lines.',
+            'name': 'Automated CNC Fabrication Plant',
+            'category': 'manufacturing',
+            'slotFootprint': 2,
+            'baseCreditCost': 13500,
+            'baseMaterialCost': 240,
+            'dailyOperatingCredits': 120,
+            'dailyInputEnergy': 2.00,
+            'dailyInputMaterials': 1.50,
+            'dailyOutputResourceType': 'components',
+            'dailyOutputResourceAmount': 2.2,
+            'description': 'Precision robotics workshop milling raw materials into durable structural components.',
           },
           {
             'type': 'server-farm',
-            'name': 'Neural Data Center & Server Farm',
-            'category': 'high_tech',
-            'tier': 1,
-            'baseCreditCost': 12500,
-            'baseMaterialCost': 190,
-            'maxStaffSlots': 6,
-            'upkeepEnergy': 3.00,
-            'upkeepComponents': 0.20,
-            'baseDailyRevenueCrd': 800,
-            'description': 'Liquid-cooled data facility providing high-throughput computational telemetry.',
+            'name': 'Liquid-Cooled Neural Data Center',
+            'category': 'compute',
+            'slotFootprint': 2,
+            'baseCreditCost': 14500,
+            'baseMaterialCost': 220,
+            'dailyOperatingCredits': 140,
+            'dailyInputEnergy': 3.00,
+            'dailyInputComponents': 0.20,
+            'dailyOutputResourceType': 'compute',
+            'dailyOutputResourceAmount': 5.0,
+            'description': 'High-throughput quantum compute clusters supplying synthetic intelligence workloads.',
           },
         ];
 
-  final commercialCatalog = catalog.where((b) => b['category'] != 'municipal_megaproject').toList();
-  String selectedType = commercialCatalog.first['type']?.toString() ?? 'restaurant';
-  final nameCtrl = TextEditingController(text: commercialCatalog.first['name']?.toString() ?? 'Facility');
+  final privateBlueprints = catalog.where((b) => b['ownershipClass'] != 'civic' && b['ownershipClass'] != 'public_investment').toList();
+  String selectedType = privateBlueprints.first['type']?.toString() ?? 'restaurant';
+  final nameCtrl = TextEditingController(text: privateBlueprints.first['name']?.toString() ?? 'Facility');
 
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) {
-        final currentSpec = commercialCatalog.firstWhere(
+        final currentSpec = privateBlueprints.firstWhere(
           (b) => b['type'] == selectedType,
-          orElse: () => commercialCatalog.first,
+          orElse: () => privateBlueprints.first,
         );
         final creditCost = asIntOr(currentSpec['baseCreditCost'], 8500);
         final materialCost = asIntOr(currentSpec['baseMaterialCost'], 120);
-        final staffSlots = asIntOr(currentSpec['maxStaffSlots'], 4);
-        final baseRev = asIntOr(currentSpec['baseDailyRevenueCrd'], 450);
+        final footprint = asIntOr(currentSpec['slotFootprint'], 1);
+        final opCost = asDoubleOr(currentSpec['dailyOperatingCredits'], 0);
+        final baseRev = asDoubleOr(currentSpec['dailyOutputCredits'], 0);
+        final resOutType = currentSpec['dailyOutputResourceType']?.toString();
+        final resOutAmt = asDoubleOr(currentSpec['dailyOutputResourceAmount'], 0);
+
+        final uEnergy = asDoubleOr(currentSpec['dailyInputEnergy'], 0);
+        final uFood = asDoubleOr(currentSpec['dailyInputFood'], 0);
+        final uMat = asDoubleOr(currentSpec['dailyInputMaterials'], 0);
+        final uComp = asDoubleOr(currentSpec['dailyInputComponents'], 0);
+        final uDat = asDoubleOr(currentSpec['dailyInputCompute'], 0);
+
+        final hasEnoughSlots = availablePrivateSlots >= footprint;
 
         return AlertDialog(
           backgroundColor: context.panelColor,
@@ -91,15 +131,22 @@ Future<void> showBuildingAcquisitionDialog(
             borderRadius: BorderRadius.circular(context.radiusPanel),
             side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
           ),
-          title: Text('Acquire Commercial / Industrial Plot', style: context.topicTitleStyle),
+          title: Row(
+            children: [
+              Icon(Icons.domain_add_outlined, color: context.primaryColor),
+              const SizedBox(width: 8),
+              Text('Acquire District Plot & Construct', style: context.topicTitleStyle),
+            ],
+          ),
           content: SizedBox(
-            width: 520,
+            width: 540,
             child: SingleChildScrollView(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Text('BUILDING ARCHETYPE', style: context.captionStyle),
+                  // Blueprint Dropdown
+                  Text('ARCHITECTURAL BLUEPRINT', style: context.captionStyle),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
                     value: selectedType,
@@ -108,22 +155,25 @@ Future<void> showBuildingAcquisitionDialog(
                     decoration: InputDecoration(
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(context.radiusControl)),
                     ),
-                    items: commercialCatalog.map((b) {
+                    items: privateBlueprints.map((b) {
                       final type = b['type']?.toString() ?? '';
                       final name = b['name']?.toString() ?? type;
-                      return DropdownMenuItem(value: type, child: Text(name));
+                      final slots = asIntOr(b['slotFootprint'], 1);
+                      return DropdownMenuItem(value: type, child: Text('$name ($slots Slot${slots > 1 ? 's' : ''})'));
                     }).toList(),
                     onChanged: (val) {
                       if (val != null) {
                         setState(() {
                           selectedType = val;
-                          final match = commercialCatalog.firstWhere((x) => x['type'] == val);
+                          final match = privateBlueprints.firstWhere((x) => x['type'] == val);
                           nameCtrl.text = match['name']?.toString() ?? 'Facility';
                         });
                       }
                     },
                   ),
                   SizedBox(height: context.spacingControl),
+
+                  // Facility Name
                   Text('FACILITY NAME', style: context.captionStyle),
                   const SizedBox(height: 6),
                   TextField(
@@ -134,6 +184,8 @@ Future<void> showBuildingAcquisitionDialog(
                     ),
                   ),
                   SizedBox(height: context.spacingControl),
+
+                  // Blueprint Specifications Card
                   Container(
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
@@ -148,31 +200,72 @@ Future<void> showBuildingAcquisitionDialog(
                           currentSpec['description']?.toString() ?? '',
                           style: context.widgetFooterStyle,
                         ),
+                        const SizedBox(height: 10),
+                        // Zoning Footprint & Cost
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                EarthBadge(
+                                  label: '$footprint DISTRICT SLOT${footprint > 1 ? 'S' : ''}',
+                                  variant: EarthBadgeVariant.primary,
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  hasEnoughSlots
+                                      ? '($availablePrivateSlots Free Slots Available)'
+                                      : '(Requires $footprint Slots · Only $availablePrivateSlots Free)',
+                                  style: context.captionStyle.copyWith(
+                                    color: hasEnoughSlots ? context.successColor : context.dangerColor,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Construction Cost: ${formatWholeNumber(creditCost)} CRD + $materialCost Materials',
+                          style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                        ),
                         const Divider(height: 16),
+                        // Daily Inflow / Outflow
+                        Text('AUTONOMOUS DAILY OPERATING CYCLE', style: context.captionStyle),
+                        const SizedBox(height: 6),
                         Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('ACQUISITION COST:', style: context.captionStyle),
-                            Text('$creditCost CRD + $materialCost MAT',
-                                style: context.widgetValueStyle.copyWith(color: context.warningColor)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('STAFF CAPACITY:', style: context.captionStyle),
-                            Text('$staffSlots Staff / Robot Slots',
-                                style: context.widgetValueStyle.copyWith(color: context.primaryColor)),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Text('BASE REVENUE:', style: context.captionStyle),
-                            Text('+$baseRev CRD / Day',
-                                style: context.widgetValueStyle.copyWith(color: context.successColor)),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('UPKEEP DRAINS', style: context.widgetFooterStyle),
+                                  const SizedBox(height: 4),
+                                  if (opCost > 0) Text('• ${formatWholeNumber(opCost)} CRD / day', style: context.bodyStyle),
+                                  if (uEnergy > 0) Text('• ${uEnergy.toStringAsFixed(1)} Energy / day', style: context.bodyStyle),
+                                  if (uFood > 0) Text('• ${uFood.toStringAsFixed(1)} Food / day', style: context.bodyStyle),
+                                  if (uMat > 0) Text('• ${uMat.toStringAsFixed(1)} Materials / day', style: context.bodyStyle),
+                                  if (uComp > 0) Text('• ${uComp.toStringAsFixed(1)} Components / day', style: context.bodyStyle),
+                                  if (uDat > 0) Text('• ${uDat.toStringAsFixed(1)} Compute / day', style: context.bodyStyle),
+                                ],
+                              ),
+                            ),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text('OUTPUT YIELDS', style: context.widgetFooterStyle),
+                                  const SizedBox(height: 4),
+                                  if (baseRev > 0)
+                                    Text('+${formatWholeNumber(baseRev)} CRD / day',
+                                        style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
+                                  if (resOutAmt > 0 && resOutType != null)
+                                    Text('+${resOutAmt.toStringAsFixed(1)} ${resOutType.toUpperCase()} / day',
+                                        style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
+                                ],
+                              ),
+                            ),
                           ],
                         ),
                       ],
@@ -183,22 +276,26 @@ Future<void> showBuildingAcquisitionDialog(
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+            EarthButton(
+              label: 'CANCEL',
+              variant: EarthButtonVariant.neutral,
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             EarthButton(
-              label: 'PURCHASE & BUILD',
+              label: 'COMMENCE CONSTRUCTION',
+              icon: Icons.check_circle_outline,
               variant: EarthButtonVariant.primary,
-              onPressed: () async {
-                Navigator.pop(dialogContext);
-                EarthAudioEngine.instance.playClick();
-                await action(() => const EarthApi().purchaseBuilding(
-                      buildingType: selectedType,
-                      name: nameCtrl.text.trim(),
-                      cityId: cityId,
-                    ));
-              },
+              onPressed: !hasEnoughSlots
+                  ? null
+                  : () async {
+                      EarthAudioEngine.instance.playClick();
+                      Navigator.of(dialogContext).pop();
+                      await action(() => const EarthApi().purchaseBuilding(
+                            buildingType: selectedType,
+                            name: nameCtrl.text.trim().isEmpty ? 'Facility' : nameCtrl.text.trim(),
+                            cityId: cityId,
+                          ));
+                    },
             ),
           ],
         );
@@ -212,12 +309,15 @@ Future<void> showBuildingUpgradeDialog(
   Future<void> Function(Future<EarthState> Function()) action,
   Map<String, dynamic> building,
 ) async {
-  final buildingId = building['id']?.toString() ?? '';
-  final name = building['name']?.toString() ?? 'Building';
+  final id = building['id']?.toString() ?? '';
+  final name = building['name']?.toString() ?? 'Facility';
   final currentTier = asIntOr(building['tier'], 1);
   final nextTier = currentTier + 1;
-  final creditCost = 4500 * nextTier;
-  final compCost = 20 * nextTier;
+  final baseRev = asDoubleOr(building['base_revenue_crd'], 0);
+  final projectedRev = (baseRev * 1.30).roundToDouble();
+
+  final upgradeCreditCost = (currentTier * 5000 + 4000);
+  final upgradeMaterialCost = (currentTier * 40 + 20);
 
   await showDialog<void>(
     context: context,
@@ -227,70 +327,67 @@ Future<void> showBuildingUpgradeDialog(
         borderRadius: BorderRadius.circular(context.radiusPanel),
         side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
       ),
-      title: Text('Upgrade $name', style: context.topicTitleStyle),
-      content: SizedBox(
-        width: 480,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              'Upgrading infrastructure to Tier $nextTier increases staff capacity by +4 slots and boosts base commercial yield by +35%.',
-              style: context.widgetFooterStyle,
+      title: Text('Upgrade Facility to Tier $nextTier', style: context.topicTitleStyle),
+      content: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            'Upgrading $name enhances operational efficiency, boosts daily commercial yield by +30%, and fully restores facility health to 100%.',
+            style: context.bodyStyle,
+          ),
+          const SizedBox(height: 12),
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusControl),
+              border: Border.all(color: context.subtleBorderColor),
             ),
-            SizedBox(height: context.spacingControl),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: context.surfaceColor,
-                borderRadius: BorderRadius.circular(context.radiusControl),
-                border: Border.all(color: context.subtleBorderColor),
-              ),
-              child: Column(
-                children: [
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('Current Tier: $currentTier', style: context.widgetFooterStyle),
+                    Text('Upgraded Tier: $nextTier', style: context.widgetFooterStyle.copyWith(color: context.successColor)),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                if (baseRev > 0)
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Text('CURRENT LEVEL:', style: context.captionStyle),
-                      Text('Tier $currentTier', style: context.widgetValueStyle),
+                      Text('Yield: +${formatWholeNumber(baseRev)} CRD', style: context.widgetFooterStyle),
+                      Text('Projected: +${formatWholeNumber(projectedRev)} CRD',
+                          style: context.widgetFooterStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
                     ],
                   ),
-                  const SizedBox(height: 4),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('UPGRADE TARGET:', style: context.captionStyle),
-                      Text('Tier $nextTier (+4 slots, +35% yield)',
-                          style: context.widgetValueStyle.copyWith(color: context.primaryColor)),
-                    ],
-                  ),
-                  const Divider(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text('REQUIRED INVESTMENT:', style: context.captionStyle),
-                      Text('$creditCost CRD + $compCost COMP',
-                          style: context.widgetValueStyle.copyWith(color: context.warningColor)),
-                    ],
-                  ),
-                ],
-              ),
+                const Divider(height: 16),
+                Text(
+                  'Upgrade Investment: ${formatWholeNumber(upgradeCreditCost)} CRD + $upgradeMaterialCost Materials',
+                  style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+        EarthButton(
+          label: 'CANCEL',
+          variant: EarthButtonVariant.neutral,
+          onPressed: () => Navigator.of(dialogContext).pop(),
         ),
         EarthButton(
-          label: 'COMMISSION UPGRADE',
+          label: 'EXECUTE UPGRADE',
+          icon: Icons.arrow_upward_outlined,
           variant: EarthButtonVariant.primary,
           onPressed: () async {
-            Navigator.pop(dialogContext);
             EarthAudioEngine.instance.playClick();
-            await action(() => const EarthApi().upgradeBuilding(buildingId: buildingId));
+            Navigator.of(dialogContext).pop();
+            await action(() => const EarthApi().upgradeBuilding(buildingId: id));
           },
         ),
       ],
@@ -298,81 +395,48 @@ Future<void> showBuildingUpgradeDialog(
   );
 }
 
-Future<void> showMunicipalLaborDispatchDialog(
+Future<void> showPublicShareInvestDialog(
   BuildContext context,
-  EarthState state,
   Future<void> Function(Future<EarthState> Function()) action,
+  Map<String, dynamic> publicBuilding,
 ) async {
-  final machines = state.machines.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
-  final activePool = state.municipalLabor.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList();
-  final pooledMachineIds = activePool.where((m) => m['status'] == 'active').map((m) => m['machine_id']?.toString()).toSet();
+  final id = publicBuilding['id']?.toString() ?? '';
+  final name = publicBuilding['name']?.toString() ?? 'Megaproject';
+  final pricePerShare = asDoubleOr(publicBuilding['price_per_share_crd'], 500);
+  final totalShares = asIntOr(publicBuilding['total_shares'], 100);
 
-  final eligibleMachines = machines.where((m) {
-    final status = m['status']?.toString() ?? 'active';
-    final id = m['id']?.toString() ?? '';
-    return status == 'active' && !pooledMachineIds.contains(id);
-  }).toList();
-
-  if (eligibleMachines.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('All active machines are already dispatched or assigned.')),
-    );
-    return;
-  }
-
-  String selectedMachineId = eligibleMachines.first['id']?.toString() ?? '';
+  int selectedShares = 1;
 
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => StatefulBuilder(
       builder: (context, setState) {
-        final machine = eligibleMachines.firstWhere((m) => m['id'] == selectedMachineId, orElse: () => eligibleMachines.first);
-        final name = machine['name']?.toString() ?? 'Machine';
-        final machineType = (machine['machine_type']?.toString() ?? 'rig').toUpperCase();
-        final cond = asIntOr(machine['condition'], 100);
+        final totalInvestment = selectedShares * pricePerShare;
 
         return AlertDialog(
           backgroundColor: context.panelColor,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(context.radiusPanel),
-            side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+            side: BorderSide(color: context.secondaryColor.withValues(alpha: .35)),
           ),
-          title: Text('Dispatch Machine to Municipal Labor Pool', style: context.topicTitleStyle),
+          title: Row(
+            children: [
+              Icon(Icons.pie_chart_outline, color: context.secondaryColor),
+              const SizedBox(width: 8),
+              Text('Invest in Public Megaproject', style: context.topicTitleStyle),
+            ],
+          ),
           content: SizedBox(
-            width: 480,
+            width: 440,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  'Assigning your automated robot or machine to the City Municipal Labor Pool provides rotating shift labor across public megaprojects (Power Grids, Hospitals, Transit Termini). The City Treasury pays guaranteed daily payroll to your account.',
-                  style: context.widgetFooterStyle,
+                  'Acquire equity shares in $name. Public megaprojects yield continuous pro-rata daily dividend distributions to shareholders directly from facility surplus revenue.',
+                  style: context.bodyStyle,
                 ),
-                SizedBox(height: context.spacingControl),
-                Text('SELECT DISPATCH UNIT', style: context.captionStyle),
-                const SizedBox(height: 6),
-                DropdownButtonFormField<String>(
-                  value: selectedMachineId,
-                  dropdownColor: context.panelColor,
-                  style: context.bodyStyle.copyWith(color: context.inkColor),
-                  decoration: InputDecoration(
-                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(context.radiusControl)),
-                  ),
-                  items: eligibleMachines.map((m) {
-                    final id = m['id']?.toString() ?? '';
-                    final mName = m['name']?.toString() ?? id;
-                    final mType = (m['machine_type']?.toString() ?? 'rig').toUpperCase();
-                    return DropdownMenuItem(value: id, child: Text('$mName ($mType)'));
-                  }).toList(),
-                  onChanged: (val) {
-                    if (val != null) {
-                      setState(() {
-                        selectedMachineId = val;
-                      });
-                    }
-                  },
-                ),
-                SizedBox(height: context.spacingControl),
+                const SizedBox(height: 12),
                 Container(
                   padding: const EdgeInsets.all(12),
                   decoration: BoxDecoration(
@@ -381,24 +445,52 @@ Future<void> showMunicipalLaborDispatchDialog(
                     border: Border.all(color: context.subtleBorderColor),
                   ),
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('MACHINE STATUS:', style: context.captionStyle),
-                          Text('$cond% Condition',
-                              style: context.widgetValueStyle.copyWith(
-                                color: cond > 70 ? context.successColor : context.warningColor,
-                              )),
+                          Text('SHARE QUANTITY', style: context.captionStyle),
+                          Row(
+                            children: [
+                              IconButton(
+                                icon: const Icon(Icons.remove_circle_outline),
+                                onPressed: selectedShares > 1
+                                    ? () {
+                                        setState(() => selectedShares--);
+                                      }
+                                    : null,
+                              ),
+                              Text('$selectedShares', style: context.topicTitleStyle),
+                              IconButton(
+                                icon: const Icon(Icons.add_circle_outline),
+                                onPressed: selectedShares < totalShares
+                                    ? () {
+                                        setState(() => selectedShares++);
+                                      }
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const Divider(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text('Price Per Share:', style: context.widgetFooterStyle),
+                          Text('${formatWholeNumber(pricePerShare)} CRD', style: context.widgetFooterStyle),
                         ],
                       ),
                       const SizedBox(height: 4),
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Text('ESTIMATED SHIFT PAYROLL:', style: context.captionStyle),
-                          Text('~96 – 288 CRD / Day',
-                              style: context.widgetValueStyle.copyWith(color: context.successColor)),
+                          Text('Total Investment:', style: context.widgetTitleStyle),
+                          Text(
+                            '${formatWholeNumber(totalInvestment)} CRD',
+                            style: context.widgetTitleStyle.copyWith(color: context.successColor),
+                          ),
                         ],
                       ),
                     ],
@@ -408,22 +500,76 @@ Future<void> showMunicipalLaborDispatchDialog(
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
+            EarthButton(
+              label: 'CANCEL',
+              variant: EarthButtonVariant.neutral,
+              onPressed: () => Navigator.of(dialogContext).pop(),
             ),
             EarthButton(
-              label: 'DISPATCH TO CITY WORKS',
-              variant: EarthButtonVariant.primary,
+              label: 'PURCHASE SHARES',
+              icon: Icons.account_balance_outlined,
+              variant: EarthButtonVariant.secondary,
               onPressed: () async {
-                Navigator.pop(dialogContext);
                 EarthAudioEngine.instance.playClick();
-                await action(() => const EarthApi().registerMunicipalLabor(machineId: selectedMachineId));
+                Navigator.of(dialogContext).pop();
+                await action(() => const EarthApi().investInPublicBuilding(
+                      buildingId: id,
+                      sharesCount: selectedShares,
+                    ));
               },
             ),
           ],
         );
       },
+    ),
+  );
+}
+
+Future<void> showDemolishConfirmDialog(
+  BuildContext context,
+  Future<void> Function(Future<EarthState> Function()) action,
+  Map<String, dynamic> building,
+) async {
+  final id = building['id']?.toString() ?? '';
+  final name = building['name']?.toString() ?? 'Facility';
+  final footprint = asIntOr(building['slot_footprint'], 1);
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) => AlertDialog(
+      backgroundColor: context.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.radiusPanel),
+        side: BorderSide(color: context.dangerColor.withValues(alpha: .35)),
+      ),
+      title: Row(
+        children: [
+          Icon(Icons.warning_amber_outlined, color: context.dangerColor),
+          const SizedBox(width: 8),
+          Text('Demolish Facility', style: context.topicTitleStyle),
+        ],
+      ),
+      content: Text(
+        'Are you sure you want to demolish $name? Demolition will close the facility, deallocate its $footprint district zoning slot(s) for new construction, and recycle 30% of its structural materials back to your warehouse.',
+        style: context.bodyStyle,
+      ),
+      actions: [
+        EarthButton(
+          label: 'CANCEL',
+          variant: EarthButtonVariant.neutral,
+          onPressed: () => Navigator.of(dialogContext).pop(),
+        ),
+        EarthButton(
+          label: 'DEMOLISH & RECYCLE',
+          icon: Icons.delete_forever_outlined,
+          variant: EarthButtonVariant.danger,
+          onPressed: () async {
+            EarthAudioEngine.instance.playClick();
+            Navigator.of(dialogContext).pop();
+            await action(() => const EarthApi().demolishBuilding(buildingId: id));
+          },
+        ),
+      ],
     ),
   );
 }

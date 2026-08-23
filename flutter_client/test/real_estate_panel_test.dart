@@ -5,7 +5,7 @@ import 'package:earth_client/features/operations/real_estate_panel.dart';
 import 'package:earth_client/features/operations/real_estate_dialogs.dart';
 
 void main() {
-  testWidgets('RealEstateDistrictPanel renders properties, megaprojects, and labor pool', (tester) async {
+  testWidgets('RealEstateDistrictPanel renders zoning visualizer, self-contained buildings, and civic dividends', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -17,71 +17,101 @@ void main() {
       'clock': {'day': 184, 'minute': 100},
       'human': {'id': 'H-0044', 'credits': 50000},
       'membership': {'city_id': 'CITY-0084'},
-      'machines': [
-        {
-          'id': 'M-01',
-          'name': 'Service Drone Alpha',
-          'machine_type': 'service-robot-hub',
-          'condition': 95,
-          'status': 'active',
-        },
-      ],
+      'districtZoning': {
+        'cityId': 'CITY-0084',
+        'cityName': 'New Carthage',
+        'population': 15,
+        'totalSlots': 11,
+        'civicReservedSlots': 4,
+        'usedPrivateSlots': 1,
+        'usedCivicSlots': 2,
+        'availablePrivateSlots': 6,
+        'availableCivicSlots': 2,
+      },
       'buildings': [
         {
           'id': 'BLD-01',
           'city_id': 'CITY-0084',
           'owner_id': 'H-0044',
+          'ownership_class': 'private',
           'ownership_type': 'private',
           'building_type': 'restaurant',
-          'name': 'Nova Bistro',
+          'name': 'Nova Molecular Bistro',
           'tier': 1,
-          'condition': 100,
-          'max_staff_slots': 4,
-          'active_staff_count': 1,
+          'condition': 95,
+          'slot_footprint': 1,
+          'operating_policy': 'balanced',
+          'daily_operating_credits': 60,
           'upkeep_energy': 0.5,
           'upkeep_food': 0.25,
-          'base_revenue_crd': 450.0,
+          'base_revenue_crd': 620.0,
           'status': 'active',
         },
         {
-          'id': 'BLD-MUNI-01',
+          'id': 'BLD-CIVIC-01',
           'city_id': 'CITY-0084',
           'owner_id': 'CITY-0084',
+          'ownership_class': 'civic',
           'ownership_type': 'municipal',
           'building_type': 'geothermal-grid',
-          'name': 'New Carthage Geothermal Central',
-          'tier': 3,
+          'name': 'New Carthage Geothermal Core',
+          'tier': 2,
           'condition': 98,
-          'max_staff_slots': 16,
-          'active_staff_count': 4,
+          'slot_footprint': 2,
+          'operating_policy': 'balanced',
+          'daily_operating_credits': 100,
           'upkeep_materials': 1.5,
           'base_revenue_crd': 850.0,
           'status': 'active',
         },
-      ],
-      'municipalLabor': [
         {
-          'id': 'MLP-01',
+          'id': 'BLD-PUB-01',
           'city_id': 'CITY-0084',
-          'human_id': 'H-0044',
-          'machine_id': 'M-01',
-          'machine_name': 'Service Drone Alpha',
-          'machine_type': 'service-robot-hub',
+          'owner_id': 'CITY-0084',
+          'ownership_class': 'public_investment',
+          'ownership_type': 'public_investment',
+          'building_type': 'transit-hyperloop',
+          'name': 'Hyperloop Terminal Express',
+          'tier': 3,
+          'condition': 100,
+          'slot_footprint': 3,
+          'total_shares': 100,
+          'price_per_share_crd': 500,
+          'operating_policy': 'high_output',
+          'base_revenue_crd': 1800.0,
           'status': 'active',
-          'accumulated_wages_crd': 384.0,
+        },
+      ],
+      'investmentShares': [
+        {
+          'building_id': 'BLD-PUB-01',
+          'investor_id': 'H-0044',
+          'shares_owned': 10,
+          'invested_credits': 5000,
+        },
+      ],
+      'civicDividends': [
+        {
+          'day': 183,
+          'city_id': 'CITY-0084',
+          'total_surplus_crd': 12000,
+          'base_ubi_per_resident_crd': 560,
+          'participation_bonus_per_resident_crd': 240,
         },
       ],
       'buildingCatalog': [
         {
           'type': 'restaurant',
-          'name': 'Bistro & Molecular Restaurant',
+          'name': 'Bistro & Molecular Diner',
           'category': 'commercial',
-          'tier': 1,
+          'slotFootprint': 1,
           'baseCreditCost': 8500,
           'baseMaterialCost': 120,
-          'maxStaffSlots': 4,
-          'baseDailyRevenueCrd': 450,
-          'description': 'Molecular dining.',
+          'dailyOperatingCredits': 60,
+          'dailyInputEnergy': 0.50,
+          'dailyInputFood': 0.25,
+          'dailyOutputCredits': 620,
+          'description': 'Molecular dining eatery.',
         },
       ],
     });
@@ -100,25 +130,35 @@ void main() {
       ),
     );
 
-    // Verify title and metrics
-    expect(find.text('URBAN REAL ESTATE & MUNICIPAL DISTRICT'), findsOneWidget);
-    expect(find.text('1 PRIVATE'), findsOneWidget);
-    expect(find.text('+450 CRD'), findsOneWidget);
-    expect(find.text('1 ROBOTS POOLED'), findsOneWidget);
+    // Verify Title & Metrics
+    expect(find.text('URBAN DISTRICT & REAL ESTATE INFRASTRUCTURE'), findsOneWidget);
+    expect(find.textContaining('1 SITES'), findsOneWidget);
+    expect(find.text('+560 CRD'), findsOneWidget); // 620 - 60 net yield
+    expect(find.textContaining('10 SHARES'), findsOneWidget);
 
-    // Verify building items
-    expect(find.text('Nova Bistro (RESTAURANT)'), findsOneWidget);
-    expect(find.text('New Carthage Geothermal Central (GEOTHERMAL-GRID)'), findsOneWidget);
-    expect(find.text('MUNICIPAL PUBLIC'), findsOneWidget);
+    // Verify Zoning Visualizer
+    expect(find.text('CITY DISTRICT LAND ZONING & FOOTPRINT MAP'), findsOneWidget);
+    expect(find.textContaining('Formula: 8 + ⌊Pop/5⌋'), findsOneWidget);
+
+    // Verify Building Cards
+    expect(find.text('Nova Molecular Bistro'), findsOneWidget);
     expect(find.text('PRIVATE ESTATE'), findsOneWidget);
+    expect(find.text('CIVIC UTILITY'), findsOneWidget);
+    expect(find.text('PUBLIC INVESTMENT'), findsOneWidget);
 
-    // Verify labor pool section
-    expect(find.text('MUNICIPAL SHARED LABOR POOL'), findsOneWidget);
-    expect(find.textContaining('Service Drone Alpha (SERVICE-ROBOT-HUB)'), findsOneWidget);
-    expect(find.text('WITHDRAW'), findsOneWidget);
+    // Verify Policy Selectors & Buttons
+    expect(find.text('Balanced (1.0x)'), findsNWidgets(1));
+    expect(find.text('UPGRADE (TIER 2)'), findsOneWidget);
+    expect(find.text('DEMOLISH / RECYCLE'), findsOneWidget);
+
+    // Verify Civic Dividends Section
+    expect(find.text('CIVIC DIVIDENDS & PUBLIC MEGAPROJECT SHARES'), findsOneWidget);
+    expect(find.text('GAME DAY 183 PAYOUT'), findsOneWidget);
+    expect(find.text('TOTAL SURPLUS: +12000 CRD'), findsOneWidget);
+    expect(find.text('BASE UBI: +560 CRD'), findsOneWidget);
   });
 
-  testWidgets('Real estate acquisition dialog opens and renders cost and details', (tester) async {
+  testWidgets('Real estate acquisition dialog opens and displays blueprint details', (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -136,20 +176,20 @@ void main() {
                 (cb) async => cb(),
                 const [],
                 'CITY-0084',
+                5,
               ),
-              child: const Text('ACQUIRE PLOT'),
+              child: const Text('CONSTRUCT BLUEPRINT'),
             ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('ACQUIRE PLOT'));
+    await tester.tap(find.text('CONSTRUCT BLUEPRINT'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Acquire Commercial / Industrial Plot'), findsOneWidget);
-    expect(find.text('BUILDING ARCHETYPE'), findsOneWidget);
-    expect(find.textContaining('8500 CRD + 120 MAT'), findsOneWidget);
-    expect(find.text('PURCHASE & BUILD'), findsOneWidget);
+    expect(find.text('Acquire District Plot & Construct'), findsOneWidget);
+    expect(find.text('ARCHITECTURAL BLUEPRINT'), findsOneWidget);
+    expect(find.text('COMMENCE CONSTRUCTION'), findsOneWidget);
   });
 }
