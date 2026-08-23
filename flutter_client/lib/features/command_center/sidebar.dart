@@ -49,6 +49,7 @@ class _SidebarState extends State<Sidebar> {
   }
 
   int _groupForSection(String section) {
+    if (section.startsWith('my-community')) return 2;
     const groups = [
       ['command', 'briefing', 'messages', 'notifications'],
       [

@@ -171,6 +171,30 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(navigatedTo, 'my-community:COM-002');
+
+    // Verify rebuilding with the selected section keeps the CIVIC group expanded
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 250,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'my-community:COM-002',
+              onNavigate: (section) {
+                navigatedTo = section;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('Solar Engineers'), findsOneWidget);
+    expect(find.text('Carthage Artisans'), findsOneWidget);
+    expect(find.text('Daily Priorities'), findsNothing); // NOW group is collapsed
   });
 
   testWidgets('showProposalComposer validates length and submits proposal',
