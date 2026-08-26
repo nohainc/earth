@@ -23,6 +23,7 @@ import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
 import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
+import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { communicationsRoutes } from './communications-routes';
 import { listSupplyContracts, proposeSupplyContract, acceptSupplyContract, cancelSupplyContract, getContractDeliveryTicks } from './supply-contracts-postgres.ts';
 import { getDynastyOverview, unlockDynastyPerk, equipDynastyHeirloom, forgeDynastyHeirloom, updateDynastyMotto } from './dynasty-postgres.ts';
