@@ -116,11 +116,13 @@ extension EarthApiInstitutions on EarthApi {
     required String name,
     String? description,
     String admissionPolicy = 'open',
+    String? applicationQuestion,
   }) async {
     await _request('/api/communities', method: 'POST', body: {
       'name': name,
       if (description != null && description.isNotEmpty) 'description': description,
       'admissionPolicy': admissionPolicy,
+      if (applicationQuestion != null && applicationQuestion.isNotEmpty) 'applicationQuestion': applicationQuestion,
       'correlationId':
           'community-formation-${DateTime.now().microsecondsSinceEpoch}',
     });
@@ -131,10 +133,12 @@ extension EarthApiInstitutions on EarthApi {
     required String communityId,
     String? description,
     String? admissionPolicy,
+    String? applicationQuestion,
   }) async {
     await _request('/api/communities/$communityId', method: 'PATCH', body: {
       if (description != null) 'description': description,
       if (admissionPolicy != null) 'admissionPolicy': admissionPolicy,
+      if (applicationQuestion != null) 'applicationQuestion': applicationQuestion,
     });
     return world();
   }
@@ -158,9 +162,11 @@ extension EarthApiInstitutions on EarthApi {
     required String communityId,
     required String requestId,
     required String action,
+    String? rejectionReason,
   }) async {
     await _request('/api/communities/$communityId/requests/$requestId', method: 'POST', body: {
       'action': action,
+      if (rejectionReason != null && rejectionReason.isNotEmpty) 'rejectionReason': rejectionReason,
     });
     return world();
   }
@@ -187,8 +193,10 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<EarthState> joinCommunity(String communityId) async {
-    await _request('/api/communities/$communityId/members', method: 'POST');
+  Future<EarthState> joinCommunity(String communityId, {String? applicationMessage}) async {
+    await _request('/api/communities/$communityId/members', method: 'POST', body: {
+      if (applicationMessage != null && applicationMessage.isNotEmpty) 'applicationMessage': applicationMessage,
+    });
     return world();
   }
 

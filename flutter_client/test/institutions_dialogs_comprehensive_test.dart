@@ -30,7 +30,9 @@ void main() {
 
     expect(find.text('Found New Community'), findsOneWidget);
     await tester.enterText(
-        find.widgetWithText(TextField, 'Community Name'), 'Pacific Syndicate');
+        find.widgetWithText(TextField, 'Community Name (Required)'), 'Pacific Syndicate');
+    await tester.enterText(
+        find.widgetWithText(TextField, 'Manifesto & Purpose (Required)'), 'Pacific oceanic clean energy consortium.');
     await tester.pumpAndSettle();
 
     await tester.tap(find.text('Found Community'));

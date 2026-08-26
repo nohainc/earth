@@ -85,15 +85,45 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const feeRate = Number(await marketFeeRate(repository, viewerId));
   const [rankings, book, trades, ownOrders, productionEvents, aiAssistants, communities, patents, licenses, finance, liquidity, audit, financialStates, roles, history, employees, buildings, investmentShares, civicDividends, corporateResearch, districtZoning, buildingPatentLicenses] = await Promise.all([
     Promise.all([
-      repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
-        FROM cities
-        JOIN institutions city_institutions ON city_institutions.id = cities.institution_id
-        ORDER BY (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
-          + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
-          + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
-          + LEAST(1, health_capacity / 100.0) * 20
-          + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) DESC, residents DESC, id LIMIT 20`),
-      repository.query(`SELECT c.id, c.member_count, c.treasury,
+      repository.query(`
+        SELECT entity_id AS id, entity_name AS name, rank, rank_delta, final_score, metrics_line, sub_indexes, raw_metrics, affiliation,
+               (raw_metrics->>'capitalization')::numeric AS capitalization,
+               (raw_metrics->>'businesses')::integer AS businesses_count,
+               (raw_metrics->>'residents')::integer AS residents,
+               (raw_metrics->>'housing_capacity')::integer AS housing_capacity,
+               (raw_metrics->>'energy_capacity')::integer AS energy_capacity,
+               (raw_metrics->>'connectivity_capacity')::integer AS connectivity_capacity,
+               (raw_metrics->>'health_capacity')::integer AS health_capacity,
+               (raw_metrics->>'treasury')::numeric AS treasury
+        FROM civic_rankings
+        WHERE category = 'cities'
+        ORDER BY rank ASC
+      `).then(async (res) => {
+        if (res.rows.length > 0) return res;
+        return repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
+          FROM cities
+          JOIN institutions city_institutions ON city_institutions.id = cities.institution_id
+          ORDER BY (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
+            + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
+            + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
+            + LEAST(1, health_capacity / 100.0) * 20
+            + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) DESC, residents DESC, id LIMIT 20`);
+      }).catch(() => repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
+          FROM cities
+          JOIN institutions city_institutions ON city_institutions.id = cities.institution_id
+          ORDER BY id LIMIT 20`)),
+      repository.query(`
+        SELECT entity_id AS id, entity_name AS name, rank, rank_delta, final_score, metrics_line, sub_indexes, raw_metrics,
+               (raw_metrics->>'totalCapitalization')::numeric AS capitalization,
+               (raw_metrics->>'totalBusinesses')::integer AS businesses_count,
+               (raw_metrics->>'totalResidents')::integer AS member_count,
+               (raw_metrics->>'directTreasury')::numeric AS treasury
+        FROM civic_rankings
+        WHERE category = 'corporations'
+        ORDER BY rank ASC
+      `).then(async (res) => {
+        if (res.rows.length > 0) return res;
+        return repository.query(`SELECT c.id, c.member_count, c.treasury,
           i.name, i.status, i.charter_rules,
           c.capital_city_id,
           cap_i.name AS capital_city_name,
@@ -104,8 +134,39 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         FROM corporations c
         JOIN institutions i ON i.id = c.institution_id
         LEFT JOIN institutions cap_i ON cap_i.id = c.capital_city_id
-        ORDER BY development_score DESC, c.member_count DESC, c.id LIMIT 10`),
-      repository.query("SELECT humans.id, humans.display_name, humans.standing, humans.legacy, memberships.city_id FROM humans JOIN memberships ON memberships.human_id = humans.id WHERE humans.life_status = 'active' AND memberships.city_id = (SELECT city_id FROM memberships WHERE human_id = $1) ORDER BY humans.standing DESC, humans.legacy DESC, humans.id LIMIT 20", [viewerId]),
+        ORDER BY development_score DESC, c.member_count DESC, c.id LIMIT 10`);
+      }).catch(() => repository.query(`SELECT c.id, c.member_count, c.treasury, i.name FROM corporations c JOIN institutions i ON i.id = c.institution_id ORDER BY id LIMIT 10`)),
+      repository.query(`
+        SELECT entity_id AS id, entity_name AS display_name, rank, rank_delta, final_score, metrics_line, sub_indexes, raw_metrics, affiliation,
+               (raw_metrics->>'legacy')::integer AS legacy,
+               (raw_metrics->>'standing')::integer AS standing,
+               (raw_metrics->>'personalCapitalization')::numeric AS credits,
+               final_score AS composite_index
+        FROM civic_rankings
+        WHERE category = 'citizens'
+        ORDER BY rank ASC
+      `).then(async (res) => {
+        if (res.rows.length > 0) return res;
+        return repository.query(`SELECT humans.id, humans.display_name, humans.standing, humans.legacy,
+                                 memberships.city_id,
+                                 memberships.corporation_id,
+                                 (SELECT name FROM institutions WHERE id = memberships.city_id) AS city_name,
+                                 (SELECT name FROM institutions WHERE id = memberships.corporation_id) AS corporation_name,
+                                 d.dynasty_name,
+                                 COALESCE(ab.balance, '0') AS credits,
+                                 ROUND(
+                                   LEAST(1, GREATEST(0, humans.legacy::numeric) / 200.0) * 45 +
+                                   LEAST(1, GREATEST(0, humans.standing::numeric) / 1000.0) * 35 +
+                                   LEAST(1, GREATEST(0, COALESCE(ab.balance::numeric, 0)) / 50000.0) * 20
+                                 )::integer AS composite_index
+                          FROM humans
+                          LEFT JOIN account_balances ab ON ab.account_id = humans.account_id AND ab.currency = 'CREDIT'
+                          LEFT JOIN memberships ON memberships.human_id = humans.id
+                          LEFT JOIN dynasties d ON d.founder_human_id = humans.id
+                          WHERE humans.life_status = 'active'
+                          ORDER BY composite_index DESC, humans.standing DESC, humans.id
+                          LIMIT 20`);
+      }).catch(() => ({ rows: [] })),
     ]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
     repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
@@ -121,6 +182,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         COALESCE(h.display_name, 'Citizen') AS founder_name, 
         c.status, 
         COALESCE(c.admission_policy, 'open') AS admission_policy, 
+        COALESCE(c.application_question, '') AS application_question,
         COALESCE(c.shared_credits, 0) AS shared_credits,
         (SELECT COUNT(*)::integer FROM community_members cm WHERE cm.community_id = c.id) AS member_count,
         (SELECT cm.role FROM community_members cm WHERE cm.community_id = c.id AND cm.human_id = $1) AS my_role,
@@ -276,7 +338,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
     technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows, activePatents: Number(patents.rows[0]?.count ?? 0), activeLicenses: Number(licenses.rows[0]?.count ?? 0), corporationSharedPatents: corporationSharedTechnology.rows }, machines: machineRows, workforce: employees.rows, productionEvents: productionEvents.rows, aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
-    publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }, ...social.rows.map((row) => ({ type: 'social', title: row.title, initiativeId: row.id, status: row.status }))], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, socialInitiatives: social.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
+    publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }, ...social.rows.map((row) => ({ type: 'social', title: row.title, initiativeId: row.id, status: row.status }))], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), citizens: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })), humans: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, socialInitiatives: social.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(audit[2].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[4].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },
     persistence: 'planetscale-postgres',

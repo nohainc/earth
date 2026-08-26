@@ -78,6 +78,13 @@ test('listRankings returns enriched citizens, podium stats, tiers, and rank delt
   assert.equal(cities.length, 1);
   assert.equal(cities[0].id, 'city-new-tokyo');
   assert.equal(cities[0].qolIndex, Math.min(100, Math.round(((150 + 180 + 140) / 300) * 100)));
+  assert.ok(cities[0].compositeIndex > 0);
+
+  // Check Corporations & compositeIndex
+  const corps = result.corporations;
+  assert.equal(corps.length, 1);
+  assert.equal(corps[0].id, 'corp-kline-industrial');
+  assert.ok(corps[0].compositeIndex > 0);
 
   // Check Dynastic Houses
   const dynasties = result.dynasticHouses;

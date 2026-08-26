@@ -239,6 +239,36 @@ const state = {
       read: false,
     },
   ],
+  rankings: {
+    corporations: [
+      { id: 'corp-kline-industrial', name: 'Kline Industrial Syndicate', member_count: 14, treasury: 32000, marketCap: 84000, compositeIndex: 84, score: 84, rank: 1, rankDelta: 0 },
+      { id: 'corp-aegis-power', name: 'Aegis Fusion & Grid', member_count: 11, treasury: 27500, marketCap: 68000, compositeIndex: 68, score: 68, rank: 2, rankDelta: 1 },
+      { id: 'corp-orbital-logistics', name: 'Orbital Logistics Consortia', member_count: 8, treasury: 19800, marketCap: 45000, compositeIndex: 52, score: 52, rank: 3, rankDelta: -1 },
+      { id: 'corp-solis-biotech', name: 'Solis Biocatalytics', member_count: 6, treasury: 14200, marketCap: 31000, compositeIndex: 41, score: 41, rank: 4, rankDelta: 0 },
+    ],
+    cities: [
+      { id: 'city-new-tokyo', name: 'Neo-Tokyo', corporation_name: 'Kline Industrial Syndicate', corporation_id: 'corp-kline-industrial', residents: 124, treasury: 28500, housing_capacity: 150, energy_capacity: 180, connectivity_capacity: 160, health_capacity: 140, qolIndex: 92, compositeIndex: 92, score: 92, rank: 1, rankDelta: 0 },
+      { id: 'city-new-york', name: 'New York', corporation_name: 'Aegis Fusion & Grid', corporation_id: 'corp-aegis-power', residents: 98, treasury: 25000, housing_capacity: 120, energy_capacity: 140, connectivity_capacity: 150, health_capacity: 110, qolIndex: 85, compositeIndex: 85, score: 85, rank: 2, rankDelta: 1 },
+      { id: 'city-london', name: 'London', corporation_name: 'Orbital Logistics Consortia', corporation_id: 'corp-orbital-logistics', residents: 82, treasury: 21400, housing_capacity: 100, energy_capacity: 110, connectivity_capacity: 120, health_capacity: 95, qolIndex: 78, compositeIndex: 78, score: 78, rank: 3, rankDelta: -1 },
+      { id: 'city-geneva', name: 'Geneva', corporation_name: 'Solis Biocatalytics', corporation_id: 'corp-solis-biotech', residents: 64, treasury: 18900, housing_capacity: 80, energy_capacity: 90, connectivity_capacity: 100, health_capacity: 90, qolIndex: 74, compositeIndex: 74, score: 74, rank: 4, rankDelta: 0 },
+      { id: 'city-singapore', name: 'Singapore', corporation_name: 'Kline Industrial Syndicate', corporation_id: 'corp-kline-industrial', residents: 52, treasury: 16200, housing_capacity: 70, energy_capacity: 85, connectivity_capacity: 90, health_capacity: 80, qolIndex: 70, compositeIndex: 70, score: 70, rank: 5, rankDelta: 'NEW' },
+    ],
+    citizens: [
+      { rank: 1, rankDelta: 0, tierBadge: 'Sovereign', id: 'H-0044', displayName: 'Amara Vance', ageYears: 42, standing: 840, legacy: 120, credits: 18420, cityId: 'city-new-tokyo', dynastyName: 'Vance Dynasty', compositeScore: 14484 },
+      { rank: 2, rankDelta: 1, tierBadge: 'Patrician', id: 'H-0012', displayName: 'Dmitri Rostov', ageYears: 38, standing: 720, legacy: 95, credits: 4200, cityId: 'city-london', dynastyName: 'House of Rostov', compositeScore: 12150 },
+      { rank: 3, rankDelta: -1, tierBadge: 'Patrician', id: 'H-0088', displayName: 'Kaelen Thorne', ageYears: 49, standing: 680, legacy: 80, credits: 3800, cityId: 'city-geneva', dynastyName: 'Thorne Syndicate', compositeScore: 10980 },
+      { rank: 4, rankDelta: 'NEW', tierBadge: 'Pioneer', id: 'H-0105', displayName: 'Sariyah Chen', ageYears: 29, standing: 510, legacy: 45, credits: 2400, cityId: 'city-singapore', dynastyName: 'Chen Holdings', compositeScore: 7850 },
+      { rank: 5, rankDelta: 2, tierBadge: 'Pioneer', id: 'H-0142', displayName: 'Tarek Al-Mansoor', ageYears: 34, standing: 480, legacy: 30, credits: 1900, cityId: 'city-new-york', dynastyName: 'Al-Mansoor House', compositeScore: 6540 },
+    ],
+    dynasties: [
+      { rank: 1, rankDelta: 0, tierBadge: 'Sovereign', id: 'DYN-VANCE', dynasty_name: 'Vance Dynasty', founder_name: 'Marcus Vance', generation: 3, deceased_count: 3, total_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', dynasty_score: 28450, founded_game_day: 1 },
+      { rank: 2, rankDelta: 1, tierBadge: 'Sovereign', id: 'DYN-NOHA', dynasty_name: 'Noha Dynasty', founder_name: 'Vitalii Noha', generation: 3, deceased_count: 2, total_legacy: 4600, peak_standing: 920, active_heir: 'Vitalii Noha', dynasty_score: 24200, founded_game_day: 120 },
+      { rank: 3, rankDelta: 0, tierBadge: 'Patrician', id: 'DYN-ROSTOV', dynasty_name: 'House of Rostov', founder_name: 'Viktor Rostov', generation: 2, deceased_count: 2, total_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', dynasty_score: 19800, founded_game_day: 365 },
+      { rank: 4, rankDelta: 'NEW', tierBadge: 'Patrician', id: 'DYN-THORNE', dynasty_name: 'Thorne Syndicate', founder_name: 'Silas Thorne', generation: 2, deceased_count: 1, total_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', dynasty_score: 15400, founded_game_day: 730 },
+      { rank: 5, rankDelta: 1, tierBadge: 'Pioneer', id: 'DYN-CHEN', dynasty_name: 'Chen Holdings', founder_name: 'Wei Chen', generation: 1, deceased_count: 0, total_legacy: 1600, peak_standing: 540, active_heir: 'Sariyah Chen', dynasty_score: 8600, founded_game_day: 1095 },
+      { rank: 6, rankDelta: -1, tierBadge: 'Pioneer', id: 'DYN-MANSOOR', dynasty_name: 'Al-Mansoor House', founder_name: 'Rashid Al-Mansoor', generation: 1, deceased_count: 0, total_legacy: 1200, peak_standing: 480, active_heir: 'Tarek Al-Mansoor', dynasty_score: 6500, founded_game_day: 1150 },
+    ],
+  },
 };
 
 // Local reference-simulator state for the Social Commons. The production
@@ -1045,24 +1075,25 @@ async function command(path, body, req = null) {
     ];
 
     let cities = [
-      { id: 'city-new-tokyo', name: 'Neo-Tokyo', residents: 124, treasury: 28500, housing_capacity: 150, energy_capacity: 180, connectivity_capacity: 160, health_capacity: 140, qolIndex: 92, rank: 1, rankDelta: 0 },
-      { id: 'city-new-york', name: 'New York', residents: 98, treasury: 25000, housing_capacity: 120, energy_capacity: 140, connectivity_capacity: 150, health_capacity: 110, qolIndex: 85, rank: 2, rankDelta: 1 },
-      { id: 'city-london', name: 'London', residents: 82, treasury: 21400, housing_capacity: 100, energy_capacity: 110, connectivity_capacity: 120, health_capacity: 95, qolIndex: 78, rank: 3, rankDelta: -1 },
-      { id: 'city-geneva', name: 'Geneva', residents: 64, treasury: 18900, housing_capacity: 80, energy_capacity: 90, connectivity_capacity: 100, health_capacity: 90, qolIndex: 74, rank: 4, rankDelta: 0 },
-      { id: 'city-singapore', name: 'Singapore', residents: 52, treasury: 16200, housing_capacity: 70, energy_capacity: 85, connectivity_capacity: 90, health_capacity: 80, qolIndex: 70, rank: 5, rankDelta: 'NEW' },
+      { id: 'city-new-tokyo', name: 'Neo-Tokyo', residents: 124, treasury: 28500, housing_capacity: 150, energy_capacity: 180, connectivity_capacity: 160, health_capacity: 140, qolIndex: 92, compositeIndex: 92, score: 92, rank: 1, rankDelta: 0 },
+      { id: 'city-new-york', name: 'New York', residents: 98, treasury: 25000, housing_capacity: 120, energy_capacity: 140, connectivity_capacity: 150, health_capacity: 110, qolIndex: 85, compositeIndex: 85, score: 85, rank: 2, rankDelta: 1 },
+      { id: 'city-london', name: 'London', residents: 82, treasury: 21400, housing_capacity: 100, energy_capacity: 110, connectivity_capacity: 120, health_capacity: 95, qolIndex: 78, compositeIndex: 78, score: 78, rank: 3, rankDelta: -1 },
+      { id: 'city-geneva', name: 'Geneva', residents: 64, treasury: 18900, housing_capacity: 80, energy_capacity: 90, connectivity_capacity: 100, health_capacity: 90, qolIndex: 74, compositeIndex: 74, score: 74, rank: 4, rankDelta: 0 },
+      { id: 'city-singapore', name: 'Singapore', residents: 52, treasury: 16200, housing_capacity: 70, energy_capacity: 85, connectivity_capacity: 90, health_capacity: 80, qolIndex: 70, compositeIndex: 70, score: 70, rank: 5, rankDelta: 'NEW' },
     ];
 
     let corporations = [
-      { id: 'corp-kline-industrial', name: 'Kline Industrial Syndicate', member_count: 14, treasury: 32000, marketCap: 84000, rank: 1, rankDelta: 0 },
-      { id: 'corp-aegis-power', name: 'Aegis Fusion & Grid', member_count: 11, treasury: 27500, marketCap: 68000, rank: 2, rankDelta: 1 },
-      { id: 'corp-orbital-logistics', name: 'Orbital Logistics Consortia', member_count: 8, treasury: 19800, marketCap: 45000, rank: 3, rankDelta: -1 },
-      { id: 'corp-solis-biotech', name: 'Solis Biocatalytics', member_count: 6, treasury: 14200, marketCap: 31000, rank: 4, rankDelta: 0 },
+      { id: 'corp-kline-industrial', name: 'Kline Industrial Syndicate', member_count: 14, treasury: 32000, marketCap: 84000, compositeIndex: 84, score: 84, rank: 1, rankDelta: 0 },
+      { id: 'corp-aegis-power', name: 'Aegis Fusion & Grid', member_count: 11, treasury: 27500, marketCap: 68000, compositeIndex: 68, score: 68, rank: 2, rankDelta: 1 },
+      { id: 'corp-orbital-logistics', name: 'Orbital Logistics Consortia', member_count: 8, treasury: 19800, marketCap: 45000, compositeIndex: 52, score: 52, rank: 3, rankDelta: -1 },
+      { id: 'corp-solis-biotech', name: 'Solis Biocatalytics', member_count: 6, treasury: 14200, marketCap: 31000, compositeIndex: 41, score: 41, rank: 4, rankDelta: 0 },
     ];
 
     let dynasticHouses = [
-      { dynasty_name: 'Vance Dynasty', deceased_count: 3, peak_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', rank: 1, rankDelta: 0 },
-      { dynasty_name: 'House of Rostov', deceased_count: 2, peak_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', rank: 2, rankDelta: 0 },
-      { dynasty_name: 'Thorne Syndicate', deceased_count: 1, peak_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', rank: 3, rankDelta: 'NEW' },
+      { dynasty_name: 'Vance Dynasty', founder_name: 'Marcus Vance', generation: 3, deceased_count: 3, total_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', dynasty_score: 28450, rank: 1, rankDelta: 0, tierBadge: 'Sovereign' },
+      { dynasty_name: 'Noha Dynasty', founder_name: 'Vitalii Noha', generation: 3, deceased_count: 2, total_legacy: 4600, peak_standing: 920, active_heir: 'Vitalii Noha', dynasty_score: 24200, rank: 2, rankDelta: 1, tierBadge: 'Sovereign' },
+      { dynasty_name: 'House of Rostov', founder_name: 'Viktor Rostov', generation: 2, deceased_count: 2, total_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', dynasty_score: 19800, rank: 3, rankDelta: 0, tierBadge: 'Patrician' },
+      { dynasty_name: 'Thorne Syndicate', founder_name: 'Silas Thorne', generation: 2, deceased_count: 1, total_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', dynasty_score: 15400, rank: 4, rankDelta: 'NEW', tierBadge: 'Patrician' },
     ];
 
     let technologies = [
@@ -1075,7 +1106,7 @@ async function command(path, body, req = null) {
       citizens = citizens.filter((c) => c.displayName.toLowerCase().includes(search) || c.id.toLowerCase().includes(search) || (c.dynastyName && c.dynastyName.toLowerCase().includes(search)));
       cities = cities.filter((c) => c.name.toLowerCase().includes(search) || c.id.toLowerCase().includes(search));
       corporations = corporations.filter((c) => c.name.toLowerCase().includes(search) || c.id.toLowerCase().includes(search));
-      dynasticHouses = dynasticHouses.filter((d) => d.dynasty_name.toLowerCase().includes(search));
+      dynasticHouses = dynasticHouses.filter((d) => d.dynasty_name.toLowerCase().includes(search) || (d.founder_name && d.founder_name.toLowerCase().includes(search)) || (d.active_heir && d.active_heir.toLowerCase().includes(search)));
       technologies = technologies.filter((t) => t.name.toLowerCase().includes(search) || t.id.toLowerCase().includes(search));
     }
 
@@ -1314,6 +1345,7 @@ async function command(path, body, req = null) {
         {
           human_id: 'H-0001',
           display_name: 'Founder Marcus Vance',
+          generation: 1,
           death_game_day: 1200,
           final_standing: 980,
           final_legacy: 5400,
@@ -1326,6 +1358,7 @@ async function command(path, body, req = null) {
         {
           human_id: 'H-0002',
           display_name: 'Elena Rostova',
+          generation: 1,
           death_game_day: 940,
           final_standing: 860,
           final_legacy: 3800,

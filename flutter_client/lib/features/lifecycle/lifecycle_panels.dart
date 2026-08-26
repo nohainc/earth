@@ -310,7 +310,7 @@ class SuccessionPanel extends StatelessWidget {
                       const SizedBox(width: 6),
                       Expanded(
                         child: Text(
-                          'HOUSE ${dynastyName.toUpperCase()} · GENERATION $dynastyGeneration',
+                          'DYNASTY: ${dynastyName.toUpperCase()} · GENERATION $dynastyGeneration',
                           style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
                         ),
                       ),

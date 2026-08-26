@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../dynasty/dynasty_lineage_dialog.dart';
 
 enum RankingCategory {
   citizens,
@@ -191,27 +192,56 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
               if (entity['standing'] != null)
                 _inspectorRow('Civic Standing', '${entity['standing']} pts'),
               if (entity['legacy'] != null)
-                _inspectorRow('Legacy Score', '${entity['legacy']} pts'),
+                _inspectorRow('Personal Legacy', '${entity['legacy']} pts'),
               if (entity['cityId'] != null)
                 _inspectorRow('City Jurisdiction', entity['cityId'].toString()),
               if (entity['dynastyName'] != null)
-                _inspectorRow('Dynastic House', entity['dynastyName'].toString()),
+                _inspectorRow('Dynasty', entity['dynastyName'].toString()),
               if (entity['residents'] != null)
                 _inspectorRow('Residents', '${entity['residents']} citizens'),
               if (entity['treasury'] != null)
                 _inspectorRow('Municipal Treasury', '${entity['treasury']} C'),
               if (entity['member_count'] != null)
                 _inspectorRow('Members / Employees', '${entity['member_count']}'),
-              if (entity['marketCap'] != null)
-                _inspectorRow('Market Cap', '${entity['marketCap']} C'),
-              if (entity['peak_legacy'] != null)
-                _inspectorRow('Peak Dynastic Legacy', '${entity['peak_legacy']} pts'),
+              if (entity['founder_name'] != null || entity['founder'] != null)
+                _inspectorRow('Founder', (entity['founder_name'] ?? entity['founder']).toString()),
+              if (entity['active_heir'] != null || entity['heir'] != null)
+                _inspectorRow('Active Heir', (entity['active_heir'] ?? entity['heir']).toString()),
+              if (entity['generation'] != null || entity['generations'] != null)
+                _inspectorRow('Generation Depth', 'Gen ${entity['generation'] ?? entity['generations']}'),
+              if (entity['total_legacy'] != null || entity['dynasty_legacy'] != null || entity['peak_legacy'] != null)
+                _inspectorRow('Dynastic Legacy', '${entity['total_legacy'] ?? entity['dynasty_legacy'] ?? entity['peak_legacy']} LP'),
+              if (entity['dynastic_standing'] != null || entity['peak_standing'] != null)
+                _inspectorRow('Dynastic Standing', '${entity['dynastic_standing'] ?? entity['peak_standing']} pts'),
+              if (entity['deceased_count'] != null || entity['ancestors_count'] != null)
+                _inspectorRow('Inscribed Ancestors', '${entity['deceased_count'] ?? entity['ancestors_count']} members'),
               if (entity['progress'] != null)
                 _inspectorRow('Research Progress', '${entity['progress']}%'),
             ],
           ),
         ),
         actions: [
+          if (_selectedCategory == RankingCategory.dynasties ||
+              entity['dynastyName'] != null ||
+              entity['dynasty_name'] != null) ...[
+            OutlinedButton.icon(
+              icon: const Icon(Icons.account_tree_outlined, size: 14),
+              label: const Text('VIEW LINEAGE TREE'),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: const Color(0xffeab308),
+                side: const BorderSide(color: Color(0xffeab308)),
+              ),
+              onPressed: () {
+                Navigator.of(ctx).pop();
+                showDynastyLineageDialog(
+                  context,
+                  dynasty: entity,
+                  state: widget.state,
+                  api: widget.api,
+                );
+              },
+            ),
+          ],
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
             child: const Text('CLOSE', style: TextStyle(color: EarthColors.cyanAccent)),
@@ -251,7 +281,7 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
       case RankingCategory.corporations:
         return Icons.corporate_fare;
       case RankingCategory.dynasties:
-        return Icons.account_balance;
+        return Icons.military_tech;
       case RankingCategory.technologies:
         return Icons.memory;
     }
@@ -575,6 +605,73 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
     );
   }
 
+  String _getEntitySubtitle(Map<String, dynamic> entity) {
+    switch (_selectedCategory) {
+      case RankingCategory.citizens:
+        final dynasty = entity['dynastyName']?.toString();
+        final city = entity['cityId']?.toString();
+        if (dynasty != null && dynasty.isNotEmpty && city != null && city.isNotEmpty) {
+          return '$dynasty · $city';
+        }
+        return dynasty ?? city ?? '';
+      case RankingCategory.cities:
+        final residents = entity['residents'] ?? 0;
+        final qol = entity['qolIndex'];
+        final corp = entity['corporation_name'] ?? entity['corporationName'];
+        final base = qol != null ? '$residents residents · QoL $qol%' : '$residents residents';
+        return corp != null && corp.toString().isNotEmpty ? '$base · $corp' : base;
+      case RankingCategory.corporations:
+        final members = entity['member_count'] ?? 0;
+        return '$members members';
+      case RankingCategory.dynasties:
+        final founder = entity['founder_name'] ?? entity['founder'];
+        final heir = entity['active_heir'] ?? entity['heir'] ?? '';
+        final gen = entity['generation'] ?? entity['generations'] ?? entity['gen'] ?? 1;
+        final count = entity['deceased_count'] ?? entity['ancestors_count'] ?? entity['deceased'] ?? 0;
+        final standing = entity['peak_standing'] ?? entity['standing'] ?? entity['dynastic_standing'] ?? 0;
+        final isExtinct = entity['is_extinct'] == true || entity['status'] == 'extinct';
+        final buffer = <String>[];
+        if (founder != null && founder.toString().isNotEmpty) {
+          buffer.add('Founder: $founder');
+        }
+        if (!isExtinct && heir.toString().isNotEmpty && heir != '—') {
+          buffer.add('Heir: $heir (Gen $gen)');
+        } else if (isExtinct) {
+          buffer.add('Extinct Lineage (Gen $gen)');
+        } else {
+          buffer.add('Gen $gen');
+        }
+        buffer.add('$count Ancestors');
+        buffer.add('Std: $standing');
+        return buffer.join(' · ');
+      case RankingCategory.technologies:
+        final owner = entity['owner_id']?.toString() ?? '—';
+        return 'Owner: $owner';
+    }
+  }
+
+  String _getEntityScore(Map<String, dynamic> entity) {
+    switch (_selectedCategory) {
+      case RankingCategory.citizens:
+        final score = entity['compositeScore'] ?? entity['credits'] ?? 0;
+        return '$score pts';
+      case RankingCategory.cities:
+        final treasury = entity['treasury'] ?? 0;
+        return '$treasury C';
+      case RankingCategory.corporations:
+        final treasury = entity['treasury'] ?? entity['marketCap'] ?? 0;
+        return '$treasury C';
+      case RankingCategory.dynasties:
+        final score = entity['dynasty_score'] ?? entity['score'];
+        if (score != null) return '$score pts';
+        final legacy = entity['total_legacy'] ?? entity['dynasty_legacy'] ?? entity['peak_legacy'] ?? 0;
+        return '$legacy LP';
+      case RankingCategory.technologies:
+        final progress = entity['progress'] ?? 0;
+        return '$progress%';
+    }
+  }
+
   Widget _buildPodiumCard(
     Map<String, dynamic> entity,
     int rank,
@@ -582,8 +679,8 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
     String medalLabel,
   ) {
     final title = entity['displayName'] ?? entity['name'] ?? entity['dynasty_name'] ?? entity['id'] ?? 'Leader';
-    final score = entity['compositeScore'] ?? entity['treasury'] ?? entity['marketCap'] ?? entity['peak_legacy'] ?? entity['progress'] ?? '—';
-    final sub = entity['dynastyName'] ?? entity['cityId'] ?? entity['id'] ?? '';
+    final score = _getEntityScore(entity);
+    final sub = _getEntitySubtitle(entity);
 
     return InkWell(
       onTap: () => _showEntityInspector(entity),
@@ -649,7 +746,7 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
                 borderRadius: BorderRadius.circular(4),
               ),
               child: Text(
-                '$score pts',
+                score,
                 style: TextStyle(
                   color: medalColor,
                   fontWeight: FontWeight.bold,
@@ -668,8 +765,8 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
     final rankDelta = entity['rankDelta'];
     final tierBadge = entity['tierBadge']?.toString();
     final title = entity['displayName'] ?? entity['name'] ?? entity['dynasty_name'] ?? entity['id'] ?? 'Entity';
-    final sub = entity['dynastyName'] ?? entity['cityId'] ?? entity['id'] ?? '';
-    final score = entity['compositeScore'] ?? entity['treasury'] ?? entity['marketCap'] ?? entity['peak_legacy'] ?? entity['progress'] ?? '—';
+    final sub = _getEntitySubtitle(entity);
+    final score = _getEntityScore(entity);
 
     return InkWell(
       onTap: () => _showEntityInspector(entity),
@@ -752,7 +849,7 @@ class _GlobalRankingsDialogState extends State<GlobalRankingsDialog> {
                 border: Border.all(color: EarthColors.borderSubtle),
               ),
               child: Text(
-                '$score',
+                score,
                 style: const TextStyle(
                   color: EarthColors.cyanAccent,
                   fontWeight: FontWeight.bold,

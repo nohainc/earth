@@ -31,6 +31,7 @@ export async function handleCommunityRoutes(
       name?: string;
       description?: string;
       admissionPolicy?: 'open' | 'approval';
+      applicationQuestion?: string;
       founderId?: string;
       correlationId?: string;
     }>(request);
@@ -52,6 +53,7 @@ export async function handleCommunityRoutes(
           name,
           description: body.description,
           admissionPolicy: body.admissionPolicy,
+          applicationQuestion: body.applicationQuestion,
           correlationId,
         }),
       );
@@ -66,7 +68,7 @@ export async function handleCommunityRoutes(
   const communityMatch = url.pathname.match(/^\/api\/communities\/([^/]+)$/);
   if (communityMatch && request.method === 'PATCH') {
     const communityId = communityMatch[1];
-    const parsed = await parseJsonBody<{ description?: string; admissionPolicy?: 'open' | 'approval' }>(request);
+    const parsed = await parseJsonBody<{ description?: string; admissionPolicy?: 'open' | 'approval'; applicationQuestion?: string }>(request);
     if (!parsed.ok) return parsed.response;
     try {
       const result = await withRepository(env, (repository) =>
@@ -75,6 +77,7 @@ export async function handleCommunityRoutes(
           humanId: viewer.id,
           description: parsed.value.description,
           admissionPolicy: parsed.value.admissionPolicy,
+          applicationQuestion: parsed.value.applicationQuestion,
         }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -115,15 +118,16 @@ export async function handleCommunityRoutes(
   if (communityRequestDecisionMatch && request.method === 'POST') {
     const communityId = communityRequestDecisionMatch[1];
     const requestId = communityRequestDecisionMatch[2];
-    const parsed = await parseJsonBody<{ action?: 'approve' | 'reject' }>(request);
+    const parsed = await parseJsonBody<{ action?: 'approve' | 'reject'; rejectionReason?: string }>(request);
     if (!parsed.ok) return parsed.response;
     if (parsed.value.action !== 'approve' && parsed.value.action !== 'reject') {
       return Response.json({ ok: false, error: 'Request action must be approve or reject' }, { status: 400 });
     }
     const action = parsed.value.action;
+    const rejectionReason = parsed.value.rejectionReason;
     try {
       const result = await withRepository(env, (repository) =>
-        decideCommunityMembershipRequestPostgres(repository, { communityId, deciderId: viewer.id, requestId, action }),
+        decideCommunityMembershipRequestPostgres(repository, { communityId, deciderId: viewer.id, requestId, action, rejectionReason }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -168,12 +172,20 @@ export async function handleCommunityRoutes(
   if (communityMembersMatch && (request.method === 'POST' || request.method === 'DELETE')) {
     const communityId = communityMembersMatch[1];
     const humanId = viewer.id;
+    let applicationMessage: string | undefined;
+    if (request.method === 'POST') {
+      const parsed = await parseJsonBody<{ applicationMessage?: string }>(request);
+      if (parsed.ok) {
+        applicationMessage = parsed.value.applicationMessage;
+      }
+    }
     try {
       const result = await withRepository(env, (repository) =>
         changeCommunityMembershipPostgres(repository, {
           communityId,
           humanId,
           action: request.method === 'POST' ? 'join' : 'leave',
+          applicationMessage,
         }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

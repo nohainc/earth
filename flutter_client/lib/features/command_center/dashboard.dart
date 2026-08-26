@@ -29,7 +29,6 @@ import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
 import '../activity/activity_panel.dart';
 import '../lifecycle/historical_archive_panel.dart';
-import '../lifecycle/cemetery_pantheon_dialog.dart';
 import '../governance/constitution_panel.dart';
 import 'quick_actions_panel.dart';
 import 'command_executive_quadrant.dart';
@@ -56,7 +55,8 @@ String dashboardSectionTitle(String section) => switch (section) {
       'machines' => 'MACHINES & PRODUCTION',
       'public-finance' => 'PUBLIC FINANCE',
       'civic-rankings' => 'CIVIC RANKINGS',
-      'history' => 'ARCHIVE',
+      'history' => 'MEMORIAL',
+      'memorial' => 'MEMORIAL',
       'life' => 'LIFE',
       'pantheon' => 'MEMORIAL',
       'constitution' => 'CONSTITUTION',
@@ -779,6 +779,7 @@ class Dashboard extends StatelessWidget {
       case 'civic-rankings':
         return [CivicRankingsPanel(state: state)];
       case 'history':
+      case 'pantheon':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
       case 'constitution':
         return [ConstitutionPanel(state: state)];
@@ -828,13 +829,6 @@ class Dashboard extends StatelessWidget {
                 ],
               );
             },
-          ),
-        ];
-      case 'pantheon':
-        return [
-          CemeteryPantheonDialog(
-            api: const EarthApi(),
-            lineageSource: pantheon,
           ),
         ];
       case 'contracts':

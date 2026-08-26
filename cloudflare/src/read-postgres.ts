@@ -191,17 +191,35 @@ export async function listRankings(repository: PostgresRepository, options: Rank
   return {
     ok: true,
     wealth: wealth.rows,
-    cities: cities.rows.map((c, idx) => ({
-      rank: idx + 1,
-      ...c,
-      qolIndex: Math.min(100, Math.round(((Number(c.housing_capacity || 0) + Number(c.energy_capacity || 0) + Number(c.health_capacity || 0)) / 300) * 100)),
-      rankingFocus: 'services, population, and financial resilience',
-    })),
-    corporations: corporations.rows.map((corp, idx) => ({
-      rank: idx + 1,
-      ...corp,
-      rankingFocus: 'membership, productive businesses, and treasury resilience',
-    })),
+    cities: cities.rows.map((c, idx) => {
+      const housingScore = Math.min(1, Number(c.housing_capacity || 0) / Math.max(1, Number(c.residents || 0))) * 25;
+      const energyScore = Math.min(1, Number(c.energy_capacity || 0) / Math.max(1, Number(c.residents || 0))) * 25;
+      const connectivityScore = Math.min(1, Number(c.connectivity_capacity || 0) / Math.max(1, Number(c.residents || 0))) * 20;
+      const healthScore = Math.min(1, Number(c.health_capacity || 0) / 100.0) * 20;
+      const treasuryScore = Math.min(1, Math.max(0, Number(c.treasury || 0)) / 10000.0) * 10;
+      const compositeIndex = Math.min(100, Math.round(housingScore + energyScore + connectivityScore + healthScore + treasuryScore));
+      return {
+        rank: idx + 1,
+        ...c,
+        compositeIndex,
+        score: compositeIndex,
+        qolIndex: Math.min(100, Math.round(((Number(c.housing_capacity || 0) + Number(c.energy_capacity || 0) + Number(c.health_capacity || 0)) / 300) * 100)),
+        rankingFocus: 'services, population, and financial resilience',
+      };
+    }),
+    corporations: corporations.rows.map((corp, idx) => {
+      const memberScore = Math.min(1, Math.max(0, Number(corp.member_count || 0)) / 100.0) * 55;
+      const treasuryScore = Math.min(1, Math.max(0, Number(corp.treasury || 0)) / 25000.0) * 25;
+      const businessScore = 20;
+      const compositeIndex = Math.min(100, Math.round(memberScore + treasuryScore + businessScore));
+      return {
+        rank: idx + 1,
+        ...corp,
+        compositeIndex,
+        score: compositeIndex,
+        rankingFocus: 'membership, productive businesses, and treasury resilience',
+      };
+    }),
     technologies: technologies.rows.map((t, idx) => ({
       rank: idx + 1,
       ...t,

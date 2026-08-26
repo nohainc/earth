@@ -55,7 +55,7 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     const transferDay = input.day;
     if (inheritedCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: transferDay, debitAccount: predecessorAccount.account_id, creditAccount: successorAccount.account_id, amount: centsToMoney(inheritedCents), reasonType: 'late_inheritance', reasonId: eventId, ruleVersion: 'life-v4', correlationId: eventId });
     if (taxCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: transferDay, debitAccount: predecessorAccount.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(taxCents), reasonType: 'late_inheritance_tax', reasonId: eventId, ruleVersion: 'life-v4', correlationId: `TAX-${eventId}` });
-    await tx.query('UPDATE humans SET standing = 0, legacy = legacy + 1 WHERE id = $1', [input.successorId]);
+    await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [input.successorId]);
 
     const machines = await tx.query<{ id: string }>('SELECT id FROM machines WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
     const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
@@ -129,7 +129,7 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
       if (!human.account_id) throw new Error('Deceased Human Credit account is required for inheritance');
       if (inheritedCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: successorRow.account_id, amount: centsToMoney(inheritedCents), reasonType: 'inheritance', reasonId: eventId, ruleVersion: 'life-v4', correlationId: eventId });
       if (taxCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(taxCents), reasonType: 'inheritance_tax', reasonId: eventId, ruleVersion: 'life-v4', correlationId: `TAX-${eventId}` });
-      await tx.query('UPDATE humans SET legacy = legacy + $1 WHERE id = $2', [Number(human.legacy) + (gross > 0 ? 1 : 0), successorRow.id]);
+      await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [successorRow.id]);
       await tx.query('UPDATE machines SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
       await tx.query('UPDATE businesses SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
       await tx.query('UPDATE business_management SET manager_id = $1, appointed_by = $1, appointed_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE manager_id = $3 AND business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [successorRow.id, day, human.id]);

@@ -42,8 +42,10 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('HISTORICAL ARCHIVE'), findsOneWidget);
+    expect(find.textContaining('MEMORIAL CITIZENS'), findsWidgets);
     expect(find.text('Mira Vance'), findsOneWidget);
+    await tester.tap(find.textContaining('DYNASTIES'));
+    await tester.pumpAndSettle();
     expect(find.text('Vance House'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });

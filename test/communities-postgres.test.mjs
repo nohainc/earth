@@ -66,7 +66,6 @@ test('createCommunity forms a new community with description and admission polic
   assert.equal(res.community.name, 'Quantum Makers Guild');
   assert.equal(res.community.admission_policy, 'approval');
 });
-
 test('updateCommunity updates description and admission policy for founder or admin', async () => {
   const client = new MockDbClient({
     'SELECT id, founder_id FROM communities WHERE id = $1': {
@@ -174,4 +173,57 @@ test('community contribution rejects non-positive amounts before ledger mutation
     /positive|amount|ledger/i,
   );
   assert.equal(client.calls.some((call) => call.sql.includes('UPDATE communities SET shared_credits')), false);
+});
+
+test('changeCommunityMembership allows leaving and rejoining open community without unique constraint error', async () => {
+  // Step 1: Leave community
+  const leaveClient = new MockDbClient({
+    'SELECT id, status, founder_id, admission_policy FROM communities': {
+      rows: [{ id: 'COMM-001', status: 'active', founder_id: 'H-001', admission_policy: 'open' }],
+      rowCount: 1,
+    },
+    'SELECT id FROM humans': { rows: [{ id: 'H-002' }], rowCount: 1 },
+    'SELECT community_id, role FROM community_members': { rows: [{ role: 'member' }], rowCount: 1 },
+    'SELECT id FROM community_membership_requests': { rows: [], rowCount: 0 },
+    'SELECT COUNT(*)::integer AS count FROM community_members': { rows: [{ count: '2' }], rowCount: 1 },
+    'SELECT game_day FROM world_state': { rows: [{ game_day: 184 }], rowCount: 1 },
+    'DELETE FROM community_members': { rows: [], rowCount: 1 },
+    'INSERT INTO membership_events': { rows: [], rowCount: 1 },
+    'INSERT INTO notifications': { rows: [], rowCount: 1 },
+  });
+  const leaveRepo = new PostgresRepository(leaveClient);
+  const leaveRes = await changeCommunityMembership(leaveRepo, {
+    communityId: 'COMM-001',
+    humanId: 'H-002',
+    action: 'leave',
+  });
+  assert.equal(leaveRes.ok, true);
+  assert.equal(leaveRes.membership, null);
+
+  // Step 2: Rejoin community on same game day
+  const joinClient = new MockDbClient({
+    'SELECT id, status, founder_id, admission_policy FROM communities': {
+      rows: [{ id: 'COMM-001', status: 'active', founder_id: 'H-001', admission_policy: 'open' }],
+      rowCount: 1,
+    },
+    'SELECT id FROM humans': { rows: [{ id: 'H-002' }], rowCount: 1 },
+    'SELECT community_id, role FROM community_members WHERE community_id = $1 AND human_id = $2 FOR UPDATE': { rows: [], rowCount: 0 },
+    'DELETE FROM community_membership_requests': { rows: [], rowCount: 0 },
+    'INSERT INTO community_members': { rows: [], rowCount: 1 },
+    'INSERT INTO membership_events': { rows: [], rowCount: 1 },
+    'INSERT INTO notifications': { rows: [], rowCount: 1 },
+    'SELECT game_day FROM world_state': { rows: [{ game_day: 184 }], rowCount: 1 },
+    'SELECT * FROM community_members WHERE community_id = $1 AND human_id = $2': {
+      rows: [{ community_id: 'COMM-001', human_id: 'H-002', role: 'member', joined_game_day: 184 }],
+      rowCount: 1,
+    },
+  });
+  const joinRepo = new PostgresRepository(joinClient);
+  const joinRes = await changeCommunityMembership(joinRepo, {
+    communityId: 'COMM-001',
+    humanId: 'H-002',
+    action: 'join',
+  });
+  assert.equal(joinRes.ok, true);
+  assert.equal(joinRes.member.role, 'member');
 });

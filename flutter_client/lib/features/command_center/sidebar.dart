@@ -272,12 +272,6 @@ class _SidebarState extends State<Sidebar> {
           ),
           (
             'history',
-            'Archive',
-            Icons.history_outlined,
-            null,
-          ),
-          (
-            'pantheon',
             'Memorial',
             Icons.account_balance_outlined,
             null,

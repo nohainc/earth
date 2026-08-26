@@ -170,6 +170,21 @@ void main() {
 
     expect(find.textContaining('Vance Dynasty'), findsWidgets);
 
+    // Tap dynasty row to open inspector
+    final dynRow = find.textContaining('Vance Dynasty').first;
+    await tester.ensureVisible(dynRow);
+    await tester.tap(dynRow);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Inscribed Ancestors'), findsOneWidget);
+    expect(find.text('3 members'), findsOneWidget);
+    expect(find.text('Dynastic Legacy'), findsOneWidget);
+    expect(find.text('5400 LP'), findsWidgets);
+    expect(find.text('CLOSE'), findsOneWidget);
+
+    await tester.tap(find.text('CLOSE'));
+    await tester.pumpAndSettle();
+
     // Switch Category Tab to TECHNOLOGIES
     final techChip = find.text('TECHNOLOGIES');
     await tester.ensureVisible(techChip);

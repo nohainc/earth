@@ -40,13 +40,21 @@ class EarthDataRow extends StatelessWidget {
           ),
       decoration: BoxDecoration(
         color: isSelected
-            ? context.primaryColor.withValues(alpha: .1)
-            : Colors.transparent,
-        border: Border(
-          bottom: showDivider
-              ? BorderSide(color: context.subtleBorderColor)
-              : BorderSide.none,
-        ),
+            ? context.primaryColor.withValues(alpha: .15)
+            : (isHighlight
+                ? context.primaryColor.withValues(alpha: .08)
+                : Colors.transparent),
+        borderRadius: isHighlight ? BorderRadius.circular(8) : null,
+        border: isHighlight
+            ? Border.all(
+                color: context.primaryColor.withValues(alpha: .45),
+                width: 1,
+              )
+            : Border(
+                bottom: showDivider
+                    ? BorderSide(color: context.subtleBorderColor)
+                    : BorderSide.none,
+              ),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
@@ -71,6 +79,7 @@ class EarthDataRow extends StatelessWidget {
                         color: isHighlight
                             ? context.primaryColor
                             : context.inkColor,
+                        fontWeight: isHighlight ? FontWeight.bold : FontWeight.normal,
                       ),
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -81,7 +90,9 @@ class EarthDataRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     subtitle!,
-                    style: context.widgetFooterStyle,
+                    style: context.widgetFooterStyle.copyWith(
+                      color: isHighlight ? context.primaryColor.withValues(alpha: 0.85) : null,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
@@ -90,7 +101,9 @@ class EarthDataRow extends StatelessWidget {
                   const SizedBox(height: 2),
                   Text(
                     secondarySubtitle!,
-                    style: context.widgetFooterStyle,
+                    style: context.widgetFooterStyle.copyWith(
+                      color: isHighlight ? context.primaryColor.withValues(alpha: 0.75) : null,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],

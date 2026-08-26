@@ -6,6 +6,7 @@ import { settleContinuousFinancials } from './financial-engine.ts';
 import { settleContinuousMarket } from './market-engine.ts';
 import { settleContinuousInstitutions } from './institutions-engine.ts';
 import { settleContinuousLifecycle } from './lifecycle-engine.ts';
+import { settleContinuousRankings } from './rankings-engine.ts';
 import { computeResourceFlows, type ResourceFlowMap } from './resource-flow-engine.ts';
 
 export interface SimulationReconciliation {
@@ -74,6 +75,9 @@ export async function reconcileWorldSimulation(
 
       await settleContinuousInstitutions(tx, currDay, currMinute);
       await settleContinuousLifecycle(tx, currDay, prevDay);
+      if (currDay !== prevDay || elapsedDays >= 1) {
+        await settleContinuousRankings(tx, currDay, prevDay);
+      }
 
       // Update world_state
       await tx.query(

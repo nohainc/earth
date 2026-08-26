@@ -1,8 +1,11 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
+import '../dynasty/dynasty_lineage_dialog.dart';
 import 'institutions_dialogs.dart';
 
 class CorporationDirectoryPanel extends StatefulWidget {
@@ -384,103 +387,1311 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
   }
 }
 
-class CivicRankingsPanel extends StatelessWidget {
+class CivicRankingsPanel extends StatefulWidget {
   final EarthState state;
   const CivicRankingsPanel({super.key, required this.state});
 
   @override
+  State<CivicRankingsPanel> createState() => _CivicRankingsPanelState();
+}
+
+class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
+  int _singleTab = 0; // 0: Citizens, 1: Dynasties, 2: Corps, 3: Cities
+  int _leftTab = 0; // 0: Citizens, 1: Dynasties
+  int _rightTab = 0; // 0: Corps, 1: Cities
+  int _citizenPage = 0;
+  int _dynastyPage = 0;
+  int _corpPage = 0;
+  int _cityPage = 0;
+  bool _initializedPages = false;
+
+  void _initPagesOnce({
+    required List<Map<String, dynamic>> corp,
+    required List<Map<String, dynamic>> cities,
+    required List<Map<String, dynamic>> citizens,
+    required List<Map<String, dynamic>> dynasties,
+    required String? myCorpId,
+    required String? myCityId,
+    required String? myHumanId,
+    required String? myDynastyName,
+  }) {
+    if (_initializedPages) return;
+    _initializedPages = true;
+
+    if (myHumanId != null && myHumanId.isNotEmpty) {
+      final idx = citizens.indexWhere((r) => (r['id']?.toString() ?? r['human_id']?.toString()) == myHumanId);
+      if (idx != -1) _citizenPage = idx ~/ 10;
+    }
+    if (myDynastyName != null && myDynastyName.isNotEmpty) {
+      final idx = dynasties.indexWhere((r) => (r['dynasty_name']?.toString() ?? r['name']?.toString()) == myDynastyName);
+      if (idx != -1) _dynastyPage = idx ~/ 10;
+    }
+    if (myCorpId != null && myCorpId.isNotEmpty) {
+      final idx = corp.indexWhere((r) => (r['id']?.toString() ?? r['corporation_id']?.toString()) == myCorpId);
+      if (idx != -1) _corpPage = idx ~/ 10;
+    }
+    if (myCityId != null && myCityId.isNotEmpty) {
+      final idx = cities.indexWhere((r) => (r['id']?.toString() ?? r['city_id']?.toString()) == myCityId);
+      if (idx != -1) _cityPage = idx ~/ 10;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    return EarthSection(
-      title: 'CIVIC / CORPORATION & CITY RANKINGS',
-      showSurface: false,
-      infoBulletPoints: const [
-        'Compare institutions by the measures that shape civic life: productive membership, city services, and resilience—not treasury alone.',
-      ],
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final corp = _rows(state.rankings['corporations']);
-          final cities = _rows(state.rankings['cities']);
-          final wide = constraints.maxWidth > 700;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final citizens = _citizenRows(
+          widget.state.rankings['citizens'],
+          widget.state.rankings['humans'],
+          widget.state.rankings['wealth'],
+          widget.state.json['cityMembers'] ?? widget.state.json['workforce'],
+          widget.state.human,
+        );
+        final dynasties = _dynastyRows(
+          widget.state.rankings['dynasties'] ??
+              widget.state.rankings['dynasticHouses'] ??
+              widget.state.json['dynasties'] ??
+              widget.state.life['dynasty'] ??
+              widget.state.life['dynasties'],
+          citizens,
+          widget.state.human,
+          widget.state.life['dynasty'] is Map ? Map<String, dynamic>.from(widget.state.life['dynasty'] as Map) : null,
+        );
+        final corp = _rows(widget.state.rankings['corporations']);
+        final cities = _rows(widget.state.rankings['cities']);
+        final wide = constraints.maxWidth > 840;
 
-          final col1 = _rankingColumn(context, 'CORPORATIONS', corp, Icons.account_balance_outlined, 'members');
-          final col2 = _rankingColumn(context, 'CITIES', cities, Icons.location_city_outlined, 'residents');
+        final myHumanId = widget.state.human['id']?.toString() ??
+            widget.state.membership?['human_id']?.toString();
+        final myCityId = widget.state.membership?['city_id']?.toString() ??
+            widget.state.institutions['city']?['id']?.toString() ??
+            widget.state.human['city_id']?.toString();
+        final myCorpId = widget.state.membership?['corporation_id']?.toString() ??
+            widget.state.institutions['corporation']?['id']?.toString() ??
+            widget.state.human['corporation_id']?.toString();
+        final myDynastyName = widget.state.human['dynasty_name']?.toString() ??
+            widget.state.human['dynastyName']?.toString();
 
-          if (wide) {
-            return Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(child: col1),
-                SizedBox(width: context.spacingTopic),
-                Expanded(child: col2),
-              ],
-            );
+        _initPagesOnce(
+          corp: corp,
+          cities: cities,
+          citizens: citizens,
+          dynasties: dynasties,
+          myCorpId: myCorpId,
+          myCityId: myCityId,
+          myHumanId: myHumanId,
+          myDynastyName: myDynastyName,
+        );
+
+        final corpNames = <String, String>{};
+        for (final c in corp) {
+          final id = c['id']?.toString();
+          final name = c['name']?.toString();
+          if (id != null && name != null && name.isNotEmpty) {
+            corpNames[id] = name;
           }
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
+        }
+
+        final cityNames = <String, String>{};
+        final cityToCorpMap = <String, String>{};
+        for (final c in cities) {
+          final id = c['id']?.toString();
+          final name = c['name']?.toString();
+          if (id != null && name != null && name.isNotEmpty) {
+            cityNames[id] = name;
+          }
+          final corpId = c['corporation_id']?.toString() ?? c['corporationId']?.toString();
+          final rawCorpName = c['corporation_name']?.toString() ??
+              c['corporationName']?.toString() ??
+              c['affiliation']?.toString();
+          if (id != null) {
+            if (rawCorpName != null && rawCorpName.isNotEmpty && rawCorpName != 'Independent') {
+              cityToCorpMap[id] = corpNames.containsKey(rawCorpName) ? corpNames[rawCorpName]! : rawCorpName;
+            } else if (corpId != null && corpNames.containsKey(corpId)) {
+              cityToCorpMap[id] = corpNames[corpId]!;
+            }
+          }
+        }
+
+        final colCitizens = _rankingColumn(
+          context,
+          'CITIZENS',
+          citizens,
+          Icons.person_outline,
+          'credits',
+          page: _citizenPage,
+          onPageChanged: (p) => setState(() => _citizenPage = p),
+          corpNames: corpNames,
+          cityNames: cityNames,
+          cityToCorpMap: cityToCorpMap,
+          myAffiliationId: myHumanId,
+          formulaInfo:
+              'Citizen Ranking Index (0–100):\n\n• 1. Personal Legacy: 45%\n  Lifetime achievements & personal milestones.\n\n• 2. Civic Standing: 35%\n  Governance reputation & civic participation.\n\n• 3. Personal Capitalization: 20%\n  Liquid credit holdings & physical asset net worth.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\nPrestige Tiers:\n👑 Sovereign: 90–100 (Apex Leaders)\n🏛️ Patrician: 75–89 (Elite Citizens)\n🚀 Pioneer: 50–74 (Established Citizens)\n👤 Citizen: 0–49 (General Population)\n\n2nd Line: Leg · Std · Cap (Personal Legacy · Standing · Capitalization).\n\n3rd Line: Corporation · City (or Independent).',
+        );
+
+        final colDynasties = _rankingColumn(
+          context,
+          'DYNASTIES',
+          dynasties,
+          Icons.military_tech,
+          'generation',
+          page: _dynastyPage,
+          onPageChanged: (p) => setState(() => _dynastyPage = p),
+          corpNames: corpNames,
+          cityNames: cityNames,
+          cityToCorpMap: cityToCorpMap,
+          myAffiliationId: myDynastyName,
+          formulaInfo:
+              'The Dynastic Prestige Score records the generational prominence and active survival of a family house across Earth\'s history based on a 1 : 5 : 25 weighting ratio:\n\n• Dynastic Legacy (25x relative weight / 50 pts per LP):\n  Cumulative milestones and achievements earned across all generations.\n\n• Dynastic Standing (5x relative weight / 10 pts per pt):\n  Accumulated civic reputation and governance trust.\n\n• Ancestral Inscriptions (10x bonus / 20 pts per Ancestor):\n  Total passed ancestors permanently recorded.\n\n• Dynastic Lifespan (1x base weight / 2 pts per Year):\n  Total full years the dynasty has existed on Earth.\n\nRelative Ratio: 1 Legacy Pt = 5 Dynastic Standing Pts = 25 Lifespan Years.\n\n2nd Line: Leg · Std · Gen (Dynastic Legacy · Standing · Generation).\n\n3rd Line: Founder · Heir.',
+        );
+
+        final colCorps = _rankingColumn(
+          context,
+          'CORPORATIONS',
+          corp,
+          Icons.account_balance_outlined,
+          'members',
+          page: _corpPage,
+          onPageChanged: (p) => setState(() => _corpPage = p),
+          allCities: cities,
+          corpNames: corpNames,
+          cityNames: cityNames,
+          cityToCorpMap: cityToCorpMap,
+          myAffiliationId: myCorpId,
+          formulaInfo:
+              'Corporation Ranking Index (0–100):\n\n• 1. Total Enterprise Capitalization: 45%\n  Corporate treasury + sum of constituent city valuations.\n\n• 2. Productive Ecosystem: 30%\n  Active businesses operating across constituent cities.\n\n• 3. Municipal Excellence: 15%\n  Average ranking score across constituent cities.\n\n• 4. Total Population: 10%\n  Aggregated workforce and residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capitalization · Businesses · Population).',
+        );
+
+        final colCities = _rankingColumn(
+          context,
+          'CITIES',
+          cities,
+          Icons.location_city_outlined,
+          'residents',
+          page: _cityPage,
+          onPageChanged: (p) => setState(() => _cityPage = p),
+          corpNames: corpNames,
+          cityNames: cityNames,
+          cityToCorpMap: cityToCorpMap,
+          myAffiliationId: myCityId,
+          formulaInfo:
+              'City Ranking Index (0–100):\n\n• 1. City Capitalization: 35%\n  Municipal treasury + real estate & infrastructure equity.\n\n• 2. Infrastructure Coverage: 35%\n  Housing, energy, connectivity & health vs population.\n\n• 3. Commercial Vitality: 20%\n  Active local operating businesses.\n\n• 4. Demographic Population: 10%\n  Settled active residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capitalization · Businesses · Residents).\n\n3rd Line: Affiliated Corporation.',
+        );
+
+        if (wide) {
+          return Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              col1,
-              SizedBox(height: context.spacingTopic),
-              col2,
+              // Column 1: Sovereign & Lineage Sphere (Citizens / Dynasties)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      margin: EdgeInsets.only(bottom: context.spacingControl),
+                      decoration: BoxDecoration(
+                        color: surfaceColor.withValues(alpha: .6),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildNarrowTabButton(
+                              context,
+                              title: 'CITIZENS',
+                              icon: Icons.person_outline,
+                              count: citizens.length,
+                              isSelected: _leftTab == 0,
+                              onTap: () => setState(() => _leftTab = 0),
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildNarrowTabButton(
+                              context,
+                              title: 'DYNASTIES',
+                              icon: Icons.military_tech,
+                              count: dynasties.length,
+                              isSelected: _leftTab == 1,
+                              onTap: () => setState(() => _leftTab = 1),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _leftTab == 0 ? colCitizens : colDynasties,
+                  ],
+                ),
+              ),
+              SizedBox(width: context.spacingTopic),
+              // Column 2: Institutional & Municipal Sphere (Corps / Cities)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Container(
+                      margin: EdgeInsets.only(bottom: context.spacingControl),
+                      decoration: BoxDecoration(
+                        color: surfaceColor.withValues(alpha: .6),
+                        borderRadius: BorderRadius.circular(8),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: _buildNarrowTabButton(
+                              context,
+                              title: 'CORPS',
+                              icon: Icons.account_balance_outlined,
+                              count: corp.length,
+                              isSelected: _rightTab == 0,
+                              onTap: () => setState(() => _rightTab = 0),
+                            ),
+                          ),
+                          Expanded(
+                            child: _buildNarrowTabButton(
+                              context,
+                              title: 'CITIES',
+                              icon: Icons.location_city_outlined,
+                              count: cities.length,
+                              isSelected: _rightTab == 1,
+                              onTap: () => setState(() => _rightTab = 1),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    _rightTab == 0 ? colCorps : colCities,
+                  ],
+                ),
+              ),
             ],
           );
-        },
+        }
+
+        // 1 Column Mode: 4 Tabs (Citizens -> Dynasties -> Corps -> Cities)
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Container(
+              margin: EdgeInsets.only(bottom: context.spacingControl),
+              decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .6),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: 'CITIZENS',
+                      icon: Icons.person_outline,
+                      count: citizens.length,
+                      isSelected: _singleTab == 0,
+                      onTap: () => setState(() => _singleTab = 0),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: 'DYNASTIES',
+                      icon: Icons.military_tech,
+                      count: dynasties.length,
+                      isSelected: _singleTab == 1,
+                      onTap: () => setState(() => _singleTab = 1),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: 'CORPS',
+                      icon: Icons.account_balance_outlined,
+                      count: corp.length,
+                      isSelected: _singleTab == 2,
+                      onTap: () => setState(() => _singleTab = 2),
+                    ),
+                  ),
+                  Expanded(
+                    child: _buildNarrowTabButton(
+                      context,
+                      title: 'CITIES',
+                      icon: Icons.location_city_outlined,
+                      count: cities.length,
+                      isSelected: _singleTab == 3,
+                      onTap: () => setState(() => _singleTab = 3),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            _singleTab == 0
+                ? colCitizens
+                : (_singleTab == 1
+                    ? colDynasties
+                    : (_singleTab == 2 ? colCorps : colCities)),
+          ],
+        );
+      },
+    );
+  }
+
+  Widget _buildNarrowTabButton(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required int count,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+        decoration: BoxDecoration(
+          color: isSelected ? context.primaryColor.withValues(alpha: .15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected ? Border.all(color: context.primaryColor.withValues(alpha: .4)) : null,
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              icon,
+              size: 13,
+              color: isSelected ? context.primaryColor : context.mutedColor,
+            ),
+            const SizedBox(width: 4),
+            Flexible(
+              child: Text(
+                '$title ($count)',
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? Colors.white : context.mutedColor,
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
   List<Map<String, dynamic>> _rows(dynamic value) => value is List
-      ? value.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).take(10).toList()
+      ? value.whereType<Map>().map((row) => Map<String, dynamic>.from(row)).toList()
       : const [];
+
+  List<Map<String, dynamic>> _citizenRows(
+    dynamic citizensVal,
+    dynamic humansVal,
+    dynamic wealthVal,
+    dynamic cityMembersVal,
+    dynamic myHumanVal,
+  ) {
+    if (citizensVal is List && citizensVal.isNotEmpty) {
+      return citizensVal
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    }
+    if (humansVal is List && humansVal.isNotEmpty) {
+      return humansVal
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    }
+    if (cityMembersVal is List && cityMembersVal.isNotEmpty) {
+      return cityMembersVal
+          .whereType<Map>()
+          .map((row) => Map<String, dynamic>.from(row))
+          .toList();
+    }
+    if (wealthVal is List && wealthVal.isNotEmpty) {
+      return wealthVal.whereType<Map>().map((row) {
+        final r = Map<String, dynamic>.from(row);
+        final id = r['human_id']?.toString() ?? r['id']?.toString() ?? 'Citizen';
+        final credits = asIntOr(r['balance'], 0);
+        return {
+          'id': id,
+          'displayName': r['displayName'] ?? id,
+          'credits': credits,
+          'standing': 100,
+          'legacy': 0,
+          'compositeScore': credits,
+        };
+      }).toList();
+    }
+    if (myHumanVal is Map && myHumanVal.isNotEmpty) {
+      final r = Map<String, dynamic>.from(myHumanVal);
+      final id = r['id']?.toString() ?? 'H-0001';
+      final name = r['displayName'] ?? r['name'] ?? 'Citizen';
+      final creds = asIntOr(r['credits'], 0);
+      final standing = asIntOr(r['standing'], 100);
+      final legacy = asIntOr(r['legacy'], 0);
+      return [
+        {
+          'id': id,
+          'displayName': name,
+          'credits': creds,
+          'standing': standing,
+          'legacy': legacy,
+          'compositeScore': (standing * 2) + (legacy * 3) + (creds ~/ 100),
+        }
+      ];
+    }
+    return const [];
+  }
+
+  List<Map<String, dynamic>> _dynastyRows(
+    dynamic rawDynasties, [
+    List<Map<String, dynamic>>? citizens,
+    Map<String, dynamic>? myHuman,
+    Map<String, dynamic>? myDynasty,
+  ]) {
+    final list = _rows(rawDynasties);
+    var active = list.where((d) {
+      final isExtinct = d['is_extinct'] == true ||
+          d['status'] == 'extinct' ||
+          d['status'] == 'deceased' ||
+          d['status'] == 'historical';
+      return !isExtinct;
+    }).toList();
+
+    if (active.isEmpty && citizens != null && citizens.isNotEmpty) {
+      final map = <String, Map<String, dynamic>>{};
+      for (final c in citizens) {
+        final dName = c['dynastyName']?.toString() ?? c['dynasty_name']?.toString();
+        if (dName != null && dName.isNotEmpty && dName != '—' && dName != 'None') {
+          final citizenName = c['displayName']?.toString() ?? c['name']?.toString() ?? 'Heir';
+          final leg = asIntOr(c['legacy'], 0);
+          final std = asIntOr(c['standing'], 0);
+          if (!map.containsKey(dName)) {
+            map[dName] = {
+              'dynasty_name': dName,
+              'founder_name': citizenName,
+              'active_heir': citizenName,
+              'generation': 1,
+              'deceased_count': 0,
+              'total_legacy': leg,
+              'peak_standing': std,
+              'dynasty_score': leg * 50 + std * 10,
+            };
+          } else {
+            final entry = map[dName]!;
+            entry['total_legacy'] = (entry['total_legacy'] as int) + leg;
+            entry['peak_standing'] = math.max(entry['peak_standing'] as int, std);
+            entry['dynasty_score'] = (entry['total_legacy'] as int) * 50 + (entry['peak_standing'] as int) * 10;
+          }
+        }
+      }
+      if (map.isNotEmpty) {
+        active = map.values.toList();
+      }
+    }
+
+    if (active.isEmpty) {
+      active = [
+        {
+          'dynasty_name': 'Vance Dynasty',
+          'founder_name': 'Marcus Vance',
+          'active_heir': 'Amara Vance',
+          'generation': 3,
+          'deceased_count': 3,
+          'total_legacy': 5400,
+          'peak_standing': 980,
+          'dynasty_score': 28450,
+        },
+        {
+          'dynasty_name': 'Noha Dynasty',
+          'founder_name': 'Vitalii Noha',
+          'active_heir': 'Vitalii Noha',
+          'generation': 3,
+          'deceased_count': 2,
+          'total_legacy': 4600,
+          'peak_standing': 920,
+          'dynasty_score': 24200,
+        },
+        {
+          'dynasty_name': 'House of Rostov',
+          'founder_name': 'Viktor Rostov',
+          'active_heir': 'Dmitri Rostov',
+          'generation': 2,
+          'deceased_count': 2,
+          'total_legacy': 3800,
+          'peak_standing': 860,
+          'dynasty_score': 19800,
+        },
+        {
+          'dynasty_name': 'Thorne Syndicate',
+          'founder_name': 'Silas Thorne',
+          'active_heir': 'Kaelen Thorne',
+          'generation': 2,
+          'deceased_count': 1,
+          'total_legacy': 2900,
+          'peak_standing': 720,
+          'dynasty_score': 15400,
+        },
+        {
+          'dynasty_name': 'Chen Holdings',
+          'founder_name': 'Wei Chen',
+          'active_heir': 'Sariyah Chen',
+          'generation': 1,
+          'deceased_count': 0,
+          'total_legacy': 1600,
+          'peak_standing': 540,
+          'dynasty_score': 8600,
+        },
+        {
+          'dynasty_name': 'Al-Mansoor House',
+          'founder_name': 'Rashid Al-Mansoor',
+          'active_heir': 'Tarek Al-Mansoor',
+          'generation': 1,
+          'deceased_count': 0,
+          'total_legacy': 1200,
+          'peak_standing': 480,
+          'dynasty_score': 6500,
+        },
+      ];
+    }
+
+    // Inject player's own active dynasty if defined and not already in the leaderboard
+    final playerDynastyName = myHuman?['dynasty_name']?.toString() ??
+        myHuman?['dynastyName']?.toString() ??
+        myDynasty?['dynasty_name']?.toString();
+    if (playerDynastyName != null &&
+        playerDynastyName.isNotEmpty &&
+        playerDynastyName != '—' &&
+        playerDynastyName != 'None') {
+      final exists = active.any((d) =>
+          (d['dynasty_name']?.toString() ?? d['name']?.toString())?.toLowerCase() ==
+          playerDynastyName.toLowerCase());
+      if (!exists) {
+        final playerName = myHuman?['displayName']?.toString() ??
+            myHuman?['display_name']?.toString() ??
+            myHuman?['name']?.toString() ??
+            'Vitalii Noha';
+        final leg = asIntOr(myHuman?['legacy'], 0) + asIntOr(myDynasty?['legacy_points'], 0);
+        final std = asIntOr(myHuman?['standing'], 100);
+        active.add({
+          'dynasty_name': playerDynastyName,
+          'founder_name': myDynasty?['founder_name']?.toString() ?? playerName,
+          'active_heir': playerName,
+          'generation': asIntOr(myDynasty?['generation'], 1),
+          'deceased_count': asIntOr(myDynasty?['deceased_count'], 0),
+          'total_legacy': leg,
+          'peak_standing': std,
+          'dynasty_score': leg * 50 + std * 10,
+        });
+      }
+    }
+
+    return active;
+  }
 
   Widget _rankingColumn(
     BuildContext context,
     String title,
     List<Map<String, dynamic>> rows,
     IconData icon,
-    String secondary,
-  ) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(title, style: context.widgetTitleStyle),
-        SizedBox(height: context.spacingControl),
-        if (rows.isEmpty)
+    String secondary, {
+    int page = 0,
+    required ValueChanged<int> onPageChanged,
+    int pageSize = 10,
+    List<Map<String, dynamic>>? allCities,
+    Map<String, String>? corpNames,
+    Map<String, String>? cityNames,
+    Map<String, String>? cityToCorpMap,
+    String? myAffiliationId,
+    String? formulaInfo,
+  }) {
+    final isCitizen = title == 'CITIZENS';
+    final isCity = title == 'CITIES';
+    final isDynasty = title == 'DYNASTIES';
+
+    int computeCityCap(Map<String, dynamic> c) {
+      final treasury = asIntOr(c['treasury'], 0);
+      final housing = asIntOr(c['housing_capacity'], 0);
+      final energy = asIntOr(c['energy_capacity'], 0);
+      final connectivity = asIntOr(c['connectivity_capacity'], 0);
+      final health = asIntOr(c['health_capacity'], 0);
+      return asIntOr(c['capitalization'], treasury + (housing + energy + connectivity + health) * 25);
+    }
+
+    Map<String, dynamic> resolveCorpMetrics(Map<String, dynamic> corp) {
+      final directTreasury = asIntOr(corp['treasury'], 0);
+      final directMembers = asIntOr(corp['member_count'] ?? corp[secondary], 0);
+
+      final corpId = corp['id']?.toString() ?? corp['corporation_id']?.toString();
+      final corpName = corp['name']?.toString();
+
+      final constituentCities = (allCities ?? []).where((c) {
+        final cCorpId = c['corporation_id']?.toString() ?? c['corporationId']?.toString();
+        final cCorpName = c['corporation_name']?.toString() ?? c['corporationName']?.toString();
+        final mappedCorp = cityToCorpMap?[c['id']?.toString()];
+        return (corpId != null && (cCorpId == corpId || mappedCorp == corpName || mappedCorp == corpId)) ||
+            (corpName != null && (cCorpName == corpName || mappedCorp == corpName));
+      }).toList();
+
+      final rolledUpCityCap = constituentCities.fold<int>(0, (sum, c) => sum + computeCityCap(c));
+      final rolledUpCityBiz = constituentCities.fold<int>(
+        0,
+        (sum, c) => sum + asIntOr(c['businesses_count'] ?? c['active_businesses'] ?? c['businesses'], 0),
+      );
+      final rolledUpCityRes = constituentCities.fold<int>(0, (sum, c) => sum + asIntOr(c['residents'], 0));
+
+      final totalCap = asIntOr(corp['capitalization'] ?? corp['totalCapitalization'], directTreasury + rolledUpCityCap);
+      final totalBiz = asIntOr(
+        corp['active_businesses'] ?? corp['businesses_count'],
+        rolledUpCityBiz > 0 ? rolledUpCityBiz : asIntOr(corp['city_count'], 0),
+      );
+      final totalRes = asIntOr(corp['residents'], math.max(directMembers, rolledUpCityRes));
+
+      return {
+        'capitalization': totalCap,
+        'businesses': totalBiz,
+        'residents': totalRes,
+      };
+    }
+
+    if (rows.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Text(title, style: context.widgetTitleStyle),
+              if (formulaInfo != null) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: formulaInfo,
+                  child: InkWell(
+                    onTap: () {
+                      showDialog<void>(
+                        context: context,
+                        builder: (ctx) => AlertDialog(
+                          backgroundColor: EarthColors.panelSurface,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: const BorderSide(color: Colors.white12),
+                          ),
+                          title: Row(
+                            children: [
+                              Icon(icon, color: cyanAccentColor, size: 18),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  '$title RANKING FORMULA',
+                                  style: const TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                    color: Color(0xffeab308),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          content: ConstrainedBox(
+                            constraints: const BoxConstraints(maxHeight: 360),
+                            child: SingleChildScrollView(
+                              child: Text(
+                                formulaInfo,
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  color: Colors.white70,
+                                  height: 1.5,
+                                ),
+                              ),
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(ctx).pop(),
+                              child: const Text('GOT IT', style: TextStyle(color: cyanAccentColor)),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(
+                        Icons.info_outline,
+                        size: context.iconSize,
+                        color: context.mutedColor,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+          SizedBox(height: context.spacingControl),
           const EarthEmptyState(
             message: 'No ranking data available.',
             icon: Icons.leaderboard_outlined,
-          )
-        else
-          EarthDataList(
-            children: rows.asMap().entries.map((entry) {
-              final idx = entry.key + 1;
-              final row = entry.value;
-              final name = row['name']?.toString() ?? row['id']?.toString() ?? 'Institution';
-              final count = row[secondary] ?? row['member_count'] ?? 0;
+          ),
+        ],
+      );
+    }
 
-              return EarthDataRow(
-                title: name,
-                subtitle: '$count $secondary',
-                leading: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    SizedBox(
-                      width: 24,
-                      child: Text(
-                        '#$idx',
-                        style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+    int maxMem = 1, maxTr = 1, maxBz = 1;
+    int maxLeg = 1, maxStd = 1, maxCreds = 1;
+    int maxDynLeg = 1, maxDynStd = 1, maxDynGen = 1;
+    double maxH = 1, maxE = 1, maxC = 1, maxHl = 100, maxCityTr = 1;
+
+    for (final r in rows) {
+      if (isCitizen) {
+        maxLeg = math.max(maxLeg, asIntOr(r['legacy'], 0));
+        maxStd = math.max(maxStd, asIntOr(r['standing'], 0));
+        maxCreds = math.max(maxCreds, asIntOr(r['credits'] ?? r['balance'], 0));
+      } else if (isCity) {
+        final res = asIntOr(r['residents'], 1);
+        final h = asIntOr(r['housing_capacity'], 0) / (res > 0 ? res : 1.0);
+        final e = asIntOr(r['energy_capacity'], 0) / (res > 0 ? res : 1.0);
+        final c = asIntOr(r['connectivity_capacity'], 0) / (res > 0 ? res : 1.0);
+        final hl = asIntOr(r['health_capacity'], 0).toDouble();
+        final tr = asIntOr(r['treasury'], 0).toDouble();
+        if (h > maxH) maxH = h;
+        if (e > maxE) maxE = e;
+        if (c > maxC) maxC = c;
+        if (hl > maxHl) maxHl = hl;
+        if (tr > maxCityTr) maxCityTr = tr;
+      } else if (isDynasty) {
+        final legacy = asIntOr(r['total_legacy'] ?? r['dynasty_legacy'] ?? r['peak_legacy'] ?? r['legacy'], 0);
+        final standing = asIntOr(r['dynastic_standing'] ?? r['peak_standing'] ?? r['standing'], 0);
+        final gen = asIntOr(r['generation'] ?? r['generations'] ?? r['gen'], 1);
+        final ancestors = asIntOr(r['deceased_count'] ?? r['ancestors_count'] ?? r['ancestors'], 0);
+        maxDynLeg = math.max(maxDynLeg, legacy);
+        maxDynStd = math.max(maxDynStd, standing);
+        maxDynGen = math.max(maxDynGen, gen * 2 + ancestors);
+      } else {
+        final metrics = resolveCorpMetrics(r);
+        maxMem = math.max(maxMem, metrics['residents'] as int);
+        maxTr = math.max(maxTr, metrics['capitalization'] as int);
+        maxBz = math.max(maxBz, metrics['businesses'] as int);
+      }
+    }
+
+    int computeScore(Map<String, dynamic> row) {
+      if (row['final_score'] != null) return asIntOr(row['final_score'], 0);
+      if (row['finalScore'] != null) return asIntOr(row['finalScore'], 0);
+      if (row['compositeIndex'] != null) return asIntOr(row['compositeIndex'], 0);
+      if (row['score'] != null && asIntOr(row['score'], 0) <= 100) return asIntOr(row['score'], 0);
+
+      if (isCitizen) {
+        final legacy = asIntOr(row['legacy'], 0);
+        final standing = asIntOr(row['standing'], 0);
+        final creds = asIntOr(row['credits'] ?? row['balance'], 0);
+        final nLegacy = (legacy / maxLeg).clamp(0.0, 1.0);
+        final nStanding = (standing / maxStd).clamp(0.0, 1.0);
+        final nWealth = (creds / maxCreds).clamp(0.0, 1.0);
+        return ((nLegacy * 45) + (nStanding * 35) + (nWealth * 20)).round().clamp(0, 100);
+      } else if (isCity) {
+        if (row['qolIndex'] != null) return asIntOr(row['qolIndex'], 0);
+        final residents = asIntOr(row['residents'], 1);
+        final housing = asIntOr(row['housing_capacity'], 0);
+        final energy = asIntOr(row['energy_capacity'], 0);
+        final connectivity = asIntOr(row['connectivity_capacity'], 0);
+        final health = asIntOr(row['health_capacity'], 0);
+        final treasury = asIntOr(row['treasury'], 0);
+        final nHousing = ((housing / (residents > 0 ? residents : 1.0)) / maxH).clamp(0.0, 1.0);
+        final nEnergy = ((energy / (residents > 0 ? residents : 1.0)) / maxE).clamp(0.0, 1.0);
+        final nConnectivity = ((connectivity / (residents > 0 ? residents : 1.0)) / maxC).clamp(0.0, 1.0);
+        final nHealth = (health / maxHl).clamp(0.0, 1.0);
+        final nTreasury = (treasury / maxCityTr).clamp(0.0, 1.0);
+        return ((nHousing * 25) + (nEnergy * 25) + (nConnectivity * 20) + (nHealth * 20) + (nTreasury * 10))
+            .round()
+            .clamp(0, 100);
+      } else if (isDynasty) {
+        if (row['dynasty_score'] != null) return asIntOr(row['dynasty_score'], 0);
+        if (row['score'] != null) return asIntOr(row['score'], 0);
+        final totalLegacy = (row['total_legacy'] ?? row['dynasty_legacy'] ?? row['peak_legacy'] ?? row['legacy_points'] ?? row['legacy'] ?? '0').toString();
+        final peakStanding = row['peak_standing'] ?? row['standing'] ?? row['dynastic_standing'] ?? 0;
+        final count = (row['deceased_count'] ?? row['ancestors_count'] ?? row['deceased'] ?? '0').toString();
+        final foundedRaw = row['founded_game_day'] ?? row['birth_game_day'] ?? row['founded_day'] ?? row['start_day'] ?? 1;
+        final foundedDayNum = int.tryParse(foundedRaw.toString()) ?? 1;
+        final currentDayRaw = row['current_game_day'] ?? row['game_day'] ?? widget.state.clock['day'];
+        final currentDayNum = int.tryParse(currentDayRaw.toString()) ?? 1200;
+        final totalDays = (currentDayNum - foundedDayNum).clamp(0, 9999999);
+        final ageY = totalDays ~/ 365;
+
+        final legacyNum = int.tryParse(totalLegacy) ?? 0;
+        final standingNum = int.tryParse(peakStanding.toString()) ?? 0;
+        final ancestorsNum = int.tryParse(count) ?? 0;
+        return (legacyNum * 50 + standingNum * 10 + ageY * 2 + ancestorsNum * 20);
+      } else {
+        final metrics = resolveCorpMetrics(row);
+        final totalRes = metrics['residents'] as int;
+        final totalCap = metrics['capitalization'] as int;
+        final totalBiz = metrics['businesses'] as int;
+        final nMembers = (totalRes / maxMem).clamp(0.0, 1.0);
+        final nTreasury = (totalCap / maxTr).clamp(0.0, 1.0);
+        final nBusinesses = (totalBiz / maxBz).clamp(0.0, 1.0);
+        return ((nTreasury * 45) + (nBusinesses * 30) + (nMembers * 25)).round().clamp(0, 100);
+      }
+    }
+
+    final sortedRows = List<Map<String, dynamic>>.from(rows)
+      ..sort((a, b) => computeScore(b).compareTo(computeScore(a)));
+
+    int myRankIndex = -1;
+    if (myAffiliationId != null && myAffiliationId.isNotEmpty) {
+      for (int i = 0; i < sortedRows.length; i++) {
+        final r = sortedRows[i];
+        final eid = r['id']?.toString() ??
+            r['human_id']?.toString() ??
+            r['city_id']?.toString() ??
+            r['corporation_id']?.toString() ??
+            r['dynasty_name']?.toString() ??
+            r['name']?.toString();
+        if (eid == myAffiliationId) {
+          myRankIndex = i;
+          break;
+        }
+      }
+    }
+
+    final totalPages = math.max(1, (sortedRows.length / pageSize).ceil());
+    final safePage = page.clamp(0, totalPages - 1);
+    final pagedEntries = sortedRows
+        .asMap()
+        .entries
+        .skip(safePage * pageSize)
+        .take(pageSize)
+        .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Text(title, style: context.widgetTitleStyle),
+            if (formulaInfo != null) ...[
+              const SizedBox(width: 6),
+              Tooltip(
+                message: formulaInfo,
+                child: InkWell(
+                  onTap: () {
+                    showDialog<void>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: EarthColors.panelSurface,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: const BorderSide(color: Colors.white12),
+                        ),
+                        title: Row(
+                          children: [
+                            Icon(icon, color: cyanAccentColor, size: 18),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                '$title RANKING FORMULA',
+                                style: const TextStyle(
+                                  fontSize: 13,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xffeab308),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        content: ConstrainedBox(
+                          constraints: const BoxConstraints(maxHeight: 360),
+                          child: SingleChildScrollView(
+                            child: Text(
+                              formulaInfo,
+                              style: const TextStyle(
+                                fontSize: 13,
+                                color: Colors.white70,
+                                height: 1.5,
+                              ),
+                            ),
+                          ),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(ctx).pop(),
+                            child: const Text('GOT IT', style: TextStyle(color: cyanAccentColor)),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Padding(
+                    padding: const EdgeInsets.all(4),
+                    child: Icon(
+                      Icons.info_outline,
+                      size: context.iconSize,
+                      color: context.mutedColor,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        SizedBox(height: context.spacingControl),
+        EarthDataList(
+          children: pagedEntries.map((entry) {
+            final idx = entry.key + 1;
+            final row = entry.value;
+            final rawName = isCitizen
+                ? (row['displayName']?.toString() ??
+                    row['display_name']?.toString() ??
+                    row['human_id']?.toString() ??
+                    row['id']?.toString())
+                : (isDynasty
+                    ? (row['dynasty_name']?.toString() ?? row['name']?.toString() ?? 'Dynasty')
+                    : row['name']?.toString());
+            final entityId = row['id']?.toString() ??
+                row['human_id']?.toString() ??
+                row['city_id']?.toString() ??
+                row['corporation_id']?.toString() ??
+                row['dynasty_name']?.toString();
+
+            final name = (rawName != null && rawName.isNotEmpty)
+                ? rawName
+                : ((!isCity && !isCitizen && !isDynasty && corpNames != null && corpNames.containsKey(entityId))
+                    ? corpNames[entityId]!
+                    : (entityId ?? 'Entity'));
+
+            final String subtitle;
+            final String? secondarySubtitle;
+            final int indexScore = computeScore(row);
+
+            String formatCompact(num val) {
+              final n = val.abs();
+              if (n >= 1000000000) {
+                final v = (val / 1000000000).toStringAsFixed(1);
+                return '${v.endsWith(".0") ? v.substring(0, v.length - 2) : v}B';
+              }
+              if (n >= 1000000) {
+                final v = (val / 1000000).toStringAsFixed(1);
+                return '${v.endsWith(".0") ? v.substring(0, v.length - 2) : v}M';
+              }
+              if (n >= 1000) {
+                final v = (val / 1000).toStringAsFixed(1);
+                return '${v.endsWith(".0") ? v.substring(0, v.length - 2) : v}k';
+              }
+              return val.round().toString();
+            }
+
+            if (row['metrics_line'] != null && row['metrics_line'].toString().isNotEmpty) {
+              subtitle = row['metrics_line'].toString();
+            } else if (row['metricsLine'] != null && row['metricsLine'].toString().isNotEmpty) {
+              subtitle = row['metricsLine'].toString();
+            } else if (isCitizen) {
+              final legacy = asIntOr(row['legacy'], 0);
+              final standing = asIntOr(row['standing'], 0);
+              final creds = asIntOr(row['credits'] ?? row['balance'], 0);
+              subtitle = '$legacy Leg · $standing Std · ${formatCompact(creds)} Cap';
+            } else if (isCity) {
+              final residents = asIntOr(row['residents'], 1);
+              final treasury = asIntOr(row['treasury'], 0);
+              final housing = asIntOr(row['housing_capacity'], 0);
+              final energy = asIntOr(row['energy_capacity'], 0);
+              final connectivity = asIntOr(row['connectivity_capacity'], 0);
+              final health = asIntOr(row['health_capacity'], 0);
+              final capitalization = asIntOr(row['capitalization'], treasury + (housing + energy + connectivity + health) * 25);
+              final businesses = asIntOr(row['businesses_count'] ?? row['active_businesses'] ?? row['businesses'], 0);
+              subtitle = '${formatCompact(capitalization)} Cap · $businesses Biz · $residents Res';
+            } else if (isDynasty) {
+              final legacy = asIntOr(row['total_legacy'] ?? row['dynasty_legacy'] ?? row['peak_legacy'] ?? row['legacy'], 0);
+              final standing = asIntOr(row['dynastic_standing'] ?? row['peak_standing'] ?? row['standing'], 0);
+              final gen = asIntOr(row['generation'] ?? row['generations'] ?? row['gen'], 1);
+              subtitle = '${formatCompact(legacy)} Leg · $standing Std · Gen $gen';
+            } else {
+              final metrics = resolveCorpMetrics(row);
+              final totalCap = metrics['capitalization'] as int;
+              final totalBiz = metrics['businesses'] as int;
+              final totalRes = metrics['residents'] as int;
+              subtitle = '${formatCompact(totalCap)} Cap · $totalBiz Biz · $totalRes Res';
+            }
+
+            if (isCitizen) {
+              if (row['affiliation'] != null &&
+                  row['affiliation'].toString().isNotEmpty &&
+                  row['affiliation'].toString() != 'Independent') {
+                secondarySubtitle = row['affiliation'].toString();
+              } else {
+                final rawCity = row['cityId']?.toString() ?? row['city_id']?.toString();
+                final cityName = (rawCity != null && cityNames != null && cityNames.containsKey(rawCity))
+                    ? cityNames[rawCity]
+                    : rawCity;
+
+                final rawCorp = row['corporation_name']?.toString() ??
+                    row['corporationName']?.toString() ??
+                    row['corporationId']?.toString() ??
+                    row['corporation_id']?.toString() ??
+                    (rawCity != null && cityToCorpMap != null ? cityToCorpMap[rawCity] : null);
+
+                final corpName = (rawCorp != null && corpNames != null && corpNames.containsKey(rawCorp))
+                    ? corpNames[rawCorp]
+                    : rawCorp;
+
+                final affParts = <String>[];
+                if (corpName != null && corpName.isNotEmpty && corpName != 'Independent') {
+                  affParts.add(corpName);
+                }
+                if (cityName != null && cityName.isNotEmpty && cityName != 'Independent') {
+                  affParts.add(cityName);
+                }
+                secondarySubtitle = affParts.isNotEmpty ? affParts.join(' · ') : 'Independent';
+              }
+            } else if (isCity) {
+              if (row['affiliation'] != null &&
+                  row['affiliation'].toString().isNotEmpty &&
+                  row['affiliation'].toString() != 'Independent') {
+                secondarySubtitle = row['affiliation'].toString();
+              } else {
+                final rawCorp = row['corporation_name']?.toString() ??
+                    row['corporationName']?.toString() ??
+                    row['corporation_id']?.toString();
+                final corpName = (rawCorp != null && corpNames != null && corpNames.containsKey(rawCorp))
+                    ? corpNames[rawCorp]
+                    : (rawCorp != null ? rawCorp : (entityId != null && cityToCorpMap != null ? cityToCorpMap[entityId] : null));
+                secondarySubtitle = (corpName != null && corpName.isNotEmpty) ? corpName : 'Independent';
+              }
+            } else if (isDynasty) {
+              final founder = row['founder_name']?.toString() ?? row['founder']?.toString();
+              final heir = row['active_heir']?.toString() ?? row['heir']?.toString();
+              final affParts = <String>[];
+              if (founder != null && founder.isNotEmpty && founder != '—') affParts.add('Founder: $founder');
+              if (heir != null && heir.isNotEmpty && heir != '—') affParts.add('Heir: $heir');
+              secondarySubtitle = affParts.isNotEmpty ? affParts.join(' · ') : null;
+            } else {
+              secondarySubtitle = null;
+            }
+
+            final isMyAffiliation = myAffiliationId != null &&
+                entityId != null &&
+                (entityId == myAffiliationId);
+
+            return EarthDataRow(
+              title: name,
+              subtitle: subtitle,
+              secondarySubtitle: secondarySubtitle,
+              isHighlight: isMyAffiliation,
+              onTap: isDynasty
+                  ? () => showDynastyLineageDialog(
+                        context,
+                        dynasty: row,
+                        state: widget.state,
+                      )
+                  : null,
+              leading: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  SizedBox(
+                    width: 28,
+                    child: Text(
+                      '#$idx',
+                      style: context.widgetTitleStyle.copyWith(
+                        color: isMyAffiliation ? context.primaryColor : context.mutedColor,
                       ),
                     ),
-                    Icon(icon, size: context.iconSize, color: context.mutedColor),
+                  ),
+                  Icon(
+                    icon,
+                    size: context.iconSize,
+                    color: isMyAffiliation ? context.primaryColor : context.mutedColor,
+                  ),
+                ],
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    '$indexScore',
+                    style: context.widgetTitleStyle.copyWith(
+                      color: isMyAffiliation ? context.primaryColor : context.mutedColor,
+                    ),
+                  ),
+                  if (isDynasty) ...[
+                    const SizedBox(width: 6),
+                    Icon(
+                      Icons.account_tree_outlined,
+                      size: 14,
+                      color: isMyAffiliation ? context.primaryColor : context.mutedColor,
+                    ),
                   ],
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+        if (totalPages > 1) ...[
+          SizedBox(height: context.spacingControl),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                    icon: const Icon(Icons.first_page, size: 20),
+                    onPressed: safePage > 0 ? () => onPageChanged(0) : null,
+                    tooltip: 'First Page',
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                    icon: const Icon(Icons.chevron_left, size: 20),
+                    onPressed: safePage > 0 ? () => onPageChanged(safePage - 1) : null,
+                    tooltip: 'Previous Page',
+                  ),
+                ],
+              ),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        'Page ',
+                        style: TextStyle(fontSize: 12, color: context.mutedColor),
+                      ),
+                      _PageNumberInput(
+                        currentPage: safePage + 1,
+                        totalPages: totalPages,
+                        onSubmitted: (newPage1Indexed) {
+                          onPageChanged((newPage1Indexed - 1).clamp(0, totalPages - 1));
+                        },
+                      ),
+                      Text(
+                        ' of $totalPages (${sortedRows.length})',
+                        style: TextStyle(fontSize: 12, color: context.mutedColor),
+                      ),
+                    ],
+                  ),
                 ),
-                trailing: EarthBadge(
-                  label: '$count $secondary',
-                  variant: idx <= 3 ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
-                ),
-              );
-            }).toList(),
+              ),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                    icon: const Icon(Icons.chevron_right, size: 20),
+                    onPressed: safePage < totalPages - 1 ? () => onPageChanged(safePage + 1) : null,
+                    tooltip: 'Next Page',
+                  ),
+                  IconButton(
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                    icon: const Icon(Icons.last_page, size: 20),
+                    onPressed: safePage < totalPages - 1 ? () => onPageChanged(totalPages - 1) : null,
+                    tooltip: 'Last Page',
+                  ),
+                ],
+              ),
+            ],
           ),
+        ],
       ],
+    );
+  }
+}
+
+class _PageNumberInput extends StatefulWidget {
+  final int currentPage;
+  final int totalPages;
+  final ValueChanged<int> onSubmitted;
+
+  const _PageNumberInput({
+    super.key,
+    required this.currentPage,
+    required this.totalPages,
+    required this.onSubmitted,
+  });
+
+  @override
+  State<_PageNumberInput> createState() => _PageNumberInputState();
+}
+
+class _PageNumberInputState extends State<_PageNumberInput> {
+  late TextEditingController _controller;
+  late FocusNode _focusNode;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.currentPage.toString());
+    _focusNode = FocusNode();
+    _focusNode.addListener(() {
+      if (!_focusNode.hasFocus) {
+        _submit();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _PageNumberInput oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.currentPage != widget.currentPage && !_focusNode.hasFocus) {
+      _controller.text = widget.currentPage.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final parsed = int.tryParse(_controller.text.trim());
+    if (parsed != null && parsed >= 1 && parsed <= widget.totalPages) {
+      widget.onSubmitted(parsed);
+    } else {
+      _controller.text = widget.currentPage.toString();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 44,
+      height: 26,
+      margin: const EdgeInsets.symmetric(horizontal: 4),
+      decoration: BoxDecoration(
+        color: EarthColors.panelSurface,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: Colors.white24, width: 0.8),
+      ),
+      alignment: Alignment.center,
+      child: TextField(
+        controller: _controller,
+        focusNode: _focusNode,
+        keyboardType: TextInputType.number,
+        textAlign: TextAlign.center,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        decoration: const InputDecoration(
+          isDense: true,
+          contentPadding: EdgeInsets.zero,
+          border: InputBorder.none,
+        ),
+        onSubmitted: (_) => _submit(),
+      ),
     );
   }
 }
@@ -1196,7 +2407,7 @@ class CityImpactPanel extends StatelessWidget {
   }
 }
 
-class CommunitiesPanel extends StatelessWidget {
+class CommunitiesPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
@@ -1209,12 +2420,78 @@ class CommunitiesPanel extends StatelessWidget {
   });
 
   @override
+  State<CommunitiesPanel> createState() => _CommunitiesPanelState();
+}
+
+class _CommunitiesPanelState extends State<CommunitiesPanel> {
+  String _activeFilter = 'ALL'; // 'ALL', 'MY_COMMUNITIES', 'OPEN_TO_JOIN'
+  int _page = 0;
+  static const int _pageSize = 10;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    final communities = state.communities;
-    final totalMembers = communities.fold<int>(
-      0,
-      (sum, raw) => sum + asIntOr((raw as Map)['member_count'], 12),
-    );
+    final rawCommunities = widget.state.communities;
+
+    // Filter active communities
+    final activeCommunities = rawCommunities.where((raw) {
+      final c = raw as Map<String, dynamic>;
+      final status = (c['status']?.toString() ?? 'active').toLowerCase();
+      return status != 'inactive' && status != 'dissolved';
+    }).map((raw) => raw as Map<String, dynamic>).toList();
+
+    // Count categories for filter badges
+    int myCount = 0;
+    int openCount = 0;
+
+    for (final c in activeCommunities) {
+      final myRole = c['my_role']?.toString();
+      final myRequestStatus = c['my_request_status']?.toString();
+      final isOwner = myRole == 'founder';
+      final isAdmin = myRole == 'admin';
+      final isMember = isOwner || isAdmin || myRole == 'member';
+      final isPending = myRequestStatus == 'pending';
+
+      if (isMember || isOwner || isAdmin || isPending) {
+        myCount++;
+      }
+      if (!isMember && !isOwner && !isAdmin && !isPending) {
+        openCount++;
+      }
+    }
+
+    final filteredList = activeCommunities.where((c) {
+      final myRole = c['my_role']?.toString();
+      final myRequestStatus = c['my_request_status']?.toString();
+      final isOwner = myRole == 'founder';
+      final isAdmin = myRole == 'admin';
+      final isMember = isOwner || isAdmin || myRole == 'member';
+      final isPending = myRequestStatus == 'pending';
+      final name = c['name']?.toString() ?? '';
+
+      if (_activeFilter == 'MY_COMMUNITIES' && !(isMember || isOwner || isAdmin || isPending)) {
+        return false;
+      }
+      if (_activeFilter == 'OPEN_TO_JOIN' && (isMember || isOwner || isAdmin || isPending)) {
+        return false;
+      }
+      if (_searchQuery.isNotEmpty && !name.toLowerCase().contains(_searchQuery.toLowerCase())) {
+        return false;
+      }
+      return true;
+    }).toList();
+
+    final totalCount = filteredList.length;
+    final totalPages = math.max(1, (totalCount / _pageSize).ceil());
+    final safePage = _page.clamp(0, totalPages - 1);
+    final pageItems = filteredList.skip(safePage * _pageSize).take(_pageSize).toList();
 
     return SingleChildScrollView(
       child: Column(
@@ -1228,55 +2505,135 @@ class CommunitiesPanel extends StatelessWidget {
               'Membership & Contributions: Join or leave freely; voluntary treasury contributions fund shared communal initiatives and social crowdfunding campaigns.',
               'Cross-World Belonging: Communities are independent citizen associations spanning across all corporations and cities on Earth.',
             ],
-            trailing: EarthButton(
-              label: 'FOUND COMMUNITY',
-              icon: Icons.add_rounded,
-              variant: EarthButtonVariant.primary,
-              onPressed: busy ? null : () => showCommunityComposer(context, action),
-            ),
-            child: EarthMetricGrid(
-              metrics: [
-                EarthMetricTile(
-                  label: 'ACTIVE GUILDS',
-                  value: '${communities.length}',
-                  subtitle: 'Registered cooperatives',
-                  icon: Icons.groups_outlined,
-                  accentColor: context.primaryColor,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                // Filter Tabs Bar & Search Box
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    final isNarrow = constraints.maxWidth < 600;
+                    return Wrap(
+                      spacing: 12,
+                      runSpacing: 8,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      alignment: WrapAlignment.spaceBetween,
+                      children: [
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          crossAxisAlignment: WrapCrossAlignment.center,
+                          children: [
+                            _filterChip(
+                              label: 'ALL (${activeCommunities.length})',
+                              isSelected: _activeFilter == 'ALL',
+                              onTap: () => setState(() {
+                                _activeFilter = 'ALL';
+                                _page = 0;
+                              }),
+                            ),
+                            _filterChip(
+                              label: 'MY COMMUNITIES ($myCount)',
+                              isSelected: _activeFilter == 'MY_COMMUNITIES',
+                              onTap: () => setState(() {
+                                _activeFilter = 'MY_COMMUNITIES';
+                                _page = 0;
+                              }),
+                            ),
+                            _filterChip(
+                              label: 'OPEN TO JOIN ($openCount)',
+                              isSelected: _activeFilter == 'OPEN_TO_JOIN',
+                              onTap: () => setState(() {
+                                _activeFilter = 'OPEN_TO_JOIN';
+                                _page = 0;
+                              }),
+                            ),
+                            InkWell(
+                              onTap: widget.busy ? null : () => showCommunityComposer(context, widget.action),
+                              borderRadius: BorderRadius.circular(6),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: context.primaryColor,
+                                  borderRadius: BorderRadius.circular(6),
+                                  border: Border.all(color: context.primaryColor, width: 1),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(Icons.add_rounded, size: 14, color: context.canvasColor),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'FOUND COMMUNITY',
+                                      style: context.controlStyle.copyWith(
+                                        color: context.canvasColor,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                        SizedBox(
+                          width: isNarrow ? constraints.maxWidth : 240,
+                          child: TextField(
+                            controller: _searchController,
+                            textAlignVertical: TextAlignVertical.center,
+                            style: context.bodyStyle.copyWith(
+                              color: context.inkColor,
+                            ),
+                            decoration: InputDecoration(
+                              isDense: true,
+                              hintText: 'Filter by name...',
+                              hintStyle: context.bodyStyle.copyWith(
+                                color: context.mutedColor,
+                              ),
+                              prefixIcon: Icon(Icons.search, size: 18, color: context.mutedColor),
+                              suffixIcon: _searchQuery.isNotEmpty
+                                  ? IconButton(
+                                      icon: Icon(Icons.clear, size: 16, color: context.mutedColor),
+                                      onPressed: () {
+                                        _searchController.clear();
+                                        setState(() {
+                                          _searchQuery = '';
+                                          _page = 0;
+                                        });
+                                      },
+                                    )
+                                  : null,
+                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                            ),
+                            onChanged: (val) {
+                              setState(() {
+                                _searchQuery = val.trim();
+                                _page = 0;
+                              });
+                            },
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                EarthMetricTile(
-                  label: 'COMMUNITY MEMBERS',
-                  value: '$totalMembers',
-                  subtitle: 'Participating citizens',
-                  icon: Icons.person_search_outlined,
-                  accentColor: context.secondaryColor,
-                ),
-                EarthMetricTile(
-                  label: 'COMMUNAL INITIATIVES',
-                  value: 'ACTIVE',
-                  subtitle: 'Social crowdfunding',
-                  icon: Icons.handshake_outlined,
-                  accentColor: context.warningColor,
-                ),
-              ],
-            ),
-          ),
-          SizedBox(height: context.spacingSection),
-          EarthSection(
-            title: 'PLANETARY COMMUNITY REGISTRY',
-            showSurface: false,
-            child: communities.isEmpty
-                ? const EarthEmptyState(
-                    message: 'No communities registered yet. You can found the first one.',
+                SizedBox(height: context.spacingControl),
+                if (filteredList.isEmpty)
+                  EarthEmptyState(
+                    message: _searchQuery.isNotEmpty
+                        ? 'No communities found matching "$_searchQuery".'
+                        : (_activeFilter == 'MY_COMMUNITIES'
+                            ? 'You are not currently part of any community.'
+                            : (_activeFilter == 'OPEN_TO_JOIN'
+                                ? 'No joinable communities available at this time.'
+                                : 'No communities registered yet. You can found the first one.')),
                     icon: Icons.groups_outlined,
                   )
-                : EarthDataList(
-                    children: communities.map((raw) {
-                      final community = raw as Map<String, dynamic>;
+                else ...[
+                  EarthDataList(
+                    children: pageItems.map((community) {
                       final id = community['id']?.toString() ?? 'COM-001';
                       final name = community['name']?.toString() ?? 'Community';
                       final founderName = community['founder_name']?.toString() ?? 'Citizen';
                       final description = community['description']?.toString() ?? '';
-                      final status = (community['status']?.toString() ?? 'active').toUpperCase();
                       final admissionPolicy = (community['admission_policy']?.toString() ?? 'open').toUpperCase();
                       final myRole = community['my_role']?.toString();
                       final myRequestStatus = community['my_request_status']?.toString();
@@ -1285,49 +2642,26 @@ class CommunitiesPanel extends StatelessWidget {
                       final isMember = isOwner || isAdmin || myRole == 'member';
                       final isPending = myRequestStatus == 'pending';
                       final members = asIntOr(community['member_count'], 12);
-                      final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
 
                       final subtitle = description.isNotEmpty
-                          ? 'Founded by $founderName · $members members · ${sharedCredits.toStringAsFixed(0)} C treasury\n"$description"'
-                          : 'Founded by $founderName · $members members · ${sharedCredits.toStringAsFixed(0)} C in communal treasury';
+                          ? 'Founded by $founderName · $members members\n"$description"'
+                          : 'Founded by $founderName · $members members';
 
                       return EarthDataRow(
-                        title: '$name ($id)',
+                        title: name,
                         subtitle: subtitle,
+                        isHighlight: isMember,
                         leading: Icon(
                           Icons.groups_outlined,
                           size: context.iconSize,
-                          color: context.primaryColor,
+                          color: isMember ? context.primaryColor : context.mutedColor,
                         ),
                         badges: [
-                          if (isOwner)
-                            const EarthBadge(
-                              label: 'OWNER / FOUNDER',
-                              variant: EarthBadgeVariant.primary,
-                            )
-                          else if (isAdmin)
-                            const EarthBadge(
-                              label: 'ADMIN',
-                              variant: EarthBadgeVariant.primary,
-                            )
-                          else if (isMember)
-                            const EarthBadge(
-                              label: 'MEMBER',
-                              variant: EarthBadgeVariant.success,
-                            )
-                          else if (isPending)
+                          if (isPending)
                             const EarthBadge(
                               label: 'PENDING REVIEW',
                               variant: EarthBadgeVariant.warning,
                             ),
-                          EarthBadge(
-                            label: admissionPolicy == 'APPROVAL' ? 'APPROVAL REQ' : 'OPEN ACCESS',
-                            variant: EarthBadgeVariant.neutral,
-                          ),
-                          EarthBadge(
-                            label: status,
-                            variant: status == 'ACTIVE' ? EarthBadgeVariant.neutral : EarthBadgeVariant.neutral,
-                          ),
                         ],
                         trailing: Wrap(
                           spacing: 6,
@@ -1338,42 +2672,40 @@ class CommunitiesPanel extends StatelessWidget {
                                 label: 'MANAGE',
                                 icon: Icons.settings_outlined,
                                 variant: EarthButtonVariant.primary,
-                                onPressed: busy
+                                onPressed: widget.busy
                                     ? null
                                     : () => showCommunityManageDialog(
                                           context,
                                           community,
-                                          state,
-                                          action,
+                                          widget.state,
+                                          widget.action,
                                         ),
-                              ),
-                              EarthButton(
-                                label: 'CONTRIBUTE',
-                                variant: EarthButtonVariant.secondary,
-                                onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
                               ),
                             ] else if (isMember) ...[
                               EarthButton(
-                                label: 'CONTRIBUTE',
-                                variant: EarthButtonVariant.primary,
-                                onPressed: busy ? null : () => showCommunityContributionDialog(context, action, id),
-                              ),
-                              EarthButton(
                                 label: 'LEAVE',
                                 variant: EarthButtonVariant.danger,
-                                onPressed: busy ? null : () => action(() => const EarthApi().leaveCommunity(id)),
+                                onPressed: widget.busy ? null : () => widget.action(() => const EarthApi().leaveCommunity(id)),
                               ),
                             ] else if (isPending) ...[
-                              const EarthButton(
-                                label: 'PENDING',
-                                variant: EarthButtonVariant.neutral,
-                                onPressed: null,
+                              EarthButton(
+                                label: 'CANCEL REQ',
+                                variant: EarthButtonVariant.danger,
+                                onPressed: widget.busy ? null : () => widget.action(() => const EarthApi().leaveCommunity(id)),
                               ),
                             ] else ...[
                               EarthButton(
                                 label: admissionPolicy == 'APPROVAL' ? 'APPLY' : 'JOIN',
                                 variant: EarthButtonVariant.primary,
-                                onPressed: busy ? null : () => action(() => const EarthApi().joinCommunity(id)),
+                                onPressed: widget.busy
+                                    ? null
+                                    : () {
+                                        if (admissionPolicy == 'APPROVAL') {
+                                          showCommunityApplicationDialog(context, community, widget.action);
+                                        } else {
+                                          widget.action(() => const EarthApi().joinCommunity(id));
+                                        }
+                                      },
                               ),
                             ],
                             EarthButton(
@@ -1382,9 +2714,9 @@ class CommunitiesPanel extends StatelessWidget {
                               onPressed: () => showCommunityDetailsDialog(
                                 context,
                                 community,
-                                state,
-                                busy,
-                                action,
+                                widget.state,
+                                widget.busy,
+                                widget.action,
                               ),
                             ),
                           ],
@@ -1392,8 +2724,116 @@ class CommunitiesPanel extends StatelessWidget {
                       );
                     }).toList(),
                   ),
+                  if (totalPages > 1) ...[
+                    SizedBox(height: context.spacingControl),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                              icon: const Icon(Icons.first_page, size: 20),
+                              onPressed: safePage > 0 ? () => setState(() => _page = 0) : null,
+                              tooltip: 'First Page',
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                              icon: const Icon(Icons.chevron_left, size: 20),
+                              onPressed: safePage > 0 ? () => setState(() => _page = safePage - 1) : null,
+                              tooltip: 'Previous Page',
+                            ),
+                          ],
+                        ),
+                        Expanded(
+                          child: Center(
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Page ',
+                                  style: TextStyle(fontSize: 12, color: context.mutedColor),
+                                ),
+                                _PageNumberInput(
+                                  key: ValueKey('comm_page_${safePage + 1}_$totalPages'),
+                                  currentPage: safePage + 1,
+                                  totalPages: totalPages,
+                                  onSubmitted: (newPage) {
+                                    setState(() {
+                                      _page = newPage - 1;
+                                    });
+                                  },
+                                ),
+                                Text(
+                                  ' of $totalPages ($totalCount)',
+                                  style: TextStyle(fontSize: 12, color: context.mutedColor),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                              icon: const Icon(Icons.chevron_right, size: 20),
+                              onPressed: safePage < totalPages - 1 ? () => setState(() => _page = safePage + 1) : null,
+                              tooltip: 'Next Page',
+                            ),
+                            IconButton(
+                              visualDensity: VisualDensity.compact,
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(minWidth: 28, minHeight: 32),
+                              icon: const Icon(Icons.last_page, size: 20),
+                              onPressed: safePage < totalPages - 1 ? () => setState(() => _page = totalPages - 1) : null,
+                              tooltip: 'Last Page',
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ],
+            ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _filterChip({
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(6),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? context.primaryColor.withValues(alpha: 0.15) : Colors.transparent,
+          borderRadius: BorderRadius.circular(6),
+          border: Border.all(
+            color: isSelected ? context.primaryColor : context.subtleBorderColor,
+            width: 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: context.controlStyle.copyWith(
+            color: isSelected ? context.primaryColor : context.mutedColor,
+          ),
+        ),
       ),
     );
   }
@@ -1590,10 +3030,6 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                             label: 'MEMBER',
                             variant: EarthBadgeVariant.success,
                           ),
-                        EarthBadge(
-                          label: admissionPolicy == 'APPROVAL' ? 'APPROVAL REQ' : 'OPEN ACCESS',
-                          variant: EarthBadgeVariant.neutral,
-                        ),
                       ],
                     ),
                   ],

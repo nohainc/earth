@@ -368,7 +368,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     TextField(
                       controller: _dynastyController,
                       decoration: const InputDecoration(
-                        labelText: 'Dynastic Family House',
+                        labelText: 'Dynasty Name',
                         hintText: 'e.g. Vance Dynasty',
                         isDense: true,
                         filled: true,
