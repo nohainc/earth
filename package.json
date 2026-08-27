@@ -22,7 +22,7 @@
     "qa:public": "node --test test/public-page-api.test.mjs",
     "qa:rankings": "node --test test/rankings-page-api.test.mjs",
     "qa:user": "node --test test/user-page-api.test.mjs",
-    "qa:dynasty": "node --test test/dynasty-page-api.test.mjs test/dynasty-postgres.test.mjs",
+    "qa:house": "node --test test/house-page-api.test.mjs test/house-postgres.test.mjs",
     "qa:memorial": "node --test test/memorial-page-api.test.mjs",
     "qa:archive": "node --test test/archive-page-api.test.mjs",
     "qa:command": "node --test test/command-center-page-api.test.mjs",

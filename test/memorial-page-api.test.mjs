@@ -31,11 +31,11 @@ test('Tier 1 memorial API returns cemetery and pantheon public records without s
   assert.doesNotMatch(JSON.stringify({ cemetery, pantheon }), /password|password_hash|session_token/i);
 });
 
-test('Tier 2 memorial API supports case-insensitive search and dynasty filters', async () => {
+test('Tier 2 memorial API supports case-insensitive search and house filters', async () => {
   const search = await get('/api/cemetery?search=ROSTOV');
-  const dynasty = await get('/api/cemetery?dynasty=vAnCe%20DyNaStY');
+  const house = await get('/api/cemetery?house=HoUsE%20oF%20vAnCe');
   assert.equal(search.body.cemetery[0].display_name, 'Elena Rostova');
-  assert.equal(dynasty.body.cemetery[0].dynasty_name, 'Vance Dynasty');
+  assert.equal(house.body.cemetery[0].house_name, 'House of Vance');
 });
 
 test('Tier 3 memorial API bounds limits and returns deterministic records', async () => {
@@ -55,7 +55,7 @@ test('Tier 4 memorial read APIs reject mutation attempts', async () => {
 });
 
 test('Tier 5 memorial journey connects cemetery records to pantheon honors', async () => {
-  const cemetery = await get('/api/cemetery?dynasty=Vance%20Dynasty');
+  const cemetery = await get('/api/cemetery?house=House%20of%20Vance');
   const pantheon = await get('/api/pantheon');
   assert.equal(cemetery.body.cemetery[0].successor_name, 'Amara Vance');
   assert.ok(pantheon.body.deceasedPantheon.some((entry) => entry.human_id === cemetery.body.cemetery[0].human_id));

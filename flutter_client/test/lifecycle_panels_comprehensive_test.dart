@@ -165,7 +165,7 @@ void main() {
           'display_name': 'Founder Marcus Vance',
           'avatarInitials': 'MV',
           'lifespanYears': 82,
-          'dynastyName': 'Vance Legacy',
+          'houseName': 'House of Vance',
           'final_legacy': 942,
           'bio': 'Pioneered zero-loss geothermal conversion grids across District 4.',
           'majorAchievements': ['Architect of the Geothermal Charter', 'Philanthropic Trust Founder'],
@@ -178,14 +178,8 @@ void main() {
           'age': 67,
           'wisdomBonus': 25,
           'composite_legacy_score': 875,
-        },
-      ],
-      'achievements': [
-        {
-          'title': 'Grand Infrastructure Endowment',
-          'category': 'PHILANTHROPY',
-          'description': 'Endowed 50,000 Credits to municipal water reclamation.',
-          'date': 'Day 140',
+          'tenure': 'Game Day 42 - Present',
+          'icon': Icons.account_balance,
         },
       ],
     };
@@ -224,8 +218,14 @@ void main() {
     );
 
     // SuccessionPanel
-    expect(find.text('LIFE & LEGACY / SUCCESSION PLAN'), findsOneWidget);
+    expect(find.text('SUCCESSION PLAN'), findsOneWidget);
     expect(find.textContaining('Kaelen Kline'), findsOneWidget);
+
+    // LegacyPersonalFinancePanel
+    expect(find.text('PERSONAL FINANCE / PROTECTED MINIMUM'), findsOneWidget);
+
+    // InstitutionSolvencyPanel
+    expect(find.text('INSTITUTION SOLVENCY / RECOVERY'), findsOneWidget);
 
     // WorldIntegrityPanel
     expect(find.text('WORLD INTEGRITY / AUDIT'), findsOneWidget);
@@ -239,7 +239,7 @@ void main() {
     expect(find.text('HUMAN SERVICES / CURRENT ACCESS'), findsOneWidget);
 
     // Pantheon
-    expect(find.text('PANTHEON / DYNASTIC ARCHIVE & LEGACY'), findsOneWidget);
+    expect(find.text('PANTHEON / HOUSE ARCHIVE & LEGACY'), findsOneWidget);
     expect(find.textContaining('Founder Marcus Vance'), findsWidgets);
     expect(find.textContaining('Senator Elena Rostova'), findsWidgets);
   });

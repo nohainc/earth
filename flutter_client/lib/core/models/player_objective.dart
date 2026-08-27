@@ -41,6 +41,7 @@ class PlayerObjective {
         return const Color(0xFFF59E0B);
       case 'civic':
         return const Color(0xFF38BDF8);
+      case 'house':
       case 'dynasty':
         return const Color(0xFFFBBF24);
       case 'technology':
@@ -60,8 +61,9 @@ class PlayerObjective {
         return 'ENTERPRISE & INDUSTRY';
       case 'civic':
         return 'CIVIC & GOVERNANCE';
+      case 'house':
       case 'dynasty':
-        return 'DYNASTY & LEGACY';
+        return 'HOUSE & LEGACY';
       case 'technology':
         return 'TECH & RESEARCH';
       case 'finance':
@@ -79,6 +81,7 @@ class PlayerObjective {
         return Icons.business_center_outlined;
       case 'civic':
         return Icons.how_to_vote_outlined;
+      case 'house':
       case 'dynasty':
         return Icons.account_balance_outlined;
       case 'technology':
@@ -225,7 +228,7 @@ class PlayerObjective {
         id: 'obj-enterprise-portfolio',
         category: 'enterprise',
         title: 'Build a Portfolio of Enterprises',
-        description: 'Own or manage three distinct operations so your dynasty is not dependent on a single source of income or production.',
+        description: 'Own or manage three distinct operations so your house is not dependent on a single source of income or production.',
         currentValue: businessCount,
         targetValue: 3.0,
         progressPercentage: (businessCount / 3.0 * 100.0).clamp(0.0, 100.0),
@@ -250,11 +253,11 @@ class PlayerObjective {
         iconName: 'support_agent',
       ),
       PlayerObjective(
-        id: 'obj-dynasty-traits',
-        category: 'dynasty',
-        title: 'Create a Dynasty with Sovereign Traits',
+        id: 'obj-house-traits',
+        category: 'house',
+        title: 'Found a House with Sovereign Traits',
         description:
-            'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct dynasty traits and heirlooms.',
+            'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct house traits and heirlooms.',
         currentValue: (gen - 1).clamp(0.0, 3.0),
         targetValue: 3.0,
         progressPercentage:
@@ -263,11 +266,11 @@ class PlayerObjective {
                     100.0)
                 .clamp(0.0, 100.0),
         metricLabel:
-            'Gen ${gen.toInt()} · ${(gen - 1).toInt()} / 3 Dynasty Traits Unlocked',
+            'Gen ${gen.toInt()} · ${(gen - 1).toInt()} / 3 House Traits Unlocked',
         status: gen >= 3.0 ? 'completed' : 'in_progress',
         rewardDescription:
             'Title: "Eternal Patriarch" · 100% Estate Inheritance Tax Waiver · Ancestral Vault Access',
-        targetSection: 'dynasty',
+        targetSection: 'house',
       ),
       PlayerObjective(
         id: 'obj-technology-licensor',

@@ -113,7 +113,7 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
               padding: const EdgeInsets.all(10),
               color: Colors.tealAccent.withValues(alpha: .08),
               child: const Text(
-                'Current inheritance rule: 80% of the estate transfers to the successor after the canonical 20% estate tax. Asset ownership and dynasty lineage transfer with the estate.',
+                'Current inheritance rule: 80% of the estate transfers to the successor after the canonical 20% estate tax. Asset ownership and house lineage transfer with the estate.',
                 style: TextStyle(fontSize: 10.5, color: mutedColor),
               ),
             ),
@@ -127,7 +127,6 @@ class _SuccessorComposerDialogState extends State<_SuccessorComposerDialog> {
         ),
         FilledButton(
           onPressed: () async {
-            if (_name.text.trim().length < 2) return;
             final parsedDays = int.tryParse(_estateDays.text.trim()) ?? 30;
             final clampedDays = parsedDays.clamp(7, 90);
             final n = _name.text.trim();

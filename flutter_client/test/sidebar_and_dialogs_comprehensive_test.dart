@@ -113,12 +113,68 @@ void main() {
     await tester.tap(find.text('CIVIC'));
     await tester.pumpAndSettle();
     expect(find.text('City & Services'), findsNothing);
+    expect(find.text('Corporations'), findsNothing);
     expect(find.text('Public Governance'), findsOneWidget);
-    expect(find.text('Corporations'), findsOneWidget);
 
     await tester.tap(find.text('EARTH'));
     await tester.pumpAndSettle();
+    expect(find.text('Corporations'), findsOneWidget);
     expect(find.text('Communities'), findsOneWidget);
+  });
+
+  testWidgets('Sidebar displays joined corporation and city in CIVIC group when affiliated', (tester) async {
+    const state = EarthState({
+      'clock': {'day': 185, 'minute': 720},
+      'human': {'name': 'Amara Vance'},
+      'membership': {'corporation_id': 'CORP-01', 'city_id': 'CITY-01'},
+      'institutions': {
+        'corporation': {'name': 'Aether Dynamics'},
+        'city': {'name': 'New Kyoto'},
+      },
+      'business': {},
+      'technology': {'research': {}},
+    });
+
+    String? target;
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 250,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'command',
+              onNavigate: (section) {
+                target = section;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('CIVIC'));
+    await tester.pumpAndSettle();
+    expect(find.text('Aether Dynamics'), findsOneWidget);
+    expect(find.text('New Kyoto'), findsOneWidget);
+    expect(find.text('Public Governance'), findsOneWidget);
+
+    await tester.tap(find.text('Aether Dynamics'));
+    await tester.pumpAndSettle();
+    expect(target, 'corporation');
+
+    await tester.tap(find.text('New Kyoto'));
+    await tester.pumpAndSettle();
+    expect(target, 'city');
+
+    await tester.tap(find.text('EARTH'));
+    await tester.pumpAndSettle();
+    expect(find.text('Corporations'), findsOneWidget);
+    await tester.tap(find.text('Corporations'));
+    await tester.pumpAndSettle();
+    expect(target, 'corporations');
   });
 
   testWidgets('Sidebar displays all joined community names in CIVIC group when affiliated', (tester) async {

@@ -25,10 +25,12 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
         return widget.objectives
             .where((o) => o.category.toLowerCase() == 'enterprise')
             .toList();
+      case 'CIVIC_HOUSE':
       case 'CIVIC_DYNASTY':
         return widget.objectives
             .where((o) =>
                 o.category.toLowerCase() == 'civic' ||
+                o.category.toLowerCase() == 'house' ||
                 o.category.toLowerCase() == 'dynasty' ||
                 o.category.toLowerCase() == 'civilization')
             .toList();
@@ -43,7 +45,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
       case 'ALL':
       default:
         final highlights = <PlayerObjective>[];
-        for (final category in ['enterprise', 'civic', 'dynasty']) {
+        for (final category in ['enterprise', 'civic', 'house', 'dynasty']) {
           final match = widget.objectives.cast<PlayerObjective?>().firstWhere(
                 (objective) => objective?.category.toLowerCase() == category,
                 orElse: () => null,
@@ -70,7 +72,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
       showSurface: false,
       infoBulletPoints: const [
         'Current Direction: Choose the kind of manager and citizen you want to become.',
-        'Direction Tracks: Enterprise (profitable businesses), Civic (city laws & capacity), Dynasty (family succession), Technology (capabilities & patents), Finance (solvency & independence).',
+        'Direction Tracks: Enterprise (profitable businesses), Civic (city laws & capacity), House (family succession), Technology (capabilities & patents), Finance (solvency & independence).',
         'Progression: Directions track against live world metrics and unlock practical rewards, titles, and new opportunities.',
       ],
       child: Column(
@@ -129,7 +131,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
                 const SizedBox(width: 6),
                 _buildFilterPill('ENTERPRISE', 'ENTERPRISE'),
                 const SizedBox(width: 6),
-                _buildFilterPill('CIVIC_DYNASTY', 'CIVIC & DYNASTY'),
+                _buildFilterPill('CIVIC_HOUSE', 'CIVIC & HOUSE'),
                 const SizedBox(width: 6),
                 _buildFilterPill('TECH_FINANCE', 'TECH & FINANCE'),
                 const SizedBox(width: 6),

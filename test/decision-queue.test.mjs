@@ -3,14 +3,14 @@ import assert from 'node:assert/strict';
 import { generateDecisionQueue } from '../cloudflare/src/decision-queue.ts';
 
 test('Unified Decision Queue Generator', async (t) => {
-  await t.test('generates prioritized items for corporate energy loss, expiring contracts, governance, research, machines, and dynasty', () => {
+  await t.test('generates prioritized items for corporate energy loss, expiring contracts, governance, research, machines, and house', () => {
     const queue = generateDecisionQueue({
       resources: { energy: 15, material: 80 },
       machines: [{ id: 'm-1', name: 'Alloy Press Mk1', condition: 25, utilization: 80 }],
       contracts: [{ id: 'c-101', title: 'Components Supply', status: 'active' }],
       proposals: [{ id: 'prop-12', title: 'City Tax Charter Amendment', status: 'open' }],
       technology: { progress: 50 },
-      dynasty: { successor_id: null, perks_available: true },
+      house: { successor_id: null, perks_available: true },
       business: { id: 'b-1', name: 'AeroCorp', profit: -200 },
       finance: { unpaid_tax: 150 },
       market: [{ product: 'food', supply: 10, demand: 45, price: 12 }],
@@ -27,7 +27,7 @@ test('Unified Decision Queue Generator', async (t) => {
     assert.ok(titles.some((t) => t.includes('unresolved governance vote')));
     assert.ok(titles.some((t) => t.includes('Research funding is available')));
     assert.ok(titles.some((t) => t.includes('machine needs maintenance')));
-    assert.ok(titles.some((t) => t.includes('dynasty decision is pending')));
+    assert.ok(titles.some((t) => t.includes('house decision is pending')));
     assert.ok(titles.some((t) => t.includes('Legacy points can unlock')));
     assert.ok(titles.some((t) => t.includes('city needs an energy recovery plan')));
     assert.ok(titles.some((t) => t.includes('city needs a health recovery plan')));
@@ -57,7 +57,7 @@ test('Unified Decision Queue Generator', async (t) => {
       contracts: [],
       proposals: [],
       technology: { progress: 100 },
-      dynasty: { successor_id: 'H-0099' },
+      house: { successor_id: 'H-0099' },
       business: { profit: 500 },
       finance: { unpaid_tax: 0 },
       market: [],

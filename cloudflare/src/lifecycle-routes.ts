@@ -30,9 +30,15 @@ export async function handleLifecycleRoutes(
     const parsed = await parseJsonBody<{ name?: string; estatePeriodDays?: number; successorHumanId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
-    const successorName = body.name?.trim();
+    const successorName = (body.name ?? '').trim();
+    if (!successorName) {
+      const result = await withRepository(env, (repository) =>
+        registerSuccessorPostgres(repository, { humanId: viewer.id, successorName: '', estatePeriodDays: 30, successorHumanId: null, currentLifeStatus: viewer.life_status }),
+      );
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    }
     const estatePeriodDays = Number(body.estatePeriodDays ?? 30);
-    if (!successorName || successorName.length < 2) return Response.json({ ok: false, error: 'Successor name is required' }, { status: 400 });
     if (!Number.isInteger(estatePeriodDays) || estatePeriodDays < 7 || estatePeriodDays > 90) {
       return Response.json({ ok: false, error: 'Estate period must be between 7 and 90 days' }, { status: 400 });
     }

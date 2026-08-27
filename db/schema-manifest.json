@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 55,
+  "migrationVersion": 60,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -171,7 +171,7 @@
       "human_id",
       "generation",
       "birth_game_day",
-      "dynasty_name"
+      "house_name"
     ],
     "cities": [
       "id",
@@ -215,6 +215,13 @@
       "human_id",
       "status"
     ],
+    "constitutional_rules": [
+      "id",
+      "part_number",
+      "rule_number",
+      "title",
+      "default_value"
+    ],
     "contract_delivery_ticks": [
       "id",
       "contract_id",
@@ -255,7 +262,7 @@
       "death_game_day",
       "cause_of_death",
       "epitaph",
-      "dynasty_name"
+      "house_name"
     ],
     "diplomatic_dispatches": [
       "id",
@@ -532,33 +539,33 @@
       "genesis_at",
       "simulated_day_offset"
     ],
-    "dynasties": [
+    "houses": [
       "id",
       "email",
-      "dynasty_name",
+      "house_name",
       "motto",
       "legacy_points",
       "total_wealth_generated"
     ],
-    "dynasty_lineage_records": [
+    "house_lineage_records": [
       "id",
-      "dynasty_id",
+      "house_id",
       "human_id",
       "generation",
       "name",
       "lifetime_wealth",
       "legacy_score"
     ],
-    "dynasty_perks": [
+    "house_perks": [
       "id",
-      "dynasty_id",
+      "house_id",
       "perk_key",
       "perk_name",
       "tier"
     ],
-    "dynasty_heirlooms": [
+    "house_heirlooms": [
       "id",
-      "dynasty_id",
+      "house_id",
       "name",
       "heirloom_type",
       "quality_tier",
@@ -671,18 +678,18 @@
     "world_events_correlation_idx",
     "character_lineage_email_idx",
     "deceased_profiles_rank_idx",
-    "deceased_profiles_dynasty_idx",
+    "deceased_profiles_house_idx",
     "comm_messages_channel_idx",
     "diplomatic_dispatches_recipient_idx",
     "diplomatic_dispatches_sender_idx",
     "supply_contracts_resource_idx",
     "contract_escrow_vaults_contract_idx",
     "contract_delivery_ticks_contract_day_idx",
-    "idx_dynasties_email",
-    "idx_dynasty_lineage_records_dynasty",
-    "idx_dynasty_lineage_records_human",
-    "idx_dynasty_perks_dynasty",
-    "idx_dynasty_heirlooms_dynasty",
+    "idx_houses_email",
+    "idx_house_lineage_records_house",
+    "idx_house_lineage_records_human",
+    "idx_house_perks_house",
+    "idx_house_heirlooms_house",
     "idx_commodity_futures_status",
     "idx_commodity_futures_seller",
     "idx_commodity_futures_buyer",

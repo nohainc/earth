@@ -36,6 +36,8 @@ try {
     )
   `);
 
+  const allowRepair = process.env.ALLOW_MIGRATION_REPAIR === 'true' || process.argv.includes('--repair');
+
   for (const name of names) {
     const version = Number(name.slice(0, name.indexOf('_')));
     const sql = await readFile(join(migrationDirectory.pathname, name), 'utf8');
@@ -43,7 +45,24 @@ try {
     const existing = await client.query('select name, checksum from earth_schema_migrations where version = $1', [version]);
     if (existing.rowCount) {
       if (existing.rows[0].name !== name || existing.rows[0].checksum !== checksum) {
-        throw new Error(`Migration ${name} differs from the applied checksum; create a new migration instead`);
+        if (allowRepair) {
+          console.warn(`Repairing migration ${name} with updated checksum...`);
+          await client.query('begin');
+          try {
+            await client.query(sql);
+            await client.query(
+              'update earth_schema_migrations set name = $1, checksum = $2, applied_at = now() where version = $3',
+              [name, checksum, version],
+            );
+            await client.query('commit');
+            console.log(`Repaired and re-applied ${name}`);
+            continue;
+          } catch (error) {
+            await client.query('rollback');
+            throw error;
+          }
+        }
+        throw new Error(`Migration ${name} differs from the applied checksum; create a new migration or run with --repair`);
       }
       continue;
     }

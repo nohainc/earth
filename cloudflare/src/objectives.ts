@@ -1,6 +1,7 @@
 export type ObjectiveCategory =
   | 'enterprise'
   | 'civic'
+  | 'house'
   | 'dynasty'
   | 'technology'
   | 'finance'
@@ -32,6 +33,7 @@ export interface ObjectivesEvaluationInput {
   };
   governance?: { proposals_voted?: unknown; voting_weight?: unknown };
   technology?: { research_progress?: unknown; active_patents?: unknown; active_licenses?: unknown };
+  house?: { generation?: unknown; perks_count?: unknown; heirlooms_count?: unknown; successor_id?: string | null };
   dynasty?: { generation?: unknown; perks_count?: unknown; heirlooms_count?: unknown; successor_id?: string | null };
   projects?: { completed?: unknown };
   resources?: Record<string, unknown>;
@@ -119,7 +121,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     id: 'obj-enterprise-portfolio',
     category: 'enterprise',
     title: 'Build a Portfolio of Enterprises',
-    description: 'Own or manage three distinct operations so your dynasty is not dependent on a single source of income or production.',
+    description: 'Own or manage three distinct operations so your house is not dependent on a single source of income or production.',
     currentValue: businessCount,
     targetValue: targetBusinessCount,
     progressPercentage: portfolioProgress,
@@ -152,28 +154,29 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     iconName: 'how_to_vote',
   });
 
-  // 3. Create a dynasty with specific traits
-  const dynastyGen = num(input.dynasty?.generation, 1);
-  const perksCount = num(input.dynasty?.perks_count, 0) + num(input.dynasty?.heirlooms_count, 0) + (input.dynasty?.successor_id ? 1 : 0);
-  const targetDynastyPerks = 3;
-  const dynastyProgressUnits = Math.max(0, dynastyGen - 1) + perksCount;
-  const dynastyTargetUnits = targetDynastyPerks + 1;
-  const dynastyProgress = Math.min(
+  // 3. Create a house with specific traits
+  const houseData = input.house || input.dynasty;
+  const houseGen = num(houseData?.generation, 1);
+  const perksCount = num(houseData?.perks_count, 0) + num(houseData?.heirlooms_count, 0) + (houseData?.successor_id ? 1 : 0);
+  const targetHousePerks = 3;
+  const houseProgressUnits = Math.max(0, houseGen - 1) + perksCount;
+  const houseTargetUnits = targetHousePerks + 1;
+  const houseProgress = Math.min(
     100,
-    Math.round((dynastyProgressUnits / dynastyTargetUnits) * 100)
+    Math.round((houseProgressUnits / houseTargetUnits) * 100)
   );
   objectives.push({
-    id: 'obj-dynasty-traits',
-    category: 'dynasty',
-    title: 'Create a Dynasty with Sovereign Traits',
-    description: 'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct dynasty traits and heirlooms.',
-    currentValue: dynastyProgressUnits,
-    targetValue: dynastyTargetUnits,
-    progressPercentage: dynastyProgress,
-    metricLabel: `Gen ${dynastyGen} · ${dynastyProgressUnits} / ${dynastyTargetUnits} Continuity Progress`,
-    status: dynastyProgress >= 100 ? 'completed' : 'in_progress',
+    id: 'obj-house-traits',
+    category: 'house',
+    title: 'Create a House with Sovereign Traits',
+    description: 'Advance your generational lineage to Generation 2+ and unlock at least 3 distinct house traits and heirlooms.',
+    currentValue: houseProgressUnits,
+    targetValue: houseTargetUnits,
+    progressPercentage: houseProgress,
+    metricLabel: `Gen ${houseGen} · ${houseProgressUnits} / ${houseTargetUnits} Continuity Progress`,
+    status: houseProgress >= 100 ? 'completed' : 'in_progress',
     rewardDescription: 'Title: "Eternal Patriarch" · 100% Estate Inheritance Tax Waiver · Ancestral Vault Access',
-    targetSection: 'dynasty',
+    targetSection: 'house',
     iconName: 'account_balance',
   });
 
@@ -247,7 +250,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     id: 'obj-civic-project-builder',
     category: 'civic',
     title: 'Build With Your Community',
-    description: 'Complete three shared city or corporation projects that leave a lasting improvement for the people around your dynasty.',
+    description: 'Complete three shared city or corporation projects that leave a lasting improvement for the people around your house.',
     currentValue: completedProjects,
     targetValue: projectTarget,
     progressPercentage: projectProgress,

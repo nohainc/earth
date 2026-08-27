@@ -67,8 +67,8 @@ void main() {
     expect(find.text('HISTORY / ARCHIVE'), findsOneWidget);
     expect(find.textContaining('DAY 180  ·  First Solar Grid Activated'), findsOneWidget);
 
-    expect(find.text('PANTHEON / DYNASTIC ARCHIVE & LEGACY'), findsOneWidget);
-    expect(find.text('DYNASTIC SUCCESSION LINEAGE TREE'), findsOneWidget);
+    expect(find.text('PANTHEON / HOUSE ARCHIVE & LEGACY'), findsOneWidget);
+    expect(find.text('HOUSE SUCCESSION LINEAGE TREE'), findsOneWidget);
     expect(find.textContaining('HISTORICAL CEMETERY ARCHIVE'), findsOneWidget);
     expect(find.textContaining('Eleni Vance'), findsWidgets);
     expect(find.textContaining('Grid Pioneer'), findsOneWidget);

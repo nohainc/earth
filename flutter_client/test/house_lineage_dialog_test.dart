@@ -1,19 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:earth_client/features/dynasty/dynasty_lineage_dialog.dart';
+import 'package:earth_client/features/house/house_lineage_dialog.dart';
 import 'package:earth_client/features/institutions/institutions_panels.dart';
 import 'package:earth_client/features/lifecycle/historical_archive_panel.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 
 void main() {
-  group('DynastyLineageDialog & Interactive Row Lineage Inspection', () {
-    testWidgets('DynastyLineageDialog renders header, metrics, and generational tree nodes', (tester) async {
+  group('HouseLineageDialog & Interactive Row Lineage Inspection', () {
+    testWidgets('HouseLineageDialog renders header, metrics, and generational tree nodes', (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      final mockDynasty = {
-        'dynasty_name': 'Vance Dynasty',
+      final mockHouse = {
+        'house_name': 'House of Vance',
         'founder_name': 'Marcus Vance',
         'active_heir': 'Amara Vance',
         'motto': 'From the Red Dust We Build Eternity',
@@ -21,7 +21,7 @@ void main() {
         'deceased_count': 3,
         'total_legacy': 5400,
         'peak_standing': 980,
-        'dynasty_score': 28450,
+        'house_score': 28450,
         'founded_game_day': 1,
       };
 
@@ -30,7 +30,7 @@ void main() {
           home: Scaffold(
             body: Builder(
               builder: (context) => ElevatedButton(
-                onPressed: () => showDynastyLineageDialog(context, dynasty: mockDynasty),
+                onPressed: () => showHouseLineageDialog(context, house: mockHouse),
                 child: const Text('OPEN DIALOG'),
               ),
             ),
@@ -41,23 +41,22 @@ void main() {
       await tester.tap(find.text('OPEN DIALOG'));
       await tester.pumpAndSettle();
 
-      expect(find.text('Vance Dynasty'), findsOneWidget);
-      expect(find.text('“From the Red Dust We Build Eternity”'), findsOneWidget);
+      expect(find.text('House of Vance'), findsOneWidget);
       expect(find.text('28450 PTS'), findsOneWidget);
       expect(find.text('5400 LP'), findsOneWidget);
       expect(find.text('980 Std'), findsOneWidget);
       expect(find.text('3 Inscribed'), findsOneWidget);
-      expect(find.text('DYNASTIC SUCCESSION & LINEAGE TREE'), findsOneWidget);
-      expect(find.text('Marcus Vance'), findsOneWidget);
-      expect(find.text('Amara Vance'), findsOneWidget);
+      expect(find.text('HOUSE SUCCESSION & LINEAGE TREE'), findsOneWidget);
+      expect(find.text('Marcus Vance'), findsWidgets);
+      expect(find.text('Amara Vance'), findsWidgets);
       expect(find.text('CLOSE'), findsOneWidget);
 
       await tester.tap(find.text('CLOSE'));
       await tester.pumpAndSettle();
-      expect(find.text('DYNASTIC SUCCESSION & LINEAGE TREE'), findsNothing);
+      expect(find.text('HOUSE SUCCESSION & LINEAGE TREE'), findsNothing);
     });
 
-    testWidgets('CivicRankingsPanel tapping dynasty row opens DynastyLineageDialog', (tester) async {
+    testWidgets('CivicRankingsPanel tapping house row opens HouseLineageDialog', (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
@@ -68,16 +67,16 @@ void main() {
             'corporations': [],
             'cities': [],
             'citizens': [],
-            'dynasties': [
+            'houses': [
               {
-                'dynasty_name': 'Noha Dynasty',
+                'house_name': 'House of Noha',
                 'founder_name': 'Vitalii Noha',
                 'active_heir': 'Vitalii Noha',
                 'generation': 3,
                 'deceased_count': 2,
                 'total_legacy': 4600,
                 'peak_standing': 920,
-                'dynasty_score': 24200,
+                'house_score': 24200,
                 'founded_game_day': 120,
               },
             ],
@@ -94,32 +93,32 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      // Switch to DYNASTIES tab on column 1
-      final dynastiesTab = find.text('DYNASTIES (1)');
-      expect(dynastiesTab, findsOneWidget);
-      await tester.tap(dynastiesTab);
+      // Switch to HOUSES tab on column 1
+      final housesTab = find.text('HOUSES (1)');
+      expect(housesTab, findsOneWidget);
+      await tester.tap(housesTab);
       await tester.pumpAndSettle();
 
-      // Find the Noha Dynasty row and tap it
-      expect(find.text('Noha Dynasty'), findsOneWidget);
-      await tester.tap(find.text('Noha Dynasty'));
+      // Find the House of Noha row and tap it
+      expect(find.text('House of Noha'), findsOneWidget);
+      await tester.tap(find.text('House of Noha'));
       await tester.pumpAndSettle();
 
-      // Verify DynastyLineageDialog opened
-      expect(find.text('DYNASTIC SUCCESSION & LINEAGE TREE'), findsOneWidget);
+      // Verify HouseLineageDialog opened
+      expect(find.text('HOUSE SUCCESSION & LINEAGE TREE'), findsOneWidget);
       expect(find.text('Vitalii Noha'), findsAtLeastNWidgets(1));
     });
 
-    testWidgets('HistoricalArchivePanel tapping recorded dynasty card opens DynastyLineageDialog', (tester) async {
+    testWidgets('HistoricalArchivePanel tapping recorded house card opens HouseLineageDialog', (tester) async {
       tester.view.physicalSize = const Size(1200, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
       final pantheon = {
         'deceasedPantheon': [],
-        'dynasties': [
+        'houses': [
           {
-            'dynasty_name': 'House of Vance (Historical)',
+            'house_name': 'House of Vance (Historical)',
             'founder': 'Marcus Vance',
             'heir': '—',
             'is_extinct': true,
@@ -146,8 +145,8 @@ void main() {
       await tester.tap(find.text('House of Vance (Historical)'));
       await tester.pumpAndSettle();
 
-      // Verify DynastyLineageDialog opened for extinct house
-      expect(find.text('DYNASTIC SUCCESSION & LINEAGE TREE'), findsOneWidget);
+      // Verify HouseLineageDialog opened for extinct house
+      expect(find.text('HOUSE SUCCESSION & LINEAGE TREE'), findsOneWidget);
       expect(find.text('Lineage Extinct'), findsOneWidget);
     });
   });

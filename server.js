@@ -254,19 +254,19 @@ const state = {
       { id: 'city-singapore', name: 'Singapore', corporation_name: 'Kline Industrial Syndicate', corporation_id: 'corp-kline-industrial', residents: 52, treasury: 16200, housing_capacity: 70, energy_capacity: 85, connectivity_capacity: 90, health_capacity: 80, qolIndex: 70, compositeIndex: 70, score: 70, rank: 5, rankDelta: 'NEW' },
     ],
     citizens: [
-      { rank: 1, rankDelta: 0, tierBadge: 'Sovereign', id: 'H-0044', displayName: 'Amara Vance', ageYears: 42, standing: 840, legacy: 120, credits: 18420, cityId: 'city-new-tokyo', dynastyName: 'Vance Dynasty', compositeScore: 14484 },
-      { rank: 2, rankDelta: 1, tierBadge: 'Patrician', id: 'H-0012', displayName: 'Dmitri Rostov', ageYears: 38, standing: 720, legacy: 95, credits: 4200, cityId: 'city-london', dynastyName: 'House of Rostov', compositeScore: 12150 },
-      { rank: 3, rankDelta: -1, tierBadge: 'Patrician', id: 'H-0088', displayName: 'Kaelen Thorne', ageYears: 49, standing: 680, legacy: 80, credits: 3800, cityId: 'city-geneva', dynastyName: 'Thorne Syndicate', compositeScore: 10980 },
-      { rank: 4, rankDelta: 'NEW', tierBadge: 'Pioneer', id: 'H-0105', displayName: 'Sariyah Chen', ageYears: 29, standing: 510, legacy: 45, credits: 2400, cityId: 'city-singapore', dynastyName: 'Chen Holdings', compositeScore: 7850 },
-      { rank: 5, rankDelta: 2, tierBadge: 'Pioneer', id: 'H-0142', displayName: 'Tarek Al-Mansoor', ageYears: 34, standing: 480, legacy: 30, credits: 1900, cityId: 'city-new-york', dynastyName: 'Al-Mansoor House', compositeScore: 6540 },
+      { rank: 1, rankDelta: 0, tierBadge: 'Sovereign', id: 'H-0044', displayName: 'Amara Vance', ageYears: 42, standing: 840, legacy: 120, credits: 18420, cityId: 'city-new-tokyo', houseName: 'House of Vance', compositeScore: 14484 },
+      { rank: 2, rankDelta: 1, tierBadge: 'Patrician', id: 'H-0012', displayName: 'Dmitri Rostov', ageYears: 38, standing: 720, legacy: 95, credits: 4200, cityId: 'city-london', houseName: 'House of Rostov', compositeScore: 12150 },
+      { rank: 3, rankDelta: -1, tierBadge: 'Patrician', id: 'H-0088', displayName: 'Kaelen Thorne', ageYears: 49, standing: 680, legacy: 80, credits: 3800, cityId: 'city-geneva', houseName: 'House of Thorne', compositeScore: 10980 },
+      { rank: 4, rankDelta: 'NEW', tierBadge: 'Pioneer', id: 'H-0105', displayName: 'Sariyah Chen', ageYears: 29, standing: 510, legacy: 45, credits: 2400, cityId: 'city-singapore', houseName: 'House of Chen', compositeScore: 7850 },
+      { rank: 5, rankDelta: 2, tierBadge: 'Pioneer', id: 'H-0142', displayName: 'Tarek Al-Mansoor', ageYears: 34, standing: 480, legacy: 30, credits: 1900, cityId: 'city-new-york', houseName: 'House of Mansoor', compositeScore: 6540 },
     ],
-    dynasties: [
-      { rank: 1, rankDelta: 0, tierBadge: 'Sovereign', id: 'DYN-VANCE', dynasty_name: 'Vance Dynasty', founder_name: 'Marcus Vance', generation: 3, deceased_count: 3, total_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', dynasty_score: 28450, founded_game_day: 1 },
-      { rank: 2, rankDelta: 1, tierBadge: 'Sovereign', id: 'DYN-NOHA', dynasty_name: 'Noha Dynasty', founder_name: 'Vitalii Noha', generation: 3, deceased_count: 2, total_legacy: 4600, peak_standing: 920, active_heir: 'Vitalii Noha', dynasty_score: 24200, founded_game_day: 120 },
-      { rank: 3, rankDelta: 0, tierBadge: 'Patrician', id: 'DYN-ROSTOV', dynasty_name: 'House of Rostov', founder_name: 'Viktor Rostov', generation: 2, deceased_count: 2, total_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', dynasty_score: 19800, founded_game_day: 365 },
-      { rank: 4, rankDelta: 'NEW', tierBadge: 'Patrician', id: 'DYN-THORNE', dynasty_name: 'Thorne Syndicate', founder_name: 'Silas Thorne', generation: 2, deceased_count: 1, total_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', dynasty_score: 15400, founded_game_day: 730 },
-      { rank: 5, rankDelta: 1, tierBadge: 'Pioneer', id: 'DYN-CHEN', dynasty_name: 'Chen Holdings', founder_name: 'Wei Chen', generation: 1, deceased_count: 0, total_legacy: 1600, peak_standing: 540, active_heir: 'Sariyah Chen', dynasty_score: 8600, founded_game_day: 1095 },
-      { rank: 6, rankDelta: -1, tierBadge: 'Pioneer', id: 'DYN-MANSOOR', dynasty_name: 'Al-Mansoor House', founder_name: 'Rashid Al-Mansoor', generation: 1, deceased_count: 0, total_legacy: 1200, peak_standing: 480, active_heir: 'Tarek Al-Mansoor', dynasty_score: 6500, founded_game_day: 1150 },
+    houses: [
+      { rank: 1, rankDelta: 0, tierBadge: 'Sovereign', id: 'HSE-VANCE', house_name: 'House of Vance', founder_name: 'Marcus Vance', generation: 3, deceased_count: 3, total_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', house_score: 28450, founded_game_day: 1 },
+      { rank: 2, rankDelta: 1, tierBadge: 'Sovereign', id: 'HSE-NOHA', house_name: 'House of Noha', founder_name: 'Vitalii Noha', generation: 3, deceased_count: 2, total_legacy: 4600, peak_standing: 920, active_heir: 'Vitalii Noha', house_score: 24200, founded_game_day: 120 },
+      { rank: 3, rankDelta: 0, tierBadge: 'Patrician', id: 'HSE-ROSTOV', house_name: 'House of Rostov', founder_name: 'Viktor Rostov', generation: 2, deceased_count: 2, total_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', house_score: 19800, founded_game_day: 365 },
+      { rank: 4, rankDelta: 'NEW', tierBadge: 'Patrician', id: 'HSE-THORNE', house_name: 'House of Thorne', founder_name: 'Silas Thorne', generation: 2, deceased_count: 1, total_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', house_score: 15400, founded_game_day: 730 },
+      { rank: 5, rankDelta: 1, tierBadge: 'Pioneer', id: 'HSE-CHEN', house_name: 'House of Chen', founder_name: 'Wei Chen', generation: 1, deceased_count: 0, total_legacy: 1600, peak_standing: 540, active_heir: 'Sariyah Chen', house_score: 8600, founded_game_day: 1095 },
+      { rank: 6, rankDelta: -1, tierBadge: 'Pioneer', id: 'HSE-MANSOOR', house_name: 'House of Mansoor', founder_name: 'Rashid Al-Mansoor', generation: 1, deceased_count: 0, total_legacy: 1200, peak_standing: 480, active_heir: 'Tarek Al-Mansoor', house_score: 6500, founded_game_day: 1150 },
     ],
   },
 };
@@ -276,9 +276,9 @@ const state = {
 // testing functional when running `npm start`.
 const socialInitiatives = [];
 const socialDirectory = [
-  { id: 'H-0012', display_name: 'Dmitri Rostov', standing: 720, dynasty_name: 'House of Rostov', city_name: 'London' },
-  { id: 'H-0088', display_name: 'Kaelen Thorne', standing: 680, dynasty_name: 'Thorne Syndicate', city_name: 'Geneva' },
-  { id: 'H-0105', display_name: 'Sariyah Chen', standing: 510, dynasty_name: 'Chen Holdings', city_name: 'Singapore' },
+  { id: 'H-0012', display_name: 'Dmitri Rostov', standing: 720, house_name: 'House of Rostov', dynasty_name: 'House of Rostov', city_name: 'London' },
+  { id: 'H-0088', display_name: 'Kaelen Thorne', standing: 680, house_name: 'House of Thorne', dynasty_name: 'House of Thorne', city_name: 'Geneva' },
+  { id: 'H-0105', display_name: 'Sariyah Chen', standing: 510, house_name: 'House of Chen', dynasty_name: 'House of Chen', city_name: 'Singapore' },
 ];
 
 const commState = {
@@ -326,6 +326,7 @@ const commState = {
         channel_id: 'channel-global-relay',
         sender_human_id: 'H-0012',
         sender_display_name: 'Dmitri Rostov',
+        sender_house_name: 'House of Rostov',
         sender_dynasty_name: 'House of Rostov',
         body: 'Notice to all industrial fabricators: high-purity silicon demand has spiked 20% in London.',
         game_day: 184,
@@ -338,7 +339,8 @@ const commState = {
         channel_id: 'channel-global-relay',
         sender_human_id: 'H-0044',
         sender_display_name: 'Amara Vance',
-        sender_dynasty_name: 'Vance Dynasty',
+        sender_house_name: 'House of Vance',
+        sender_dynasty_name: 'House of Vance',
         body: 'Kline Works is allocating 40 kW additional geothermal compute capacity to fulfill component orders.',
         game_day: 184,
         game_minute: 480,
@@ -352,7 +354,8 @@ const commState = {
         channel_id: 'channel-city-new-tokyo',
         sender_human_id: 'H-0044',
         sender_display_name: 'Amara Vance',
-        sender_dynasty_name: 'Vance Dynasty',
+        sender_house_name: 'House of Vance',
+        sender_dynasty_name: 'House of Vance',
         body: 'Proposing municipal proposal P-201: Lower industrial energy tariffs by 1.5% to boost export volume.',
         game_day: 184,
         game_minute: 500,
@@ -366,6 +369,7 @@ const commState = {
         channel_id: 'dm-amara-dmitri',
         sender_human_id: 'H-0012',
         sender_display_name: 'Dmitri Rostov',
+        sender_house_name: 'House of Rostov',
         sender_dynasty_name: 'House of Rostov',
         body: 'Amara, did you review the tender offer for the circuit board delivery?',
         game_day: 184,
@@ -380,6 +384,7 @@ const commState = {
       id: 'mail-1',
       sender_human_id: 'H-0012',
       sender_display_name: 'Dmitri Rostov',
+      sender_house_name: 'House of Rostov',
       sender_dynasty_name: 'House of Rostov',
       recipient_human_id: 'H-0044',
       recipient_display_name: 'Amara Vance',
@@ -397,7 +402,8 @@ const commState = {
       id: 'mail-2',
       sender_human_id: 'H-0088',
       sender_display_name: 'Kaelen Thorne',
-      sender_dynasty_name: 'Thorne Syndicate',
+      sender_house_name: 'House of Thorne',
+      sender_dynasty_name: 'House of Thorne',
       recipient_human_id: 'H-0044',
       recipient_display_name: 'Amara Vance',
       subject: 'Quantum Core Patent Licensing Inquiry',
@@ -514,10 +520,11 @@ const supplyTicksState = {
   ],
 };
 
-const dynastyState = {
-  dynasty: {
-    id: 'DYN-H0044',
+const houseState = {
+  house: {
+    id: 'HSE-H0044',
     email: 'amara@earth.local',
+    house_name: 'House Vance',
     dynasty_name: 'House Vance',
     motto: 'From the Red Dust We Build Eternity',
     founder_human_id: 'H-0044',
@@ -528,7 +535,8 @@ const dynastyState = {
   lineage: [
     {
       id: 'LIN-001',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       human_id: 'H-0044',
       predecessor_human_id: null,
       generation: 1,
@@ -547,12 +555,13 @@ const dynastyState = {
     },
     {
       id: 'LIN-002',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       human_id: 'H-0044',
       predecessor_human_id: 'H-0044',
       generation: 2,
       name: 'Amara Vance',
-      title: 'Current Dynastic Head',
+      title: 'Current House Head',
       birth_game_day: 120,
       death_game_day: null,
       is_incumbent: true,
@@ -568,7 +577,8 @@ const dynastyState = {
   perks: [
     {
       id: 'PRK-001',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       perk_key: 'industrialist_lineage',
       perk_name: 'Industrialist Lineage',
       perk_category: 'operations',
@@ -579,7 +589,8 @@ const dynastyState = {
   heirlooms: [
     {
       id: 'HLM-001',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       name: 'The Vance Founding Signet',
       heirloom_type: 'founder_seal',
       quality_tier: 'Legendary',
@@ -590,7 +601,8 @@ const dynastyState = {
     },
     {
       id: 'HLM-002',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       name: 'High Senate Chronometer',
       heirloom_type: 'pioneer_chronometer',
       quality_tier: 'Epic',
@@ -602,12 +614,14 @@ const dynastyState = {
   ],
   catalogPerks: [
     { key: 'industrialist_lineage', name: 'Industrialist Lineage', category: 'Operations', cost: 100, description: '+10% Machine Build Speed & -15% Business Startup Fees' },
-    { key: 'diplomatic_dynasty', name: 'Diplomatic Dynasty', category: 'Governance', cost: 100, description: '+15% Senate & City Council Voting Influence' },
+    { key: 'diplomatic_house', name: 'Diplomatic House', category: 'Governance', cost: 100, description: '+15% Senate & City Council Voting Influence' },
     { key: 'financial_magnate', name: 'Financial Magnate', category: 'Finance', cost: 120, description: '+8% Corporate Dividend Yields & -20% Loan Margins' },
     { key: 'technological_pioneers', name: 'Technological Pioneers', category: 'Research', cost: 150, description: '+15% Compute Research Efficiency & +25% Patent Royalties' },
     { key: 'planetary_agronomists', name: 'Planetary Agronomists', category: 'Resources', cost: 120, description: '+20% Food Production Efficiency' },
   ],
 };
+const dynastyState = houseState;
+houseState.dynasty = houseState.house;
 
 
 const commoditiesList = ['energy', 'material', 'compute', 'food'];
@@ -807,7 +821,7 @@ async function command(path, body, req = null) {
     const requestUrl = req ? new URL(req.url, 'http://127.0.0.1') : null;
     if (path === '/api/social/directory' && body.method === 'GET') {
       const query = (requestUrl?.searchParams.get('q') || '').trim().toLowerCase();
-      const humans = socialDirectory.filter((person) => !query || [person.display_name, person.dynasty_name, person.city_name].some((value) => value.toLowerCase().includes(query)));
+      const humans = socialDirectory.filter((person) => !query || [person.display_name, person.house_name, person.dynasty_name, person.city_name].filter(Boolean).some((value) => value.toLowerCase().includes(query)));
       return { ok: true, humans };
     }
     if (path === '/api/social/initiatives' && body.method === 'GET') {
@@ -900,6 +914,61 @@ async function command(path, body, req = null) {
     ].filter((corporation) => !search || corporation.name.toLowerCase().includes(search) || corporation.id.toLowerCase().includes(search));
     return { corporations, generatedFrom: database ? 'planetscale-postgres' : 'reference-simulator' };
   }
+
+  const corpMembershipMatch = path.match(/^\/api\/corporations\/([^/]+)\/membership$/);
+  if (corpMembershipMatch && body.method === 'POST') {
+    const corpId = corpMembershipMatch[1];
+    state.membership = state.membership || {};
+    state.membership.corporation_id = corpId;
+    state.membership.city_id = state.membership.city_id || 'CITY-0084';
+    state.institutions = state.institutions || {};
+    state.institutions.corporation = state.institutions.corporation || {};
+    state.institutions.corporation.id = corpId;
+    publish('corporation.membership_joined', { corporationId: corpId });
+    return { ok: true, membership: state.membership };
+  }
+  if (corpMembershipMatch && body.method === 'DELETE') {
+    const corpId = corpMembershipMatch[1];
+    state.membership = state.membership || {};
+    state.membership.corporation_id = null;
+    state.membership.city_id = null;
+    publish('corporation.membership_left', { corporationId: corpId });
+    return { ok: true, membership: state.membership };
+  }
+
+  const cityResidencyMatch = path.match(/^\/api\/cities\/([^/]+)\/residency$/);
+  if (cityResidencyMatch && body.method === 'POST') {
+    const cityId = cityResidencyMatch[1];
+    state.membership = state.membership || {};
+    state.membership.city_id = cityId;
+    publish('city.residency_joined', { cityId });
+    return { ok: true, membership: state.membership };
+  }
+
+  const corpAdmissionMatch = path.match(/^\/api\/corporations\/([^/]+)\/admission-policy$/);
+  if (corpAdmissionMatch && body.method === 'POST') {
+    const policy = body.policy || 'open';
+    if (state.institutions?.corporation) {
+      state.institutions.corporation.admission_policy = policy;
+    }
+    return { ok: true, policy };
+  }
+
+  const corpTaxMatch = path.match(/^\/api\/corporations\/([^/]+)\/tax-charter$/);
+  if (corpTaxMatch && body.method === 'POST') {
+    return { ok: true };
+  }
+
+  const cityTaxMatch = path.match(/^\/api\/cities\/([^/]+)\/tax-charter$/);
+  if (cityTaxMatch && body.method === 'POST') {
+    return { ok: true };
+  }
+
+  const cityBudgetMatch = path.match(/^\/api\/cities\/([^/]+)\/budget$/);
+  if (cityBudgetMatch && body.method === 'POST') {
+    return { ok: true };
+  }
+
   if (path === '/api/audit' && body.method === 'GET') return audit();
   if (path === '/api/institutions' && body.method === 'GET') return state.institutions;
   if (path === '/api/production/catalog' && body.method === 'GET') {
@@ -1013,7 +1082,8 @@ async function command(path, body, req = null) {
         legacy: 120,
         credits: 5000,
         cityId: 'city-new-tokyo',
-        dynastyName: 'Vance Dynasty',
+        houseName: 'House of Vance',
+        dynastyName: 'House of Vance',
         compositeScore: 14484,
       },
       {
@@ -1027,6 +1097,7 @@ async function command(path, body, req = null) {
         legacy: 95,
         credits: 4200,
         cityId: 'city-london',
+        houseName: 'House of Rostov',
         dynastyName: 'House of Rostov',
         compositeScore: 12150,
       },
@@ -1041,7 +1112,8 @@ async function command(path, body, req = null) {
         legacy: 80,
         credits: 3800,
         cityId: 'city-geneva',
-        dynastyName: 'Thorne Syndicate',
+        houseName: 'House of Thorne',
+        dynastyName: 'House of Thorne',
         compositeScore: 10980,
       },
       {
@@ -1055,7 +1127,8 @@ async function command(path, body, req = null) {
         legacy: 45,
         credits: 2400,
         cityId: 'city-singapore',
-        dynastyName: 'Chen Holdings',
+        houseName: 'House of Chen',
+        dynastyName: 'House of Chen',
         compositeScore: 7850,
       },
       {
@@ -1069,7 +1142,8 @@ async function command(path, body, req = null) {
         legacy: 30,
         credits: 1900,
         cityId: 'city-new-york',
-        dynastyName: 'Al-Mansoor House',
+        houseName: 'House of Mansoor',
+        dynastyName: 'House of Mansoor',
         compositeScore: 6540,
       },
     ];
@@ -1089,11 +1163,11 @@ async function command(path, body, req = null) {
       { id: 'corp-solis-biotech', name: 'Solis Biocatalytics', member_count: 6, treasury: 14200, marketCap: 31000, compositeIndex: 41, score: 41, rank: 4, rankDelta: 0 },
     ];
 
-    let dynasticHouses = [
-      { dynasty_name: 'Vance Dynasty', founder_name: 'Marcus Vance', generation: 3, deceased_count: 3, total_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', dynasty_score: 28450, rank: 1, rankDelta: 0, tierBadge: 'Sovereign' },
-      { dynasty_name: 'Noha Dynasty', founder_name: 'Vitalii Noha', generation: 3, deceased_count: 2, total_legacy: 4600, peak_standing: 920, active_heir: 'Vitalii Noha', dynasty_score: 24200, rank: 2, rankDelta: 1, tierBadge: 'Sovereign' },
-      { dynasty_name: 'House of Rostov', founder_name: 'Viktor Rostov', generation: 2, deceased_count: 2, total_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', dynasty_score: 19800, rank: 3, rankDelta: 0, tierBadge: 'Patrician' },
-      { dynasty_name: 'Thorne Syndicate', founder_name: 'Silas Thorne', generation: 2, deceased_count: 1, total_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', dynasty_score: 15400, rank: 4, rankDelta: 'NEW', tierBadge: 'Patrician' },
+    let houses = [
+      { house_name: 'House of Vance', dynasty_name: 'House of Vance', founder_name: 'Marcus Vance', generation: 3, deceased_count: 3, total_legacy: 5400, peak_standing: 980, active_heir: 'Amara Vance', house_score: 28450, dynasty_score: 28450, rank: 1, rankDelta: 0, tierBadge: 'Sovereign' },
+      { house_name: 'House of Noha', dynasty_name: 'House of Noha', founder_name: 'Vitalii Noha', generation: 3, deceased_count: 2, total_legacy: 4600, peak_standing: 920, active_heir: 'Vitalii Noha', house_score: 24200, dynasty_score: 24200, rank: 2, rankDelta: 1, tierBadge: 'Sovereign' },
+      { house_name: 'House of Rostov', dynasty_name: 'House of Rostov', founder_name: 'Viktor Rostov', generation: 2, deceased_count: 2, total_legacy: 3800, peak_standing: 860, active_heir: 'Dmitri Rostov', house_score: 19800, dynasty_score: 19800, rank: 3, rankDelta: 0, tierBadge: 'Patrician' },
+      { house_name: 'House of Thorne', dynasty_name: 'House of Thorne', founder_name: 'Silas Thorne', generation: 2, deceased_count: 1, total_legacy: 2900, peak_standing: 720, active_heir: 'Kaelen Thorne', house_score: 15400, dynasty_score: 15400, rank: 4, rankDelta: 'NEW', tierBadge: 'Patrician' },
     ];
 
     let technologies = [
@@ -1103,10 +1177,10 @@ async function command(path, body, req = null) {
     ];
 
     if (search) {
-      citizens = citizens.filter((c) => c.displayName.toLowerCase().includes(search) || c.id.toLowerCase().includes(search) || (c.dynastyName && c.dynastyName.toLowerCase().includes(search)));
+      citizens = citizens.filter((c) => c.displayName.toLowerCase().includes(search) || c.id.toLowerCase().includes(search) || (c.houseName && c.houseName.toLowerCase().includes(search)) || (c.dynastyName && c.dynastyName.toLowerCase().includes(search)));
       cities = cities.filter((c) => c.name.toLowerCase().includes(search) || c.id.toLowerCase().includes(search));
       corporations = corporations.filter((c) => c.name.toLowerCase().includes(search) || c.id.toLowerCase().includes(search));
-      dynasticHouses = dynasticHouses.filter((d) => d.dynasty_name.toLowerCase().includes(search) || (d.founder_name && d.founder_name.toLowerCase().includes(search)) || (d.active_heir && d.active_heir.toLowerCase().includes(search)));
+      houses = houses.filter((d) => d.house_name.toLowerCase().includes(search) || (d.founder_name && d.founder_name.toLowerCase().includes(search)) || (d.active_heir && d.active_heir.toLowerCase().includes(search)));
       technologies = technologies.filter((t) => t.name.toLowerCase().includes(search) || t.id.toLowerCase().includes(search));
     }
 
@@ -1119,7 +1193,8 @@ async function command(path, body, req = null) {
       corporations: corporations.slice(offset, offset + limit),
       technologies: technologies.slice(offset, offset + limit),
       citizens: citizens.slice(offset, offset + limit),
-      dynasticHouses: dynasticHouses.slice(offset, offset + limit),
+      houses: houses.slice(offset, offset + limit),
+      dynasticHouses: houses.slice(offset, offset + limit),
       userStanding: {
         rank: 1,
         totalTracked: citizens.length,
@@ -1134,7 +1209,7 @@ async function command(path, body, req = null) {
   if (path === '/api/cemetery' && body.method === 'GET') {
     const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
     const search = (url?.searchParams.get('search') || body.search || '').trim().toLowerCase();
-    const dynasty = (url?.searchParams.get('dynasty') || body.dynasty || '').trim().toLowerCase();
+    const house = (url?.searchParams.get('house') || url?.searchParams.get('dynasty') || body.house || body.dynasty || '').trim().toLowerCase();
     const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 50)));
 
     let memorials = [
@@ -1147,7 +1222,8 @@ async function command(path, body, req = null) {
         successor_name: 'Amara Vance',
         cause_of_death: 'Natural Biological Mortality',
         epitaph: 'Pioneered civilization across the frontier of Earth.',
-        dynasty_name: 'Vance Dynasty',
+        house_name: 'House of Vance',
+        dynasty_name: 'House of Vance',
         birth_game_day: 1,
       },
       {
@@ -1159,6 +1235,7 @@ async function command(path, body, req = null) {
         successor_name: 'Dmitri Rostov',
         cause_of_death: 'Natural Biological Mortality',
         epitaph: 'Architect of municipal water security and free exchange.',
+        house_name: 'House of Rostov',
         dynasty_name: 'House of Rostov',
         birth_game_day: 1,
       },
@@ -1167,19 +1244,20 @@ async function command(path, body, req = null) {
     if (search) {
       memorials = memorials.filter((m) =>
         m.display_name.toLowerCase().includes(search) ||
+        (m.house_name && m.house_name.toLowerCase().includes(search)) ||
         (m.dynasty_name && m.dynasty_name.toLowerCase().includes(search)) ||
         (m.successor_name && m.successor_name.toLowerCase().includes(search))
       );
     }
-    if (dynasty) {
-      memorials = memorials.filter((m) => m.dynasty_name.toLowerCase() === dynasty);
+    if (house) {
+      memorials = memorials.filter((m) => (m.house_name && m.house_name.toLowerCase() === house) || (m.dynasty_name && m.dynasty_name.toLowerCase() === house));
     }
 
     return {
       ok: true,
       cemetery: memorials.slice(0, limit),
       totalReturned: Math.min(memorials.length, limit),
-      persistence: database ? 'postgres-reference' : 'reference-simulator',
+      persistence: database ? 'planetscale-postgres' : 'reference-simulator',
     };
   }
 
@@ -1560,71 +1638,74 @@ async function command(path, body, req = null) {
     return { ok: true, ticks, persistence: database ? 'postgres-reference' : 'reference-simulator' };
   }
 
-  // Dynastic Lineage & Genealogical Archive
-  if (path === '/api/dynasty' && body.method === 'GET') {
+  // House Lineage & Ancestral Archive
+  if ((path === '/api/house' || path === '/api/dynasty') && body.method === 'GET') {
     return {
       ok: true,
-      dynasty: dynastyState.dynasty,
-      lineage: dynastyState.lineage,
-      perks: dynastyState.perks,
-      heirlooms: dynastyState.heirlooms,
-      catalogPerks: dynastyState.catalogPerks,
+      house: houseState.house,
+      dynasty: houseState.house,
+      lineage: houseState.lineage,
+      perks: houseState.perks,
+      heirlooms: houseState.heirlooms,
+      catalogPerks: houseState.catalogPerks,
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
 
-  if (path === '/api/dynasty/perks/unlock' && body.method === 'POST') {
+  if ((path === '/api/house/perks/unlock' || path === '/api/dynasty/perks/unlock') && body.method === 'POST') {
     if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const perkKey = body.perkKey;
-    const catalogItem = dynastyState.catalogPerks.find((p) => p.key === perkKey);
+    const catalogItem = houseState.catalogPerks.find((p) => p.key === perkKey || (perkKey === 'diplomatic_dynasty' && p.key === 'diplomatic_house'));
     if (!catalogItem) throw new ApiError(`Invalid perk key '${perkKey}'`, 400, 'BAD_REQUEST');
-    if (dynastyState.dynasty.legacy_points < catalogItem.cost) {
-      throw new ApiError(`Insufficient legacy points. Required: ${catalogItem.cost}, available: ${dynastyState.dynasty.legacy_points}`, 409, 'CONFLICT');
+    if (houseState.house.legacy_points < catalogItem.cost) {
+      throw new ApiError(`Insufficient legacy points. Required: ${catalogItem.cost}, available: ${houseState.house.legacy_points}`, 409, 'CONFLICT');
     }
-    if (dynastyState.perks.some((p) => p.perk_key === perkKey)) {
+    if (houseState.perks.some((p) => p.perk_key === catalogItem.key)) {
       throw new ApiError(`Perk '${catalogItem.name}' is already unlocked`, 409, 'CONFLICT');
     }
-    dynastyState.dynasty.legacy_points -= catalogItem.cost;
+    houseState.house.legacy_points -= catalogItem.cost;
     const newPerk = {
-      id: `PRK-DYN-H0044-${perkKey}`,
-      dynasty_id: dynastyState.dynasty.id,
-      perk_key: perkKey,
+      id: `PRK-HSE-H0044-${catalogItem.key}`,
+      house_id: houseState.house.id,
+      dynasty_id: houseState.house.id,
+      perk_key: catalogItem.key,
       perk_name: catalogItem.name,
       perk_category: catalogItem.category.toLowerCase(),
       tier: 1,
       unlocked_game_day: state.clock.day,
     };
-    dynastyState.perks.push(newPerk);
-    publish('dynasty.perk_unlocked', { perkKey, remainingPoints: dynastyState.dynasty.legacy_points });
-    const result = { ok: true, perkKey, perkName: catalogItem.name, remainingPoints: dynastyState.dynasty.legacy_points };
+    houseState.perks.push(newPerk);
+    publish('house.perk_unlocked', { perkKey: catalogItem.key, remainingPoints: houseState.house.legacy_points });
+    const result = { ok: true, perkKey: catalogItem.key, perkName: catalogItem.name, remainingPoints: houseState.house.legacy_points };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }
 
-  if (path === '/api/dynasty/heirlooms/equip' && body.method === 'POST') {
+  if ((path === '/api/house/heirlooms/equip' || path === '/api/dynasty/heirlooms/equip') && body.method === 'POST') {
     if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const player = human('amara', req);
     const heirloomId = body.heirloomId;
-    const heirloom = dynastyState.heirlooms.find((h) => h.id === heirloomId);
+    const heirloom = houseState.heirlooms.find((h) => h.id === heirloomId);
     if (!heirloom) throw new ApiError('Heirloom not found', 404, 'NOT_FOUND');
     const isEquipped = heirloom.equipped_by_human_id === player.id;
     heirloom.equipped_by_human_id = isEquipped ? null : player.id;
-    publish('dynasty.heirloom_equipped', { heirloomId, isEquipped: !isEquipped });
+    publish('house.heirloom_equipped', { heirloomId, isEquipped: !isEquipped });
     const result = { ok: true, heirloomId, isEquipped: !isEquipped, equippedBy: heirloom.equipped_by_human_id };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }
 
-  if (path === '/api/dynasty/heirlooms/forge' && body.method === 'POST') {
+  if ((path === '/api/house/heirlooms/forge' || path === '/api/dynasty/heirlooms/forge') && body.method === 'POST') {
     if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     const name = String(body.name || 'Ancestral Relic').trim();
     if (name.length < 3 || name.length > 100) throw new ApiError('Heirloom name must be between 3 and 100 characters', 400, 'VALIDATION_ERROR');
-    const heirloomType = body.heirloomType || 'dynasty_standard';
+    const heirloomType = body.heirloomType || 'house_standard';
     const inscription = body.inscription || 'Forged by the house patriarch.';
     const statBuff = body.statBuff || '+5% Prestige & Influence';
     const newHeirloom = {
-      id: `HLM-DYN-H0044-${Date.now()}`,
-      dynasty_id: dynastyState.dynasty.id,
+      id: `HLM-HSE-H0044-${Date.now()}`,
+      house_id: houseState.house.id,
+      dynasty_id: houseState.house.id,
       name,
       heirloom_type: heirloomType,
       quality_tier: 'Legendary',
@@ -1633,24 +1714,25 @@ async function command(path, body, req = null) {
       inscription,
       created_at: new Date().toISOString(),
     };
-    dynastyState.heirlooms.push(newHeirloom);
-    publish('dynasty.heirloom_forged', { heirloomId: newHeirloom.id, name });
+    houseState.heirlooms.push(newHeirloom);
+    publish('house.heirloom_forged', { heirloomId: newHeirloom.id, name });
     const result = { ok: true, heirloom: newHeirloom };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }
 
-  if (path === '/api/dynasty/motto' && body.method === 'POST') {
+  if ((path === '/api/house/motto' || path === '/api/dynasty/motto') && body.method === 'POST') {
     if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const motto = body.motto ? String(body.motto).trim() : dynastyState.dynasty.motto;
-    const dynastyName = body.dynastyName ? String(body.dynastyName).trim() : dynastyState.dynasty.dynasty_name;
-    if (motto.length < 3 || motto.length > 160 || dynastyName.length < 3 || dynastyName.length > 80) {
-      throw new ApiError('Dynasty name and motto are invalid', 400, 'VALIDATION_ERROR');
+    const motto = body.motto ? String(body.motto).trim() : houseState.house.motto;
+    const houseName = (body.houseName || body.dynastyName) ? String(body.houseName || body.dynastyName).trim() : houseState.house.house_name;
+    if (motto.length < 3 || motto.length > 160 || houseName.length < 3 || houseName.length > 80) {
+      throw new ApiError('House name and motto are invalid', 400, 'VALIDATION_ERROR');
     }
-    dynastyState.dynasty.motto = motto;
-    dynastyState.dynasty.dynasty_name = dynastyName;
-    publish('dynasty.motto_updated', { motto, dynastyName });
-    const result = { ok: true, motto, dynastyName };
+    houseState.house.motto = motto;
+    houseState.house.house_name = houseName;
+    houseState.house.dynasty_name = houseName;
+    publish('house.motto_updated', { motto, houseName });
+    const result = { ok: true, motto, houseName, dynastyName: houseName };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }
@@ -2122,18 +2204,34 @@ async function command(path, body, req = null) {
   if (path === '/api/auth/profile' && body.method === 'PATCH') {
     const session = resolveSession(req);
     if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const displayName = String(body.displayName || '').trim();
-    if (displayName.length < 2 || displayName.length > 80) {
-      throw new ApiError('Display name must be between 2 and 80 characters', 400, 'VALIDATION_ERROR');
-    }
-    session.displayName = displayName;
-    const user = Array.from(registeredUsers.values()).find((candidate) => candidate.humanId === session.humanId);
-    if (user) user.displayName = displayName;
     const player = human(session.humanId, req);
-    player.name = displayName;
+    if (body.displayName !== undefined) {
+      const displayName = String(body.displayName || '').trim();
+      if (displayName.length < 2 || displayName.length > 80) {
+        throw new ApiError('Display name must be between 2 and 80 characters', 400, 'VALIDATION_ERROR');
+      }
+      session.displayName = displayName;
+      const user = Array.from(registeredUsers.values()).find((candidate) => candidate.humanId === session.humanId);
+      if (user) user.displayName = displayName;
+      player.name = displayName;
+      const incumbent = houseState.lineage.find((l) => l.is_incumbent);
+      if (incumbent) {
+        incumbent.name = displayName;
+        if (incumbent.generation === 1) {
+          houseState.house.founder_name = displayName;
+        }
+      }
+    }
+    if (body.epitaph !== undefined) {
+      const epitaph = String(body.epitaph || '').trim();
+      if (epitaph.length > 200) {
+        throw new ApiError('Epitaph cannot exceed 200 characters', 400, 'VALIDATION_ERROR');
+      }
+      player.epitaph = epitaph;
+    }
     return {
       ok: true,
-      human: { id: player.id, displayName, email: session.email },
+      human: { id: player.id, displayName: player.name, epitaph: player.epitaph, email: session.email },
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
@@ -2274,7 +2372,7 @@ async function command(path, body, req = null) {
     if (!displayName || displayName.length < 2 || displayName.length > 80) {
       throw new ApiError('Display name must be between 2 and 80 characters', 400, 'VALIDATION_ERROR');
     }
-    const dynastyName = (body.dynastyName || body.dynasty_name || '').trim();
+    const houseName = (body.houseName || body.house_name || body.dynastyName || body.dynasty_name || '').trim();
     const cityId = (body.startingCityId || body.city_id || 'city-new-tokyo').trim();
     const humanId = `H-${Math.floor(1000 + Math.random() * 9000)}`;
     const newHuman = {
@@ -2287,7 +2385,8 @@ async function command(path, body, req = null) {
       age_years: 20,
       life_status: 'active',
       city_id: cityId,
-      dynasty_name: dynastyName || undefined,
+      house_name: houseName || undefined,
+      dynasty_name: houseName || undefined,
       credits: 200,
     };
     return {
@@ -2331,9 +2430,16 @@ async function command(path, body, req = null) {
   if ((path === '/api/life/successor' || path === '/api/succession/plans') && body.method === 'POST') {
     const player = human('amara', req);
     if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
-    const name = body.name || body.successorName;
-    if (typeof name !== 'string' || name.trim().length < 2) throw new ApiError('Successor name is required', 400, 'VALIDATION_ERROR');
-    state.life.successor = { name: name.trim(), registeredOnDay: state.clock.day };
+    const name = body.name !== undefined ? body.name : body.successorName;
+    if (typeof name !== 'string') throw new ApiError('Successor name must be a string', 400, 'VALIDATION_ERROR');
+    const trimmed = name.trim();
+    if (!trimmed) {
+      state.life.successor = null;
+      if (database) void database.deleteSuccession?.().catch((error) => console.error('succession deletion failed', error.message));
+      publish('succession.cleared', { humanId: player.id });
+      return { ok: true, life: state.life, succession: null, state: snapshot() };
+    }
+    state.life.successor = { name: trimmed, registeredOnDay: state.clock.day };
     if (database) void database.saveSuccession(state.life.successor).catch((error) => console.error('succession persistence failed', error.message));
     publish('succession.registered', state.life.successor);
     return { ok: true, life: state.life, succession: state.life.successor, state: snapshot() };
@@ -2829,6 +2935,10 @@ async function command(path, body, req = null) {
         lifeStatus: player.lifeStatus || 'active',
         standing: player.standing || 742,
         legacy: player.legacy || 31,
+        health: player.health || player.vitality || 100,
+        vitality: player.vitality || player.health || 100,
+        energy: player.energy || player.stamina || 100,
+        stamina: player.stamina || player.energy || 100,
         politicalEligibilityDay: 180,
       },
       succession: state.life.successor ? {

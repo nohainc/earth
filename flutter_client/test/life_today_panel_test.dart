@@ -29,7 +29,7 @@ void main() {
 
     expect(find.text('MY LIFE TODAY'), findsOneWidget);
     expect(find.text('AURELIA'), findsOneWidget);
-    expect(find.textContaining('Age 34'), findsOneWidget);
+    expect(find.text('34'), findsOneWidget);
     expect(find.text('82%'), findsOneWidget);
     expect(find.text('64%'), findsOneWidget);
     expect(find.text('UNAVAILABLE'), findsNothing);

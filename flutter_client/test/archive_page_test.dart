@@ -5,14 +5,14 @@ import 'package:earth_client/features/lifecycle/historical_archive_panel.dart';
 void main() {
   const pantheon = {
     'deceasedPantheon': [
-      {'display_name': 'Founder Marcus Vance', 'death_game_day': 1200, 'final_legacy': 5400, 'dynasty_name': 'Vance Dynasty'},
+      {'display_name': 'Founder Marcus Vance', 'death_game_day': 1200, 'final_legacy': 5400, 'house_name': 'House of Vance'},
     ],
-    'dynasties': [
-      {'dynasty_name': 'Vance Dynasty', 'deceased_count': 1, 'peak_legacy': 5400, 'is_extinct': true},
+    'houses': [
+      {'house_name': 'House of Vance', 'deceased_count': 1, 'peak_legacy': 5400, 'is_extinct': true},
     ],
   };
 
-  testWidgets('memorial page renders citizens and dynasties with tab switching', (tester) async {
+  testWidgets('memorial page renders citizens and houses with tab switching', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
       pantheon: pantheon,
       events: [],
@@ -20,14 +20,14 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('MEMORIAL CITIZENS'), findsWidgets);
     expect(find.text('CITIZENS (1)'), findsOneWidget);
-    expect(find.text('DYNASTIES (1)'), findsOneWidget);
+    expect(find.text('HOUSES (1)'), findsOneWidget);
     expect(find.textContaining('Founder Marcus Vance'), findsOneWidget);
 
-    // Switch to Dynasties tab on narrow layout
-    await tester.tap(find.text('DYNASTIES (1)'));
+    // Switch to Houses tab on narrow layout
+    await tester.tap(find.text('HOUSES (1)'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('HISTORICAL DYNASTIES'), findsWidgets);
-    expect(find.textContaining('Vance Dynasty'), findsWidgets);
+    expect(find.textContaining('HISTORICAL HOUSES'), findsWidgets);
+    expect(find.textContaining('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
@@ -39,9 +39,9 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No citizens have entered the public archive yet.'), findsOneWidget);
 
-    await tester.tap(find.text('DYNASTIES (0)'));
+    await tester.tap(find.text('HOUSES (0)'));
     await tester.pumpAndSettle();
-    expect(find.text('No extinct dynasties have been recorded in the archive yet.'), findsOneWidget);
+    expect(find.text('No extinct houses have been recorded in the archive yet.'), findsOneWidget);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
@@ -67,15 +67,15 @@ void main() {
     await tester.pumpAndSettle();
   });
 
-  testWidgets('tapping info icon on HISTORICAL DYNASTIES opens prestige score modal', (tester) async {
+  testWidgets('tapping info icon on HISTORICAL HOUSES opens prestige score modal', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
       pantheon: pantheon,
       events: [],
     ))));
     await tester.pumpAndSettle();
 
-    // Switch to Dynasties tab
-    await tester.tap(find.text('DYNASTIES (1)'));
+    // Switch to Houses tab
+    await tester.tap(find.text('HOUSES (1)'));
     await tester.pumpAndSettle();
 
     final infoIcon = find.byIcon(Icons.info_outline);
@@ -84,24 +84,24 @@ void main() {
     await tester.tap(infoIcon);
     await tester.pumpAndSettle();
 
-    expect(find.text('HISTORICAL DYNASTIES'), findsWidgets);
+    expect(find.text('HISTORICAL HOUSES'), findsWidgets);
     expect(find.textContaining('1 : 5 : 25 weighting ratio'), findsOneWidget);
-    expect(find.textContaining('Dynastic Legacy (25x relative weight)'), findsOneWidget);
+    expect(find.textContaining('House Legacy (25x relative weight)'), findsOneWidget);
     expect(find.text('CLOSE'), findsOneWidget);
 
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
   });
 
-  testWidgets('searching citizens and dynasties filters archive lists and shows empty states', (tester) async {
+  testWidgets('searching citizens and houses filters archive lists and shows empty states', (tester) async {
     const multiPantheon = {
       'deceasedPantheon': [
-        {'display_name': 'Founder Marcus Vance', 'dynasty_name': 'Vance Dynasty', 'death_game_day': 1200, 'final_legacy': 5400},
-        {'display_name': 'Elena Rostova', 'dynasty_name': 'House of Rostov', 'death_game_day': 1450, 'final_legacy': 3200},
+        {'display_name': 'Founder Marcus Vance', 'house_name': 'House of Vance', 'death_game_day': 1200, 'final_legacy': 5400},
+        {'display_name': 'Elena Rostova', 'house_name': 'House of Rostov', 'death_game_day': 1450, 'final_legacy': 3200},
       ],
-      'dynasties': [
-        {'dynasty_name': 'Vance Dynasty', 'is_extinct': true, 'deceased_count': 1},
-        {'dynasty_name': 'House of Rostov', 'is_extinct': true, 'deceased_count': 1},
+      'houses': [
+        {'house_name': 'House of Vance', 'is_extinct': true, 'deceased_count': 1},
+        {'house_name': 'House of Rostov', 'is_extinct': true, 'deceased_count': 1},
       ],
     };
 
@@ -133,24 +133,24 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('Elena Rostova'), findsOneWidget);
 
-    // Switch to Dynasties tab
-    await tester.tap(find.textContaining('DYNASTIES'));
+    // Switch to Houses tab
+    await tester.tap(find.textContaining('HOUSES'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Vance Dynasty'), findsWidgets);
+    expect(find.textContaining('House of Vance'), findsWidgets);
     expect(find.textContaining('House of Rostov'), findsWidgets);
 
-    // Search dynasties for Rostov
-    final dynastySearchFields = find.byType(TextField);
-    await tester.enterText(dynastySearchFields.first, 'Rostov');
+    // Search houses for Rostov
+    final houseSearchFields = find.byType(TextField);
+    await tester.enterText(houseSearchFields.first, 'Rostov');
     await tester.pumpAndSettle();
 
     expect(find.textContaining('House of Rostov'), findsWidgets);
-    expect(find.textContaining('Vance Dynasty'), findsNothing);
+    expect(find.textContaining('House of Vance'), findsNothing);
 
-    // Non-matching dynasty search
-    await tester.enterText(dynastySearchFields.first, 'Nonexistent Dynasty');
+    // Non-matching house search
+    await tester.enterText(houseSearchFields.first, 'Nonexistent House');
     await tester.pumpAndSettle();
-    expect(find.text('No recorded dynasties match "Nonexistent Dynasty".'), findsOneWidget);
+    expect(find.text('No recorded houses match "Nonexistent House".'), findsOneWidget);
   });
 }

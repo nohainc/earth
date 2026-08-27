@@ -37,7 +37,7 @@ class ReincarnationDialog extends StatefulWidget {
 
 class _ReincarnationDialogState extends State<ReincarnationDialog> {
   final _nameController = TextEditingController();
-  late final TextEditingController _dynastyController;
+  late final TextEditingController _houseController;
   String _selectedCity = 'CITY-0084';
   List<Map<String, dynamic>> _cities = const [];
   bool _submitting = false;
@@ -46,18 +46,18 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
   @override
   void dispose() {
     _nameController.dispose();
-    _dynastyController.dispose();
+    _houseController.dispose();
     super.dispose();
   }
 
   @override
   void initState() {
     super.initState();
-    final existingDynasty = widget.deceasedHuman['dynasty_name']?.toString().trim();
-    _dynastyController = TextEditingController(
-      text: existingDynasty == null || existingDynasty.isEmpty
-          ? 'Founding Dynasty'
-          : existingDynasty,
+    final existingHouse = (widget.deceasedHuman['house_name'] ?? widget.deceasedHuman['houseName'] ?? widget.deceasedHuman['dynasty_name'])?.toString().trim();
+    _houseController = TextEditingController(
+      text: existingHouse == null || existingHouse.isEmpty
+          ? 'Founding House'
+          : existingHouse,
     );
     _loadCities();
   }
@@ -91,7 +91,8 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
     try {
       final res = await widget.api.rebirth(
         name,
-        dynastyName: _dynastyController.text.trim(),
+        houseName: _houseController.text.trim(),
+        dynastyName: _houseController.text.trim(),
         startingCityId: _selectedCity,
       );
       if (mounted) {
@@ -166,7 +167,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'MORTALITY & DYNASTIC SUCCESSION',
+                          'MORTALITY & HOUSE SUCCESSION',
                           style:
                               Theme.of(context).textTheme.titleMedium?.copyWith(
                                     color: EarthColors.goldMetallic,
@@ -349,7 +350,7 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     ),
                     const SizedBox(height: 6),
                     const Text(
-                      'Begin a new generation at legal adulthood (Age 20) with an indexed starter package. The new character carries dynasty legacy forward but does not directly claim the predecessor’s estate. Your selected city determines initial civic affiliation: if it belongs to a corporation, the new character joins that corporation. A 500 Credit naturalization fee is allocated between the central and city treasuries.',
+                      'Begin a new generation at legal adulthood (Age 20) with an indexed starter package. The new character carries house legacy forward but does not directly claim the predecessor’s estate. Your selected city determines initial civic affiliation: if it belongs to a corporation, the new character joins that corporation. A 500 Credit naturalization fee is allocated between the central and city treasuries.',
                       style:
                           TextStyle(color: EarthColors.textMuted, fontSize: 11),
                     ),
@@ -366,10 +367,10 @@ class _ReincarnationDialogState extends State<ReincarnationDialog> {
                     ),
                     const SizedBox(height: 12),
                     TextField(
-                      controller: _dynastyController,
+                      controller: _houseController,
                       decoration: const InputDecoration(
-                        labelText: 'Dynasty Name',
-                        hintText: 'e.g. Vance Dynasty',
+                        labelText: 'House Name',
+                        hintText: 'e.g. House of Vance',
                         isDense: true,
                         filled: true,
                         fillColor: EarthColors.panelSurface,

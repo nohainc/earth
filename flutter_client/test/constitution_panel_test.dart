@@ -36,6 +36,6 @@ void main() {
     expect(find.text('Macroeconomic Statutory Citizen Levy'), findsOneWidget);
     expect(find.text('Democratic Ballot Quorum & Supermajority Thresholds'), findsOneWidget);
     expect(find.text('Mandatory Legislative Cooling-Off & Judicial Review'), findsOneWidget);
-    expect(find.text('Dynastic Succession & Testamentary Integrity'), findsOneWidget);
+    expect(find.text('House Succession & Testamentary Integrity'), findsOneWidget);
   });
 }

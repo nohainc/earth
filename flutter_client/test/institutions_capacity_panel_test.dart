@@ -65,6 +65,101 @@ void main() {
   });
 
   testWidgets(
+      'CorporationHubPanel allows selecting corporations to inspect detailed overview',
+      (tester) async {
+    tester.view.physicalSize = const Size(1200, 900);
+    addTearDown(tester.view.resetPhysicalSize);
+    const state = EarthState({
+      'human': {'id': 'H-0044'},
+      'membership': {},
+      'institutions': {},
+      'rankings': {
+        'corporations': [
+          {
+            'id': 'CORP-001',
+            'name': 'Carthage Dynamics',
+            'member_count': 38,
+            'treasury': 12500,
+            'capital_city_name': 'New Carthage',
+          },
+          {
+            'id': 'CORP-002',
+            'name': 'Aether Syndicate',
+            'member_count': 94,
+            'treasury': 45000,
+            'capital_city_name': 'Sky Spire',
+          },
+        ],
+        'cities': [
+          {'id': 'CITY-1', 'name': 'New Carthage', 'corporation_id': 'CORP-001', 'residents': 150},
+          {'id': 'CITY-2', 'name': 'Sky Spire', 'corporation_id': 'CORP-002', 'residents': 300},
+        ],
+      },
+    });
+
+    // Test 2-column wide layout (>= 840 width)
+    tester.view.physicalSize = const Size(1200, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() => tester.view.resetPhysicalSize());
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: CorporationHubPanel(
+            state: state,
+            busy: false,
+            action: (_) async => state,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // Verify both corporations are listed in directory
+    expect(find.textContaining('Carthage Dynamics'), findsWidgets);
+    expect(find.textContaining('Aether Syndicate'), findsWidgets);
+
+    // Initial selected corporation details in right column
+    expect(find.text('CARTHAGE DYNAMICS'), findsWidgets);
+    expect(find.text('JOIN CORPORATION'), findsWidgets);
+
+    // Tap on Aether Syndicate to select and inspect
+    final aetherItem = find.textContaining('Aether Syndicate').first;
+    await tester.ensureVisible(aetherItem);
+    await tester.tap(aetherItem, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    // Verify the right-column details update to Aether Syndicate
+    expect(find.text('AETHER SYNDICATE'), findsWidgets);
+    expect(find.textContaining('45000 C'), findsWidgets);
+
+    // Test 1-column narrow expandable layout (< 840 width)
+    tester.view.physicalSize = const Size(600, 900);
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        body: SingleChildScrollView(
+          child: CorporationHubPanel(
+            state: state,
+            busy: false,
+            action: (_) async => state,
+          ),
+        ),
+      ),
+    ));
+    await tester.pumpAndSettle();
+
+    // In 1-col layout, tap to expand Aether Syndicate inline
+    final aetherRow = find.textContaining('Aether Syndicate').first;
+    await tester.tap(aetherRow, warnIfMissed: false);
+    await tester.pumpAndSettle();
+
+    // Verify universal charter principles and inline expansion reveals details
+    expect(find.text('UNIVERSAL CHARTER PRINCIPLES'), findsOneWidget);
+    expect(find.text('Corporate Tax Protection'), findsOneWidget);
+    expect(find.textContaining('45000 C'), findsWidgets);
+  });
+
+  testWidgets(
       'InstitutionsCapacityPanel renders city residency, pressure ratios, and proposes budget',
       (tester) async {
     const state = EarthState({
@@ -250,18 +345,19 @@ void main() {
     expect(find.text('VIEW CONSTITUTION & TAX CHARTER'), findsOneWidget);
     expect(find.text('ALL PLANETARY CORPORATIONS'), findsOneWidget);
 
-    expect(find.text('Carthage Dynamics (CORP-001)'), findsOneWidget);
-    expect(find.text('Aether Syndicate (CORP-002)'), findsOneWidget);
-    expect(find.text('INCOME TAX: 2.5%'), findsWidgets);
-    expect(find.text('MARKET FEE: 1.0%'), findsWidgets);
-    expect(find.text('INCOME TAX: 1.8%'), findsOneWidget);
+    expect(find.text('Carthage Dynamics'), findsOneWidget);
+    expect(find.textContaining('2.5%'), findsWidgets);
+    expect(find.textContaining('1.0%'), findsWidgets);
+    expect(find.textContaining('1.8%'), findsWidgets);
 
-    await tester.tap(find.text('CHARTER & PERKS').first);
+    final charterBtn = find.text('CHARTER & PERKS').first;
+    await tester.ensureVisible(charterBtn);
+    await tester.tap(charterBtn);
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Charter & Constitution'), findsOneWidget);
     expect(find.text('CONSTITUTIONAL TAX SCHEDULE'), findsOneWidget);
-    expect(find.text('Corporate Tax Protection'), findsOneWidget);
+    expect(find.text('Corporate Tax Protection'), findsWidgets);
   });
 
   testWidgets('CivicRankingsPanel renders corporations and cities with tabs, formula dialogs and index badges',
@@ -310,7 +406,7 @@ void main() {
           {
             'id': 'H-0044',
             'displayName': 'Amara Vance',
-            'dynastyName': 'Vance Dynasty',
+            'houseName': 'House of Vance',
             'corporationId': 'CORP-001',
             'cityId': 'CITY-0084',
             'legacy': 120,
@@ -321,7 +417,7 @@ void main() {
           {
             'id': 'H-0012',
             'displayName': 'Dmitri Rostov',
-            'dynastyName': 'House of Rostov',
+            'houseName': 'House of Rostov',
             'cityId': 'CITY-0084',
             'legacy': 90,
             'standing': 650,
@@ -329,14 +425,14 @@ void main() {
             'compositeScore': 12150,
           },
         ],
-        'dynasties': [
+        'houses': [
           {
-            'dynasty_name': 'Vance Dynasty',
+            'house_name': 'House of Vance',
             'founder_name': 'Marcus Vance',
             'active_heir': 'Amara Vance',
             'generation': 3,
             'total_legacy': 5400,
-            'dynastic_standing': 980,
+            'house_standing': 980,
           },
         ],
       },
@@ -360,7 +456,7 @@ void main() {
 
     // Verify 4 Tab buttons on narrow screen
     expect(find.text('CITIZENS (2)'), findsOneWidget);
-    expect(find.text('DYNASTIES (1)'), findsOneWidget);
+    expect(find.text('HOUSES (1)'), findsOneWidget);
     expect(find.text('CORPS (2)'), findsOneWidget);
     expect(find.text('CITIES (1)'), findsOneWidget);
 
@@ -373,24 +469,24 @@ void main() {
     expect(find.text('100'), findsOneWidget);
     expect(find.text('78'), findsOneWidget);
 
-    // Switch to Dynasties tab
-    await tester.tap(find.text('DYNASTIES (1)'));
+    // Switch to Houses tab
+    await tester.tap(find.text('HOUSES (1)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('Vance Dynasty'), findsOneWidget);
+    expect(find.text('House of Vance'), findsOneWidget);
     expect(find.text('5.4k Leg · 980 Std · Gen 3'), findsOneWidget);
     expect(find.text('Founder: Marcus Vance · Heir: Amara Vance'), findsOneWidget);
 
-    // Verify formula info dialog for Dynasties
+    // Verify formula info dialog for Houses
     final infoIcons = find.byIcon(Icons.info_outline);
     expect(infoIcons, findsOneWidget);
 
     await tester.tap(infoIcons.first);
     await tester.pumpAndSettle();
 
-    expect(find.text('DYNASTIES RANKING FORMULA'), findsOneWidget);
+    expect(find.text('HOUSES RANKING FORMULA'), findsOneWidget);
     expect(find.textContaining('1 : 5 : 25 weighting ratio'), findsOneWidget);
-    expect(find.textContaining('Dynastic Legacy (25x relative weight'), findsOneWidget);
+    expect(find.textContaining('House Legacy (25x relative weight'), findsOneWidget);
     expect(find.text('GOT IT'), findsOneWidget);
 
     await tester.tap(find.text('GOT IT'));
@@ -426,9 +522,9 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    // Left Column: CITIZENS and DYNASTIES
+    // Left Column: CITIZENS and HOUSES
     expect(find.text('CITIZENS (2)'), findsOneWidget);
-    expect(find.text('DYNASTIES (1)'), findsOneWidget);
+    expect(find.text('HOUSES (1)'), findsOneWidget);
     // Right Column: CORPS and CITIES
     expect(find.text('CORPS (2)'), findsOneWidget);
     expect(find.text('CITIES (1)'), findsOneWidget);

@@ -920,7 +920,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final senderName = msg['sender_display_name'] ??
         msg['sender_human_id'] ??
         'Citizen Diplomat';
-    final dynasty = msg['sender_dynasty_name']?.toString();
+    final house = (msg['sender_house_name'] ?? msg['sender_dynasty_name'])?.toString();
     final body = msg['body'] ?? '';
     final day = _parseNumber(msg['game_day']);
     final min = _parseNumber(msg['game_minute']);
@@ -961,7 +961,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                         overflow: TextOverflow.ellipsis,
                       ),
                     ),
-                    if (dynasty != null && dynasty.isNotEmpty) ...[
+                    if (house != null && house.isNotEmpty) ...[
                       const SizedBox(width: 5),
                       Container(
                         padding: const EdgeInsets.symmetric(
@@ -974,7 +974,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                               width: 0.6),
                         ),
                         child: Text(
-                          dynasty,
+                          house,
                           style: const TextStyle(
                             color: violetColor,
                             fontSize: 8.5,
@@ -1451,7 +1451,7 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
     final sender = dispatch['sender_display_name'] ??
         dispatch['sender_human_id'] ??
         'Sender';
-    final dynasty = dispatch['sender_dynasty_name']?.toString();
+    final house = (dispatch['sender_house_name'] ?? dispatch['sender_dynasty_name'])?.toString();
     final recipient = dispatch['recipient_display_name'] ??
         dispatch['recipient_human_id'] ??
         'Recipient';
@@ -1542,8 +1542,8 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                                 color: cyanAccentColor,
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w800)),
-                        if (dynasty != null && dynasty.isNotEmpty)
-                          Text('($dynasty)',
+                        if (house != null && house.isNotEmpty)
+                          Text('($house)',
                               style: const TextStyle(
                                   color: violetColor, fontSize: 10)),
                       ],

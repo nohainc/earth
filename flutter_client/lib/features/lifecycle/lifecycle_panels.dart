@@ -44,8 +44,10 @@ class LifeTodayPanel extends StatelessWidget {
   const LifeTodayPanel({super.key, required this.state, this.busy = false, this.action});
 
   Future<void> _editName(BuildContext context) async {
-    final controller = TextEditingController(
-        text: (state.human['display_name'] ?? state.human['name'] ?? '').toString());
+    final rawName =
+        (state.human['display_name'] ?? state.human['name'] ?? '').toString().trim();
+    final initialName = rawName.contains(' ') ? rawName.split(' ').first : rawName;
+    final controller = TextEditingController(text: initialName);
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
@@ -54,7 +56,7 @@ class LifeTodayPanel extends StatelessWidget {
           borderRadius: BorderRadius.circular(context.radiusPanel),
           side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
         ),
-        title: Text('Edit your name',
+        title: Text('Edit name',
             style: context.topicTitleStyle.copyWith(color: context.primaryColor)),
         content: TextField(
           controller: controller,
@@ -62,7 +64,7 @@ class LifeTodayPanel extends StatelessWidget {
           maxLength: 80,
           style: context.bodyStyle.copyWith(color: context.inkColor),
           decoration: InputDecoration(
-            labelText: 'Name and surname',
+            labelText: 'Name',
             labelStyle: context.widgetFooterStyle,
           ),
         ),
@@ -89,102 +91,357 @@ class LifeTodayPanel extends StatelessWidget {
     controller.dispose();
   }
 
+  Future<void> _editEpitaph(BuildContext context, String currentEpitaph) async {
+    final controller = TextEditingController(text: currentEpitaph);
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: context.panelColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(context.radiusPanel),
+          side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+        ),
+        title: Text('Edit citizen epitaph',
+            style: context.topicTitleStyle.copyWith(color: context.primaryColor)),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          maxLength: 160,
+          maxLines: 2,
+          style: context.bodyStyle.copyWith(color: context.inkColor),
+          decoration: InputDecoration(
+            labelText: 'Epitaph / Memorial Inscription',
+            labelStyle: context.widgetFooterStyle,
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: Text('CANCEL',
+                style: context.controlStyle.copyWith(color: context.mutedColor)),
+          ),
+          EarthButton(
+            label: 'SAVE',
+            onPressed: busy || action == null
+                ? null
+                : () async {
+                    final text = controller.text.trim();
+                    if (text.isEmpty) return;
+                    Navigator.pop(dialogContext);
+                    await action!(() => const EarthApi().updateEpitaph(text));
+                  },
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final human = state.human;
     final life = state.life;
-    final health = asDouble(human['health'] ?? human['vitality']);
-    final energy = asDouble(human['energy'] ?? human['stamina']);
-    final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']);
-    final legacy = asDouble(human['legacy'] ?? life['legacy']);
-    final fullName =
-        (human['display_name'] ?? human['name'] ?? 'YOUR LIFE').toString().trim();
+    final health = asDouble(human['health'] ?? human['vitality'] ?? life['health'] ?? life['vitality']) ?? 100.0;
+    final energy = asDouble(human['energy'] ?? human['stamina'] ?? life['energy'] ?? life['stamina']) ?? 100.0;
+    final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']) ?? 31;
+    final legacy = asDouble(human['legacy'] ?? life['legacy']) ?? 0.0;
+    final standing = asIntOr(human['standing'], 0);
+    final credits = asDouble(human['credits']) ?? 0.0;
+    final humanId = (human['id'] ?? 'H-0001').toString();
+    final rawFullName =
+        (human['display_name'] ?? human['name'] ?? 'CITIZEN').toString().trim();
+    final displayName = rawFullName.contains(' ') ? rawFullName.split(' ').first : rawFullName;
+    final initials = displayName.length >= 2
+        ? displayName.substring(0, 2).toUpperCase()
+        : 'OP';
+    final epitaph = (human['epitaph'] ??
+            life['epitaph'] ??
+            'Pioneered civilization across the frontier of Earth.')
+        .toString()
+        .trim();
     final lifeStatus =
-        life['status']?.toString() ?? human['life_status']?.toString();
+        life['status']?.toString() ?? human['life_status']?.toString() ?? 'ACTIVE';
+
+    final houseName = (life['houseName'] ??
+            life['house_name'] ??
+            human['house_name'] ??
+            'Founding Lineage')
+        .toString();
+    final generation = asIntOr(life['generation'] ?? human['generation'], 1);
+    final birthGameDay = asIntOr(
+        human['birth_game_day'] ??
+            human['birth_day'] ??
+            human['birthDay'] ??
+            life['birth_game_day'],
+        1);
+
+    final birthYear = ((birthGameDay - 1) ~/ 365) + 1;
+    final birthDayInYear = ((birthGameDay - 1) % 365) + 1;
+    final birthDayFormatted = 'Year $birthYear, Day $birthDayInYear';
+
+    final isMatured = human['politicalMaturity'] == true ||
+        (human['political_eligibility_game_day'] != null &&
+            asIntOr(state.clock['day'], 0) >= asIntOr(human['political_eligibility_game_day'], 0));
 
     final cityName = state.institutions['city'] is Map
         ? (state.institutions['city'] as Map)['name']?.toString().toUpperCase()
         : null;
+    final corporationName = (state.institutions['corporation'] is Map
+            ? (state.institutions['corporation'] as Map)['name']?.toString().toUpperCase()
+            : null) ??
+        (state.membership?['corporation_name']?.toString().toUpperCase()) ??
+        (state.membership?['name']?.toString().toUpperCase());
 
     final healthColor =
-        health != null && health < 40 ? context.warningColor : context.successColor;
+        health < 40 ? context.warningColor : context.successColor;
 
     return EarthSection(
       title: 'MY LIFE TODAY',
       showSurface: false,
+      showHeader: false,
       infoBulletPoints: const [
-        'Your current personal situation: health, energy, residence, work, and legacy.',
-        'Values marked unavailable require current personal data; they are not estimates.',
-        'Detailed financial and asset records remain in Finance and Business.',
+        'Your active citizen situation: biometric vitality, labor energy, municipal jurisdiction, and legal standing.',
+        'Health represents physical vitality (100% base). Life energy measures daily operational capacity.',
+        'All economic balances and productive assets remain synchronized with Finance and Business.',
       ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Center(
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(context.cardPadding),
+        decoration: BoxDecoration(
+          color: context.surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(context.radiusCard),
+          border: Border.all(color: context.subtleBorderColor),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // 1. Citizen Identity Header Row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                Text(
-                  fullName.toUpperCase(),
-                  textAlign: TextAlign.center,
-                  style: context.pageTitleStyle,
-                ),
-                if (action != null) ...[
-                  SizedBox(width: context.spacingInline),
-                  IconButton(
-                    tooltip: 'Edit name',
-                    icon: Icon(
-                      Icons.edit_outlined,
-                      size: context.iconSize,
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: context.primaryColor.withValues(alpha: .15),
+                  child: Text(
+                    initials,
+                    style: context.widgetTitleStyle.copyWith(
                       color: context.primaryColor,
+                      fontWeight: FontWeight.bold,
                     ),
-                    onPressed: busy ? null : () => _editName(context),
                   ),
-                ],
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              displayName.toUpperCase(),
+                              style: context.topicTitleStyle.copyWith(
+                                color: context.inkColor,
+                                fontWeight: FontWeight.w700,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (action != null) ...[
+                            const SizedBox(width: 6),
+                            IconButton(
+                              tooltip: 'Edit name',
+                              icon: Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: context.primaryColor,
+                              ),
+                              onPressed: busy ? null : () => _editName(context),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              epitaph,
+                              style: context.bodyStyle.copyWith(
+                                color: context.inkColor.withValues(alpha: .9),
+                                fontStyle: FontStyle.italic,
+                                fontSize: 13.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (action != null) ...[
+                            const SizedBox(width: 6),
+                            IconButton(
+                              tooltip: 'Edit epitaph / motto',
+                              icon: Icon(
+                                Icons.edit_outlined,
+                                size: 16,
+                                color: context.primaryColor,
+                              ),
+                              onPressed: busy ? null : () => _editEpitaph(context, epitaph),
+                              padding: EdgeInsets.zero,
+                              constraints: const BoxConstraints(),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
               ],
             ),
+            const SizedBox(height: 14),
+            Divider(height: 1, color: context.subtleBorderColor),
+            const SizedBox(height: 10),
+            // 2. Two-Column Single-Row Key-Value Grid with White Values and Full-Row Residence / Corporation
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isWide = constraints.maxWidth >= 450;
+                final leftColumn = [
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.person_outline,
+                    label: 'AGE',
+                    value: '$age',
+                    accentColor: context.primaryColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.cake_outlined,
+                    label: 'BIRTH DAY',
+                    value: birthDayFormatted,
+                    accentColor: context.primaryColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.alt_route_outlined,
+                    label: 'GENERATION',
+                    value: '$generation',
+                    accentColor: context.secondaryColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.how_to_vote_outlined,
+                    label: 'POLITICAL STATUS',
+                    value: isMatured ? 'ELIGIBLE' : 'IN TRAINING',
+                    accentColor: isMatured ? context.successColor : context.mutedColor,
+                  ),
+                ];
+
+                final rightColumn = [
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.favorite_outline,
+                    label: 'BIOMETRIC HEALTH',
+                    value: '${health.toStringAsFixed(0)}%',
+                    accentColor: healthColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.bolt_outlined,
+                    label: 'LIFE ENERGY',
+                    value: '${energy.toStringAsFixed(0)}%',
+                    accentColor: context.warningColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.verified_user_outlined,
+                    label: 'CIVIC STANDING',
+                    value: formatWholeNumber(standing.toDouble()),
+                    accentColor: context.primaryColor,
+                  ),
+                  _buildAttributeRow(
+                    context,
+                    icon: Icons.auto_awesome_outlined,
+                    label: 'LIFETIME LEGACY',
+                    value: formatWholeNumber(legacy),
+                    accentColor: context.secondaryColor,
+                  ),
+                ];
+
+                return Column(
+                  children: [
+                    if (isWide)
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: Column(children: leftColumn)),
+                          const SizedBox(width: 24),
+                          Expanded(child: Column(children: rightColumn)),
+                        ],
+                      )
+                    else ...[
+                      ...leftColumn,
+                      ...rightColumn,
+                    ],
+                    const SizedBox(height: 2),
+                    Divider(height: 12, color: context.subtleBorderColor),
+                    _buildAttributeRow(
+                      context,
+                      icon: Icons.corporate_fare_outlined,
+                      label: 'CORPORATION',
+                      value: corporationName ?? 'INDEPENDENT',
+                      accentColor: context.secondaryColor,
+                    ),
+                    _buildAttributeRow(
+                      context,
+                      icon: Icons.location_city_outlined,
+                      label: 'RESIDENCE',
+                      value: cityName ?? 'INDEPENDENT',
+                      accentColor: context.secondaryColor,
+                    ),
+                  ],
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAttributeRow(
+    BuildContext context, {
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color accentColor,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Icon(icon, size: 14, color: accentColor),
+          const SizedBox(width: 6),
+          Text(
+            label,
+            style: context.bodyStyle.copyWith(
+              color: context.mutedColor,
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
           ),
-          SizedBox(height: context.spacingTitleOffset),
-          EarthMetricGrid(
-            metrics: [
-              if (cityName != null)
-                EarthMetricTile(
-                  label: 'RESIDENCE',
-                  value: cityName,
-                  subtitle: 'Current municipal location',
-                  icon: Icons.location_city_outlined,
-                  accentColor: context.secondaryColor,
-                ),
-              EarthMetricTile(
-                label: 'AGE',
-                value: age == null ? 'UNAVAILABLE' : 'Age $age',
-                subtitle: (lifeStatus ?? 'ACTIVE').toUpperCase(),
-                icon: Icons.person_outline,
-                accentColor: context.primaryColor,
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              value,
+              textAlign: TextAlign.right,
+              style: context.bodyStyle.copyWith(
+                color: Colors.white,
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
               ),
-              EarthMetricTile(
-                label: 'HEALTH',
-                value: health == null ? 'UNAVAILABLE' : '${health.toStringAsFixed(0)}%',
-                subtitle: 'Personal wellbeing',
-                icon: Icons.favorite_outline,
-                accentColor: healthColor,
-              ),
-              EarthMetricTile(
-                label: 'LIFE ENERGY',
-                value: energy == null ? 'UNAVAILABLE' : '${energy.toStringAsFixed(0)}%',
-                subtitle: 'Daily capacity',
-                icon: Icons.bolt_outlined,
-                accentColor: context.warningColor,
-              ),
-              if (cityName == null)
-                EarthMetricTile(
-                  label: 'LEGACY',
-                  value: legacy == null ? 'UNAVAILABLE' : formatWholeNumber(legacy),
-                  subtitle: 'Lifetime contribution',
-                  icon: Icons.auto_awesome_outlined,
-                  accentColor: context.secondaryColor,
-                ),
-            ],
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),
@@ -204,6 +461,16 @@ class SuccessionPanel extends StatelessWidget {
     required this.action,
   });
 
+  Future<void> _editSuccessorName(BuildContext context, String currentName) async {
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => _EditSuccessorDialog(
+        initialName: currentName,
+        action: action,
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final life = state.life;
@@ -212,11 +479,6 @@ class SuccessionPanel extends StatelessWidget {
             human['life_status']?.toString() ??
             'active')
         .toLowerCase();
-    final age = asIntOr(
-        life['ageYears'] ?? human['age_years'] ?? human['ageYears'], 31);
-    final dynastyName = (life['dynastyName'] ?? life['dynasty_name'])?.toString();
-    final dynastyGeneration = asIntOr(
-        life['generation'] ?? human['generation'], 1);
     final rawSuccessor = life['successor'];
     final successor =
         rawSuccessor is Map<String, dynamic> ? rawSuccessor : null;
@@ -236,38 +498,91 @@ class SuccessionPanel extends StatelessWidget {
     final isEstatePeriod = lifeStatus == 'estate';
     final isDeceased = lifeStatus == 'deceased';
 
-    Color statusColor = context.primaryColor;
-    if (isEstatePeriod) statusColor = context.warningColor;
-    if (isDeceased) statusColor = context.errorColor;
-
-    String generationalStage = 'PRIME OPERATIVE (100% LABOR EFFICIENCY)';
-    Color stageColor = context.primaryColor;
-    if (age >= 65) {
-      generationalStage =
-          'DYNASTIC PATRIARCH/MATRIARCH (+25% GOVERNANCE WISDOM)';
-      stageColor = context.secondaryColor;
-    } else if (age >= 45) {
-      generationalStage = 'SENIOR EXECUTIVE (BALANCED PRODUCTIVITY)';
-      stageColor = context.successColor;
-    }
-
     final credits = asDouble(human['credits']) ?? 0.0;
     final estimatedTax = isEstatePeriod ? credits * 0.20 : credits * 0.10;
     final estimatedNet = (credits - estimatedTax).clamp(0.0, double.infinity);
 
+    final displayName = successorName != null && successorName.isNotEmpty
+        ? successorName
+        : 'NO SUCCESSOR DESIGNATED';
+    final initials = displayName.length >= 2
+        ? displayName.substring(0, 2).toUpperCase()
+        : 'HE';
+
     return EarthSection(
-      title: 'LIFE & LEGACY / SUCCESSION PLAN',
+      title: 'SUCCESSION PLAN',
       showSurface: false,
       infoBulletPoints: const [
-        'Your succession plan keeps your work, assets, and responsibilities moving forward.',
-        'At the end of this life, you can continue as a registered heir who receives the estate, or begin a new adult character and carry forward part of the dynasty legacy.',
-        'A new character starts in a city and follows that city’s corporation affiliation; leaving that corporation means returning to independent life.',
-        'Detailed ownership and financial records belong in Business and Finance; this page focuses on the person and their legacy.',
+        'Your succession plan keeps your enterprises, machinery, and capital moving forward without liquidation.',
+        'Tap the edit icon to designate or update your heir. Estate buffer default is 30 game days.',
+        'Standard statutory distribution: 70% to primary heir, 20% to home city trust, 10% to House reserve.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. BIOLOGICAL AGE & GENERATIONAL STAGE
+          // 1. SUCCESSOR NAME CARD WITH EDIT ICON (LIKE THE USER CARD ABOVE)
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(context.cardPadding),
+            decoration: BoxDecoration(
+              color: context.surfaceColor.withValues(alpha: .75),
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.subtleBorderColor),
+            ),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  radius: 24,
+                  backgroundColor: context.secondaryColor.withValues(alpha: .15),
+                  child: Text(
+                    initials,
+                    style: context.widgetTitleStyle.copyWith(
+                      color: context.secondaryColor,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Row(
+                    children: [
+                      Flexible(
+                        child: Text(
+                          displayName,
+                          style: context.topicTitleStyle.copyWith(
+                            color: context.inkColor,
+                            fontWeight: FontWeight.w700,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: 'Edit successor',
+                        icon: Icon(
+                          Icons.edit_outlined,
+                          size: 16,
+                          color: context.primaryColor,
+                        ),
+                        onPressed: busy
+                            ? null
+                            : () => _editSuccessorName(
+                                  context,
+                                  successorName ?? '',
+                                ),
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          SizedBox(height: context.spacingTitleOffset),
+
+          // 2. CANONICAL SUCCESSION RULES & ALLOCATION BREAKDOWN
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(context.cardPadding),
@@ -285,157 +600,170 @@ class SuccessionPanel extends StatelessWidget {
                     Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('BIOLOGICAL AGE: ', style: context.widgetTitleStyle),
-                        Text('$age YEARS', style: context.widgetValueStyle),
+                        Icon(Icons.gavel_outlined,
+                            size: context.iconSize, color: context.primaryColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'CANONICAL SUCCESSION RULES',
+                          style: context.widgetTitleStyle.copyWith(
+                            color: context.primaryColor,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
                       ],
                     ),
                     EarthBadge(
                       label: lifeStatus.toUpperCase(),
-                      customColor: statusColor,
+                      customColor: isEstatePeriod
+                          ? context.warningColor
+                          : (isDeceased ? context.errorColor : context.successColor),
                     ),
                   ],
                 ),
-                const SizedBox(height: 6),
-                EarthBadge(
-                  label: generationalStage,
-                  customColor: stageColor,
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 8,
+                  runSpacing: 6,
+                  children: [
+                    EarthStatusPill(
+                        label: 'PRIMARY HEIR',
+                        value: '$heirPct%',
+                        color: context.primaryColor),
+                    EarthStatusPill(
+                        label: 'MUNICIPAL TRUST',
+                        value: '$trustPct%',
+                        color: context.successColor),
+                    EarthStatusPill(
+                        label: 'HOUSE RESERVE',
+                        value: '$reservePct%',
+                        color: context.secondaryColor),
+                    EarthStatusPill(
+                        label: 'ESTATE BUFFER',
+                        value: '$estatePeriodDays DAYS',
+                        color: context.primaryColor),
+                  ],
                 ),
-                if (dynastyName != null && dynastyName.trim().isNotEmpty) ...[
-                  SizedBox(height: context.spacingTopic),
-                  Row(
-                    children: [
-                      Icon(Icons.account_tree_outlined,
-                          size: context.iconSize,
-                          color: context.primaryColor),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'DYNASTY: ${dynastyName.toUpperCase()} · GENERATION $dynastyGeneration',
-                          style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
+                const SizedBox(height: 10),
+                Text(
+                  '• Primary Heir inherits $heirPct% of liquid credits plus 100% of business shares, production machines, buildings, and fleet licenses.',
+                  style: context.widgetFooterStyle,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '• Municipal Trust receives $trustPct% for city services, and House Reserve receives $reservePct% for generational house perks.',
+                  style: context.widgetFooterStyle,
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  '• Statutory Estate Buffer is 30 game days to claim inheritance prior to public liquidation.',
+                  style: context.widgetFooterStyle,
+                ),
                 const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(3),
-                  child: LinearProgressIndicator(
-                    value: (age / 90.0).clamp(0.0, 1.0),
-                    minHeight: 5,
-                    color: stageColor,
-                    backgroundColor: Colors.white10,
-                  ),
+                Text(
+                  'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
+                  style: context.widgetFooterStyle.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  'Life stage and succession readiness are based on your current profile',
-                  style: context.widgetFooterStyle,
+                  isEstatePeriod
+                      ? 'Estate state: ACTIVE ESTATE PERIOD (Awaiting settlement or liquidation)'
+                      : 'Estate state: PENDING (Protected transition ready upon mortality)',
+                  style: context.widgetFooterStyle.copyWith(
+                    color: isEstatePeriod ? context.warningColor : context.primaryColor,
+                  ),
                 ),
               ],
             ),
           ),
 
-          SizedBox(height: context.spacingTitleOffset),
-
-          // 2. TESTAMENTARY WILL & SUCCESSOR PLAN
-          if (successorName != null) ...[
-            Container(
-              padding: EdgeInsets.all(context.cardPadding),
-              decoration: BoxDecoration(
-                color: context.surfaceColor.withValues(alpha: .75),
-                borderRadius: BorderRadius.circular(context.radiusCard),
-                border: Border.all(color: context.subtleBorderColor),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.history_edu_outlined,
-                          size: context.iconSize, color: context.primaryColor),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          'SUCCESSOR: $successorName ${successorHumanId != null ? '($successorHumanId)' : ''}',
-                          style: context.widgetValueStyle.copyWith(color: context.inkColor),
-                        ),
+          // 3. SETTLE ESTATE ACTION (ONLY IN ACTIVE ESTATE PERIOD)
+          if (isEstatePeriod && successorName != null) ...[
+            SizedBox(height: context.spacingTitleOffset),
+            EarthButton(
+              label: 'SETTLE ESTATE INHERITANCE',
+              variant: EarthButtonVariant.primary,
+              onPressed: busy
+                  ? null
+                  : () => showSettleInheritanceDialog(
+                        context,
+                        action,
+                        predecessorId: human['id']?.toString() ?? 'H-0044',
+                        defaultSuccessorName: successorName,
                       ),
-                    ],
-                  ),
-                  const SizedBox(height: 4),
-                  Text(
-                    'Registered on Day $registeredDay · Estate buffer: $estatePeriodDays days',
-                    style: context.widgetFooterStyle,
-                  ),
-                  const SizedBox(height: 8),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 6,
-                    children: [
-                      EarthStatusPill(
-                          label: 'PRIMARY HEIR', value: '$heirPct%', color: context.primaryColor),
-                      EarthStatusPill(
-                          label: 'MUNICIPAL TRUST', value: '$trustPct%', color: context.successColor),
-                      EarthStatusPill(
-                          label: 'DYNASTIC RESERVE', value: '$reservePct%', color: context.secondaryColor),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
-                    style: context.widgetFooterStyle.copyWith(fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    isEstatePeriod
-                        ? 'Estate state: ACTIVE ESTATE PERIOD (Awaiting settlement or liquidation)'
-                        : 'Estate state: PENDING (Protected transition ready upon mortality)',
-                    style: context.widgetFooterStyle.copyWith(
-                      color: isEstatePeriod ? context.warningColor : context.primaryColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ] else ...[
-            Text(
-              'No succession plan registered. In the event of mortality, unclaimed assets will be liquidated to the municipal treasury after the estate period.',
-              style: context.bodyStyle,
             ),
           ],
-          SizedBox(height: context.spacingTitleOffset),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              EarthButton(
-                label: successorName == null
-                    ? 'PLAN SUCCESSION & WILL'
-                    : 'UPDATE WILL & SUCCESSOR',
-                icon: Icons.edit_note_outlined,
-                variant: EarthButtonVariant.secondary,
-                onPressed: busy
-                    ? null
-                    : () => showSuccessorComposerDialog(context, action),
-              ),
-              if (isEstatePeriod && successorName != null)
-                EarthButton(
-                  label: 'SETTLE ESTATE INHERITANCE',
-                  variant: EarthButtonVariant.primary,
-                  onPressed: busy
-                      ? null
-                      : () => showSettleInheritanceDialog(
-                            context,
-                            action,
-                            predecessorId: human['id']?.toString() ?? 'H-0044',
-                            defaultSuccessorName: successorName,
-                          ),
-                ),
-            ],
-          ),
         ],
       ),
+    );
+  }
+}
+
+class _EditSuccessorDialog extends StatefulWidget {
+  final String initialName;
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const _EditSuccessorDialog({
+    required this.initialName,
+    required this.action,
+  });
+
+  @override
+  State<_EditSuccessorDialog> createState() => _EditSuccessorDialogState();
+}
+
+class _EditSuccessorDialogState extends State<_EditSuccessorDialog> {
+  late final TextEditingController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialName);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      backgroundColor: context.panelColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(context.radiusPanel),
+        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
+      ),
+      title: Text('Edit successor name',
+          style: context.topicTitleStyle.copyWith(color: context.primaryColor)),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        maxLength: 80,
+        style: context.bodyStyle.copyWith(color: context.inkColor),
+        decoration: InputDecoration(
+          labelText: 'Name',
+          labelStyle: context.widgetFooterStyle,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('CANCEL',
+              style: context.controlStyle.copyWith(color: context.mutedColor)),
+        ),
+        EarthButton(
+          label: 'SAVE',
+          onPressed: () async {
+            final name = _controller.text.trim();
+            Navigator.pop(context);
+            await widget.action(() => const EarthApi().registerSuccessor(
+                  name,
+                  estatePeriodDays: 30,
+                ));
+          },
+        ),
+      ],
     );
   }
 }
@@ -1711,11 +2039,11 @@ class PantheonPanel extends StatelessWidget {
         (pantheon['achievements'] as List<dynamic>?) ?? const [];
 
     return EarthSection(
-      title: 'PANTHEON / DYNASTIC ARCHIVE & LEGACY',
+      title: 'PANTHEON / HOUSE ARCHIVE & LEGACY',
       showSurface: false,
       infoBulletPoints: const [
         'Persistent Civilization Record: When a citizen passes away, their biographical, economic, and political record is permanently inscribed in the UC Historical Archive.',
-        'Multi-Generational Dynastic Lineage: Tracks continuous succession chains from founding ancestors to living heirs.',
+        'Multi-Generational House Lineage: Tracks continuous succession chains from founding ancestors to living heirs.',
         'Composite Legacy Score: Calculated across lifetime economic production, public civic service, philanthropic endowments, and constitutional stability.',
       ],
       child: Column(
@@ -1759,9 +2087,9 @@ class PantheonPanel extends StatelessWidget {
             ),
           ),
 
-          // 1. Dynastic Succession Lineage Tree
+          // 1. House Succession Lineage Tree
           Text(
-            'DYNASTIC SUCCESSION LINEAGE TREE',
+            'HOUSE SUCCESSION LINEAGE TREE',
             style: context.widgetTitleStyle,
           ),
           SizedBox(height: context.spacingInline),
@@ -1775,7 +2103,7 @@ class PantheonPanel extends StatelessWidget {
               return Padding(
                 padding: EdgeInsets.symmetric(vertical: context.spacingInline),
                 child: Text(
-                  'No dynasty lineage records are available yet. Your first succession will establish the family archive.',
+                  'No house lineage records are available yet. Your first succession will establish the family archive.',
                   style: context.bodyStyle.copyWith(color: context.mutedColor),
                 ),
               );
@@ -1790,11 +2118,11 @@ class PantheonPanel extends StatelessWidget {
                 final name = entry['display_name'] ?? entry['name'] ?? 'Unknown Human';
                 final score = entry['final_legacy'] ??
                     entry['composite_legacy_score'] ?? entry['legacy'] ?? 0;
-                final node = _dynastyNode(
+                final node = _houseNode(
                   context: context,
                   generation: 'GEN $generation · ${isLiving ? 'CURRENT ACTIVE CITIZEN' : 'ANCESTOR'}',
                   name: name.toString(),
-                  details: isLiving ? 'Active · Current dynasty member' : 'Archived · Historical dynasty member',
+                  details: isLiving ? 'Active · Current house member' : 'Archived · Historical house member',
                   score: score.toString(),
                   color: isLiving ? context.primaryColor : context.secondaryColor,
                   isLast: indexed.$1 == recorded.length - 1,
@@ -1889,7 +2217,7 @@ class PantheonPanel extends StatelessWidget {
     );
   }
 
-  Widget _dynastyNode({
+  Widget _houseNode({
     required BuildContext context,
     required String generation,
     required String name,

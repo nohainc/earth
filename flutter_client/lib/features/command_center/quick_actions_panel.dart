@@ -49,12 +49,12 @@ class QuickActionsPanel extends StatelessWidget {
         color: context.secondaryColor,
       ),
       (
-        label: 'PROTECT THE DYNASTY',
+        label: 'PROTECT THE HOUSE',
         detail: successor is Map && successor.isNotEmpty
             ? 'Successor plan is recorded'
             : 'Register a continuity plan',
-        section: successor is Map && successor.isNotEmpty ? 'dynasty' : 'life',
-        icon: Icons.account_tree_outlined,
+        section: successor is Map && successor.isNotEmpty ? 'house' : 'life',
+        icon: Icons.shield_outlined,
         color: context.warningColor,
       ),
       (

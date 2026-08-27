@@ -26,6 +26,7 @@ extension EarthApiInstitutions on EarthApi {
     await _request('/api/cities/$cityId/budget', method: 'POST', body: {
       'category': category,
       'amount': 100,
+      'correlationId': 'city-budget-$cityId-${DateTime.now().microsecondsSinceEpoch}',
     });
     return world();
   }
@@ -65,7 +66,11 @@ extension EarthApiInstitutions on EarthApi {
 
   Future<EarthState> createCity(String name, String communityId) async {
     await _request('/api/cities',
-        method: 'POST', body: {'name': name, 'communityId': communityId});
+        method: 'POST', body: {
+          'name': name,
+          'communityId': communityId,
+          'correlationId': 'city-formation-${DateTime.now().microsecondsSinceEpoch}',
+        });
     return world();
   }
 

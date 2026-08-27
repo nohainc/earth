@@ -9,169 +9,76 @@ class ConstitutionPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final constitutionalRules = state.json['constitutionalRules'] is List
+        ? (state.json['constitutionalRules'] as List)
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+            .toList()
+        : const <Map<String, dynamic>>[];
+    final constitutionalChanges = state.history['events'] is List
+        ? (state.history['events'] as List)
+            .whereType<Map>()
+            .map(Map<String, dynamic>.from)
+            .where((event) {
+              final type = event['event_type']?.toString().toLowerCase() ?? '';
+              return type.contains('rule') ||
+                  type.contains('charter') ||
+                  type.contains('tax') ||
+                  type.contains('constitution');
+            })
+            .take(12)
+            .toList()
+        : const <Map<String, dynamic>>[];
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // 1. Top Section & Core Invariants
-          EarthSection(
-            title: 'PLANETARY CONSTITUTION & GOVERNANCE',
-            showSurface: false,
-            infoBulletPoints: const [
-              'The Planetary Constitution establishes immutable economic and civil invariants that bind all corporations, cities, and citizens.',
-              'Tier 1 (Earth Universal Law) restricts and bounds Tier 2 (Corporate Charters) and Tier 3 (Municipal Ordinances).',
-              'Subordinate entities may customize policies within constitutional parameters, but any rule exceeding parent limits is voided by High Court injunction.',
-            ],
-            child: EarthMetricGrid(
-              metrics: [
-                EarthMetricTile(
-                  label: 'HIERARCHY TIERS',
-                  value: '3 TIERS',
-                  icon: Icons.account_tree_outlined,
-                  accentColor: context.primaryColor,
-                ),
-                EarthMetricTile(
-                  label: 'IMMUTABLE INVARIANTS',
-                  value: '5 LAWS',
-                  icon: Icons.shield_outlined,
-                  accentColor: context.primaryColor,
-                ),
-                EarthMetricTile(
-                  label: 'JUDICIAL REVIEW',
-                  value: 'ACTIVE',
-                  icon: Icons.gavel_outlined,
-                  accentColor: context.secondaryColor,
-                ),
-              ],
-            ),
-          ),
-
-          SizedBox(height: context.spacingSection),
-
-          // 2. Governance & Override Model
+          // Governance & Override Model
           EarthSection(
             title: 'GOVERNANCE HIERARCHY & OVERRIDE MODEL',
             showSurface: false,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                _buildHierarchyCard(
-                  context,
-                  tier: 'TIER 1 · TOP LEVEL',
-                  title: 'EARTH (UNIVERSAL CITIZENSHIP)',
-                  scope: 'PLANETARY INVARIANTS & STATUTORY LAW',
-                  color: context.primaryColor,
-                  icon: Icons.public_rounded,
-                  rules: [
-                    'Constitutional property rights & non-negative ledger invariants.',
-                    'Central Market uniform clearing & non-discriminatory access.',
-                    'Mandatory 3-day cooling-off period for democratic legislation.',
-                    'High Court judicial injunction & constitutional appeal authority.',
-                  ],
-                  overridable: false,
-                ),
-                SizedBox(height: context.spacingControl),
-                _buildHierarchyCard(
-                  context,
-                  tier: 'TIER 2 · ENTERPRISE LEVEL',
-                  title: 'CORPORATIONS',
-                  scope: 'CORPORATE CHARTERS & BYLAWS',
-                  color: context.secondaryColor,
-                  icon: Icons.apartment_rounded,
-                  rules: [
-                    'Internal tax charter & operational fee deductions.',
-                    'Corporate dividend distribution formula & payout cadence.',
-                    'Membership admission & shareholder supermajority protections (67%).',
-                    'Executive officer appointments & operational delegation.',
-                  ],
-                  overridable: true,
-                  parentConstraint: 'Restricted by Tier 1 Earth Constitutional Invariants.',
-                ),
-                SizedBox(height: context.spacingControl),
-                _buildHierarchyCard(
-                  context,
-                  tier: 'TIER 3 · LOCAL LEVEL',
-                  title: 'CITIES & MUNICIPALITIES',
-                  scope: 'MUNICIPAL ORDINANCES & ESSENTIAL SERVICES',
-                  color: context.warningColor,
-                  icon: Icons.location_city_rounded,
-                  rules: [
-                    'Municipal utility tariffs (Energy, Food, Water, Materials).',
-                    'Local residency eligibility, registration & housing allocation.',
-                    'Public infrastructure budgets & community initiatives.',
-                  ],
-                  overridable: true,
-                  parentConstraint: 'Restricted by Tier 1 Earth Law & Tier 2 Corporate Charters.',
-                ),
-              ],
-            ),
+            child: _buildTierFlow(context),
           ),
 
           SizedBox(height: context.spacingSection),
 
-          // 3. Active Constitutional Statutes
+          // Constitution Code
           EarthSection(
-            title: 'ACTIVE PLANETARY STATUTES',
+            title: 'CONSTITUTION CODE',
             showSurface: false,
-            child: EarthDataList(
-              children: [
-                _buildStatuteRow(
-                  context,
-                  code: 'STATUTE-001',
-                  title: 'Central Market Clearing & Fair Allocation',
-                  category: 'MARKET & COMMERCE',
-                  status: 'IMMUTABLE INVARIANT',
-                  isImmutable: true,
-                  summary:
-                      'All secondary trade across Food, Materials, Energy, and Computing settles through uniform clearing price mechanisms without monopolistic routing.',
-                  showDivider: true,
-                ),
-                _buildStatuteRow(
-                  context,
-                  code: 'STATUTE-002',
-                  title: 'Macroeconomic Statutory Citizen Levy',
-                  category: 'FINANCE & REVENUE',
-                  status: 'DELEGATED VARIABLE',
-                  isImmutable: false,
-                  summary:
-                      'Base planetary levy rate on commercial transaction volume. Corporations may levy additional fees up to a maximum constitutional ceiling of 15.0%.',
-                  showDivider: true,
-                ),
-                _buildStatuteRow(
-                  context,
-                  code: 'STATUTE-003',
-                  title: 'Democratic Ballot Quorum & Supermajority Thresholds',
-                  category: 'GOVERNANCE',
-                  status: 'IMMUTABLE INVARIANT',
-                  isImmutable: true,
-                  summary:
-                      'Legislation requires minimum 25% citizen participation quorum and 50% majority approval. Minority shareholder motions require 67% supermajority.',
-                  showDivider: true,
-                ),
-                _buildStatuteRow(
-                  context,
-                  code: 'STATUTE-004',
-                  title: 'Mandatory Legislative Cooling-Off & Judicial Review',
-                  category: 'JUSTICE & APPEALS',
-                  status: 'IMMUTABLE INVARIANT',
-                  isImmutable: true,
-                  summary:
-                      'Passed proposals enter a mandatory 3 game-day cooling-off window prior to ledger execution to allow affected parties to file High Court constitutional challenges.',
-                  showDivider: true,
-                ),
-                _buildStatuteRow(
-                  context,
-                  code: 'STATUTE-005',
-                  title: 'Dynastic Succession & Testamentary Integrity',
-                  category: 'CIVIL RIGHTS',
-                  status: 'IMMUTABLE INVARIANT',
-                  isImmutable: true,
-                  summary:
-                      'Guarantees inheritance transfer of registered businesses, private assets, dynastic heirlooms, and accumulated legacy points to designated heirs upon end-of-life.',
-                  showDivider: false,
-                ),
-              ],
-            ),
+            child: constitutionalRules.isEmpty
+                ? const EarthEmptyState(
+                    message: 'Constitutional rules are unavailable until the rule registry is applied.',
+                    icon: Icons.gavel_outlined,
+                  )
+                : _buildCodeFromRules(context, constitutionalRules),
+          ),
+
+          SizedBox(height: context.spacingSection),
+
+          EarthSection(
+            title: 'CONSTITUTIONAL HISTORY',
+            showSurface: false,
+            child: constitutionalChanges.isEmpty
+                ? const EarthEmptyState(
+                    message: 'No constitutional or charter changes have been recorded yet.',
+                    icon: Icons.history_outlined,
+                  )
+                : EarthDataList(
+                    children: constitutionalChanges.indexed.map((indexed) {
+                      final event = indexed.$2;
+                      return EarthDataRow(
+                        title: event['title']?.toString() ?? 'Rule change',
+                        subtitle: 'Game day ${event['game_day'] ?? '—'} · ${event['event_type'] ?? 'governance'}',
+                        leading: Icon(
+                          Icons.history_outlined,
+                          size: context.iconSize,
+                          color: context.secondaryColor,
+                        ),
+                        showDivider: indexed.$1 != constitutionalChanges.length - 1,
+                      );
+                    }).toList(),
+                  ),
           ),
         ],
       ),
@@ -222,7 +129,7 @@ class ConstitutionPanel extends StatelessWidget {
                 ),
               ),
               EarthBadge(
-                label: overridable ? 'DELEGATED' : 'IMMUTABLE',
+                label: overridable ? 'OVERRIDES ALLOWED' : 'BASELINE',
                 customColor: overridable ? context.secondaryColor : context.primaryColor,
               ),
             ],
@@ -252,6 +159,62 @@ class ConstitutionPanel extends StatelessWidget {
     );
   }
 
+  Widget _buildTierFlow(BuildContext context) {
+    Widget tier(IconData icon, String label, String detail, Color color) => Expanded(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(icon, color: color, size: context.iconSize + 4),
+              const SizedBox(height: 6),
+              Text(label, textAlign: TextAlign.center, style: context.widgetValueStyle),
+              const SizedBox(height: 2),
+              Text(detail, textAlign: TextAlign.center, style: context.captionStyle),
+            ],
+          ),
+        );
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor.withValues(alpha: .75),
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      child: Column(
+        children: [
+          Text('A later permitted override replaces the value before it.', style: context.widgetFooterStyle),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              tier(Icons.public_outlined, 'EARTH', 'Complete baseline', context.primaryColor),
+              Icon(Icons.arrow_forward_rounded, color: context.mutedColor),
+              tier(Icons.apartment_outlined, 'CORPORATION', 'Permitted override', context.secondaryColor),
+              Icon(Icons.arrow_forward_rounded, color: context.mutedColor),
+              tier(Icons.location_city_outlined, 'CITY', 'Final permitted override', context.warningColor),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildResolutionArrow(BuildContext context, String label) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Expanded(child: Divider(color: context.subtleBorderColor)),
+          const SizedBox(width: 8),
+          Icon(Icons.arrow_downward_rounded, size: 16, color: context.mutedColor),
+          const SizedBox(width: 8),
+          Text(label, style: context.captionStyle),
+          const SizedBox(width: 8),
+          Expanded(child: Divider(color: context.subtleBorderColor)),
+        ],
+      ),
+    );
+  }
+
   Widget _buildStatuteRow(
     BuildContext context, {
     required String code,
@@ -262,21 +225,95 @@ class ConstitutionPanel extends StatelessWidget {
     required String summary,
     required bool showDivider,
   }) {
+    final values = switch (code) {
+      '1.1' => ('Earth baseline', 'Earth, Corporation, or City source'),
+      '1.2' => ('Rule-specific authority', 'Only the levels named by that rule'),
+      '2.1' => ('Earth income levy', '0–50%'),
+      '2.2' => ('Earth sales levy', '0–25%'),
+      '2.3' => ('Earth business levy', '0–50%'),
+      '2.4' => ('Earth property baseline', '0–30%'),
+      '3.1' => ('Active, politically eligible member or resident', null),
+      '3.2' => ('25% quorum · 50% approval', 'Active governance-rule version'),
+      '3.3' => ('1 game-day implementation delay', null),
+      '4.1' => ('Open admission', 'Open or approval'),
+      _ => (category, status),
+    };
     return EarthDataRow(
       title: title,
-      subtitle: '$code · $category\n$summary',
-      leading: Icon(
-        isImmutable ? Icons.lock_outline_rounded : Icons.tune_rounded,
-        size: context.iconSize,
-        color: isImmutable ? context.primaryColor : context.secondaryColor,
-      ),
-      badges: [
-        EarthBadge(
-          label: isImmutable ? 'IMMUTABLE' : 'OVERRIDABLE',
-          variant: isImmutable ? EarthBadgeVariant.primary : EarthBadgeVariant.neutral,
+      subtitle: summary,
+      secondarySubtitle: values.$2 == null
+          ? 'Default: ${values.$1}'
+          : 'Default: ${values.$1} · Permitted values: ${values.$2}',
+      leading: SizedBox(
+        width: 30,
+        child: Text(
+          code,
+          style: context.topicTitleStyle.copyWith(color: context.primaryColor),
         ),
-      ],
+      ),
       showDivider: showDivider,
     );
   }
+
+  Widget _buildCodePart(
+    BuildContext context,
+    String title,
+    List<Widget> rules,
+  ) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.spacingTopic),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: context.topicTitleStyle),
+          const SizedBox(height: 8),
+          EarthDataList(children: rules),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCodeFromRules(BuildContext context, List<Map<String, dynamic>> rules) {
+    const partTitles = {
+      1: 'PART 1 · GENERAL PROVISIONS',
+      2: 'PART 2 · REVENUE & FINANCE',
+      3: 'PART 3 · DEMOCRATIC GOVERNANCE',
+      4: 'PART 4 · INSTITUTIONAL MEMBERSHIP',
+    };
+    final grouped = <int, List<Map<String, dynamic>>>{};
+    for (final rule in rules) {
+      final part = int.tryParse(rule['part_number']?.toString() ?? '') ?? 0;
+      grouped.putIfAbsent(part, () => []).add(rule);
+    }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: grouped.entries.map((entry) {
+        final rows = entry.value;
+        return _buildCodePart(
+          context,
+          partTitles[entry.key] ?? 'PART ${entry.key}',
+          rows.asMap().entries.map((indexed) {
+            final rule = indexed.value;
+            final permitted = rule['permitted_values']?.toString();
+            return EarthDataRow(
+              title: rule['title']?.toString() ?? 'Rule',
+              subtitle: rule['description']?.toString() ?? '',
+              secondarySubtitle: permitted == null || permitted.isEmpty
+                  ? 'Default: ${rule['default_value'] ?? '—'}'
+                  : 'Default: ${rule['default_value'] ?? '—'} · Permitted values: $permitted',
+              leading: SizedBox(
+                width: 30,
+                child: Text(
+                  rule['rule_number']?.toString() ?? '—',
+                  style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+                ),
+              ),
+              showDivider: indexed.key != rows.length - 1,
+            );
+          }).toList(),
+        );
+      }).toList(),
+    );
+  }
+
 }

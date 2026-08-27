@@ -5,11 +5,11 @@ import 'package:http/testing.dart';
 import 'package:earth_client/core/api/earth_api.dart';
 import 'package:earth_client/core/api/earth_api_transport.dart';
 import 'package:earth_client/core/nano_markup_helper.dart';
-import 'package:earth_client/features/dynasty/dynasty_tree_dialog.dart';
+import 'package:earth_client/features/house/house_tree_dialog.dart';
 
 void main() {
   testWidgets(
-      'DynastyTreeDialog renders lineage tree, member list and inspector',
+      'HouseTreeDialog renders lineage tree, member list and inspector',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -18,14 +18,14 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/dynasty') {
+      if (path == '/api/house' || path == '/api/dynasty') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'dynasty': {
-              'id': 'DYN-H0044',
+            'house': {
+              'id': 'HOUSE-H0044',
               'email': 'amara@earth.local',
-              'dynasty_name': 'House Vance',
+              'house_name': 'House Vance',
               'motto': 'From the Red Dust We Build Eternity',
               'founder_human_id': 'H-0044',
               'legacy_points': 350,
@@ -34,7 +34,7 @@ void main() {
             'lineage': [
               {
                 'id': 'LIN-001',
-                'dynasty_id': 'DYN-H0044',
+                'house_id': 'HOUSE-H0044',
                 'human_id': 'H-0044',
                 'predecessor_human_id': null,
                 'generation': 1,
@@ -52,12 +52,12 @@ void main() {
               },
               {
                 'id': 'LIN-002',
-                'dynasty_id': 'DYN-H0044',
+                'house_id': 'HOUSE-H0044',
                 'human_id': 'H-0044',
                 'predecessor_human_id': 'H-0044',
                 'generation': 2,
                 'name': 'Amara Vance',
-                'title': 'Current Dynastic Head',
+                'title': 'Current Head of House',
                 'birth_game_day': 120,
                 'death_game_day': null,
                 'is_incumbent': true,
@@ -73,7 +73,7 @@ void main() {
             'perks': [
               {
                 'id': 'PRK-001',
-                'dynasty_id': 'DYN-H0044',
+                'house_id': 'HOUSE-H0044',
                 'perk_key': 'industrialist_lineage',
                 'perk_name': 'Industrialist Lineage',
                 'perk_category': 'operations',
@@ -84,7 +84,7 @@ void main() {
             'heirlooms': [
               {
                 'id': 'HLM-001',
-                'dynasty_id': 'DYN-H0044',
+                'house_id': 'HOUSE-H0044',
                 'name': 'The Vance Founding Signet',
                 'heirloom_type': 'founder_seal',
                 'quality_tier': 'Legendary',
@@ -103,8 +103,8 @@ void main() {
                 'description': '+10% Machine Build Speed',
               },
               {
-                'key': 'diplomatic_dynasty',
-                'name': 'Diplomatic Dynasty',
+                'key': 'diplomatic_house',
+                'name': 'Diplomatic House',
                 'category': 'Governance',
                 'cost': 100,
                 'description': '+15% Voting Influence',
@@ -127,7 +127,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: DynastyTreeDialog(api: api),
+          body: HouseTreeDialog(api: api),
         ),
       ),
     );
@@ -136,17 +136,17 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(find.text('VANCE'), findsOneWidget);
-    expect(find.text('"From the Red Dust We Build Eternity"'), findsOneWidget);
+    expect(find.text('HOUSE'), findsOneWidget);
     expect(find.text('Cassian Vance I'), findsWidgets);
-    expect(find.text('Amara Vance'), findsOneWidget);
-    expect(find.text('GENERATION 1 DOSSIER'), findsOneWidget);
-    expect(find.text('FAMILY TODAY'), findsOneWidget);
-    expect(find.text('PEOPLE & RELATIONSHIPS'), findsOneWidget);
-    expect(find.text('FAMILY IDENTITY'), findsOneWidget);
-    expect(find.text('FAMILY HEIRLOOMS & SHARED ASSETS'), findsOneWidget);
+    expect(find.text('Amara Vance'), findsWidgets);
+    expect(find.text('HISTORICAL MILESTONES & ACHIEVEMENTS'), findsOneWidget);
+    expect(find.text('HOUSE IDENTITY'), findsOneWidget);
+    expect(find.text('LINEAGE & HEIRS'), findsOneWidget);
+    expect(find.text('HEREDITARY PERKS'), findsOneWidget);
+    expect(find.text('SHARED HEIRLOOMS & RELICS'), findsOneWidget);
   });
 
-  testWidgets('DynastyTreeDialog unlocks hereditary trait', (tester) async {
+  testWidgets('HouseTreeDialog unlocks hereditary trait', (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
@@ -154,14 +154,14 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/dynasty') {
+      if (path == '/api/house' || path == '/api/dynasty') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'dynasty': {
-              'id': 'DYN-H0044',
+            'house': {
+              'id': 'HOUSE-H0044',
               'email': 'amara@earth.local',
-              'dynasty_name': 'House Vance',
+              'house_name': 'House of Vance',
               'motto': 'From the Red Dust We Build Eternity',
               'legacy_points': 350,
               'total_wealth_generated': 450000.0,
@@ -169,7 +169,7 @@ void main() {
             'lineage': [
               {
                 'id': 'LIN-001',
-                'dynasty_id': 'DYN-H0044',
+                'house_id': 'HOUSE-H0044',
                 'human_id': 'H-0044',
                 'name': 'Cassian Vance I',
                 'generation': 1,
@@ -179,8 +179,8 @@ void main() {
             'heirlooms': [],
             'catalogPerks': [
               {
-                'key': 'diplomatic_dynasty',
-                'name': 'Diplomatic Dynasty',
+                'key': 'diplomatic_house',
+                'name': 'Diplomatic House',
                 'category': 'Governance',
                 'cost': 100,
                 'description': '+15% Voting Influence',
@@ -196,8 +196,8 @@ void main() {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'perkKey': 'diplomatic_dynasty',
-            'perkName': 'Diplomatic Dynasty',
+            'perkKey': 'diplomatic_house',
+            'perkName': 'Diplomatic House',
             'remainingPoints': 250,
           }),
           200,
@@ -216,7 +216,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: DynastyTreeDialog(api: api),
+          body: HouseTreeDialog(api: api),
         ),
       ),
     );
@@ -226,7 +226,7 @@ void main() {
 
     // Scroll until unlock perk button is visible
     final unlockBtn =
-        find.byKey(const Key('btn-unlock-perk-diplomatic_dynasty'));
+        find.byKey(const Key('btn-unlock-perk-diplomatic_house'));
     await tester.scrollUntilVisible(unlockBtn, 200);
     expect(unlockBtn, findsOneWidget);
 
@@ -235,26 +235,28 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     expect(
-        find.textContaining('Hereditary Trait "Diplomatic Dynasty" unlocked!'),
+        find.textContaining('Hereditary Trait "Diplomatic House" unlocked!'),
         findsOneWidget);
   });
 
-  testWidgets('DynastyTreeDialog equips and unequips heirloom', (tester) async {
+  testWidgets('HouseTreeDialog equips and unequips heirloom', (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() => tester.view.resetPhysicalSize());
 
+    var isEquippedServer = false;
+
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/dynasty') {
+      if (path == '/api/house' || path == '/api/dynasty') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'dynasty': {
-              'id': 'DYN-H0044',
+            'house': {
+              'id': 'HOUSE-H0044',
               'email': 'amara@earth.local',
-              'dynasty_name': 'House Vance',
+              'house_name': 'House of Vance',
               'motto': 'From the Red Dust We Build Eternity',
               'legacy_points': 350,
               'total_wealth_generated': 450000.0,
@@ -264,12 +266,12 @@ void main() {
             'heirlooms': [
               {
                 'id': 'HLM-001',
-                'dynasty_id': 'DYN-H0044',
+                'house_id': 'HOUSE-H0044',
                 'name': 'The Vance Founding Signet',
                 'heirloom_type': 'founder_seal',
                 'quality_tier': 'Legendary',
                 'stat_buff': '+10% Machine Build Speed',
-                'equipped_by_human_id': null,
+                'equipped_by_human_id': isEquippedServer ? 'H-0044' : null,
                 'inscription': 'Forged from titanium.',
               },
             ],
@@ -281,12 +283,13 @@ void main() {
       }
 
       if (path.endsWith('/heirlooms/equip')) {
+        isEquippedServer = !isEquippedServer;
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
             'heirloomId': 'HLM-001',
-            'isEquipped': true,
-            'equippedBy': 'H-0044',
+            'isEquipped': isEquippedServer,
+            'equippedBy': isEquippedServer ? 'H-0044' : null,
           }),
           200,
           headers: {'content-type': 'application/x-nano-markup'},
@@ -304,7 +307,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: DynastyTreeDialog(api: api),
+          body: HouseTreeDialog(api: api),
         ),
       ),
     );
@@ -316,16 +319,29 @@ void main() {
     final equipBtn = find.byKey(const Key('btn-equip-heirloom-HLM-001'));
     await tester.scrollUntilVisible(equipBtn, 200);
     expect(equipBtn, findsOneWidget);
+    expect(find.text('EQUIP TO HEAD'), findsOneWidget);
 
+    // Equip
     await tester.tap(equipBtn);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('equipped to current Dynastic Head'),
+    expect(find.textContaining('equipped to current Head of House'),
         findsOneWidget);
+    expect(find.text('UNEQUIP'), findsOneWidget);
+    expect(find.text('EQUIPPED TO HEAD'), findsOneWidget);
+
+    // Unequip
+    await tester.tap(find.text('UNEQUIP'));
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.textContaining('returned to the Heritage Vault'),
+        findsOneWidget);
+    expect(find.text('EQUIP TO HEAD'), findsOneWidget);
   });
 
-  testWidgets('DynastyTreeDialog opens edit motto dialog and saves creed',
+  testWidgets('HouseTreeDialog opens edit motto dialog and saves creed',
       (tester) async {
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
@@ -334,14 +350,14 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/dynasty') {
+      if (path == '/api/house' || path == '/api/dynasty') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
-            'dynasty': {
-              'id': 'DYN-H0044',
+            'house': {
+              'id': 'HOUSE-H0044',
               'email': 'amara@earth.local',
-              'dynasty_name': 'House Vance',
+              'house_name': 'House of Vance',
               'motto': 'From the Red Dust We Build Eternity',
               'legacy_points': 350,
               'total_wealth_generated': 450000.0,
@@ -361,7 +377,7 @@ void main() {
           NanoMarkupHelper.encode({
             'ok': true,
             'motto': 'Per Aspera Ad Astra',
-            'dynastyName': 'House Vance-Neo',
+            'houseName': 'House of Vance-Neo',
           }),
           200,
           headers: {'content-type': 'application/x-nano-markup'},
@@ -379,7 +395,7 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: DynastyTreeDialog(api: api),
+          body: HouseTreeDialog(api: api),
         ),
       ),
     );
@@ -393,7 +409,7 @@ void main() {
     await tester.tap(editBtn);
     await tester.pumpAndSettle();
 
-    expect(find.text('EDIT DYNASTY CREED'), findsOneWidget);
+    expect(find.text('EDIT HOUSE NAME'), findsOneWidget);
 
     final saveBtn = find.byKey(const Key('btn-save-motto'));
     expect(saveBtn, findsOneWidget);
@@ -402,7 +418,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.textContaining('Dynasty creed updated successfully'),
+    expect(find.textContaining('House name updated successfully'),
         findsOneWidget);
   });
 }

@@ -67,7 +67,7 @@ export async function communicationsRoutes(
         repo,
         human.id,
         human.displayName ?? human.id,
-        (human as Record<string, unknown>).dynasty_name as string | null,
+        ((human as Record<string, unknown>).house_name ?? (human as Record<string, unknown>).dynasty_name) as string | null,
         channelId,
         body,
         parsed.value.gameDay ?? 1,

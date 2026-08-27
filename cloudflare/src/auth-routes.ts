@@ -12,11 +12,17 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
   if (url.pathname === '/api/auth/profile' && request.method === 'PATCH') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ displayName?: string }>(request);
+    const parsed = await parseJsonBody<{ displayName?: string; epitaph?: string }>(request);
     if (!parsed.ok) return parsed.response;
-    const displayName = parsed.value.displayName?.trim() ?? '';
-    if (displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Name must be 2–80 characters' }, { status: 400 });
-    const result = await withRepository(env, (repository) => updateDisplayName(repository, { humanId: human.id, displayName }));
+    const displayName = parsed.value.displayName !== undefined ? parsed.value.displayName.trim() : undefined;
+    if (displayName !== undefined && (displayName.length < 2 || displayName.length > 80)) {
+      return Response.json({ ok: false, error: 'Name must be 2–80 characters' }, { status: 400 });
+    }
+    const epitaph = parsed.value.epitaph !== undefined ? parsed.value.epitaph.trim() : undefined;
+    if (epitaph !== undefined && epitaph.length > 200) {
+      return Response.json({ ok: false, error: 'Epitaph cannot exceed 200 characters' }, { status: 400 });
+    }
+    const result = await withRepository(env, (repository) => updateDisplayName(repository, { humanId: human.id, displayName, epitaph }));
     return Response.json(result);
   }
   if (url.pathname === '/api/auth/mfa/enroll' && request.method === 'POST') {
@@ -78,12 +84,13 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     // route must authenticate those identities instead of requiring active.
     const human = await currentHuman(request, env, true);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const parsed = await parseJsonBody<{ displayName?: string; dynastyName?: string; startingCityId?: string }>(request);
+    const parsed = await parseJsonBody<{ displayName?: string; houseName?: string; dynastyName?: string; startingCityId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const displayName = parsed.value.displayName?.trim();
     if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => rebornIdentity(repository, { email: human.email, displayName, dynastyName: parsed.value.dynastyName?.trim(), startingCityId: parsed.value.startingCityId }));
+      const houseName = parsed.value.houseName?.trim() ?? parsed.value.dynastyName?.trim();
+      const result = await withRepository(env, (repository) => rebornIdentity(repository, { email: human.email, displayName, dynastyName: houseName, startingCityId: parsed.value.startingCityId }));
       if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
     } catch (error) {

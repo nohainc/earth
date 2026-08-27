@@ -374,7 +374,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
               const SizedBox(width: 6),
               _filterChip(context, 'CORPORATION', 'ENTERPRISE', color: context.primaryColor),
               const SizedBox(width: 6),
-              _filterChip(context, 'CIVIC', 'CIVIC & DYNASTY', color: context.secondaryColor),
+              _filterChip(context, 'CIVIC', 'CIVIC & HOUSE', color: context.secondaryColor),
             ],
           ),
         ),
@@ -440,6 +440,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             .where((i) =>
                 i.category.toLowerCase() == 'governance' ||
                 i.category.toLowerCase() == 'civic' ||
+                i.category.toLowerCase() == 'house' ||
                 i.category.toLowerCase() == 'dynasty' ||
                 i.category.toLowerCase() == 'technology' ||
                 i.category.toLowerCase() == 'finance')
@@ -557,6 +558,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         return Icons.how_to_vote_outlined;
       case 'contracts':
         return Icons.handshake_outlined;
+      case 'house':
       case 'dynasty':
         return Icons.shield_outlined;
       default:

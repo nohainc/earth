@@ -15,7 +15,7 @@ part 'earth_api_contracts.dart';
 part 'earth_api_supply_contracts.dart';
 part 'earth_api_personal_finance.dart';
 part 'earth_api_comm.dart';
-part 'earth_api_dynasty.dart';
+part 'earth_api_house.dart';
 part 'earth_api_derivatives.dart';
 part 'earth_api_net_worth.dart';
 part 'earth_api_briefing.dart';

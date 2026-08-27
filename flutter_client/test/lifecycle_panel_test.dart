@@ -55,27 +55,22 @@ void main() {
       ),
     );
 
-    expect(find.text('LIFE & LEGACY / SUCCESSION PLAN'), findsOneWidget);
+    expect(find.text('SUCCESSION PLAN'), findsOneWidget);
     expect(find.text('ACTIVE'), findsOneWidget);
-    expect(find.textContaining('Life stage and succession readiness'),
-        findsOneWidget);
-    expect(
-        find.textContaining('SUCCESSOR: Mira Kline (H-0088)'), findsOneWidget);
-    expect(
-        find.textContaining('Registered on Day 180 · Estate buffer: 30 days'),
-        findsOneWidget);
+    expect(find.text('Mira Kline'), findsOneWidget);
+    expect(find.textContaining('PRIMARY HEIR'), findsOneWidget);
     expect(find.textContaining('Estate state: PENDING'), findsOneWidget);
-    expect(find.text('UPDATE WILL & SUCCESSOR'), findsOneWidget);
+    expect(find.byIcon(Icons.edit_outlined), findsOneWidget);
 
-    // Open plan dialog
-    await tester.tap(find.text('UPDATE WILL & SUCCESSOR'));
+    // Open successor edit dialog via edit icon button
+    await tester.tap(find.byIcon(Icons.edit_outlined));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Plan succession'), findsOneWidget);
-    expect(find.text('Save plan'), findsOneWidget);
+    expect(find.text('Edit successor name'), findsOneWidget);
+    expect(find.text('SAVE'), findsOneWidget);
 
     await tester.enterText(find.byType(TextField).first, 'Mira Kline');
-    await tester.tap(find.text('Save plan'));
+    await tester.tap(find.text('SAVE'));
     await tester.pumpAndSettle();
 
     expect(planTriggered, isTrue);

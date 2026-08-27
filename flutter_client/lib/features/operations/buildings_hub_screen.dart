@@ -75,7 +75,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         'Non-Punitive Expiration: When a patent license expires, buildings operate at reduced baseline efficiency (-30% output) with upgrades locked, and are never demolished.',
         'Civic Dividends & Public Megaprojects: Public utilities distribute 100% of net surplus revenue to citizens via 70/30 UBI + Participation bonuses.',
       ],
-      trailing: EarthButton(
+      trailing: null,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          EarthButton(
         label: 'ACQUIRE & CONSTRUCT',
         icon: Icons.domain_add_outlined,
         variant: EarthButtonVariant.primary,
@@ -91,10 +95,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   availablePrivateSlots,
                 );
               },
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+          ),
+          const SizedBox(height: 14),
           // High Level Metrics
           EarthMetricGrid(
             metrics: [

@@ -204,7 +204,7 @@ values
   ('TEST-COMM-REQ-002', 'TEST-COMM-004', 'TEST-H-010', 'pending', 254)
 on conflict (id) do nothing;
 
--- Archive and dynasty page fixtures.
+-- Archive and house page fixtures.
 insert into humans (id, account_id, display_name, age_years, standing, legacy, life_status, political_eligibility_game_day)
 values
   ('TEST-H-011', 'test-account-011', 'Ada Mercer', 88, 920, 410, 'deceased', 0),
@@ -213,15 +213,15 @@ values
   ('TEST-H-014', 'test-account-014', 'Darius Okoro', 61, 705, 260, 'deceased', 0)
 on conflict (id) do nothing;
 
-insert into dynasties (id, email, dynasty_name, motto, founder_human_id, legacy_points, total_wealth_generated)
+insert into houses (id, email, house_name, motto, founder_human_id, legacy_points, total_wealth_generated)
 values
-  ('TEST-DYN-001', 'ada.mercer@earth.local', 'House Mercer', 'Measure twice, build for generations.', 'TEST-H-011', 820, 980000),
-  ('TEST-DYN-002', 'bastien.okoro@earth.local', 'House Okoro', 'Knowledge is the longest inheritance.', 'TEST-H-012', 560, 640000)
+  ('TEST-HSE-001', 'ada.mercer@earth.local', 'House Mercer', 'Measure twice, build for generations.', 'TEST-H-011', 820, 980000),
+  ('TEST-HSE-002', 'bastien.okoro@earth.local', 'House Okoro', 'Knowledge is the longest inheritance.', 'TEST-H-012', 560, 640000)
 on conflict (id) do nothing;
 
 insert into deceased_profiles (
   human_id, display_name, death_game_day, final_standing, final_legacy, successor_name,
-  birth_game_day, cause_of_death, epitaph, lifetime_dividends, predecessor_human_id, dynasty_name
+  birth_game_day, cause_of_death, epitaph, lifetime_dividends, predecessor_human_id, house_name
 )
 values
   ('TEST-H-011', 'Ada Mercer', 310, 920, 410, 'Clara Mercer', 12, 'Natural Aging', 'Her civic designs became the blueprint for three thriving cities.', 18400, null, 'House Mercer'),
@@ -238,7 +238,7 @@ values
   ('TEST-LIFE-014-DEATH', 'TEST-H-014', 'death', 351, 'Priya Nandakumar', 137000)
 on conflict (id) do nothing;
 
-insert into character_lineage (id, email, human_id, predecessor_human_id, generation, birth_game_day, death_game_day, final_legacy, dynasty_name)
+insert into character_lineage (id, email, human_id, predecessor_human_id, generation, birth_game_day, death_game_day, final_legacy, house_name)
 values
   ('TEST-LINEAGE-011', 'ada.mercer@earth.local', 'TEST-H-011', null, 1, 12, 310, 410, 'House Mercer'),
   ('TEST-LINEAGE-013', 'ada.mercer@earth.local', 'TEST-H-013', 'TEST-H-011', 2, 105, 366, 340, 'House Mercer'),
@@ -246,26 +246,26 @@ values
   ('TEST-LINEAGE-014', 'bastien.okoro@earth.local', 'TEST-H-014', 'TEST-H-012', 2, 126, 351, 260, 'House Okoro')
 on conflict (id) do nothing;
 
-insert into dynasty_lineage_records (
-  id, dynasty_id, human_id, predecessor_human_id, generation, name, title,
+insert into house_lineage_records (
+  id, house_id, human_id, predecessor_human_id, generation, name, title,
   birth_game_day, death_game_day, is_incumbent, cause_of_death, epitaph,
   lifetime_wealth, businesses_founded, proposals_authored, legacy_score
 )
 values
-  ('TEST-DLR-011', 'TEST-DYN-001', 'TEST-H-011', null, 1, 'Ada Mercer', 'Founding Architect', 12, 310, false, 'Natural Aging', 'Her civic designs became the blueprint for three thriving cities.', 520000, 5, 11, 410),
-  ('TEST-DLR-013', 'TEST-DYN-001', 'TEST-H-013', 'TEST-H-011', 2, 'Clara Mercer', 'Civic Steward', 105, 366, false, 'Natural Aging', 'She made public infrastructure a shared inheritance.', 460000, 4, 8, 340),
-  ('TEST-DLR-012', 'TEST-DYN-002', 'TEST-H-012', null, 1, 'Bastien Okoro', 'Research Pioneer', 34, 298, false, 'Quiet Orbital Passage', 'He connected the first open research exchanges across the southern arc.', 350000, 2, 14, 295),
-  ('TEST-DLR-014', 'TEST-DYN-002', 'TEST-H-014', 'TEST-H-012', 2, 'Darius Okoro', 'Trade Navigator', 126, 351, false, 'Frontier Transit Incident', 'He carried House Okoro into the age of intercity trade.', 290000, 3, 6, 260)
+  ('TEST-HLR-011', 'TEST-HSE-001', 'TEST-H-011', null, 1, 'Ada Mercer', 'Founding Architect', 12, 310, false, 'Natural Aging', 'Her civic designs became the blueprint for three thriving cities.', 520000, 5, 11, 410),
+  ('TEST-HLR-013', 'TEST-HSE-001', 'TEST-H-013', 'TEST-H-011', 2, 'Clara Mercer', 'Civic Steward', 105, 366, false, 'Natural Aging', 'She made public infrastructure a shared inheritance.', 460000, 4, 8, 340),
+  ('TEST-HLR-012', 'TEST-HSE-002', 'TEST-H-012', null, 1, 'Bastien Okoro', 'Research Pioneer', 34, 298, false, 'Quiet Orbital Passage', 'He connected the first open research exchanges across the southern arc.', 350000, 2, 14, 295),
+  ('TEST-HLR-014', 'TEST-HSE-002', 'TEST-H-014', 'TEST-H-012', 2, 'Darius Okoro', 'Trade Navigator', 126, 351, false, 'Frontier Transit Incident', 'He carried House Okoro into the age of intercity trade.', 290000, 3, 6, 260)
 on conflict (id) do nothing;
 
-insert into dynasty_perks (id, dynasty_id, perk_key, perk_name, perk_category, tier, unlocked_game_day)
+insert into house_perks (id, house_id, perk_key, perk_name, perk_category, tier, unlocked_game_day)
 values
-  ('TEST-PRK-001', 'TEST-DYN-001', 'civic_foundation', 'Civic Foundation', 'governance', 2, 210),
-  ('TEST-PRK-002', 'TEST-DYN-002', 'research_patronage', 'Research Patronage', 'technology', 2, 205)
-on conflict (dynasty_id, perk_key) do nothing;
+  ('TEST-PRK-001', 'TEST-HSE-001', 'civic_foundation', 'Civic Foundation', 'governance', 2, 210),
+  ('TEST-PRK-002', 'TEST-HSE-002', 'research_patronage', 'Research Patronage', 'technology', 2, 205)
+on conflict (house_id, perk_key) do nothing;
 
-insert into dynasty_heirlooms (id, dynasty_id, name, heirloom_type, quality_tier, stat_buff, equipped_by_human_id, inscription)
+insert into house_heirlooms (id, house_id, name, heirloom_type, quality_tier, stat_buff, equipped_by_human_id, inscription)
 values
-  ('TEST-HLM-001', 'TEST-DYN-001', 'Mercer Civic Seal', 'founder_seal', 'Legendary', '+8% civic project completion', null, 'Carried by the first architect of Aurora Basin.'),
-  ('TEST-HLM-002', 'TEST-DYN-002', 'Okoro Research Cipher', 'quantum_cipher', 'Epic', '+10% research progress', null, 'A promise that knowledge remains open to the next generation.')
+  ('TEST-HLM-001', 'TEST-HSE-001', 'Mercer Civic Seal', 'founder_seal', 'Legendary', '+8% civic project completion', null, 'Carried by the first architect of Aurora Basin.'),
+  ('TEST-HLM-002', 'TEST-HSE-002', 'Okoro Research Cipher', 'quantum_cipher', 'Epic', '+10% research progress', null, 'A promise that knowledge remains open to the next generation.')
 on conflict (id) do nothing;

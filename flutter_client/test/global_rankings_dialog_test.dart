@@ -81,9 +81,9 @@ void main() {
                 'rankDelta': 0,
               },
             ],
-            'dynasticHouses': [
+            'houses': [
               {
-                'dynasty_name': 'Vance Dynasty',
+                'house_name': 'House of Vance',
                 'deceased_count': 3,
                 'peak_legacy': 5400,
                 'peak_standing': 980,
@@ -162,23 +162,23 @@ void main() {
 
     expect(find.textContaining('Kline Industrial Syndicate'), findsWidgets);
 
-    // Switch Category Tab to DYNASTIES
-    final dynChip = find.text('DYNASTIES');
-    await tester.ensureVisible(dynChip);
-    await tester.tap(dynChip);
+    // Switch Category Tab to HOUSES
+    final houseChip = find.text('HOUSES');
+    await tester.ensureVisible(houseChip);
+    await tester.tap(houseChip);
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Vance Dynasty'), findsWidgets);
+    expect(find.textContaining('House of Vance'), findsWidgets);
 
-    // Tap dynasty row to open inspector
-    final dynRow = find.textContaining('Vance Dynasty').first;
-    await tester.ensureVisible(dynRow);
-    await tester.tap(dynRow);
+    // Tap house row to open inspector
+    final houseRow = find.textContaining('House of Vance').first;
+    await tester.ensureVisible(houseRow);
+    await tester.tap(houseRow);
     await tester.pumpAndSettle();
 
     expect(find.text('Inscribed Ancestors'), findsOneWidget);
     expect(find.text('3 members'), findsOneWidget);
-    expect(find.text('Dynastic Legacy'), findsOneWidget);
+    expect(find.text('House Legacy'), findsOneWidget);
     expect(find.text('5400 LP'), findsWidgets);
     expect(find.text('CLOSE'), findsOneWidget);
 

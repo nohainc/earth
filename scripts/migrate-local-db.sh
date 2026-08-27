@@ -13,9 +13,9 @@ if [[ "$DATABASE_URL" != *"localhost"* && "$DATABASE_URL" != *"127.0.0.1"* && "$
 fi
 
 echo "Migrating local database: $DATABASE_URL"
-(cd "$project_dir" && DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres)
+(cd "$project_dir" && DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres -- "$@")
 
-if [[ "${1:-}" == "--seed" ]]; then
+if [[ " $* " =~ " --seed " ]]; then
   echo "Seeding canonical starter data"
   (cd "$project_dir" && DATABASE_URL="$DATABASE_URL" npm run db:seed:postgres)
 fi

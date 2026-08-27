@@ -14,7 +14,8 @@ export interface CommMessage {
   channel_id: string;
   sender_human_id: string;
   sender_display_name: string;
-  sender_dynasty_name: string | null;
+  sender_house_name: string | null;
+  sender_dynasty_name?: string | null;
   body: string;
   game_day: number;
   game_minute: number;
@@ -26,6 +27,7 @@ export interface DiplomaticDispatch {
   id: string;
   sender_human_id: string;
   sender_display_name?: string;
+  sender_house_name?: string;
   sender_dynasty_name?: string;
   recipient_human_id: string;
   recipient_display_name?: string;
@@ -64,7 +66,7 @@ export async function listChannelMessages(
 ): Promise<CommMessage[]> {
   const boundedLimit = Math.min(100, Math.max(1, limit));
   const sql = `
-    SELECT id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name,
+    SELECT id, channel_id, sender_human_id, sender_display_name, sender_house_name, sender_house_name AS sender_dynasty_name,
            body, game_day, game_minute, attachments, created_at
     FROM comm_messages
     WHERE channel_id = $1
@@ -79,7 +81,7 @@ export async function sendChannelMessage(
   repository: PostgresRepository,
   senderHumanId: string,
   senderDisplayName: string,
-  senderDynastyName: string | null,
+  senderHouseName: string | null,
   channelId: string,
   body: string,
   gameDay: number,
@@ -90,17 +92,17 @@ export async function sendChannelMessage(
   const msgId = `msg-${correlationId}`;
   return repository.transaction(async (tx) => {
     const sql = `
-    INSERT INTO comm_messages (id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments)
+    INSERT INTO comm_messages (id, channel_id, sender_human_id, sender_display_name, sender_house_name, body, game_day, game_minute, attachments)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
     ON CONFLICT (id) DO NOTHING
-    RETURNING id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at
+    RETURNING id, channel_id, sender_human_id, sender_display_name, sender_house_name, sender_house_name AS sender_dynasty_name, body, game_day, game_minute, attachments, created_at
   `;
     const res = await tx.query<CommMessage>(sql, [
     msgId,
     channelId,
     senderHumanId,
     senderDisplayName,
-    senderDynastyName,
+    senderHouseName,
     body,
     gameDay,
     gameMinute,
@@ -108,7 +110,7 @@ export async function sendChannelMessage(
     ]);
     if (res.rows[0]) return res.rows[0];
     const replay = await tx.query<CommMessage>(
-      `SELECT id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments, created_at FROM comm_messages WHERE id = $1`,
+      `SELECT id, channel_id, sender_human_id, sender_display_name, sender_house_name, sender_house_name AS sender_dynasty_name, body, game_day, game_minute, attachments, created_at FROM comm_messages WHERE id = $1`,
       [msgId]
     );
     return replay.rows[0];
@@ -141,11 +143,12 @@ export async function listDiplomaticDispatches(
            d.status, d.game_day, d.game_minute, d.dispatch_type, d.action_payload,
            d.created_at, d.read_at,
            sh.display_name AS sender_display_name,
-           sd.dynasty_name AS sender_dynasty_name,
+           sd.house_name AS sender_house_name,
+           sd.house_name AS sender_dynasty_name,
            rh.display_name AS recipient_display_name
     FROM diplomatic_dispatches d
     LEFT JOIN humans sh ON sh.id = d.sender_human_id
-    LEFT JOIN dynasties sd ON sd.founder_human_id = sh.id
+    LEFT JOIN houses sd ON sd.founder_human_id = sh.id
     LEFT JOIN humans rh ON rh.id = d.recipient_human_id
     WHERE ${filterClause}
     ORDER BY d.game_day DESC, d.created_at DESC

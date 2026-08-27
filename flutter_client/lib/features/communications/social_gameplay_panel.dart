@@ -108,6 +108,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
 
   void _selectPartner(Map<String, dynamic> partner) {
     final partnerName = (partner['display_name'] ??
+            partner['house_name'] ??
             partner['dynasty_name'] ??
             partner['city_name'] ??
             partner['name'] ??
@@ -461,7 +462,7 @@ class _SocialGameplayPanelState extends State<SocialGameplayPanel> {
                       controller: search,
                       onChanged: _onPartnerSearch,
                       decoration: const InputDecoration(
-                        labelText: 'Search citizens or dynasties',
+                        labelText: 'Search citizens or houses',
                         prefixIcon: Icon(Icons.search, size: 16),
                       ),
                     ),

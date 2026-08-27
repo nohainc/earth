@@ -4,7 +4,7 @@ import 'package:earth_client/core/api/earth_api.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/core/navigation_deep_link.dart';
 import 'package:earth_client/features/command_center/dashboard.dart';
-import 'package:earth_client/features/dynasty/dynasty_tree_dialog.dart';
+import 'package:earth_client/features/house/house_tree_dialog.dart';
 import 'package:earth_client/features/contracts/supply_contracts_dialog.dart';
 import 'package:earth_client/features/market/derivatives_dialog.dart';
 import 'package:earth_client/features/finance/net_worth_analytics_dialog.dart';
@@ -33,7 +33,7 @@ void main() {
   });
 
   group('Complex Systems Page Mode & Dashboard Full Pages', () {
-    testWidgets('DynastyTreeDialog renders in page mode', (tester) async {
+    testWidgets('HouseTreeDialog renders in page mode', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.resetPhysicalSize);
@@ -42,7 +42,7 @@ void main() {
         MaterialApp(
           home: Scaffold(
             body: SingleChildScrollView(
-              child: DynastyTreeDialog(
+              child: HouseTreeDialog(
                 api: const EarthApi(),
                 state: sampleState,
                 isPageMode: true,
@@ -53,7 +53,7 @@ void main() {
       );
       await tester.pump();
 
-      expect(find.byType(DynastyTreeDialog), findsOneWidget);
+      expect(find.byType(HouseTreeDialog), findsOneWidget);
     });
 
     testWidgets('SupplyContractsDialog renders in page mode', (tester) async {

@@ -51,6 +51,7 @@ class _SidebarState extends State<Sidebar> {
 
   int _groupForSection(String section) {
     if (section.startsWith('my-community')) return 2;
+    if (section == 'corporations') return 4;
     const groups = [
       ['command', 'briefing', 'messages', 'notifications'],
       [
@@ -64,9 +65,9 @@ class _SidebarState extends State<Sidebar> {
         'technology',
         'patents',
       ],
-      ['corporation', 'city', 'my-community', 'civic', 'public-finance'],
-      ['life', 'dynasty'],
-      ['communities', 'civic-rankings', 'pantheon', 'history', 'constitution'],
+      ['corporation', 'my-corporation', 'city', 'my-community', 'civic', 'public-finance'],
+      ['life', 'house', 'dynasty'],
+      ['corporations', 'communities', 'civic-rankings', 'pantheon', 'history', 'constitution'],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -101,7 +102,11 @@ class _SidebarState extends State<Sidebar> {
             'Life')
         .toString();
     final userName = fullUserName.split(RegExp(r'\s+')).first;
-    final dynastyName = widget.state.life['dynastyName']
+    final houseName = (widget.state.life['houseName'] ??
+            widget.state.life['dynastyName'] ??
+            widget.state.human['house_name'] ??
+            widget.state.human['houseName'] ??
+            widget.state.human['dynasty_name'])
         ?.toString()
         .replaceFirst(RegExp(r'^house\s+', caseSensitive: false), '');
 
@@ -202,19 +207,20 @@ class _SidebarState extends State<Sidebar> {
         'CIVIC',
         Icons.account_balance_rounded,
         [
-          (
-            'corporation',
-            corporationName,
-            Icons.account_balance_outlined,
-            null,
-          ),
-          if (isCorporationMember)
+          if (isCorporationMember) ...[
+            (
+              'corporation',
+              corporationName,
+              Icons.account_balance_outlined,
+              null,
+            ),
             (
               'city',
               cityName,
               Icons.location_city_outlined,
               null,
             ),
+          ],
           for (final comm in myCommunities)
             (
               'my-community:${comm['id']}',
@@ -241,9 +247,9 @@ class _SidebarState extends State<Sidebar> {
             null,
           ),
           (
-            'dynasty',
-            dynastyName?.isNotEmpty == true ? dynastyName! : 'Dynasty',
-            Icons.account_tree_outlined,
+            'house',
+            houseName?.isNotEmpty == true ? houseName! : 'House',
+            Icons.shield_outlined,
             null,
           ),
         ]
@@ -253,15 +259,21 @@ class _SidebarState extends State<Sidebar> {
         Icons.public_rounded,
         [
           (
-            'civic-rankings',
-            'Rankings',
-            Icons.leaderboard_outlined,
+            'corporations',
+            'Corporations',
+            Icons.domain_outlined,
             null,
           ),
           (
             'communities',
             'Communities',
             Icons.groups_outlined,
+            null,
+          ),
+          (
+            'civic-rankings',
+            'Rankings',
+            Icons.leaderboard_outlined,
             null,
           ),
           (

@@ -23,8 +23,8 @@ export async function createBusiness(repository: PostgresRepository, input: { ow
     const nameConflict = await tx.query('SELECT id FROM institutions WHERE name = $1', [input.name]);
     if (nameConflict.rows[0]) throw new Error('Business name already exists');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
-    const dynastyPerk = await tx.query<{ perk_key: string }>("SELECT dp.perk_key FROM auth_credentials ac JOIN dynasties d ON d.email = ac.email JOIN dynasty_perks dp ON dp.dynasty_id = d.id WHERE ac.human_id = $1 AND dp.perk_key = 'industrialist_lineage' LIMIT 1", [input.ownerId]);
-    const feeCents = dynastyPerk.rows[0] ? 21250n : 25000n;
+    const housePerk = await tx.query<{ perk_key: string }>("SELECT dp.perk_key FROM auth_credentials ac JOIN houses d ON d.email = ac.email JOIN house_perks dp ON dp.house_id = d.id WHERE ac.human_id = $1 AND dp.perk_key = 'industrialist_lineage' LIMIT 1", [input.ownerId]);
+    const feeCents = housePerk.rows[0] ? 21250n : 25000n;
     const fee = centsToMoney(feeCents);
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < feeCents) throw new Error('Business registration requires 250 Credits');
     const businessId = `B-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -123,9 +123,9 @@ export async function distributeDividends(repository: PostgresRepository, input:
     if (!shares.rows.length) throw new Error('No shareholders registered');
     const totalShares = shares.rows.reduce((sum, row) => sum + BigInt(row.shares), 0n);
     if (totalShares <= 0n) throw new Error('Total shares count is invalid');
-    const financialDynasties = await tx.query<{ human_id: string }>("SELECT ac.human_id FROM auth_credentials ac JOIN dynasties d ON d.email = ac.email JOIN dynasty_perks dp ON dp.dynasty_id = d.id WHERE dp.perk_key = 'financial_magnate' AND ac.human_id = ANY($1::text[])", [shares.rows.map((row) => row.holder_id)]);
-    const financialHolders = new Set(financialDynasties.rows.map((row) => row.human_id));
-    const standardHeirs = await tx.query<{ human_id: string }>("SELECT equipped_by_human_id AS human_id FROM dynasty_heirlooms WHERE heirloom_type = 'dynasty_standard' AND equipped_by_human_id = ANY($1::text[])", [shares.rows.map((row) => row.holder_id)]);
+    const financialHouses = await tx.query<{ human_id: string }>("SELECT ac.human_id FROM auth_credentials ac JOIN houses d ON d.email = ac.email JOIN house_perks dp ON dp.house_id = d.id WHERE dp.perk_key = 'financial_magnate' AND ac.human_id = ANY($1::text[])", [shares.rows.map((row) => row.holder_id)]);
+    const financialHolders = new Set(financialHouses.rows.map((row) => row.human_id));
+    const standardHeirs = await tx.query<{ human_id: string }>("SELECT equipped_by_human_id AS human_id FROM house_heirlooms WHERE (heirloom_type = 'house_standard' OR heirloom_type = 'dynasty_standard') AND equipped_by_human_id = ANY($1::text[])", [shares.rows.map((row) => row.holder_id)]);
     const standardHolders = new Set(standardHeirs.rows.map((row) => row.human_id));
     const weightedShares = shares.rows.reduce((sum, row) => sum + BigInt(row.shares) * (financialHolders.has(row.holder_id) ? 108n : 100n) * (standardHolders.has(row.holder_id) ? 105n : 100n), 0n);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");

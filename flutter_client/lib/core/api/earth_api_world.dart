@@ -65,12 +65,12 @@ extension EarthApiWorld on EarthApi {
       (await _request('/api/pantheon')) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> cemetery(
-      {String? search, String? dynasty, int limit = 50}) async {
+      {String? search, String? house, String? dynasty, int limit = 50}) async {
+    final houseFilter = house?.trim() ?? dynasty?.trim();
     final params = <String, String>{
       'limit': limit.toString(),
       if (search != null && search.trim().isNotEmpty) 'search': search.trim(),
-      if (dynasty != null && dynasty.trim().isNotEmpty)
-        'dynasty': dynasty.trim(),
+      if (houseFilter != null && houseFilter.isNotEmpty) 'house': houseFilter,
     };
     final uri = Uri(path: '/api/cemetery', queryParameters: params);
     return (await _request(uri.toString())) as Map<String, dynamic>;

@@ -11,7 +11,7 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       theme: createEarthTheme(),
       home: Scaffold(body: HistoricalArchivePanel(
-        pantheon: const {'deceasedPantheon': [{'display_name': 'Founder Marcus Vance', 'death_game_day': 1200, 'final_legacy': 5400, 'dynasty_name': 'Vance Dynasty'}]},
+        pantheon: const {'deceasedPantheon': [{'display_name': 'Founder Marcus Vance', 'death_game_day': 1200, 'final_legacy': 5400, 'house_name': 'House of Vance'}]},
         events: const [{'type': 'world_clock', 'gameDay': 184, 'title': 'World advances'}],
       )),
     ));

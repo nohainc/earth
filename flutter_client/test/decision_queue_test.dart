@@ -86,7 +86,7 @@ void main() {
       expect(titles.any((t) => t.contains('Research funding is available')),
           isTrue);
       expect(
-          titles.any((t) => t.contains('dynasty decision is pending')), isTrue);
+          titles.any((t) => t.contains('house decision is pending')), isTrue);
 
       // Verify sorted by urgency descending
       for (int i = 0; i < items.length - 1; i++) {
@@ -126,7 +126,7 @@ void main() {
       expect(find.textContaining('ALL ('), findsOneWidget);
       expect(find.textContaining('CRITICAL / HIGH'), findsOneWidget);
       expect(find.text('CORPORATION & ASSETS'), findsOneWidget);
-      expect(find.text('CIVIC & DYNASTY'), findsOneWidget);
+      expect(find.text('CIVIC & HOUSE'), findsOneWidget);
 
       // Verify Decision Card Titles
       expect(find.text('Your corporation is losing energy'), findsOneWidget);
@@ -135,7 +135,7 @@ void main() {
           find.text('You have an unresolved governance vote'), findsOneWidget);
       expect(find.text('Your machine needs maintenance'), findsOneWidget);
       expect(find.text('Research funding is available'), findsOneWidget);
-      expect(find.text('A dynasty decision is pending'), findsOneWidget);
+      expect(find.text('A house decision is pending'), findsOneWidget);
 
       // Verify "Why it matters" narrative blocks exist
       expect(find.textContaining('Energy reserves are dangerously depleted'),
@@ -155,16 +155,16 @@ void main() {
       expect(executedDecision?.targetSection, 'market');
 
       // Test Filtering Tabs
-      final civicTab = find.text('CIVIC & DYNASTY');
+      final civicTab = find.text('CIVIC & HOUSE');
       await tester.ensureVisible(civicTab);
       await tester.pumpAndSettle();
       await tester.tap(civicTab);
       await tester.pumpAndSettle();
 
-      // In Civic & Dynasty filter: governance, technology, and dynasty should be present
+      // In Civic & House filter: governance, technology, and house should be present
       expect(
           find.text('You have an unresolved governance vote'), findsOneWidget);
-      expect(find.text('A dynasty decision is pending'), findsOneWidget);
+      expect(find.text('A house decision is pending'), findsOneWidget);
       // Corporate machine maintenance should be filtered out
       expect(find.text('Your machine needs maintenance'), findsNothing);
     });

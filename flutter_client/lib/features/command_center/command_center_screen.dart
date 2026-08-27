@@ -46,6 +46,7 @@ class _CommandCenterState extends State<CommandCenter> {
     'business': const ValueKey('section-business'),
     'civic': const ValueKey('section-civic'),
     'corporation': const ValueKey('section-corporation'),
+    'corporations': const ValueKey('section-corporations'),
     'city': const ValueKey('section-city'),
     'technology': const ValueKey('section-technology'),
     'life': const ValueKey('section-life'),
@@ -461,7 +462,8 @@ class _CommandCenterState extends State<CommandCenter> {
       OnboardingController.instance.completeStep('personal_resources');
     } else if (section == 'city' ||
         section == 'civic' ||
-        section == 'corporation') {
+        section == 'corporation' ||
+        section == 'corporations') {
       OnboardingController.instance.completeStep('join_community');
     } else if (section == 'market' || section == 'derivatives') {
       OnboardingController.instance.completeStep('first_market_decision');

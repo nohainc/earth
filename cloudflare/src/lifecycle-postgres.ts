@@ -3,7 +3,15 @@ import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents, taxToCents } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 
+export async function clearSuccessor(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
+  await repository.query('DELETE FROM succession_plans WHERE human_id = $1', [humanId]);
+  return { ok: true, successor: null };
+}
+
 export async function registerSuccessor(repository: PostgresRepository, input: { humanId: string; successorName: string; estatePeriodDays: number; successorHumanId: string | null; currentLifeStatus: string }): Promise<Record<string, unknown>> {
+  if (!input.successorName || input.successorName.trim().length === 0) {
+    return clearSuccessor(repository, input.humanId);
+  }
   return repository.transaction(async (tx) => {
     if (input.currentLifeStatus === 'estate') throw new Error('Estate inheritance requires the succession settlement slice');
     if (input.successorHumanId) {
@@ -153,9 +161,9 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
     await tx.query('UPDATE memberships SET city_id = NULL, corporation_id = NULL WHERE human_id = $1', [human.id]);
     await tx.query("UPDATE role_assignments SET status = 'expired' WHERE human_id = $1 AND status = 'active'", [human.id]);
     await tx.query("UPDATE humans SET life_status = $1, death_game_day = $2 WHERE id = $3", [successorRow ? 'deceased' : 'estate', day, human.id]);
-    // Keep the modern dynasty tree accurate during the estate window, before
+    // Keep the modern house tree accurate during the estate window, before
     // the next generation is selected.
-    await tx.query("UPDATE dynasty_lineage_records SET is_incumbent = false, death_game_day = $1, cause_of_death = 'Natural Biological Mortality', epitaph = 'Inscribed into the Planetary Pantheon of Earth.', lifetime_wealth = GREATEST(lifetime_wealth, $2) WHERE human_id = $3", [day, gross, human.id]);
+    await tx.query("UPDATE house_lineage_records SET is_incumbent = false, death_game_day = $1, cause_of_death = 'Natural Biological Mortality', epitaph = 'Inscribed into the Planetary Pantheon of Earth.', lifetime_wealth = GREATEST(lifetime_wealth, $2) WHERE human_id = $3", [day, gross, human.id]);
     await tx.query('INSERT INTO life_events (id,human_id,event_type,game_day,successor_name,estate_credits) VALUES ($1,$2,\'death\',$3,$4,$5)', [eventId, human.id, day, human.successor_name, successorRow ? gross : gross]);
     if (successorRow) {
       await tx.query('INSERT INTO deceased_profiles (human_id,display_name,death_game_day,final_standing,final_legacy,successor_name,cause_of_death,epitaph) VALUES ($1,$2,$3,$4,$5,$6,$7,$8) ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name, death_game_day = EXCLUDED.death_game_day', [human.id, human.display_name, day, human.standing, human.legacy, human.successor_name, 'Natural Biological Mortality', 'Inscribed into the Planetary Pantheon of Earth.']);

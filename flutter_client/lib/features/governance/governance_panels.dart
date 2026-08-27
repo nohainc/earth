@@ -157,29 +157,37 @@ class ProposalPanel extends StatelessWidget {
         .where((raw) =>
             raw is Map && (raw['institution_id'] ?? raw['institutionId'] ?? institutionId)?.toString() == institutionId)
         .toList();
+    final createProposalButton = EarthButton(
+      label: 'CREATE $scopeLabel PROPOSAL',
+      icon: Icons.note_add_outlined,
+      variant: EarthButtonVariant.primary,
+      onPressed: busy
+          ? null
+          : () => showProposalComposer(context, action,
+              institutionId: institutionId, scopeLabel: scopeLabel),
+    );
 
     if (proposals.isEmpty) {
       return EarthSection(
         title: '$scopeLabel PROPOSALS',
         showSurface: false,
-        trailing: EarthButton(
-          label: 'CREATE $scopeLabel PROPOSAL',
-          icon: Icons.note_add_outlined,
-          variant: EarthButtonVariant.primary,
-          onPressed: busy
-              ? null
-              : () => showProposalComposer(context, action,
-                  institutionId: institutionId, scopeLabel: scopeLabel),
-        ),
+        trailing: null,
         infoBulletPoints: const [
           'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
           'Quorum & Approval Thresholds: Quorum 25%, Approval 50% needed for enactment.',
           'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
           'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
         ],
-        child: const EarthEmptyState(
-          message: 'No active legislation is currently on the ballot.',
-          icon: Icons.how_to_vote_outlined,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            createProposalButton,
+            const SizedBox(height: 14),
+            const EarthEmptyState(
+              message: 'No active legislation is currently on the ballot.',
+              icon: Icons.how_to_vote_outlined,
+            ),
+          ],
         ),
       );
     }
@@ -198,15 +206,7 @@ class ProposalPanel extends StatelessWidget {
     return EarthSection(
       title: sectionTitle,
       showSurface: false,
-      trailing: EarthButton(
-        label: 'CREATE $scopeLabel PROPOSAL',
-        icon: Icons.note_add_outlined,
-        variant: EarthButtonVariant.secondary,
-        onPressed: busy
-            ? null
-            : () => showProposalComposer(context, action,
-                institutionId: institutionId, scopeLabel: scopeLabel),
-      ),
+      trailing: null,
       infoBulletPoints: [
         'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
         'Quorum & Approval Thresholds: Quorum $quorumPercent%, Approval $approvalPercent% needed for enactment.',
@@ -216,6 +216,8 @@ class ProposalPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          createProposalButton,
+          const SizedBox(height: 14),
           ...proposals.map((raw) {
             final proposal = Map<String, dynamic>.from(raw as Map);
             return _buildProposalItem(context, proposal);

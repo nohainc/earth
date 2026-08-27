@@ -295,23 +295,42 @@ class DecisionQueueItem {
       ));
     }
 
-    // 6. Dynasty & successor
+    // 5. Technology patenting & research
+    final researchProgress = asDoubleOr(state.json['technology']?['research']?['progress'], 45.0);
+    if (researchProgress >= 100.0) {
+      items.add(const DecisionQueueItem(
+        id: 'decision-tech-patent-ready',
+        category: 'technology',
+        title: 'Research ready for patent registration',
+        whyItMatters:
+            'Completed R&D discovery is unpatented. Registering grants exclusive commercial licensing rights across Earth.',
+        deadline: 'Open Registration',
+        expectedImpact:
+            'Generates perpetual licensing royalty streams from all active planetary manufacturers.',
+        riskLevel: 'low',
+        primaryActionLabel: 'Register Patent',
+        targetSection: 'technology',
+        urgencyScore: 52.0,
+      ));
+    }
+
+    // 6. House & successor
     final rawLife = state.json['life'];
     final life = rawLife is Map ? rawLife : const {};
     final successor = life['successor'];
     if (successor == null) {
       items.add(const DecisionQueueItem(
-        id: 'decision-dynasty-successor-pending',
-        category: 'dynasty',
-        title: 'A dynasty decision is pending',
+        id: 'decision-house-successor-pending',
+        category: 'house',
+        title: 'A house decision is pending',
         whyItMatters:
             'No legal successor is registered for your lineage. In the event of mortal transition, your accumulated estate faces heavy OUC liquidation penalties.',
         deadline: 'Prior to Transition',
         expectedImpact:
-            'Guarantee 100% generational wealth preservation and unlock family dynasty perks.',
+            'Guarantee 100% generational wealth preservation and unlock family house perks.',
         riskLevel: 'high',
-        primaryActionLabel: 'Manage Dynasty',
-        targetSection: 'dynasty',
+        primaryActionLabel: 'Manage House',
+        targetSection: 'house',
         urgencyScore: 78.0,
       ));
     }

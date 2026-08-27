@@ -13,7 +13,7 @@ test('Player Strategic Objectives Engine', async (t) => {
       },
       governance: { voting_weight: 12.5 },
       technology: { active_patents: 2, active_licenses: 3 },
-      dynasty: { generation: 2, perks_count: 2, successor_id: 'H-0099' },
+      house: { generation: 2, perks_count: 2, successor_id: 'H-0099' },
       resources: { material: 120 },
       netWorth: 28000,
     });
@@ -25,7 +25,7 @@ test('Player Strategic Objectives Engine', async (t) => {
     assert.ok(ids.includes('obj-food-security'));
     assert.ok(ids.includes('obj-enterprise-portfolio'));
     assert.ok(ids.includes('obj-civic-delegate'));
-    assert.ok(ids.includes('obj-dynasty-traits'));
+    assert.ok(ids.includes('obj-house-traits'));
     assert.ok(ids.includes('obj-technology-licensor'));
     assert.ok(ids.includes('obj-financial-independence'));
     assert.ok(ids.includes('obj-public-service-score'));
@@ -56,7 +56,7 @@ test('Player Strategic Objectives Engine', async (t) => {
       },
       governance: { voting_weight: 30 },
       technology: { active_patents: 4, active_licenses: 4 },
-      dynasty: { generation: 3, perks_count: 4, successor_id: 'H-0099' },
+      house: { generation: 3, perks_count: 4, successor_id: 'H-0099' },
       resources: { material: 500 },
       netWorth: 80000,
     });

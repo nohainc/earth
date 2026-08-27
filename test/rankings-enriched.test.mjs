@@ -32,15 +32,15 @@ test('listRankings returns enriched citizens, podium stats, tiers, and rank delt
       if (sql.includes('FROM humans')) {
         return {
           rows: [
-            { id: 'H-0044', display_name: 'Amara Vance', age_years: 42, standing: 840, legacy: 120, life_status: 'active', city_id: 'city-new-tokyo', dynasty_name: 'Vance Dynasty', balance: '5000' },
-            { id: 'H-0012', display_name: 'Dmitri Rostov', age_years: 38, standing: 720, legacy: 95, life_status: 'active', city_id: 'city-london', dynasty_name: 'House of Rostov', balance: '4200' },
+            { id: 'H-0044', display_name: 'Amara Vance', age_years: 42, standing: 840, legacy: 120, life_status: 'active', city_id: 'city-new-tokyo', house_name: 'House of Vance', dynasty_name: 'House of Vance', balance: '5000' },
+            { id: 'H-0012', display_name: 'Dmitri Rostov', age_years: 38, standing: 720, legacy: 95, life_status: 'active', city_id: 'city-london', house_name: 'House of Rostov', dynasty_name: 'House of Rostov', balance: '4200' },
           ],
         };
       }
       if (sql.includes('FROM deceased_profiles')) {
         return {
           rows: [
-            { dynasty_name: 'Vance Dynasty', deceased_count: 3, peak_legacy: 5400, peak_standing: 980 },
+            { house_name: 'House of Vance', dynasty_name: 'House of Vance', deceased_count: 3, peak_legacy: 5400, peak_standing: 980 },
           ],
         };
       }
@@ -86,8 +86,8 @@ test('listRankings returns enriched citizens, podium stats, tiers, and rank delt
   assert.equal(corps[0].id, 'corp-kline-industrial');
   assert.ok(corps[0].compositeIndex > 0);
 
-  // Check Dynastic Houses
-  const dynasties = result.dynasticHouses;
-  assert.equal(dynasties.length, 1);
-  assert.equal(dynasties[0].dynasty_name, 'Vance Dynasty');
+  // Check Houses
+  const houses = result.houses || result.dynasticHouses;
+  assert.equal(houses.length, 1);
+  assert.equal(houses[0].house_name, 'House of Vance');
 });

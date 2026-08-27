@@ -59,7 +59,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify Eulogy & Inscriptions
-    expect(find.text('MORTALITY & DYNASTIC SUCCESSION'), findsOneWidget);
+    expect(find.text('MORTALITY & HOUSE SUCCESSION'), findsOneWidget);
     expect(find.textContaining('The life journey of Founder Marcus Vance'),
         findsOneWidget);
     expect(find.textContaining('Lifetime Legacy: 4500'), findsOneWidget);

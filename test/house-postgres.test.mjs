@@ -1,18 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  getDynastyOverview,
-  unlockDynastyPerk,
-  equipDynastyHeirloom,
-  forgeDynastyHeirloom,
-  updateDynastyMotto,
-} from '../cloudflare/src/dynasty-postgres.ts';
+  getHouseOverview,
+  unlockHousePerk,
+  equipHouseHeirloom,
+  forgeHouseHeirloom,
+  updateHouseMotto,
+} from '../cloudflare/src/house-postgres.ts';
 
 function createMockDb(initialData = {}) {
-  const dynasties = initialData.dynasties || [
+  const houses = initialData.houses || [
     {
-      id: 'DYN-H0044',
+      id: 'HSE-H0044',
       email: 'amara@earth.local',
+      house_name: 'House Vance',
       dynasty_name: 'House Vance',
       motto: 'From the Red Dust We Build Eternity',
       founder_human_id: 'H-0044',
@@ -25,7 +26,8 @@ function createMockDb(initialData = {}) {
   const lineage = initialData.lineage || [
     {
       id: 'LIN-001',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       human_id: 'H-0044',
       predecessor_human_id: null,
       generation: 1,
@@ -48,7 +50,8 @@ function createMockDb(initialData = {}) {
   const heirlooms = initialData.heirlooms || [
     {
       id: 'HLM-001',
-      dynasty_id: 'DYN-H0044',
+      house_id: 'HSE-H0044',
+      dynasty_id: 'HSE-H0044',
       name: 'The Vance Founding Signet',
       heirloom_type: 'founder_seal',
       quality_tier: 'Legendary',
@@ -63,39 +66,40 @@ function createMockDb(initialData = {}) {
     async query(sql, params = []) {
       const s = sql.trim().toUpperCase();
 
-      if (s.includes('FROM DYNASTIES WHERE EMAIL = $1')) {
-        const found = dynasties.find((d) => d.email === params[0] || d.id === params[1]);
+      if (s.includes('FROM HOUSES WHERE EMAIL = $1') || s.includes('FROM DYNASTIES WHERE EMAIL = $1')) {
+        const found = houses.find((d) => d.email === params[0] || d.id === params[1]);
         return { rows: found ? [found] : [] };
       }
 
-      if (s.includes('FROM DYNASTY_LINEAGE_RECORDS WHERE DYNASTY_ID = $1')) {
-        const rows = lineage.filter((l) => l.dynasty_id === params[0]);
+      if (s.includes('FROM HOUSE_LINEAGE_RECORDS WHERE HOUSE_ID = $1') || s.includes('FROM DYNASTY_LINEAGE_RECORDS WHERE DYNASTY_ID = $1')) {
+        const rows = lineage.filter((l) => l.house_id === params[0] || l.dynasty_id === params[0]);
         return { rows };
       }
 
-      if (s.includes('FROM DYNASTY_PERKS WHERE DYNASTY_ID = $1 AND PERK_KEY = $2')) {
-        const rows = perks.filter((p) => p.dynasty_id === params[0] && p.perk_key === params[1]);
+      if (s.includes('FROM HOUSE_PERKS WHERE HOUSE_ID = $1 AND PERK_KEY = $2') || s.includes('FROM DYNASTY_PERKS WHERE DYNASTY_ID = $1 AND PERK_KEY = $2')) {
+        const rows = perks.filter((p) => (p.house_id === params[0] || p.dynasty_id === params[0]) && p.perk_key === params[1]);
         return { rows };
       }
 
-      if (s.includes('FROM DYNASTY_PERKS WHERE DYNASTY_ID = $1')) {
-        const rows = perks.filter((p) => p.dynasty_id === params[0]);
+      if (s.includes('FROM HOUSE_PERKS WHERE HOUSE_ID = $1') || s.includes('FROM DYNASTY_PERKS WHERE DYNASTY_ID = $1')) {
+        const rows = perks.filter((p) => p.house_id === params[0] || p.dynasty_id === params[0]);
         return { rows };
       }
 
-      if (s.includes('FROM DYNASTY_HEIRLOOMS WHERE ID = $1 AND DYNASTY_ID = $2')) {
-        const found = heirlooms.find((h) => h.id === params[0] && h.dynasty_id === params[1]);
+      if (s.includes('FROM HOUSE_HEIRLOOMS WHERE ID = $1 AND HOUSE_ID = $2') || s.includes('FROM DYNASTY_HEIRLOOMS WHERE ID = $1 AND DYNASTY_ID = $2')) {
+        const found = heirlooms.find((h) => h.id === params[0] && (h.house_id === params[1] || h.dynasty_id === params[1]));
         return { rows: found ? [found] : [] };
       }
 
-      if (s.includes('FROM DYNASTY_HEIRLOOMS WHERE DYNASTY_ID = $1')) {
-        const rows = heirlooms.filter((h) => h.dynasty_id === params[0]);
+      if (s.includes('FROM HOUSE_HEIRLOOMS WHERE HOUSE_ID = $1') || s.includes('FROM DYNASTY_HEIRLOOMS WHERE DYNASTY_ID = $1')) {
+        const rows = heirlooms.filter((h) => h.house_id === params[0] || h.dynasty_id === params[0]);
         return { rows };
       }
 
-      if (s.includes('INSERT INTO DYNASTY_PERKS')) {
+      if (s.includes('INSERT INTO HOUSE_PERKS') || s.includes('INSERT INTO DYNASTY_PERKS')) {
         const newPerk = {
           id: params[0],
+          house_id: params[1],
           dynasty_id: params[1],
           perk_key: params[2],
           perk_name: params[3],
@@ -107,21 +111,22 @@ function createMockDb(initialData = {}) {
         return { rows: [newPerk] };
       }
 
-      if (s.includes('UPDATE DYNASTIES') && s.includes('SET LEGACY_POINTS = LEGACY_POINTS - $1')) {
-        const dyn = dynasties.find((d) => d.id === params[1]);
+      if ((s.includes('UPDATE HOUSES') || s.includes('UPDATE DYNASTIES')) && s.includes('SET LEGACY_POINTS = LEGACY_POINTS - $1')) {
+        const dyn = houses.find((d) => d.id === params[1]);
         if (dyn) dyn.legacy_points -= params[0];
         return { rows: [dyn] };
       }
 
-      if (s.includes('UPDATE DYNASTY_HEIRLOOMS SET EQUIPPED_BY_HUMAN_ID = $1 WHERE ID = $2')) {
+      if (s.includes('UPDATE HOUSE_HEIRLOOMS SET EQUIPPED_BY_HUMAN_ID = $1 WHERE ID = $2') || s.includes('UPDATE DYNASTY_HEIRLOOMS SET EQUIPPED_BY_HUMAN_ID = $1 WHERE ID = $2')) {
         const h = heirlooms.find((x) => x.id === params[1]);
         if (h) h.equipped_by_human_id = params[0];
         return { rows: [h] };
       }
 
-      if (s.includes('INSERT INTO DYNASTY_HEIRLOOMS')) {
+      if (s.includes('INSERT INTO HOUSE_HEIRLOOMS') || s.includes('INSERT INTO DYNASTY_HEIRLOOMS')) {
         const newH = {
           id: params[0],
+          house_id: params[1],
           dynasty_id: params[1],
           name: params[2],
           heirloom_type: params[3],
@@ -134,10 +139,11 @@ function createMockDb(initialData = {}) {
         return { rows: [newH] };
       }
 
-      if (s.includes('UPDATE DYNASTIES SET MOTTO = $1, DYNASTY_NAME = $2 WHERE ID = $3')) {
-        const dyn = dynasties.find((d) => d.id === params[2]);
+      if ((s.includes('UPDATE HOUSES SET MOTTO = $1') || s.includes('UPDATE DYNASTIES SET MOTTO = $1'))) {
+        const dyn = houses.find((d) => d.id === params[2]);
         if (dyn) {
           dyn.motto = params[0];
+          dyn.house_name = params[1];
           dyn.dynasty_name = params[1];
         }
         return { rows: [dyn] };
@@ -150,42 +156,42 @@ function createMockDb(initialData = {}) {
   return repository;
 }
 
-test('getDynastyOverview queries dynasty, lineage, perks, and catalog', async () => {
+test('getHouseOverview queries house, lineage, perks, and catalog', async () => {
   const db = createMockDb();
-  const res = await getDynastyOverview(db, 'amara@earth.local', 'H-0044', 'Amara Vance');
+  const res = await getHouseOverview(db, 'amara@earth.local', 'H-0044', 'Amara Vance');
 
   assert.equal(res.ok, true);
-  assert.equal(res.dynasty.dynasty_name, 'House Vance');
+  assert.equal(res.house.house_name, 'House Vance');
   assert.equal(res.lineage.length, 1);
   assert.equal(res.heirlooms.length, 1);
   assert.equal(res.catalogPerks.length, 5);
 });
 
-test('unlockDynastyPerk deducts legacy points and records perk', async () => {
+test('unlockHousePerk deducts legacy points and records perk', async () => {
   const db = createMockDb();
-  const res = await unlockDynastyPerk(db, 'amara@earth.local', 'industrialist_lineage', 140);
+  const res = await unlockHousePerk(db, 'amara@earth.local', 'industrialist_lineage', 140);
 
   assert.equal(res.ok, true);
   assert.equal(res.perkKey, 'industrialist_lineage');
   assert.equal(res.remainingPoints, 250); // 350 - 100
 });
 
-test('equipDynastyHeirloom toggles equip status', async () => {
+test('equipHouseHeirloom toggles equip status', async () => {
   const db = createMockDb();
-  const res1 = await equipDynastyHeirloom(db, 'amara@earth.local', 'HLM-001', 'H-0044');
+  const res1 = await equipHouseHeirloom(db, 'amara@earth.local', 'HLM-001', 'H-0044');
   assert.equal(res1.ok, true);
   assert.equal(res1.isEquipped, true);
   assert.equal(res1.equippedBy, 'H-0044');
 
-  const res2 = await equipDynastyHeirloom(db, 'amara@earth.local', 'HLM-001', 'H-0044');
+  const res2 = await equipHouseHeirloom(db, 'amara@earth.local', 'HLM-001', 'H-0044');
   assert.equal(res2.ok, true);
   assert.equal(res2.isEquipped, false);
   assert.equal(res2.equippedBy, null);
 });
 
-test('forgeDynastyHeirloom and updateDynastyMotto succeed', async () => {
+test('forgeHouseHeirloom and updateHouseMotto succeed', async () => {
   const db = createMockDb();
-  const forgeRes = await forgeDynastyHeirloom(
+  const forgeRes = await forgeHouseHeirloom(
     db,
     'amara@earth.local',
     'Senate Gavel of Truth',
@@ -196,8 +202,8 @@ test('forgeDynastyHeirloom and updateDynastyMotto succeed', async () => {
   assert.equal(forgeRes.ok, true);
   assert.equal(forgeRes.heirloom.name, 'Senate Gavel of Truth');
 
-  const mottoRes = await updateDynastyMotto(db, 'amara@earth.local', 'Per Aspera Ad Astra', 'House Vance-Neo');
+  const mottoRes = await updateHouseMotto(db, 'amara@earth.local', 'Per Aspera Ad Astra', 'House Vance-Neo');
   assert.equal(mottoRes.ok, true);
   assert.equal(mottoRes.motto, 'Per Aspera Ad Astra');
-  assert.equal(mottoRes.dynastyName, 'House Vance-Neo');
+  assert.equal(mottoRes.houseName, 'House Vance-Neo');
 });

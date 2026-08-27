@@ -108,33 +108,36 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       legacy: number;
       life_status: string;
       city_id: string | null;
-      dynasty_name: string | null;
+      house_name: string | null;
+      dynasty_name?: string | null;
       balance: string;
     }>(`
       SELECT h.id, h.display_name, h.age_years, h.standing, h.legacy, h.life_status,
-             m.city_id, d.dynasty_name,
+             m.city_id, d.house_name, d.house_name AS dynasty_name,
              COALESCE(ab.balance, '0') AS balance
       FROM humans h
       LEFT JOIN account_balances ab ON ab.account_id = h.account_id AND ab.currency = 'CREDIT'
       LEFT JOIN memberships m ON m.human_id = h.id
-      LEFT JOIN dynasties d ON d.founder_human_id = h.id
+      LEFT JOIN houses d ON d.founder_human_id = h.id
       WHERE h.life_status = 'active'
       ORDER BY (h.legacy * 3 + h.standing * 2 + FLOOR(COALESCE(ab.balance::numeric, 0) / 100)) DESC, h.legacy DESC
       LIMIT $1
     `, [limit]).catch(() => ({ rows: [] })),
     repository.query<{
-      dynasty_name: string;
+      house_name: string;
+      dynasty_name?: string;
       deceased_count: number;
       peak_legacy: number;
       peak_standing: number;
     }>(`
-      SELECT dp.dynasty_name,
+      SELECT dp.house_name AS house_name,
+             dp.house_name AS dynasty_name,
              COUNT(*)::int AS deceased_count,
              MAX(dp.final_legacy)::int AS peak_legacy,
              MAX(dp.final_standing)::int AS peak_standing
       FROM deceased_profiles dp
-      WHERE dp.dynasty_name IS NOT NULL AND dp.dynasty_name != ''
-      GROUP BY dp.dynasty_name
+      WHERE dp.house_name IS NOT NULL AND dp.house_name != ''
+      GROUP BY dp.house_name
       ORDER BY MAX(dp.final_legacy) DESC, COUNT(*) DESC
       LIMIT $1
     `, [limit]).catch(() => ({ rows: [] })),
@@ -183,7 +186,8 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       legacy: Number(h.legacy),
       credits,
       cityId: h.city_id,
-      dynastyName: h.dynasty_name,
+      houseName: h.house_name ?? h.dynasty_name ?? null,
+      dynastyName: h.house_name ?? h.dynasty_name ?? null,
       compositeScore,
     };
   });
@@ -225,6 +229,10 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       ...t,
     })),
     citizens: enrichedHumans,
+    houses: dynasticHouses.rows.map((d, idx) => ({
+      rank: idx + 1,
+      ...d,
+    })),
     dynasticHouses: dynasticHouses.rows.map((d, idx) => ({
       rank: idx + 1,
       ...d,
@@ -336,29 +344,31 @@ export async function readBusinessProfile(repository: PostgresRepository, busine
 }
 
 export async function listPantheonOfAchievements(repository: PostgresRepository): Promise<Record<string, unknown>> {
-  const [deceased, active, dynasties] = await Promise.all([
+  const [deceased, active, houses] = await Promise.all([
     repository.query('SELECT * FROM deceased_profiles ORDER BY final_legacy DESC, final_standing DESC LIMIT 50'),
     repository.query("SELECT id, display_name, age_years, standing, legacy, (standing * 10 + legacy * 50 + age_years * 2) AS composite_legacy_score FROM humans WHERE life_status = 'active' ORDER BY legacy DESC, standing DESC LIMIT 20"),
-    repository.query("SELECT dynasty_name, COUNT(*) as deceased_count, MAX(final_legacy) as peak_legacy FROM deceased_profiles GROUP BY dynasty_name ORDER BY peak_legacy DESC LIMIT 20"),
+    repository.query("SELECT house_name, house_name as dynasty_name, COUNT(*)::int as deceased_count, MAX(final_legacy)::int as peak_legacy FROM deceased_profiles WHERE house_name IS NOT NULL AND house_name != '' GROUP BY house_name ORDER BY peak_legacy DESC LIMIT 20"),
   ]);
   return {
     deceasedPantheon: deceased.rows,
     livingLeaders: active.rows,
-    dynasticHouses: dynasties.rows,
+    houses: houses.rows,
+    dynasticHouses: houses.rows,
   };
 }
 
-export async function listCemeteryProfiles(repository: PostgresRepository, query: { search?: string; dynasty?: string; limit?: number }): Promise<Record<string, unknown>> {
+export async function listCemeteryProfiles(repository: PostgresRepository, query: { search?: string; house?: string; dynasty?: string; limit?: number }): Promise<Record<string, unknown>> {
   const limit = Math.max(1, Math.min(100, query.limit ?? 50));
   let sql = 'SELECT * FROM deceased_profiles WHERE 1=1';
   const params: unknown[] = [];
   if (query.search && query.search.trim().length > 0) {
     params.push(`%${query.search.trim()}%`);
-    sql += ` AND (display_name ILIKE $${params.length} OR successor_name ILIKE $${params.length} OR dynasty_name ILIKE $${params.length})`;
+    sql += ` AND (display_name ILIKE $${params.length} OR successor_name ILIKE $${params.length} OR house_name ILIKE $${params.length})`;
   }
-  if (query.dynasty && query.dynasty.trim().length > 0) {
-    params.push(query.dynasty.trim());
-    sql += ` AND dynasty_name = $${params.length}`;
+  const houseFilter = query.house?.trim() || query.dynasty?.trim();
+  if (houseFilter) {
+    params.push(houseFilter);
+    sql += ` AND house_name = $${params.length}`;
   }
   params.push(limit);
   sql += ` ORDER BY death_game_day DESC, final_legacy DESC LIMIT $${params.length}`;

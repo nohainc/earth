@@ -39,11 +39,13 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 i.category.toLowerCase() == 'contracts' ||
                 i.category.toLowerCase() == 'market')
             .toList();
+      case 'CIVIC_HOUSE':
       case 'CIVIC_DYNASTY':
         return widget.items
             .where((i) =>
                 i.category.toLowerCase() == 'governance' ||
                 i.category.toLowerCase() == 'civic' ||
+                i.category.toLowerCase() == 'house' ||
                 i.category.toLowerCase() == 'dynasty' ||
                 i.category.toLowerCase() == 'technology' ||
                 i.category.toLowerCase() == 'finance')
@@ -65,7 +67,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
     return EarthPanel(
       title: 'PRIORITIZED DECISION QUEUE',
       infoDescription:
-          '• Unified Strategic Loop: Aggregates high-priority decisions across your corporate operations, pending contracts, civic referendums, machine maintenance, research initiatives, and dynasty succession.\n\n• Decision Tiers:\n  - CRITICAL / HIGH: Immediate risk of asset loss, default penalty, or production stoppage.\n  - MEDIUM: Governance referendums, contractual obligations, and market price arbitrage.\n  - LOW: Research funding opportunities and non-blocking civic updates.\n\n• Primary Action: Tapping the action button primes the decision parameters and opens the target terminal for immediate execution.',
+          '• Unified Strategic Loop: Aggregates high-priority decisions across your corporate operations, pending contracts, civic referendums, machine maintenance, research initiatives, and house succession.\n\n• Decision Tiers:\n  - CRITICAL / HIGH: Immediate risk of asset loss, default penalty, or production stoppage.\n  - MEDIUM: Governance referendums, contractual obligations, and market price arbitrage.\n  - LOW: Research funding opportunities and non-blocking civic updates.\n\n• Primary Action: Tapping the action button primes the decision parameters and opens the target terminal for immediate execution.',
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -126,7 +128,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
                 const SizedBox(width: 6),
                 _buildFilterPill('CORPORATION', 'CORPORATION & ASSETS'),
                 const SizedBox(width: 6),
-                _buildFilterPill('CIVIC_DYNASTY', 'CIVIC & DYNASTY'),
+                _buildFilterPill('CIVIC_HOUSE', 'CIVIC & HOUSE'),
               ],
             ),
           ),

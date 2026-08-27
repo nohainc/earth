@@ -18,7 +18,7 @@ import '../operations/buildings_hub_screen.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
-import '../dynasty/dynasty_tree_dialog.dart';
+import '../house/house_tree_dialog.dart';
 import '../contracts/supply_contracts_dialog.dart';
 import '../market/derivatives_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
@@ -45,11 +45,14 @@ String dashboardSectionTitle(String section) => switch (section) {
       'buildings' => 'BUILDINGS & URBAN INFRASTRUCTURE',
       'real_estate' => 'BUILDINGS & DISTRICT',
       'civic' => 'PUBLIC',
-      'corporation' => 'CORPORATIONS',
+      'corporations' => 'CORPORATIONS',
+      'corporation' => 'CORPORATION',
+      'my-corporation' => 'MY CORPORATION',
       'city' => 'MY CITY',
       String s when s.startsWith('my-community') => 'MY COMMUNITY',
       'communities' => 'COMMUNITIES',
-      'dynasty' => 'FAMILY',
+      'house' => 'HOUSE',
+      'dynasty' => 'HOUSE',
       'technology' => 'TECHNOLOGY',
       'patents' => 'PATENTS & LICENSING',
       'machines' => 'MACHINES & PRODUCTION',
@@ -362,7 +365,7 @@ class Dashboard extends StatelessWidget {
       case 'market':
         return [
           LayoutBuilder(
-            builder: (context, _) {
+            builder: (context, constraints) {
               final signals = MarketSignalsPanel(
                 panelKey: sectionKeys['market'],
                 state: state,
@@ -476,19 +479,16 @@ class Dashboard extends StatelessWidget {
             onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
           ),
         ];
+      case 'house':
       case 'dynasty':
         return [
-          Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            DynastyTreeDialog(
-              api: const EarthApi(),
-              state: state,
-              isPageMode: true,
-              onNavigate: onNavigate,
-              onRefresh: () => action(() => const EarthApi().world()),
-            ),
-            const SizedBox(height: 34),
-            HistoricalDynastiesPanel(pantheon: pantheon),
-          ]),
+          HouseTreeDialog(
+            api: const EarthApi(),
+            state: state,
+            isPageMode: true,
+            onNavigate: onNavigate,
+            onRefresh: () => action(() => const EarthApi().world()),
+          ),
         ];
       case 'business':
         return [
@@ -548,65 +548,53 @@ class Dashboard extends StatelessWidget {
       case 'civic':
       case 'governance':
         return [
-          ProposalPanel(state: state, busy: busy, action: action),
-          const SizedBox(height: 34),
           PublicFinanceGovernancePanel(
               state: state, busy: busy, action: action),
+          const SizedBox(height: 34),
+          ProposalPanel(state: state, busy: busy, action: action),
         ];
       case 'corporation':
+      case 'my-corporation':
+        final corporationId = state.membership?['corporation_id']?.toString();
         return [
-          LayoutBuilder(builder: (context, constraints) {
-            final overview = CorporationOverviewPanel(
-                state: state, busy: busy, action: action);
-            final isMember = state.membership?['corporation_id'] != null;
-            if (isMember) {
-              final corporationId =
-                  state.membership?['corporation_id']?.toString();
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  overview,
-                  if (corporationId != null) ...[
-                    const SizedBox(height: 34),
-                    ProposalPanel(
-                      state: state,
-                      busy: busy,
-                      action: action,
-                      institutionId: corporationId,
-                      scopeLabel: 'CORPORATION',
-                    ),
-                    const SizedBox(height: 34),
-                    RolesPanel(
-                      state: state,
-                      busy: busy,
-                      action: action,
-                      institutionId: corporationId,
-                    ),
-                  ],
-                ],
-              );
-            }
-            final directory = CorporationDirectoryPanel(
-                state: state, busy: busy, action: action);
-            if (constraints.maxWidth > 1000) {
-              return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(child: overview),
-                    const SizedBox(width: 34),
-                    Expanded(child: directory),
-                  ]);
-            }
-            return Column(
-                children: [overview, const SizedBox(height: 34), directory]);
-          })
+          CorporationOverviewPanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          if (corporationId != null && corporationId.isNotEmpty) ...[
+            const SizedBox(height: 34),
+            ProposalPanel(
+              state: state,
+              busy: busy,
+              action: action,
+              institutionId: corporationId,
+              scopeLabel: 'CORPORATION',
+            ),
+            const SizedBox(height: 34),
+            RolesPanel(
+              state: state,
+              busy: busy,
+              action: action,
+              institutionId: corporationId,
+            ),
+          ],
+        ];
+      case 'corporations':
+        return [
+          CorporationDirectoryPanel(
+            state: state,
+            busy: busy,
+            action: action,
+            isExpandable: true,
+            showMemberSummary: false,
+            showSelection: false,
+          ),
         ];
       case 'city':
         return [
           LayoutBuilder(
-            builder: (context, constraints) {
-              final humanServices = HumanServicesPanel(
-                  panelKey: sectionKeys['city'], state: state);
+            builder: (context, _) {
               final institutions = InstitutionsCapacityPanel(
                 state: state,
                 busy: busy,
@@ -622,51 +610,12 @@ class Dashboard extends StatelessWidget {
                       institutionId: cityId,
                       scopeLabel: 'CITY');
               final cityImpact = CityImpactPanel(state: state);
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          institutions,
-                          if (cityProposal != null) ...[
-                            const SizedBox(height: 34),
-                            cityProposal,
-                          ],
-                          if (cityId != null) ...[
-                            const SizedBox(height: 34),
-                            RolesPanel(
-                              state: state,
-                              busy: busy,
-                              action: action,
-                              institutionId: cityId,
-                            ),
-                          ],
-                          const SizedBox(height: 34),
-                          humanServices,
-                          const SizedBox(height: 34),
-                          BuildingsHubScreen(state: state, busy: busy, action: action),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          cityImpact,
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   institutions,
+                  const SizedBox(height: 34),
+                  cityImpact,
                   if (cityProposal != null) ...[
                     const SizedBox(height: 34),
                     cityProposal,
@@ -680,12 +629,6 @@ class Dashboard extends StatelessWidget {
                       institutionId: cityId,
                     ),
                   ],
-                  const SizedBox(height: 34),
-                  humanServices,
-                  const SizedBox(height: 34),
-                  BuildingsHubScreen(state: state, busy: busy, action: action),
-                  const SizedBox(height: 34),
-                  cityImpact,
                 ],
               );
             },
@@ -798,24 +741,9 @@ class Dashboard extends StatelessWidget {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          lifeToday,
-                          const SizedBox(height: 34),
-                          succession,
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    const Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                        ],
-                      ),
-                    ),
+                    Expanded(child: lifeToday),
+                    const SizedBox(width: 40),
+                    Expanded(child: succession),
                   ],
                 );
               }
@@ -825,7 +753,6 @@ class Dashboard extends StatelessWidget {
                   lifeToday,
                   const SizedBox(height: 34),
                   succession,
-                  const SizedBox(height: 34),
                 ],
               );
             },

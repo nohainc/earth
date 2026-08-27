@@ -188,7 +188,7 @@ enum EarthThemeMode {
     id: 'solar_gold',
     name: 'Sovereign Solar Gold',
     description:
-        'Imperial solar gold and regal crimson for prestigious dynasties and high-stakes finance.',
+        'Imperial solar gold and regal crimson for prestigious noble houses and high-stakes finance.',
     primary: Color(0xfff59e0b),
     secondary: Color(0xffe11d48),
     canvas: Color(0xff070a12),

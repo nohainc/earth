@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
-import '../dynasty/dynasty_lineage_dialog.dart';
+import '../house/house_lineage_dialog.dart';
 
 class HistoricalArchivePanel extends StatefulWidget {
   final Map<String, dynamic> pantheon;
@@ -18,20 +18,20 @@ class HistoricalArchivePanel extends StatefulWidget {
 }
 
 class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
-  int _selectedTab = 0; // 0: Archived Citizens, 1: Recorded Dynasties
+  int _selectedTab = 0; // 0: Archived Citizens, 1: Recorded Houses
   int _deceasedPage = 0;
-  int _dynastyPage = 0;
+  int _housePage = 0;
   static const int _pageSize = 10;
 
   final _citizenSearchController = TextEditingController();
-  final _dynastySearchController = TextEditingController();
+  final _houseSearchController = TextEditingController();
   String _citizenSearch = '';
-  String _dynastySearch = '';
+  String _houseSearch = '';
 
   @override
   void dispose() {
     _citizenSearchController.dispose();
-    _dynastySearchController.dispose();
+    _houseSearchController.dispose();
     super.dispose();
   }
 
@@ -40,8 +40,8 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
   @override
   Widget build(BuildContext context) {
     final deceased = _list(widget.pantheon['deceasedPantheon'] ?? widget.pantheon['deceased']);
-    final rawDynasties = _list(widget.pantheon['dynasties'] ?? widget.pantheon['dynasticHouses']);
-    final dynasties = rawDynasties.where((item) {
+    final rawHouses = _list(widget.pantheon['houses'] ?? widget.pantheon['dynasties'] ?? widget.pantheon['dynasticHouses']);
+    final houses = rawHouses.where((item) {
       if (item is! Map) return false;
       final heir = item['active_heir']?.toString() ?? item['heir']?.toString();
       final isExtinct = item['is_extinct'] == true ||
@@ -52,20 +52,20 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
       return isExtinct;
     }).toList();
 
-    final deceasedCol = _buildDeceasedSection(context, deceased, rawDynasties);
-    final dynastiesCol = _buildDynastiesSection(context, dynasties);
+    final deceasedCol = _buildDeceasedSection(context, deceased, rawHouses);
+    final housesCol = _buildHousesSection(context, houses);
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final wide = constraints.maxWidth > 800;
+        final wide = constraints.maxWidth >= 840;
 
         if (wide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(child: deceasedCol),
-              SizedBox(width: context.spacingTopic),
-              Expanded(child: dynastiesCol),
+              const SizedBox(width: 40),
+              Expanded(child: housesCol),
             ],
           );
         }
@@ -95,9 +95,9 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                   Expanded(
                     child: _buildNarrowTabButton(
                       context,
-                      title: 'DYNASTIES',
-                      icon: Icons.account_tree_outlined,
-                      count: dynasties.length,
+                      title: 'HOUSES',
+                      icon: Icons.shield_outlined,
+                      count: houses.length,
                       isSelected: _selectedTab == 1,
                       onTap: () => setState(() => _selectedTab = 1),
                     ),
@@ -105,7 +105,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                 ],
               ),
             ),
-            _selectedTab == 0 ? deceasedCol : dynastiesCol,
+            _selectedTab == 0 ? deceasedCol : housesCol,
           ],
         );
       },
@@ -218,20 +218,20 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     );
   }
 
-  Widget _buildDeceasedSection(BuildContext context, List<dynamic> deceased, List<dynamic> dynasties) {
+  Widget _buildDeceasedSection(BuildContext context, List<dynamic> deceased, List<dynamic> houses) {
     final query = _citizenSearch.trim().toLowerCase();
     final filteredDeceased = query.isEmpty
         ? deceased
         : deceased.where((item) {
             if (item is! Map) return false;
             final name = (item['display_name'] ?? item['name'] ?? '').toString().toLowerCase();
-            final origDynasty = (item['original_dynasty_name'] ?? item['dynasty_name'] ?? item['dynasty'] ?? '').toString().toLowerCase();
-            final currDynasty = (item['current_dynasty_name'] ?? item['active_dynasty_name'] ?? '').toString().toLowerCase();
+            final origHouse = (item['original_house_name'] ?? item['house_name'] ?? item['original_dynasty_name'] ?? item['dynasty_name'] ?? item['dynasty'] ?? '').toString().toLowerCase();
+            final currHouse = (item['current_house_name'] ?? item['active_house_name'] ?? item['current_dynasty_name'] ?? item['active_dynasty_name'] ?? '').toString().toLowerCase();
             final city = (item['city_name'] ?? item['city'] ?? '').toString().toLowerCase();
             final succ = (item['successor_name'] ?? item['successor'] ?? '').toString().toLowerCase();
             return name.contains(query) ||
-                origDynasty.contains(query) ||
-                currDynasty.contains(query) ||
+                origHouse.contains(query) ||
+                currHouse.contains(query) ||
                 city.contains(query) ||
                 succ.contains(query);
           }).toList();
@@ -265,7 +265,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
             _buildSearchBar(
               context: context,
               controller: _citizenSearchController,
-              hintText: 'Search citizens by name, dynasty, city, or successor...',
+              hintText: 'Search citizens by name, house, city, or successor...',
               onChanged: (val) => setState(() {
                 _citizenSearch = val;
                 _deceasedPage = 0;
@@ -320,18 +320,18 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                     ageLabel = 'Age: $ageY yrs';
                   }
 
-                  final originalDynasty = (row['original_dynasty_name'] ?? row['dynasty_name'] ?? row['dynasty'] ?? 'Unknown dynasty').toString();
-                  final dynastyId = row['dynasty_id']?.toString();
-                  String? currentDynastyFromMap;
-                  if (dynastyId != null) {
-                    for (final d in dynasties) {
-                      if (d is Map && (d['id']?.toString() == dynastyId || d['dynasty_id']?.toString() == dynastyId)) {
-                        currentDynastyFromMap = d['dynasty_name']?.toString();
+                  final originalHouse = (row['original_house_name'] ?? row['house_name'] ?? row['original_dynasty_name'] ?? row['dynasty_name'] ?? row['dynasty'] ?? 'Unknown house').toString();
+                  final houseId = (row['house_id'] ?? row['dynasty_id'])?.toString();
+                  String? currentHouseFromMap;
+                  if (houseId != null) {
+                    for (final d in houses) {
+                      if (d is Map && (d['id']?.toString() == houseId || d['house_id']?.toString() == houseId || d['dynasty_id']?.toString() == houseId)) {
+                        currentHouseFromMap = (d['house_name'] ?? d['dynasty_name'])?.toString();
                         break;
                       }
                     }
                   }
-                  final currentDynasty = row['current_dynasty_name']?.toString() ?? row['active_dynasty_name']?.toString() ?? currentDynastyFromMap;
+                  final currentHouse = row['current_house_name'] ?? row['active_house_name'] ?? row['current_dynasty_name'] ?? row['active_dynasty_name'] ?? currentHouseFromMap;
 
                   final legacy = (row['final_legacy'] ?? row['legacy_points'] ?? row['legacy'] ?? 0).toString();
                   final legNum = int.tryParse(legacy) ?? 0;
@@ -379,7 +379,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                                       style: context.widgetValueStyle,
                                     ),
                                     Text(
-                                      '· Gen $gen of ${currentDynasty ?? originalDynasty}',
+                                      '· Gen $gen of ${currentHouse ?? originalHouse}',
                                       style: context.widgetValueStyle.copyWith(
                                         color: context.mutedColor,
                                       ),
@@ -410,8 +410,8 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                             spacing: 12,
                             runSpacing: 6,
                             children: [
-                              if (currentDynasty != null && currentDynasty.isNotEmpty && currentDynasty != originalDynasty)
-                                _badge(context, Icons.history_edu, 'Original Dynasty: $originalDynasty'),
+                              if (currentHouse != null && currentHouse.toString().isNotEmpty && currentHouse != originalHouse)
+                                _badge(context, Icons.history_edu, 'Original House: $originalHouse'),
                               if (bornLabel != null) _badge(context, Icons.cake_outlined, bornLabel),
                               if (ageLabel != null) _badge(context, Icons.timelapse, ageLabel),
                               _badge(context, Icons.stars_outlined, 'Personal Legacy: $legNum LP'),
@@ -469,34 +469,34 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     );
   }
 
-  Widget _buildDynastiesSection(BuildContext context, List<dynamic> dynasties) {
-    final dQuery = _dynastySearch.trim().toLowerCase();
-    final filteredDynasties = dQuery.isEmpty
-        ? dynasties
-        : dynasties.where((item) {
+  Widget _buildHousesSection(BuildContext context, List<dynamic> houses) {
+    final dQuery = _houseSearch.trim().toLowerCase();
+    final filteredHouses = dQuery.isEmpty
+        ? houses
+        : houses.where((item) {
             if (item is! Map) return false;
-            final dynastyName = (item['dynasty_name'] ?? item['name'] ?? '').toString().toLowerCase();
+            final houseName = (item['house_name'] ?? item['dynasty_name'] ?? item['name'] ?? '').toString().toLowerCase();
             final heir = (item['active_heir'] ?? item['heir'] ?? '').toString().toLowerCase();
             final seat = (item['seat'] ?? item['seat_city'] ?? item['city_name'] ?? '').toString().toLowerCase();
             final founder = (item['founder_name'] ?? item['founder'] ?? '').toString().toLowerCase();
-            return dynastyName.contains(dQuery) || heir.contains(dQuery) || seat.contains(dQuery) || founder.contains(dQuery);
+            return houseName.contains(dQuery) || heir.contains(dQuery) || seat.contains(dQuery) || founder.contains(dQuery);
           }).toList();
 
-    final totalPages = (filteredDynasties.length / _pageSize).ceil().clamp(1, 9999);
-    final currentPage = _dynastyPage.clamp(0, totalPages - 1);
-    final pageItems = filteredDynasties.skip(currentPage * _pageSize).take(_pageSize).toList();
+    final totalPages = (filteredHouses.length / _pageSize).ceil().clamp(1, 9999);
+    final currentPage = _housePage.clamp(0, totalPages - 1);
+    final pageItems = filteredHouses.skip(currentPage * _pageSize).take(_pageSize).toList();
 
     return EarthSection(
-      title: 'HISTORICAL DYNASTIES',
+      title: 'HISTORICAL HOUSES',
       showSurface: false,
       infoDescription:
-          'The Dynastic Prestige Score permanently records the generational prominence and survival of a family house across Earth\'s history based on a 1 : 5 : 25 weighting ratio:',
+          'The House Prestige Score permanently records the generational prominence and survival of a noble house across Earth\'s history based on a 1 : 5 : 25 weighting ratio:',
       infoBulletPoints: const [
-        'Dynastic Legacy (25x relative weight): Cumulative milestones and achievements earned across all generations.',
-        'Dynastic Standing (5x relative weight): Accumulated civic reputation and governance trust.',
+        'House Legacy (25x relative weight): Cumulative milestones and achievements earned across all generations.',
+        'House Standing (5x relative weight): Accumulated civic reputation and governance trust.',
         'Ancestral Inscriptions (10x bonus): Total passed ancestors permanently recorded.',
-        'Dynastic Lifespan (1x base weight): Total full years the dynasty has existed on Earth.',
-        'Relative Ratio: 1 Legacy Pt = 5 Dynastic Standing Pts = 25 Lifespan Years.',
+        'House Lifespan (1x base weight): Total full years the house has existed on Earth.',
+        'Relative Ratio: 1 Legacy Pt = 5 House Standing Pts = 25 Lifespan Years.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -504,28 +504,28 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
           Padding(
             padding: EdgeInsets.only(bottom: context.spacingControl),
             child: Text(
-              'Planetary registry and memorial of concluded, extinct, and inactive dynastic lineages across Earth.',
+              'Planetary registry and memorial of concluded, extinct, and inactive noble house lineages across Earth.',
               style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
             ),
           ),
-          if (dynasties.isNotEmpty)
+          if (houses.isNotEmpty)
             _buildSearchBar(
               context: context,
-              controller: _dynastySearchController,
-              hintText: 'Search extinct dynasties by name, founder, or seat...',
+              controller: _houseSearchController,
+              hintText: 'Search extinct houses by name, founder, or seat...',
               onChanged: (val) => setState(() {
-                _dynastySearch = val;
-                _dynastyPage = 0;
+                _houseSearch = val;
+                _housePage = 0;
               }),
             ),
-          if (dynasties.isEmpty)
+          if (houses.isEmpty)
             const EarthEmptyState(
-              message: 'No extinct dynasties have been recorded in the archive yet.',
-              icon: Icons.account_tree_outlined,
+              message: 'No extinct houses have been recorded in the archive yet.',
+              icon: Icons.shield_outlined,
             )
-          else if (filteredDynasties.isEmpty)
+          else if (filteredHouses.isEmpty)
             EarthEmptyState(
-              message: 'No recorded dynasties match "$_dynastySearch".',
+              message: 'No recorded houses match "$_houseSearch".',
               icon: Icons.search_off,
             )
           else ...[
@@ -534,12 +534,12 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               final row = raw is Map
                   ? Map<String, dynamic>.from(raw)
                   : const <String, dynamic>{};
-              final dynastyName =
-                  (row['dynasty_name'] ?? row['name'] ?? 'Dynasty').toString();
+              final houseName =
+                  (row['house_name'] ?? row['dynasty_name'] ?? row['name'] ?? 'House').toString();
               final gen = row['generation'] ?? row['generations'] ?? row['generation_number'] ?? row['gen'] ?? 1;
               final count = (row['deceased_count'] ?? row['ancestors_count'] ?? row['deceased'] ?? '1').toString();
-              final totalLegacy = (row['total_legacy'] ?? row['dynasty_legacy'] ?? row['peak_legacy'] ?? row['legacy_points'] ?? row['legacy'] ?? '0').toString();
-              final peakStanding = row['peak_standing'] ?? row['standing'] ?? row['dynastic_standing'] ?? 0;
+              final totalLegacy = (row['total_legacy'] ?? row['house_legacy'] ?? row['dynasty_legacy'] ?? row['peak_legacy'] ?? row['legacy_points'] ?? row['legacy'] ?? '0').toString();
+              final peakStanding = row['peak_standing'] ?? row['standing'] ?? row['house_standing'] ?? row['dynastic_standing'] ?? 0;
               final founder = row['founder_name']?.toString() ?? row['founder']?.toString() ?? row['progenitor_name']?.toString();
               final heir = row['active_heir']?.toString() ?? row['heir']?.toString();
               final motto = row['motto']?.toString() ?? row['description']?.toString() ?? row['epitaph']?.toString();
@@ -563,7 +563,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
               final standingNum = int.tryParse(peakStanding.toString()) ?? 0;
               final genNum = int.tryParse(gen.toString()) ?? 1;
               final ancestorsNum = int.tryParse(count) ?? 1;
-              final dynastyScore = row['dynasty_score'] ?? row['score'] ?? (legacyNum * 50 + standingNum * 10 + ageY * 2 + ancestorsNum * 20);
+              final houseScore = row['house_score'] ?? row['dynasty_score'] ?? row['score'] ?? (legacyNum * 50 + standingNum * 10 + ageY * 2 + ancestorsNum * 20);
 
               final isExtinct = row['is_extinct'] == true || row['status'] == 'extinct' || row['status'] == 'deceased' || (heir == null || heir.isEmpty || heir == '—');
               final statusLabel = !isExtinct
@@ -576,9 +576,9 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                 ),
                 child: InkWell(
                   borderRadius: BorderRadius.circular(context.radiusCard),
-                  onTap: () => showDynastyLineageDialog(
+                  onTap: () => showHouseLineageDialog(
                     context,
-                    dynasty: Map<String, dynamic>.from(row),
+                    house: Map<String, dynamic>.from(row),
                   ),
                   child: Container(
                     padding: EdgeInsets.all(context.cardPadding),
@@ -594,7 +594,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
                             Icon(
-                              Icons.military_tech,
+                              Icons.shield_outlined,
                               color: context.primaryColor,
                               size: context.iconSize,
                             ),
@@ -606,7 +606,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                                 runSpacing: 2,
                                 children: [
                                   Text(
-                                    dynastyName,
+                                    houseName,
                                     style: context.widgetValueStyle,
                                   ),
                                   Text(
@@ -621,7 +621,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                             SizedBox(width: context.spacingInline),
                             EarthStatusPill(
                               label: 'SCORE',
-                              value: '$dynastyScore PTS',
+                              value: '$houseScore PTS',
                               color: context.primaryColor,
                             ),
                             const SizedBox(width: 6),
@@ -656,9 +656,9 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                             _badge(context, Icons.cake_outlined, foundedLabel),
                             _badge(context, Icons.timelapse, ageLabel),
                             _badge(context, Icons.account_box_outlined, 'Ancestors: $count'),
-                            _badge(context, Icons.stars_outlined, 'Dynastic Legacy: $totalLegacy LP'),
+                            _badge(context, Icons.stars_outlined, 'House Legacy: $totalLegacy LP'),
                             if (standingNum > 0)
-                              _badge(context, Icons.shield, 'Dynastic Standing: $standingNum pts'),
+                              _badge(context, Icons.shield, 'House Standing: $standingNum pts'),
                             if (seat != null && seat.isNotEmpty && seat != '—')
                               _badge(context, Icons.location_city, 'Seat: $seat'),
                             if (vault != null && vault != 0 && vault != '0')
@@ -672,13 +672,13 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                 ),
               );
             }),
-            if (filteredDynasties.length > _pageSize) ...[
+            if (filteredHouses.length > _pageSize) ...[
               const SizedBox(height: 16),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'PAGE ${currentPage + 1} OF $totalPages (${filteredDynasties.length} TOTAL)',
+                    'PAGE ${currentPage + 1} OF $totalPages (${filteredHouses.length} TOTAL)',
                     style: context.captionStyle.copyWith(color: context.mutedColor),
                   ),
                   Row(
@@ -688,7 +688,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                         label: 'PREVIOUS',
                         icon: Icons.chevron_left_rounded,
                         onPressed: currentPage > 0
-                            ? () => setState(() => _dynastyPage = currentPage - 1)
+                            ? () => setState(() => _housePage = currentPage - 1)
                             : null,
                       ),
                       const SizedBox(width: 8),
@@ -696,7 +696,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                         label: 'NEXT',
                         icon: Icons.chevron_right_rounded,
                         onPressed: currentPage < totalPages - 1
-                            ? () => setState(() => _dynastyPage = currentPage + 1)
+                            ? () => setState(() => _housePage = currentPage + 1)
                             : null,
                       ),
                     ],
@@ -711,15 +711,17 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
   }
 }
 
-class HistoricalDynastiesPanel extends StatefulWidget {
+typedef HistoricalDynastiesPanel = HistoricalHousesPanel;
+
+class HistoricalHousesPanel extends StatefulWidget {
   final Map<String, dynamic> pantheon;
-  const HistoricalDynastiesPanel({super.key, required this.pantheon});
+  const HistoricalHousesPanel({super.key, required this.pantheon});
 
   @override
-  State<HistoricalDynastiesPanel> createState() => _HistoricalDynastiesPanelState();
+  State<HistoricalHousesPanel> createState() => _HistoricalHousesPanelState();
 }
 
-class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
+class _HistoricalHousesPanelState extends State<HistoricalHousesPanel> {
   int _page = 0;
   static const int _pageSize = 10;
 
@@ -742,19 +744,19 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
 
   @override
   Widget build(BuildContext context) {
-    final rows = widget.pantheon['dynasties'] ?? widget.pantheon['dynasticHouses'];
-    final dynasties = rows is List ? rows : const <dynamic>[];
-    final totalPages = (dynasties.length / _pageSize).ceil().clamp(1, 9999);
+    final rows = widget.pantheon['houses'] ?? widget.pantheon['dynasties'] ?? widget.pantheon['dynasticHouses'];
+    final houses = rows is List ? rows : const <dynamic>[];
+    final totalPages = (houses.length / _pageSize).ceil().clamp(1, 9999);
     final currentPage = _page.clamp(0, totalPages - 1);
-    final pageItems = dynasties.skip(currentPage * _pageSize).take(_pageSize).toList();
+    final pageItems = houses.skip(currentPage * _pageSize).take(_pageSize).toList();
 
     return EarthSection(
-      title: 'DYNASTIES',
+      title: 'HISTORICAL HOUSES',
       showSurface: false,
-      child: dynasties.isEmpty
+      child: houses.isEmpty
           ? const EarthEmptyState(
-              message: 'No historical dynasties recorded.',
-              icon: Icons.account_tree_outlined,
+              message: 'No historical houses recorded.',
+              icon: Icons.shield_outlined,
             )
           : Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -764,12 +766,12 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                   final row = raw is Map
                       ? Map<String, dynamic>.from(raw)
                       : const <String, dynamic>{};
-                  final dynastyName =
-                      (row['dynasty_name'] ?? row['name'] ?? 'Dynasty').toString();
+                  final houseName =
+                      (row['house_name'] ?? row['dynasty_name'] ?? row['name'] ?? 'House').toString();
                   final gen = row['generation'] ?? row['generations'] ?? row['generation_number'] ?? row['gen'] ?? 1;
                   final count = (row['deceased_count'] ?? row['generations'] ?? row['generation'] ?? '1').toString();
-                  final totalLegacy = (row['total_legacy'] ?? row['dynasty_legacy'] ?? row['peak_legacy'] ?? row['legacy_points'] ?? row['legacy'] ?? '0').toString();
-                  final peakStanding = row['peak_standing'] ?? row['standing'] ?? row['dynastic_standing'] ?? 0;
+                  final totalLegacy = (row['total_legacy'] ?? row['house_legacy'] ?? row['dynasty_legacy'] ?? row['peak_legacy'] ?? row['legacy_points'] ?? row['legacy'] ?? '0').toString();
+                  final peakStanding = row['peak_standing'] ?? row['standing'] ?? row['house_standing'] ?? row['dynastic_standing'] ?? 0;
                   final founder = row['founder_name']?.toString() ?? row['founder']?.toString() ?? row['progenitor_name']?.toString();
                   final heir = row['active_heir']?.toString() ?? row['heir']?.toString();
 
@@ -790,7 +792,7 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                   final standingNum = int.tryParse(peakStanding.toString()) ?? 0;
                   final genNum = int.tryParse(gen.toString()) ?? 1;
                   final ancestorsNum = int.tryParse(count) ?? 1;
-                  final dynastyScore = row['dynasty_score'] ?? row['score'] ?? (legacyNum * 50 + standingNum * 10 + ageY * 2 + ancestorsNum * 20);
+                  final houseScore = row['house_score'] ?? row['dynasty_score'] ?? row['score'] ?? (legacyNum * 50 + standingNum * 10 + ageY * 2 + ancestorsNum * 20);
 
                   final isExtinct = row['is_extinct'] == true || row['status'] == 'extinct' || row['status'] == 'deceased' || (heir == null || heir.isEmpty || heir == '—');
                   final statusLabel = !isExtinct
@@ -815,7 +817,7 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                             crossAxisAlignment: CrossAxisAlignment.center,
                             children: [
                               Icon(
-                                Icons.military_tech,
+                                Icons.shield_outlined,
                                 color: context.primaryColor,
                                 size: context.iconSize,
                               ),
@@ -827,7 +829,7 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                                   runSpacing: 2,
                                   children: [
                                     Text(
-                                      dynastyName,
+                                      houseName,
                                       style: context.widgetValueStyle,
                                     ),
                                     Text(
@@ -842,7 +844,7 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                               SizedBox(width: context.spacingInline),
                               EarthStatusPill(
                                 label: 'SCORE',
-                                value: '$dynastyScore PTS',
+                                value: '$houseScore PTS',
                                 color: context.primaryColor,
                               ),
                             ],
@@ -861,9 +863,9 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                               _badge(context, Icons.cake_outlined, foundedLabel),
                               _badge(context, Icons.timelapse, ageLabel),
                               _badge(context, Icons.account_box_outlined, 'Ancestors: $count'),
-                              _badge(context, Icons.stars_outlined, 'Dynastic Legacy: $totalLegacy LP'),
+                              _badge(context, Icons.stars_outlined, 'House Legacy: $totalLegacy LP'),
                               if (standingNum > 0)
-                                _badge(context, Icons.shield, 'Dynastic Standing: $standingNum pts'),
+                                _badge(context, Icons.shield, 'House Standing: $standingNum pts'),
                             ],
                           ),
                         ],
@@ -871,13 +873,13 @@ class _HistoricalDynastiesPanelState extends State<HistoricalDynastiesPanel> {
                     ),
                   );
                 }),
-                if (dynasties.length > _pageSize) ...[
+                if (houses.length > _pageSize) ...[
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'PAGE ${currentPage + 1} OF $totalPages (${dynasties.length} TOTAL)',
+                        'PAGE ${currentPage + 1} OF $totalPages (${houses.length} TOTAL)',
                         style: context.captionStyle.copyWith(color: context.mutedColor),
                       ),
                       Row(

@@ -44,7 +44,7 @@ Future<void> showFormationComposer(
           label: 'Submit',
           onPressed: () async {
             final selectedName = name.text.trim();
-            if (selectedName.length < 3) return;
+            if (selectedName.length < 2) return;
             Navigator.pop(dialogContext);
             await action(() => city
                 ? const EarthApi().createCity(selectedName, communityId ?? 'COM-001')
@@ -1444,7 +1444,7 @@ Future<void> showCorporationWithCapitalDialog(
           onPressed: () async {
             final corporationName = corporation.text.trim();
             final cityName = capital.text.trim();
-            if (corporationName.length < 3 || cityName.length < 3) return;
+            if (corporationName.length < 2 || cityName.length < 2) return;
             Navigator.pop(dialogContext);
             await action(() => const EarthApi().createCorporationWithCapital(
                   corporationName: corporationName,

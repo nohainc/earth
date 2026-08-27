@@ -11,11 +11,11 @@ void main() {
       'technology': {'research': {}},
     });
     var actions = 0;
-    await tester.pumpWidget(MaterialApp(home: Scaffold(body: CorporationDirectoryPanel(
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(child: CorporationDirectoryPanel(
       state: state,
       busy: false,
       action: (_) async { actions++; },
-    ))));
+    )))));
     await tester.pumpAndSettle();
     expect(find.textContaining('Aether Dynamics'), findsWidgets);
     expect(find.textContaining('New Kyoto'), findsWidgets);

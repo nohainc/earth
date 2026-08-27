@@ -15,7 +15,7 @@ void main() {
     'life': {'successor': {}},
   });
 
-  testWidgets('Historical Archive presents people, dynasties, and milestones',
+  testWidgets('Historical Archive presents people, houses, and milestones',
       (tester) async {
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
@@ -24,13 +24,13 @@ void main() {
             'deceasedPantheon': [
               {
                 'display_name': 'Mira Vance',
-                'dynasty_name': 'Vance House',
+                'house_name': 'House of Vance',
                 'death_game_day': 180
               }
             ],
-            'dynasties': [
+            'houses': [
               {
-                'dynasty_name': 'Vance House',
+                'house_name': 'House of Vance',
                 'generation': 3,
                 'legacy_points': 240
               }
@@ -44,9 +44,9 @@ void main() {
 
     expect(find.textContaining('MEMORIAL CITIZENS'), findsWidgets);
     expect(find.text('Mira Vance'), findsOneWidget);
-    await tester.tap(find.textContaining('DYNASTIES'));
+    await tester.tap(find.textContaining('HOUSES'));
     await tester.pumpAndSettle();
-    expect(find.text('Vance House'), findsWidgets);
+    expect(find.text('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 

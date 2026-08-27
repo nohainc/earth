@@ -71,7 +71,7 @@ void main() {
       final titles = objectives.map((o) => o.title).toList();
       expect(titles.any((t) => t.contains('Valuable Corporation')), isTrue);
       expect(titles.any((t) => t.contains('Civic Delegate')), isTrue);
-      expect(titles.any((t) => t.contains('Dynasty with Sovereign Traits')), isTrue);
+      expect(titles.any((t) => t.contains('House with Sovereign Traits')), isTrue);
       expect(titles.any((t) => t.contains('Technology Licensor')), isTrue);
       expect(titles.any((t) => t.contains('Financial Independence')), isTrue);
       expect(titles.any((t) => t.contains('Public-Service Score')), isTrue);
@@ -105,14 +105,14 @@ void main() {
       // Verify Filter Pills
       expect(find.textContaining('ALL (9)'), findsOneWidget);
       expect(find.text('ENTERPRISE'), findsOneWidget);
-      expect(find.text('CIVIC & DYNASTY'), findsOneWidget);
+      expect(find.text('CIVIC & HOUSE'), findsOneWidget);
       expect(find.text('TECH & FINANCE'), findsOneWidget);
       expect(find.textContaining('COMPLETED ('), findsOneWidget);
 
       // Verify Titles of Objectives
       expect(find.text('Build the Most Valuable Corporation'), findsOneWidget);
       expect(find.text('Become a Major Civic Delegate'), findsOneWidget);
-      expect(find.text('Create a Dynasty with Sovereign Traits'), findsOneWidget);
+      expect(find.text('Found a House with Sovereign Traits'), findsOneWidget);
       expect(find.text('Become a Leading Technology Licensor'), findsNothing);
       expect(find.text('Reach Financial Independence'), findsNothing);
       expect(find.text('Maintain the Highest Public-Service Score'), findsNothing);

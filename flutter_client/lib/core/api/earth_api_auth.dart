@@ -13,6 +13,13 @@ extension EarthApiAuth on EarthApi {
     return world();
   }
 
+  Future<EarthState> updateEpitaph(String epitaph) async {
+    await _request('/api/auth/profile', method: 'PATCH', body: {
+      'epitaph': epitaph.trim(),
+    });
+    return world();
+  }
+
   Future<Map<String, dynamic>> login(String email, String password,
       {String? otp}) async {
     final response = (await _request('/api/auth/login', method: 'POST', body: {
@@ -90,13 +97,16 @@ extension EarthApiAuth on EarthApi {
           })) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> rebirth(String displayName,
-      {String? dynastyName, String? startingCityId}) async {
+      {String? houseName, String? dynastyName, String? startingCityId}) async {
+    final finalHouseName = houseName ?? dynastyName;
     final response = (await _request('/api/auth/rebirth',
         method: 'POST',
         body: {
           'displayName': displayName,
-          if (dynastyName != null && dynastyName.isNotEmpty)
-            'dynastyName': dynastyName,
+          if (finalHouseName != null && finalHouseName.isNotEmpty) ...{
+            'houseName': finalHouseName,
+            'dynastyName': finalHouseName,
+          },
           if (startingCityId != null && startingCityId.isNotEmpty)
             'startingCityId': startingCityId,
         })) as Map<String, dynamic>;

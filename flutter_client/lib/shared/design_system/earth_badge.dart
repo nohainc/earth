@@ -53,9 +53,12 @@ class EarthBadge extends StatelessWidget {
             Icon(icon, size: 10, color: color),
             const SizedBox(width: 4),
           ],
-          Text(
-            label,
-            style: context.captionStyle.copyWith(color: color),
+          Flexible(
+            child: Text(
+              label,
+              style: context.captionStyle.copyWith(color: color),
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
         ],
       ),

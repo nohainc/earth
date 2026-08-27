@@ -26,7 +26,7 @@ import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { communicationsRoutes } from './communications-routes';
 import { listSupplyContracts, proposeSupplyContract, acceptSupplyContract, cancelSupplyContract, getContractDeliveryTicks } from './supply-contracts-postgres.ts';
-import { getDynastyOverview, unlockDynastyPerk, equipDynastyHeirloom, forgeDynastyHeirloom, updateDynastyMotto } from './dynasty-postgres.ts';
+import { getHouseOverview, unlockHousePerk, equipHouseHeirloom, forgeHouseHeirloom, updateHouseMotto } from './house-postgres.ts';
 import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
@@ -1493,17 +1493,17 @@ const worker = {
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
 
-    if (url.pathname === '/api/dynasty' && request.method === 'GET') {
+    if ((url.pathname === '/api/house' || url.pathname === '/api/dynasty') && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       const email = viewer?.email || 'amara@earth.local';
       const humanId = viewer?.id || 'H-0044';
       const humanName = viewer?.name || 'Amara Vance';
-      const result = await withRepository(env, (repository) => getDynastyOverview(repository, email, humanId, humanName));
+      const result = await withRepository(env, (repository) => getHouseOverview(repository, email, humanId, humanName));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
 
-    if (url.pathname === '/api/dynasty/perks/unlock' && request.method === 'POST') {
+    if ((url.pathname === '/api/house/perks/unlock' || url.pathname === '/api/dynasty/perks/unlock') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ perkKey?: string; correlationId?: string }>(request);
@@ -1511,7 +1511,7 @@ const worker = {
       const perkKey = parsed.value.perkKey?.trim() ?? '';
       if (!perkKey) return Response.json({ ok: false, error: 'Perk key is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => unlockDynastyPerk(repository, viewer.email || 'amara@earth.local', perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)));
+        const result = await withRepository(env, (repository) => unlockHousePerk(repository, viewer.email || 'amara@earth.local', perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1520,7 +1520,7 @@ const worker = {
       }
     }
 
-    if (url.pathname === '/api/dynasty/heirlooms/equip' && request.method === 'POST') {
+    if ((url.pathname === '/api/house/heirlooms/equip' || url.pathname === '/api/dynasty/heirlooms/equip') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ heirloomId?: string; correlationId?: string }>(request);
@@ -1528,7 +1528,7 @@ const worker = {
       const heirloomId = parsed.value.heirloomId?.trim() ?? '';
       if (!heirloomId) return Response.json({ ok: false, error: 'Heirloom ID is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => equipDynastyHeirloom(repository, viewer.email || 'amara@earth.local', heirloomId, viewer.id, resolveIdempotencyKey(request, parsed.value.correlationId)));
+        const result = await withRepository(env, (repository) => equipHouseHeirloom(repository, viewer.email || 'amara@earth.local', heirloomId, viewer.id, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1537,18 +1537,18 @@ const worker = {
       }
     }
 
-    if (url.pathname === '/api/dynasty/heirlooms/forge' && request.method === 'POST') {
+    if ((url.pathname === '/api/house/heirlooms/forge' || url.pathname === '/api/dynasty/heirlooms/forge') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ name?: string; heirloomType?: string; inscription?: string; statBuff?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const name = parsed.value.name?.trim() ?? '';
-      const heirloomType = parsed.value.heirloomType?.trim() ?? 'dynasty_standard';
+      const heirloomType = parsed.value.heirloomType?.trim() ?? 'house_standard';
       const inscription = parsed.value.inscription?.trim() ?? 'Forged by the house patriarch.';
       const statBuff = parsed.value.statBuff?.trim() ?? '+5% Prestige & Influence';
       if (!name) return Response.json({ ok: false, error: 'Heirloom name is required' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => forgeDynastyHeirloom(repository, viewer.email || 'amara@earth.local', name, heirloomType, inscription, statBuff, resolveIdempotencyKey(request, parsed.value.correlationId)));
+        const result = await withRepository(env, (repository) => forgeHouseHeirloom(repository, viewer.email || 'amara@earth.local', name, heirloomType, inscription, statBuff, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -1557,16 +1557,16 @@ const worker = {
       }
     }
 
-    if (url.pathname === '/api/dynasty/motto' && request.method === 'POST') {
+    if ((url.pathname === '/api/house/motto' || url.pathname === '/api/dynasty/motto') && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ motto?: string; dynastyName?: string; correlationId?: string }>(request);
+      const parsed = await parseJsonBody<{ motto?: string; houseName?: string; dynastyName?: string; correlationId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const motto = parsed.value.motto?.trim() ?? '';
-      const dynastyName = parsed.value.dynastyName?.trim();
-      if (dynastyName !== undefined && dynastyName.length < 2) return Response.json({ ok: false, error: 'Dynasty name must be at least 2 characters' }, { status: 400 });
+      const houseName = parsed.value.houseName?.trim() ?? parsed.value.dynastyName?.trim();
+      if (houseName !== undefined && houseName.length < 2) return Response.json({ ok: false, error: 'House name must be at least 2 characters' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => updateDynastyMotto(repository, viewer.email || 'amara@earth.local', motto, dynastyName, resolveIdempotencyKey(request, parsed.value.correlationId)));
+        const result = await withRepository(env, (repository) => updateHouseMotto(repository, viewer.email || 'amara@earth.local', motto, houseName, resolveIdempotencyKey(request, parsed.value.correlationId)));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -2239,9 +2239,13 @@ const worker = {
       const parsed = await parseJsonBody<{ name?: string; estatePeriodDays?: number; successorHumanId?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
-      const successorName = body.name?.trim();
+      const successorName = (body.name ?? '').trim();
+      if (!successorName) {
+        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName: '', estatePeriodDays: 30, successorHumanId: null, currentLifeStatus: viewer.life_status }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      }
       const estatePeriodDays = Number(body.estatePeriodDays ?? 30);
-      if (!successorName || successorName.length < 2) return Response.json({ ok: false, error: 'Successor name is required' }, { status: 400 });
       if (!Number.isInteger(estatePeriodDays) || estatePeriodDays < 7 || estatePeriodDays > 90) return Response.json({ ok: false, error: 'Estate period must be between 7 and 90 days' }, { status: 400 });
       const successorHumanId = body.successorHumanId?.trim() || null;
       try {

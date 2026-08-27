@@ -20,13 +20,13 @@ class FakeSocialTransport extends EarthApiTransport {
             'id': 'H-2',
             'display_name': 'Ari',
             'standing': 20,
-            'dynasty_name': 'Sol'
+            'house_name': 'Sol'
           },
           {
             'id': 'H-3',
             'display_name': 'Benn',
             'standing': 30,
-            'dynasty_name': 'Nova'
+            'house_name': 'Nova'
           }
         ]
       };

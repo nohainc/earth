@@ -5,6 +5,7 @@ export type DecisionCategory =
   | 'civic'
   | 'technology'
   | 'machines'
+  | 'house'
   | 'dynasty'
   | 'market'
   | 'finance'
@@ -31,6 +32,7 @@ export interface DecisionQueueInput {
   contracts?: Array<{ id: string; title?: string; status?: string; delivery_tick?: unknown; terms?: string }>;
   proposals?: Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>;
   technology?: { progress?: unknown; active_patents?: unknown; is_funding_open?: boolean };
+  house?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
   dynasty?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
   business?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
   finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
@@ -205,32 +207,33 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   }
 
-  // 6. Dynasty & Succession Decisions
-  if (!input.dynasty?.successor_id) {
+  // 6. House & Succession Decisions
+  const houseData = input.house || input.dynasty;
+  if (!houseData?.successor_id) {
     items.push({
-      id: 'decision-dynasty-successor-pending',
-      category: 'dynasty',
-      title: 'A dynasty decision is pending',
+      id: 'decision-house-successor-pending',
+      category: 'house',
+      title: 'A house decision is pending',
       whyItMatters: 'No legal successor is registered for your lineage. After mortality, you can designate an existing adult or begin a new adult through Civic Rebirth, but an unplanned estate risks liquidation and lost productive assets.',
       deadline: 'Prior to Transition',
-      expectedImpact: 'Choose your continuity path early, preserve more productive assets, and keep the dynasty eligible for family perks.',
+      expectedImpact: 'Choose your continuity path early, preserve more productive assets, and keep the house eligible for family perks.',
       riskLevel: 'high',
-      primaryActionLabel: 'Manage Dynasty',
-      targetSection: 'dynasty',
+      primaryActionLabel: 'Manage House',
+      targetSection: 'house',
       urgencyScore: 78,
     });
   }
-  if (input.dynasty?.perks_available) {
+  if (houseData?.perks_available) {
     items.push({
-      id: 'decision-dynasty-perk-available',
-      category: 'dynasty',
+      id: 'decision-house-perk-available',
+      category: 'house',
       title: 'Legacy points can unlock a family trait',
-      whyItMatters: 'A dynasty perk creates a lasting advantage for every future generation.',
+      whyItMatters: 'A house perk creates a lasting advantage for every future generation.',
       deadline: 'When legacy points are available',
       expectedImpact: 'Improve production, research, finance, or civic influence across the lineage.',
       riskLevel: 'low',
-      primaryActionLabel: 'Open Dynasty',
-      targetSection: 'dynasty',
+      primaryActionLabel: 'Open House',
+      targetSection: 'house',
       urgencyScore: 48,
     });
   }
