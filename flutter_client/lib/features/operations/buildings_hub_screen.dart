@@ -1621,7 +1621,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
           // Secondary management actions stay collapsed until needed.
           if (isOwner)
-            ExpansionTile(
+            Material(
+              color: Colors.transparent,
+              child: ExpansionTile(
               tilePadding: EdgeInsets.zero,
               childrenPadding: EdgeInsets.zero,
               title: Text('MANAGE BUILDING', style: context.widgetTitleStyle),
@@ -1752,6 +1754,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               ],
             ),
               ],
+              ),
             ),
         ],
       ),
@@ -1793,8 +1796,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            crossAxisAlignment: WrapCrossAlignment.center,
             children: [
               Text('PUBLIC PROJECTS & DIVIDENDS', style: context.topicTitleStyle),
               const EarthBadge(label: '70/30 UBI + PARTICIPATION', variant: EarthBadgeVariant.secondary),
@@ -1830,23 +1835,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     borderRadius: BorderRadius.circular(context.radiusControl),
                     border: Border.all(color: context.subtleBorderColor),
                   ),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(bName, style: context.widgetTitleStyle),
-                            const SizedBox(height: 2),
-                            Text(
-                              'Price: ${formatWholeNumber(pricePerShare)} CRD / Share · Your Holdings: $myCount / $totalShares Shares (${((myCount / totalShares) * 100).toStringAsFixed(1)}%)',
-                              style: context.widgetFooterStyle,
-                            ),
-                          ],
-                        ),
+                      Text(bName, style: context.widgetTitleStyle),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Price: ${formatWholeNumber(pricePerShare)} CRD / Share · Your Holdings: $myCount / $totalShares Shares (${((myCount / totalShares) * 100).toStringAsFixed(1)}%)',
+                        style: context.widgetFooterStyle,
                       ),
+                      const SizedBox(height: 8),
                       EarthButton(
                         label: 'INVEST IN SHARES',
                         icon: Icons.add_chart_outlined,
@@ -1884,12 +1882,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     borderRadius: BorderRadius.circular(context.radiusControl),
                     border: Border.all(color: context.subtleBorderColor),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text('GAME DAY $day PAYOUT', style: context.widgetTitleStyle),
+                      const SizedBox(height: 6),
                       Wrap(
                         spacing: 8,
+                        runSpacing: 6,
                         children: [
                           EarthBadge(label: 'TOTAL SURPLUS: +${formatWholeNumber(totalPool)} CRD', variant: EarthBadgeVariant.primary),
                           EarthBadge(label: 'BASE UBI: +${formatWholeNumber(ubiPerCitizen)} CRD', variant: EarthBadgeVariant.success),

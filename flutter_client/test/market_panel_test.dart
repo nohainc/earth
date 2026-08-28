@@ -62,7 +62,7 @@ void main() {
       ),
     );
 
-    expect(find.text('MARKET ACTION / BUY & SELL'), findsOneWidget);
+    expect(find.text('TRADE'), findsOneWidget);
     expect(find.text('ENERGY'), findsOneWidget);
     expect(find.text('12.50 C'), findsOneWidget);
     expect(find.text('SUPPLY HIGH'), findsOneWidget);
@@ -78,6 +78,9 @@ void main() {
 
     await tester.ensureVisible(find.text('PLACE BUY ORDER'));
     await tester.tap(find.text('PLACE BUY ORDER'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('CONFIRM ORDER'));
+    await tester.pumpAndSettle();
     expect(executedAction, 'called');
   });
 
@@ -227,7 +230,7 @@ void main() {
       ),
     );
 
-    expect(find.text('MY MARKET ORDERS / LIFECYCLE'), findsOneWidget);
+    expect(find.text('MY ORDERS'), findsOneWidget);
     expect(find.textContaining('BUY COMPONENTS · 10 units @ 120.00 C'),
         findsOneWidget);
     expect(find.text('PARTIAL'), findsOneWidget);
@@ -272,9 +275,9 @@ void main() {
       home: Scaffold(body: SuppliesTodayPanel(state: state, action: (fn) async {})),
     ));
 
-    expect(find.text('SUPPLIES TODAY'), findsOneWidget);
+    expect(find.text('STOCK & SHORTAGES'), findsOneWidget);
     expect(find.textContaining('Needs attention'), findsOneWidget);
     expect(find.text('0 available'), findsOneWidget);
-    expect(find.textContaining('sign a supply contract'), findsOneWidget);
+    expect(find.textContaining('Buildings and businesses drive demand'), findsOneWidget);
   });
 }
