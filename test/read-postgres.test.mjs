@@ -51,16 +51,15 @@ test('listNotifications queries user notifications and counts unread', async () 
 test('listTechnology scopes private records to the current human', async () => {
   const client = new MockDbClient({
     'FROM research_projects WHERE owner_id': { rows: [{ id: 'PROJECT-1', owner_id: 'H-001' }], rowCount: 1 },
-    'FROM patents': { rows: [{ id: 'PAT-1', owner_id: 'H-001' }], rowCount: 1 },
-    'FROM technology_licenses': { rows: [{ id: 'LIC-1', licensee_id: 'H-001' }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 
   const result = await listTechnology(repo, 'H-001');
   assert.equal(result.projects.length, 1);
-  assert.equal(result.patents.length, 1);
-  assert.equal(result.licenses.length, 1);
-  assert.ok(client.calls.filter((call) => call.params.includes('H-001')).length >= 3);
+  assert.ok(Array.isArray(result.catalog));
+  assert.equal(result.patents, undefined);
+  assert.equal(result.licenses, undefined);
+  assert.equal(client.calls.filter((call) => call.params.includes('H-001')).length, 1);
 });
 
 test('markNotificationRead updates timestamp', async () => {
@@ -72,11 +71,10 @@ test('markNotificationRead updates timestamp', async () => {
   assert.ok(client.calls.some((c) => c.sql.includes('UPDATE notifications SET read_at')));
 });
 
-test('auditWorld validates balances, machines, and membership invariants', async () => {
+test('auditWorld validates balances and membership invariants', async () => {
   const client = new MockDbClient({
     'SELECT COUNT(*)::integer AS invalid FROM account_balances': { rows: [{ invalid: '0' }], rowCount: 1 },
     'SELECT COUNT(*)::integer AS invalid FROM ledger_entries': { rows: [{ invalid: '0' }], rowCount: 1 },
-    'SELECT COUNT(*)::integer AS invalid FROM machines': { rows: [{ invalid: '0' }], rowCount: 1 },
     'SELECT COUNT(*)::integer AS count FROM succession_plans': { rows: [{ count: '1' }], rowCount: 1 },
     'SELECT COUNT(*)::integer AS invalid FROM corporations': { rows: [{ invalid: '0' }], rowCount: 1 },
     'SELECT COUNT(*)::integer AS invalid FROM cities': { rows: [{ invalid: '0' }], rowCount: 1 },
@@ -86,7 +84,7 @@ test('auditWorld validates balances, machines, and membership invariants', async
   const result = await auditWorld(repo, 'H-001');
   assert.equal(result.ok, true);
   assert.equal(result.checks.balancesNonNegative, true);
-  assert.equal(result.checks.machineConditionsBounded, true);
+  assert.equal(result.checks.ledgerEntriesValid, true);
 });
 
 test('listInstitutions and listRankings return structured models', async () => {

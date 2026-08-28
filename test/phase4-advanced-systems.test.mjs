@@ -88,7 +88,7 @@ test('proposeMerger validates balance and records tender offer', async () => {
   assert.deepEqual(outboxEvents, ['business-merger-proposal:MERGER-PROPOSE-1']);
 });
 
-test('executeMerger transfers funds pro-rata, transfers assets, and dissolves target', async () => {
+test('executeMerger transfers funds pro-rata and dissolves target', async () => {
   let transferredLedgerCount = 0;
   let targetDissolved = false;
   let assetsTransferred = false;
@@ -173,9 +173,8 @@ test('executeMerger transfers funds pro-rata, transfers assets, and dissolves ta
 
   assert.equal(result.ok, true);
   assert.equal(result.mergerId, 'MERGER-123');
-  assert.equal(result.transferredMachines, 2);
   assert.equal(transferredLedgerCount, 2);
-  assert.equal(assetsTransferred, true);
+  assert.equal(assetsTransferred, false);
   assert.equal(targetDissolved, true);
   assert.deepEqual(outboxEvents, ['business-merger:MERGER-EXEC-1']);
 });

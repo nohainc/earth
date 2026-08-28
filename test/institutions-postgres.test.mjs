@@ -195,7 +195,7 @@ test('corporation executives can adopt an unclaimed city', async () => {
   const client = new MockDbClient({
     'SELECT role_assignments.id': { rows: [{ id: 'ROLE-ASSIGNMENT-01' }], rowCount: 1 },
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
-    'SELECT id, corporation_id FROM cities': { rows: [{ id: 'CITY-02', corporation_id: null }], rowCount: 1 },
+    'SELECT cities.id, cities.corporation_id, corporations.admission_policy FROM cities': { rows: [{ id: 'CITY-02', corporation_id: null }], rowCount: 1 },
     'SELECT human_id FROM memberships WHERE city_id': { rows: [], rowCount: 0 },
     'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
     'UPDATE cities SET corporation_id': { rows: [], rowCount: 1 },

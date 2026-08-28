@@ -3,10 +3,9 @@ import assert from 'node:assert/strict';
 import { generateDecisionQueue } from '../cloudflare/src/decision-queue.ts';
 
 test('Unified Decision Queue Generator', async (t) => {
-  await t.test('generates prioritized items for corporate energy loss, expiring contracts, governance, research, machines, and house', () => {
+  await t.test('generates prioritized items for corporate energy loss, expiring contracts, governance, research, and house', () => {
     const queue = generateDecisionQueue({
       resources: { energy: 15, material: 80 },
-      machines: [{ id: 'm-1', name: 'Alloy Press Mk1', condition: 25, utilization: 80 }],
       contracts: [{ id: 'c-101', title: 'Components Supply', status: 'active' }],
       proposals: [{ id: 'prop-12', title: 'City Tax Charter Amendment', status: 'open' }],
       technology: { progress: 50 },
@@ -26,7 +25,6 @@ test('Unified Decision Queue Generator', async (t) => {
     assert.ok(titles.some((t) => t.includes('contract expires in 2 days')));
     assert.ok(titles.some((t) => t.includes('unresolved governance vote')));
     assert.ok(titles.some((t) => t.includes('Research funding is available')));
-    assert.ok(titles.some((t) => t.includes('machine needs maintenance')));
     assert.ok(titles.some((t) => t.includes('house decision is pending')));
     assert.ok(titles.some((t) => t.includes('Legacy points can unlock')));
     assert.ok(titles.some((t) => t.includes('city needs an energy recovery plan')));
