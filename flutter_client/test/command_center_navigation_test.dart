@@ -122,7 +122,6 @@ void main() {
               businessProfile: const <String, dynamic>{},
               membershipEvents: const <dynamic>[],
               authorityEvents: const <dynamic>[],
-              productionCatalog: const <dynamic>[],
               marketHistory: const <String, dynamic>{},
               pantheon: const <String, dynamic>{},
               personalFinanceData: const <String, dynamic>{},

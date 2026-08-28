@@ -80,7 +80,6 @@ void main() {
     await api.ownershipEvents();
     await api.membershipEvents();
     await api.authorityEvents();
-    await api.productionCatalog();
     await api.notifications();
     await api.markNotificationRead('notif-1');
     await api.markAllNotificationsRead();
@@ -159,13 +158,6 @@ void main() {
   test('Lifecycle, Machines, Market, Finance & Technology API endpoints execute expected HTTP calls', () async {
     await api.registerSuccessor('Kaelen Vance', successorHumanId: 'H-2', estatePeriodDays: 45);
     await api.settleInheritance(predecessorId: 'H-1', successorId: 'H-2', successorName: 'Kaelen');
-
-    await api.acquireMachine('fabricator');
-    await api.upgradeMachine('M-1', otp: '123456');
-    await api.decommissionMachine('M-1', otp: '123456');
-    await api.maintainMachine('M-1');
-    await api.setMachineUtilization('M-1', 90);
-    await api.sellMachine('M-1', 'H-2', 500);
 
     await api.submitOrder('energy', 1.25, side: 'buy', quantity: 100);
     await api.settleMarket('energy');

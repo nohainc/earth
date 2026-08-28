@@ -268,8 +268,8 @@ void main() {
       'contracts': [],
     });
 
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(body: SuppliesTodayPanel(state: state)),
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(body: SuppliesTodayPanel(state: state, action: (fn) async {})),
     ));
 
     expect(find.text('SUPPLIES TODAY'), findsOneWidget);

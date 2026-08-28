@@ -150,7 +150,6 @@ void main() {
                 authorityEvents: const [],
                 membershipEvents: const [],
                 marketHistory: const {},
-                productionCatalog: const [],
                 unreadNotifications: 0,
                 action: (_) async {},
                 onNavigate: (_) {},

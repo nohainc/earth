@@ -53,8 +53,6 @@ void main() {
     expect(state.governance['active'], isEmpty);
     expect(state.institutions['city'], isNotNull);
     expect(state.life['vitality'], 90);
-    expect(state.machines.length, 1);
-    expect(state.productionEvents.length, 1);
     expect(state.aiAssistants.length, 1);
     expect(state.aiRecommendations.length, 1);
     expect(state.market['food'], 10.0);

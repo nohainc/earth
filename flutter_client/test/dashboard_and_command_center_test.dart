@@ -147,7 +147,6 @@ void main() {
               businessProfile: const {},
               membershipEvents: const [],
               authorityEvents: const [],
-              productionCatalog: const [],
               unreadNotifications: 0,
               sectionKeys: sectionKeys,
               selectedSection: selectedSection,
