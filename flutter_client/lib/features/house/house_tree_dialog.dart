@@ -1004,12 +1004,6 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
     final food = _parseNum(res['food']);
     total += (mat * 12.0) + (energy * 6.0) + (compute * 25.0) + (food * 8.0);
 
-    for (final m in state.machines) {
-      if (m is Map) {
-        total += _parseNum(m['cost'] ?? m['valuation'] ?? m['price'] ?? 5000.0);
-      }
-    }
-
     for (final b in state.buildings) {
       if (b is Map) {
         total += _parseNum(b['value'] ?? b['cost'] ?? 10000.0);

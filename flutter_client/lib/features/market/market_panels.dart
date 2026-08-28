@@ -7,96 +7,15 @@ import '../../shared/widgets/format_helpers.dart';
 
 class SuppliesTodayPanel extends StatelessWidget {
   final EarthState state;
+  final Future<void> Function(Future<EarthState> Function()) action;
 
-  const SuppliesTodayPanel({super.key, required this.state});
+  const SuppliesTodayPanel({
+    super.key,
+    required this.state,
+    required this.action,
+  });
 
   static const _products = ['energy', 'food', 'material', 'components', 'compute'];
-
-  @override
-  Widget build(BuildContext context) {
-    final shortages = <String>[];
-    final cards = <Widget>[];
-    for (final product in _products) {
-      final quantity = asInt(state.resources[product]) ?? 0;
-      final reserved = _reserved(product);
-      final available = quantity - reserved;
-      final market = state.market[product] is Map
-          ? Map<String, dynamic>.from(state.market[product] as Map)
-          : const <String, dynamic>{};
-      final price = asDouble(market['price']);
-      if (available <= 0) shortages.add(product);
-      final meta = CommodityMeta.forProduct(product);
-      cards.add(Container(
-        width: 150,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-          color: surfaceColor.withValues(alpha: .75),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-              color: (available <= 0 ? Colors.orangeAccent : meta.color)
-                  .withValues(alpha: .3)),
-        ),
-        child: Row(children: [
-          Icon(meta.icon,
-              size: 16,
-              color: available <= 0 ? Colors.orangeAccent : meta.color),
-          const SizedBox(width: 7),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(meta.name.toUpperCase(),
-                    style: const TextStyle(
-                        color: mutedColor,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text('$available available',
-                    style: TextStyle(
-                        color: available <= 0 ? Colors.orangeAccent : inkColor,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800)),
-                Text(
-                    price == null
-                        ? 'Price unavailable'
-                        : '${price.toStringAsFixed(2)} C each',
-                    style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-              ])),
-        ]),
-      ));
-    }
-    final contractCount = state.contracts.length;
-    return EarthPanel(
-      title: 'SUPPLIES TODAY',
-      showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• Your available stock after currently reserved quantities.\n\n• A shortage means your life, business, or contract may need attention; compare buying, producing, contracting, or waiting.\n\n• Orders can remain open and fill later, partially or completely, at the market clearing event.',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(
-            shortages.isEmpty
-                ? 'No immediate commodity shortage is visible.'
-                : 'Needs attention: ${shortages.map((p) => CommodityMeta.forProduct(p).name).join(' · ')}',
-            style: TextStyle(
-                color:
-                    shortages.isEmpty ? Colors.tealAccent : Colors.orangeAccent,
-                fontSize: 12,
-                fontWeight: FontWeight.w700)),
-        const SizedBox(height: 4),
-        Text(
-            '$contractCount active or recent supply commitment${contractCount == 1 ? '' : 's'} · Reserved stock is excluded from available quantities.',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        const SizedBox(height: 12),
-        Wrap(spacing: 10, runSpacing: 10, children: cards),
-        const SizedBox(height: 12),
-        const Text(
-            'Decision: buy from the market · sign a supply contract · produce internally · reduce or delay consumption.',
-            style: TextStyle(color: mutedColor, fontSize: 10.5)),
-      ]),
-    );
-  }
 
   int _reserved(String product) {
     return state.marketOrders.whereType<Map>().where((order) {
@@ -111,6 +30,295 @@ class SuppliesTodayPanel extends StatelessWidget {
             sum +
             (asInt(order['quantity']) ?? 0) -
             (asInt(order['filled_quantity'] ?? order['filled']) ?? 0));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final shortages = <String>[];
+    final watchlist = <String>[];
+    final cards = <Widget>[];
+    final flowMap = state.json['resourceFlows'] is Map
+        ? Map<String, dynamic>.from(state.json['resourceFlows'] as Map)
+        : const <String, dynamic>{};
+    double netFlow(String product) {
+      final raw = flowMap[product] ??
+          (product == 'material' ? flowMap['materials'] : null);
+      return asDoubleOr(raw is Map ? raw['net'] : raw, 0);
+    }
+
+    for (final product in _products) {
+      final quantity = asInt(state.resources[product]) ?? 0;
+      final reserved = _reserved(product);
+      final available = quantity - reserved;
+      final net = netFlow(product);
+      final market = state.market[product] is Map
+          ? Map<String, dynamic>.from(state.market[product] as Map)
+          : const <String, dynamic>{};
+      final price = asDouble(market['price']);
+      if (available <= 0) shortages.add(product);
+      if (available > 0 && net < 0 && available / net.abs() <= 3) {
+        watchlist.add(product);
+      }
+      final meta = CommodityMeta.forProduct(product);
+      cards.add(Container(
+        width: 150,
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: surfaceColor.withValues(alpha: .75),
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(
+              color: (available <= 0 ? Colors.orangeAccent : meta.color)
+                  .withValues(alpha: .3)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Icon(meta.icon,
+                  size: 16,
+                  color: available <= 0 ? Colors.orangeAccent : meta.color),
+              const SizedBox(width: 7),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(meta.name.toUpperCase(),
+                        style: const TextStyle(
+                            color: mutedColor,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w800)),
+                    const SizedBox(height: 3),
+                    Text('$available available',
+                        style: TextStyle(
+                            color: available <= 0 ? Colors.orangeAccent : inkColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800)),
+                    Text(
+                        net == 0
+                            ? 'Stable flow'
+                            : net > 0
+                                ? '+${net.toStringAsFixed(1)} / cycle'
+                                : '${net.toStringAsFixed(1)} / cycle · ~${(available / net.abs()).floor()} cycles',
+                        style: TextStyle(
+                            color: net < 0 ? Colors.orangeAccent : mutedColor,
+                            fontSize: 9.5,
+                            fontWeight: FontWeight.w600)),
+                    Text(
+                        price == null
+                            ? 'Price unavailable'
+                        : '${price.toStringAsFixed(2)} Credits / unit',
+                        style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                  ])),
+            ]),
+            const SizedBox(height: 4),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton(
+                onPressed: price == null
+                    ? null
+                    : () => showPlaceOrderDialog(
+                          context,
+                          action,
+                          initialProduct: product,
+                          initialPrice: price,
+                          feeRate: state.marketFeeRate,
+                          initialSide: available <= 0 ? 'buy' : 'sell',
+                        ),
+                style: TextButton.styleFrom(
+                  padding: EdgeInsets.zero,
+                  minimumSize: const Size(0, 22),
+                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+                child: Text(available <= 0 ? 'BUY' : 'TRADE', style: const TextStyle(fontSize: 9)),
+              ),
+            ),
+          ],
+        ),
+      ));
+    }
+    final contractCount = state.contracts.length;
+    final marketEntries = state.market.entries
+        .map((entry) => entry.value is Map
+            ? Map<String, dynamic>.from(entry.value as Map)
+            : const <String, dynamic>{})
+        .toList();
+    final totalSupply = marketEntries.fold<int>(
+        0, (sum, item) => sum + (asInt(item['supply']) ?? 0));
+    final totalDemand = marketEntries.fold<int>(
+        0, (sum, item) => sum + (asInt(item['demand']) ?? 0));
+    final marketStatus = totalDemand > totalSupply * 1.15
+        ? 'Demand is running ahead of supply'
+        : totalSupply > totalDemand * 1.15
+            ? 'Supply is currently comfortable'
+            : 'Supply and demand are broadly balanced';
+    final activeOrders = state.marketOrders.whereType<Map>().where((order) {
+      final status = order['status']?.toString().toLowerCase();
+      return status == 'open' || status == 'partial';
+    }).length;
+    final buildingCount = state.buildings.length;
+    return EarthPanel(
+      title: 'STOCK & SHORTAGES',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          '• Available stock after currently reserved quantities.\n\n• A shortage can be handled by buying, producing, signing a contract, or reducing consumption.\n\n• Open orders may fill fully, partially, or later at the next market clearing.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: surfaceColor.withValues(alpha: .7),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: cyanAccentColor.withValues(alpha: .22)),
+          ),
+          child: Wrap(
+            spacing: 18,
+            runSpacing: 10,
+            crossAxisAlignment: WrapCrossAlignment.center,
+            children: [
+              _overviewMetric('MARKET HEALTH', marketStatus),
+              _overviewMetric('CITY DEMAND', '$buildingCount buildings active'),
+              _overviewMetric('OPEN ORDERS', '$activeOrders'),
+            ],
+          ),
+        ),
+        const SizedBox(height: 12),
+        Text(
+            shortages.isEmpty
+                ? (watchlist.isEmpty
+                    ? 'No immediate commodity shortage is visible.'
+                    : 'Watch closely: ${watchlist.map((p) => CommodityMeta.forProduct(p).name).join(' · ')} may run low soon.')
+                : 'Needs attention: ${shortages.map((p) => CommodityMeta.forProduct(p).name).join(' · ')}',
+            style: TextStyle(
+                color:
+                    shortages.isEmpty && watchlist.isEmpty
+                        ? Colors.tealAccent
+                        : Colors.orangeAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w700)),
+        const SizedBox(height: 4),
+        Text(
+            '$contractCount active or recent supply commitment${contractCount == 1 ? '' : 's'} · Reserved stock is excluded from available quantities.',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+        const SizedBox(height: 12),
+        Wrap(spacing: 10, runSpacing: 10, children: cards),
+        const SizedBox(height: 12),
+        const Text(
+            'Buildings and businesses drive demand. Before trading, check the flow, runway, and price trend for the selected resource.',
+            style: TextStyle(color: mutedColor, fontSize: 10.5)),
+      ]),
+    );
+  }
+
+  Widget _overviewMetric(String label, String value) {
+    return ConstrainedBox(
+      constraints: const BoxConstraints(minWidth: 120, maxWidth: 240),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(label,
+              style: const TextStyle(
+                  color: mutedColor,
+                  fontSize: 8.5,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8)),
+          const SizedBox(height: 3),
+          Text(value,
+              style: const TextStyle(
+                  color: inkColor, fontSize: 11, fontWeight: FontWeight.w700)),
+        ],
+      ),
+    );
+  }
+}
+
+class MarketWorkspace extends StatefulWidget {
+  final EarthState state;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function()) action;
+  final Map<String, dynamic> priceHistory;
+
+  const MarketWorkspace({
+    super.key,
+    required this.state,
+    required this.busy,
+    required this.action,
+    this.priceHistory = const {},
+  });
+
+  @override
+  State<MarketWorkspace> createState() => _MarketWorkspaceState();
+}
+
+class _MarketWorkspaceState extends State<MarketWorkspace> {
+  int _selectedTab = 0;
+
+  @override
+  Widget build(BuildContext context) {
+    return DefaultTabController(
+      length: 3,
+      initialIndex: _selectedTab,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TabBar(
+            onTap: (index) => setState(() => _selectedTab = index),
+            tabs: const [
+              Tab(text: 'OVERVIEW'),
+              Tab(text: 'TRADE'),
+              Tab(text: 'ORDERS'),
+            ],
+          ),
+          const SizedBox(height: 20),
+          if (_selectedTab == 0)
+            SuppliesTodayPanel(state: widget.state, action: widget.action)
+          else if (_selectedTab == 1)
+            MarketSignalsPanel(
+              state: widget.state,
+              busy: widget.busy,
+              priceHistory: widget.priceHistory,
+              action: widget.action,
+            )
+          else
+            Theme(
+              data: Theme.of(context).copyWith(
+                dividerColor: Colors.transparent,
+                splashColor: Colors.transparent,
+              ),
+              child: ExpansionTile(
+                initiallyExpanded: true,
+                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+                childrenPadding: EdgeInsets.zero,
+                title: const Text(
+                  'ORDERS & ADVANCED DATA',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: mutedColor,
+                  ),
+                ),
+                subtitle: const Text(
+                  'Track your orders first; inspect market depth and liquidity when needed.',
+                  style: TextStyle(fontSize: 11, color: mutedColor),
+                ),
+                children: [
+                  const SizedBox(height: 12),
+                  MyMarketOrdersPanel(
+                    state: widget.state,
+                    busy: widget.busy,
+                    action: widget.action,
+                  ),
+                  const SizedBox(height: 24),
+                  MarketOrderBookPanel(state: widget.state),
+                ],
+              ),
+            ),
+        ],
+      ),
+    );
   }
 }
 
@@ -501,6 +709,20 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     if (quantity > maximum) _qtyController.text = maximum.toString();
   }
 
+  int _reservedSellUnits(String product) {
+    return widget.state.marketOrders.whereType<Map>().where((order) {
+      final side = order['side']?.toString().toLowerCase();
+      final status = order['status']?.toString().toLowerCase();
+      return side == 'sell' &&
+          (status == 'open' || status == 'partial') &&
+          order['product']?.toString() == product;
+    }).fold<int>(0, (sum, order) {
+      final quantity = asInt(order['quantity']) ?? 0;
+      final filled = asInt(order['filled_quantity'] ?? order['filled']) ?? 0;
+      return sum + (quantity - filled).clamp(0, quantity);
+    });
+  }
+
   void _refreshOrderTotals() {
     _capBuyQuantityToBudget();
     if (mounted) setState(() {});
@@ -561,6 +783,59 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
     super.dispose();
   }
 
+  Future<void> _confirmOrder({
+    required BuildContext context,
+    required int quantity,
+    required double limitPrice,
+    required double fee,
+    required double total,
+    required String product,
+    required String side,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: Text('${side.toUpperCase()} ${CommodityMeta.forProduct(product).name}',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w800)),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Orders are evaluated at the next market clearing and may fill partially.', style: TextStyle(fontSize: 12, color: mutedColor)),
+            const SizedBox(height: 12),
+            Text('Quantity: $quantity units', style: const TextStyle(fontSize: 12)),
+            Text('Limit price: ${limitPrice.toStringAsFixed(2)} Credits / unit', style: const TextStyle(fontSize: 12)),
+            if (side == 'buy') Text('Fee: ${fee.toStringAsFixed(2)} Credits', style: const TextStyle(fontSize: 12, color: mutedColor)),
+            const SizedBox(height: 6),
+            Text(
+              side == 'buy'
+                  ? 'Total escrow: ${total.toStringAsFixed(2)} Credits'
+                  : 'Expected proceeds: ${total.toStringAsFixed(2)} Credits',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w800),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.of(dialogContext).pop(false), child: const Text('CANCEL')),
+          FilledButton(onPressed: () => Navigator.of(dialogContext).pop(true), child: const Text('CONFIRM ORDER')),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    await widget.action(() => const EarthApi().submitOrder(
+          product,
+          limitPrice,
+          side: side,
+          quantity: quantity,
+        ));
+    if (mounted) {
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(content: Text('${side.toUpperCase()} order submitted for $quantity ${CommodityMeta.forProduct(product).name.toLowerCase()} units.')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final meta = CommodityMeta.forProduct(_selectedCommodity);
@@ -609,10 +884,15 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         ? (userCredits / (limitPrice * (1 + widget.state.marketFeeRate)))
             .floor()
         : 0;
-    final maxSellableUnits = userStock;
+    final reservedSellUnits = _reservedSellUnits(_selectedCommodity);
+    final maxSellableUnits = (userStock - reservedSellUnits).clamp(0, userStock);
 
     final isBuy = _orderSide == 'buy';
     final sideColor = isBuy ? cyanAccentColor : Colors.orangeAccent;
+    final canSubmit = !widget.busy &&
+        qty > 0 &&
+        limitPrice > 0 &&
+        (isBuy ? qty <= maxAffordableUnits : qty <= maxSellableUnits);
 
     final currentDay = asIntOr(widget.state.clock['day'], 1);
     final currentMinute = asIntOr(widget.state.clock['minute'], 0);
@@ -625,7 +905,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
 
     return EarthPanel(
       key: widget.panelKey,
-      title: 'MARKET ACTION / BUY & SELL',
+      title: 'TRADE',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -636,7 +916,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
         children: [
           _marketTopicHeading(
             context,
-            'MARKET ACTION / BUY & SELL',
+            'TRADE',
             description:
                 '• Decide whether to buy, sell, produce internally, sign a supply contract, or wait. Open orders can fill later.',
           ),
@@ -671,7 +951,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                         spacing: 8,
                         children: [
                           Text(
-                            'PERIODIC BATCH AUCTION',
+                            'NEXT MARKET CLEARING',
                             style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w800,
@@ -683,7 +963,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                       ),
                       SizedBox(height: 2),
                       Text(
-                        'Uniform clearing price (P*) · Zero slippage',
+                        'Orders may fill fully, partially, or later at the clearing price.',
                         style:
                             TextStyle(fontSize: 9.5, color: mutedColor),
                         overflow: TextOverflow.ellipsis,
@@ -707,7 +987,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
           const SizedBox(height: 34),
           _marketTopicHeading(
             context,
-            'COMMODITY MARKET',
+            'MARKET PRICES & STOCK',
             description:
                 '• Choose a commodity to compare its clearing price, liquidity, demand, supply, and your current inventory.',
           ),
@@ -722,7 +1002,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
               final chartAndDepthSection = Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Area Price Trend Chart
+                  // Price trend chart
                   Container(
                     height: 140,
                     width: double.infinity,
@@ -747,7 +1027,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                   ),
                   const SizedBox(height: 12),
 
-                  // Supply vs Demand Pressure Bar
+                  // Supply and demand
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -894,7 +1174,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                                         fontSize: 13,
                                         fontWeight: FontWeight.w600),
                                     decoration: InputDecoration(
-                                      labelText: 'LIMIT PRICE',
+                                      labelText: 'LIMIT PRICE (CREDITS / UNIT)',
                                       isDense: true,
                                       contentPadding:
                                           const EdgeInsets.symmetric(
@@ -927,22 +1207,40 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                             ),
                             const SizedBox(height: 12),
 
+                            Text(
+                              isBuy
+                                  ? 'Maximum affordable: $maxAffordableUnits units · Balance: ${userCredits.toStringAsFixed(2)} C'
+                                  : 'Sellable: $maxSellableUnits units · Reserved: $reservedSellUnits units',
+                              style: const TextStyle(fontSize: 10, color: mutedColor),
+                            ),
+                            if ((isBuy && qty > maxAffordableUnits) ||
+                                (!isBuy && qty > maxSellableUnits)) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                isBuy
+                                    ? 'Reduce quantity or price to fit your available Credits.'
+                                    : 'Some inventory is already reserved by another sell order.',
+                                style: const TextStyle(fontSize: 10, color: Colors.orangeAccent),
+                              ),
+                            ],
+                            const SizedBox(height: 12),
+
                             // Submit Action Button
                             SizedBox(
                               width: double.infinity,
                               child: FilledButton(
-                                onPressed: widget.busy ||
-                                        qty <= 0 ||
-                                        limitPrice <= 0
+                                onPressed: !canSubmit
                                     ? null
                                     : () async {
-                                        await widget.action(
-                                            () => const EarthApi().submitOrder(
-                                                  _selectedCommodity,
-                                                  limitPrice,
-                                                  side: _orderSide,
-                                                  quantity: qty,
-                                                ));
+                                        await _confirmOrder(
+                                          context: context,
+                                          quantity: qty,
+                                          limitPrice: limitPrice,
+                                          fee: fee,
+                                          total: totalEscrow,
+                                          product: _selectedCommodity,
+                                          side: _orderSide,
+                                        );
                                       },
                                 style: FilledButton.styleFrom(
                                   backgroundColor:
@@ -1046,7 +1344,9 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                 final meta = CommodityMeta.forProduct(key);
                 final supply = asInt(data['supply']) ?? 0;
                 final demand = asInt(data['demand']) ?? 0;
-                final owned = formatWholeNumber(widget.state.resources[key]);
+                final ownedUnits = asInt(widget.state.resources[key]) ?? 0;
+                final reservedUnits = _reservedSellUnits(key);
+                final availableUnits = (ownedUnits - reservedUnits).clamp(0, ownedUnits);
                 final selected = key == _selectedCommodity;
                 final pressure = _marketPressure(supply, demand);
                 final last = indexed.$1 == entries.length - 1;
@@ -1082,7 +1382,8 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
                               ]),
                               const SizedBox(height: 4),
                               Row(children: [
-                                Text(owned,
+                                Text(
+                                    'Available: $availableUnits · Reserved: $reservedUnits',
                                     style: const TextStyle(
                                         fontSize: 10,
                                         fontWeight: FontWeight.w700,
@@ -1164,7 +1465,7 @@ class _MiniTrendBadge extends StatelessWidget {
         borderRadius: BorderRadius.circular(4),
       ),
       child: Text(
-        '${isPos ? '+' : ''}${pct.toStringAsFixed(1)}%',
+        '${isPos ? '+' : ''}${pct.toStringAsFixed(1)}% trend',
         style: TextStyle(
           fontSize: 9,
           fontWeight: FontWeight.w700,
@@ -1257,7 +1558,7 @@ class MarketOrderBookPanel extends StatelessWidget {
     final book = state.marketBook;
 
     return EarthPanel(
-      title: 'CENTRAL MARKET / ORDER BOOK',
+      title: 'ORDER BOOK',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -1266,7 +1567,7 @@ class MarketOrderBookPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          _marketTopicHeading(context, 'CENTRAL MARKET / ORDER BOOK',
+          _marketTopicHeading(context, 'ORDER BOOK',
               description:
                   '• Review aggregated buy bids, sell asks, order counts, and available liquidity.'),
           if (book.isEmpty)
@@ -1364,7 +1665,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
     }).toList();
 
     return EarthPanel(
-      title: 'MY MARKET ORDERS / LIFECYCLE',
+      title: 'MY ORDERS',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
@@ -1373,7 +1674,7 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _marketTopicHeading(context, 'MY MARKET ORDERS / LIFECYCLE',
+          _marketTopicHeading(context, 'MY ORDERS',
               description:
                   '• Track active, filled, and cancelled orders, including escrow and execution progress.'),
           // Filter Tabs
@@ -1570,8 +1871,16 @@ class _MyMarketOrdersPanelState extends State<MyMarketOrdersPanel> {
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 10, vertical: 2),
                           ),
-                          onPressed: () => widget
-                              .action(() => const EarthApi().cancelOrder(id)),
+                          onPressed: () async {
+                            await widget.action(() => const EarthApi().cancelOrder(id));
+                            if (mounted) {
+                              ScaffoldMessenger.of(this.context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Order cancelled and reserved assets released.'),
+                                ),
+                              );
+                            }
+                          },
                           child: const Text('CANCEL ORDER',
                               style: TextStyle(fontSize: 9.5)),
                         ),

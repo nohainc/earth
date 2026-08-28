@@ -19,18 +19,18 @@ export async function handleFinanceRoutes(
 ): Promise<Response | null> {
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [account, state, machines, businesses] = await Promise.all([
+      const [account, state, buildings, businesses] = await Promise.all([
         repository.query("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-        repository.query("SELECT id, machine_type, condition FROM machines WHERE owner_id = $1 AND machine_type != 'service-robot'", [viewer.id]),
+        repository.query("SELECT id, name, building_type, condition, status FROM buildings WHERE owner_id = $1 AND ownership_type = 'private'", [viewer.id]),
         repository.query('SELECT id, name, status FROM businesses WHERE owner_id = $1', [viewer.id]),
       ]);
       const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
       return {
         account: account.rows[0] ?? null,
         state: stateRow,
-        liquidatableAssets: { machines: machines.rows, businesses: businesses.rows },
-        protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100), basicServiceRobot: true },
+        liquidatableAssets: { buildings: buildings.rows, businesses: businesses.rows },
+        protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100) },
       };
     });
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

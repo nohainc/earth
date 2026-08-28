@@ -66,12 +66,10 @@ class _CommandCenterState extends State<CommandCenter> {
   Map<String, dynamic> businessFinancials = const {};
   Map<String, dynamic> businessProfile = const {};
   String? selectedBusinessId;
-  List<dynamic> productionCatalog = const [];
   Map<String, dynamic> marketHistory = const {};
   Map<String, dynamic> pantheon = const {};
   Map<String, dynamic> personalFinanceData = const {};
   List<dynamic> contractsList = const [];
-  List<dynamic> socialInitiatives = const [];
   int unreadNotifications = 0;
   int unreadCommMessages = 0;
   String selectedSection = 'command';
@@ -111,8 +109,6 @@ class _CommandCenterState extends State<CommandCenter> {
 
   Future<void> _loadProductionCatalog() async {
     try {
-      final catalog = await api.productionCatalog();
-      if (mounted) setState(() => productionCatalog = catalog);
     } catch (_) {
       // The dashboard remains usable if the public catalog is temporarily unavailable.
     }
@@ -289,7 +285,6 @@ class _CommandCenterState extends State<CommandCenter> {
         api.personalFinance().catchError((_) => personalFinanceData),
         api.contracts().catchError((_) => contractsList),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
-        api.socialInitiatives().catchError((_) => socialInitiatives),
       ]);
       final latest = results[0] as List<dynamic>;
       final notificationData = results[1] as Map<String, dynamic>;
@@ -301,7 +296,6 @@ class _CommandCenterState extends State<CommandCenter> {
       final commUnread =
           asInt((results[7] as Map<String, dynamic>)['unreadDispatches']) ??
               unreadCommMessages;
-      final social = results[8] as List<dynamic>;
       if (mounted) {
         setState(() {
           events = latest;
@@ -316,7 +310,6 @@ class _CommandCenterState extends State<CommandCenter> {
           unreadNotifications = asInt(notificationData['unread']) ??
               asInt(notificationData['unreadCount']) ??
               0;
-          socialInitiatives = social;
           if (connectionStatus == LiveConnectionStatus.offline) {
             connectionStatus = liveClient != null
                 ? LiveConnectionStatus.live
@@ -369,7 +362,9 @@ class _CommandCenterState extends State<CommandCenter> {
 
   Future<void> _loadSecondaryPanels(EarthState value) async {
     final available = value.businesses.whereType<Map>().toList();
-    if (selectedBusinessId == null || !available.any((item) => item['id']?.toString() == selectedBusinessId)) {
+    if (selectedBusinessId == null ||
+        !available
+            .any((item) => item['id']?.toString() == selectedBusinessId)) {
       selectedBusinessId = value.business['id']?.toString();
     }
     final businessId = selectedBusinessId;
@@ -657,12 +652,10 @@ class _CommandCenterState extends State<CommandCenter> {
                                       onSelectBusiness: _selectBusiness,
                                       membershipEvents: membershipEvents,
                                       authorityEvents: authorityEvents,
-                                      productionCatalog: productionCatalog,
                                       marketHistory: marketHistory,
                                       pantheon: pantheon,
                                       personalFinanceData: personalFinanceData,
                                       contracts: contractsList,
-                                      socialInitiatives: socialInitiatives,
                                       isLiveConnected: liveClient != null,
                                       isReconnecting:
                                           liveReconnectTimer?.isActive == true,

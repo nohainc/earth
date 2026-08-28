@@ -171,47 +171,9 @@ const state = {
   },
   governance: { proposals: [{ id: '042', title: 'Components maintenance levy', status: 'open', levy: 0.02, votes: { support: 41, oppose: 17, uncast: 42 }, ballots: {} }] },
   technology: {
-    research: { id: 'TECH-001', name: 'Adaptive Maintenance AI', progress: 72, budgetPerDay: 240, focus: 'efficiency', status: 'active', budget: 1440 },
-    activePatents: 1,
-    activeLicenses: 1,
+    research: { id: 'TECH-001', name: 'Building Systems Optimization', progress: 72, budgetPerDay: 240, focus: 'efficiency', status: 'active', budget: 1440 },
   },
-  machines: [
-    {
-      id: 'M-H0044-001',
-      owner_id: 'H-0044',
-      name: 'Advanced Fabrication Rig',
-      machine_type: 'fabrication-rig',
-      condition: 88,
-      utilization: 50,
-      maintenance_due: 14,
-      productive_capacity: 1.2,
-      output_resource: 'components',
-      input_resource: 'material',
-      status: 'active',
-    },
-  ],
-  patents: [
-    {
-      id: 'PAT-TECH-001',
-      technology_id: 'TECH-001',
-      name: 'Adaptive Maintenance AI',
-      owner_id: 'H-0044',
-      granted_game_day: 180,
-      expiry_game_day: 3830,
-      status: 'active',
-    },
-  ],
-  licenses: [
-    {
-      id: 'LIC-PAT-TECH-001-H-0045',
-      patent_id: 'PAT-TECH-001',
-      licensor_id: 'H-0044',
-      licensee_id: 'H-0045',
-      royalty_rate: 0.05,
-      license_fee: 100,
-      status: 'active',
-    },
-  ],
+  // Machines removed; buildings will handle production.
   ledger: [],
   contracts: [
     {
@@ -271,11 +233,8 @@ const state = {
   },
 };
 
-// Local reference-simulator state for the Social Commons. The production
-// Worker persists the same feature in PostgreSQL; these routes keep local UI
-// testing functional when running `npm start`.
-const socialInitiatives = [];
-const socialDirectory = [
+// Neutral local directory for successor selection and entity pickers.
+const neutralDirectoryPeople = [
   { id: 'H-0012', display_name: 'Dmitri Rostov', standing: 720, house_name: 'House of Rostov', dynasty_name: 'House of Rostov', city_name: 'London' },
   { id: 'H-0088', display_name: 'Kaelen Thorne', standing: 680, house_name: 'House of Thorne', dynasty_name: 'House of Thorne', city_name: 'Geneva' },
   { id: 'H-0105', display_name: 'Sariyah Chen', standing: 510, house_name: 'House of Chen', dynasty_name: 'House of Chen', city_name: 'Singapore' },
@@ -813,7 +772,8 @@ function settleMarket() {
 
 async function command(path, body, req = null) {
   const correlationId = body.correlationId || body.idempotencyKey || req?.headers?.['idempotency-key'] || req?.headers?.['x-request-id'];
-  // Social Commons local compatibility routes.
+  // The sole retained /api/social route is a neutral directory used by
+  // successor selection and entity pickers.
   if (path.startsWith('/api/social/')) {
     const session = resolveSession(req);
     if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
@@ -821,44 +781,10 @@ async function command(path, body, req = null) {
     const requestUrl = req ? new URL(req.url, 'http://127.0.0.1') : null;
     if (path === '/api/social/directory' && body.method === 'GET') {
       const query = (requestUrl?.searchParams.get('q') || '').trim().toLowerCase();
-      const humans = socialDirectory.filter((person) => !query || [person.display_name, person.house_name, person.dynasty_name, person.city_name].filter(Boolean).some((value) => value.toLowerCase().includes(query)));
-      return { ok: true, humans };
+      const humans = neutralDirectoryPeople.filter((person) => !query || [person.display_name, person.house_name, person.dynasty_name, person.city_name].filter(Boolean).some((value) => value.toLowerCase().includes(query)));
+      const matches = (item) => !query || String(item.name || '').toLowerCase().includes(query);
+      return { ok: true, humans, businesses: Object.values(state.businesses).filter(matches), cities: state.rankings.cities.filter(matches), corporations: state.rankings.corporations.filter(matches), communities: [] };
     }
-    if (path === '/api/social/initiatives' && body.method === 'GET') {
-      return { ok: true, initiatives: socialInitiatives.filter((item) => item.creator_id === viewerId || item.target_id === viewerId).map((item) => ({ ...item, member_status: item.target_id === viewerId ? item.member_status : 'accepted' })) };
-    }
-    if (path === '/api/social/initiatives' && body.method === 'POST') {
-      if (!body.targetId || !body.kind || !String(body.title || '').trim() || !String(body.body || '').trim()) throw new ApiError('targetId, kind, title, and body are required');
-      const terms = body.terms || {};
-      const escrowAmount = Number(terms.creditAmount || 0);
-      const deadlineGameDay = Number(terms.deadlineGameDay || state.clock.day + 7);
-      const contributionTarget = Number(terms.contributionTarget || 100);
-      if (!Number.isFinite(escrowAmount) || escrowAmount < 0 || !Number.isInteger(deadlineGameDay) || deadlineGameDay <= state.clock.day || !Number.isInteger(contributionTarget) || contributionTarget < 1 || contributionTarget > 100) throw new ApiError('Invalid initiative terms', 400, 'VALIDATION_ERROR');
-      const initiative = { id: `SOC-${randomUUID()}`, creator_id: viewerId, target_id: body.targetId, kind: body.kind, title: String(body.title).trim(), body: String(body.body).trim(), terms, escrow_amount: escrowAmount, deadline_game_day: deadlineGameDay, progress: 0, status: 'proposed', member_status: 'invited' };
-      socialInitiatives.unshift(initiative);
-      return { ok: true, initiative };
-    }
-    const action = path.match(/^\/api\/social\/initiatives\/([^/]+)\/(accept|decline|contribute)$/);
-    if (action && body.method === 'POST') {
-      const initiative = socialInitiatives.find((item) => item.id === action[1]);
-      if (!initiative) throw new ApiError('Social initiative not found', 404, 'NOT_FOUND');
-      if (action[2] === 'contribute') {
-        if (initiative.creator_id !== viewerId && initiative.target_id !== viewerId) throw new ApiError('Forbidden: initiative is not associated with current human', 403, 'FORBIDDEN');
-        const contribution = Number(body.contribution || 0);
-        if (!Number.isInteger(contribution) || contribution < 1 || contribution > 100) throw new ApiError('Contribution must be an integer from 1 to 100');
-        initiative.progress = Math.min(100, initiative.progress + contribution);
-        const contributionTarget = Number(initiative.terms?.contributionTarget || 100);
-        initiative.status = initiative.progress >= contributionTarget ? 'completed' : 'active';
-      } else {
-        if (initiative.target_id !== viewerId) throw new ApiError('Only the invited target can respond to an initiative', 403, 'FORBIDDEN');
-        if (initiative.status !== 'proposed') throw new ApiError('Initiative is no longer awaiting a response', 409, 'CONFLICT');
-        initiative.member_status = action[2] === 'accept' ? 'accepted' : 'declined';
-        initiative.status = action[2] === 'accept' ? 'active' : 'declined';
-      }
-      return { ok: true, initiative };
-    }
-    if (path === '/api/social/relationships' && body.method === 'GET') return { ok: true, relationships: [] };
-    if (path === '/api/social/timeline' && body.method === 'GET') return { ok: true, timeline: [] };
   }
   // Public inspection routes
   if (path === '/api/world' && body.method === 'GET') return snapshot();
@@ -1491,10 +1417,9 @@ async function command(path, body, req = null) {
         liquidity_status: player.credits > 1000 ? 'healthy' : 'tight',
         insolvency_status: player.insolvencyStatus === 'restructured' ? 'restructured' : player.credits >= 100 ? 'solvent' : 'insolvent',
       },
-      liquidatableAssets: {
-        machines: [{ id: 'MACH-01', name: 'Standard Fabrication Rig', value: 850 }],
-        businesses: [state.businesses.klineWorks],
-      },
+        liquidatableAssets: {
+          businesses: [state.businesses.klineWorks],
+        },
       protectedMinimum: { credits: 100, basicServiceRobot: true },
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
@@ -2547,8 +2472,6 @@ async function command(path, body, req = null) {
     if (!resolveSession(req)) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
     return {
       projects: [state.technology.research],
-      patents: state.patents || [],
-      licenses: state.licenses || [],
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
@@ -2592,6 +2515,10 @@ async function command(path, body, req = null) {
     const result = { ok: true, research: state.technology.research, state: snapshot() };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
+  }
+
+  if (path.endsWith('/patent') || path.endsWith('/license')) {
+    throw new ApiError('Patents and technology licensing have been retired', 404, 'NOT_FOUND');
   }
 
   if ((path === '/api/technology/me/patent' || path === '/api/technology/TECH-001/patent') && body.method === 'POST') {
@@ -2649,6 +2576,9 @@ async function command(path, body, req = null) {
   }
 
   // Machines
+  if (path === '/api/machines' || path.startsWith('/api/machines/')) {
+    throw new ApiError('Machine operations have been retired; use building operations', 404, 'NOT_FOUND');
+  }
   if (path === '/api/machines' && body.method === 'GET') {
     const session = resolveSession(req);
     if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
@@ -3004,9 +2934,7 @@ function snapshot() {
     market: state.market,
     governance: state.governance,
     technology: state.technology,
-    machines: state.machines || [],
-    patents: state.patents || [],
-    licenses: state.licenses || [],
+    buildings: state.buildings || [],
     publicActivity: [
       { type: 'world_clock', day: state.clock.day },
       { type: 'research_progress', progress: state.technology.research.progress },

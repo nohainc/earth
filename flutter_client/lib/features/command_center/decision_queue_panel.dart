@@ -35,7 +35,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
         return widget.items
             .where((i) =>
                 i.category.toLowerCase() == 'business' ||
-                i.category.toLowerCase() == 'machines' ||
+                i.category.toLowerCase() == 'buildings' ||
                 i.category.toLowerCase() == 'contracts' ||
                 i.category.toLowerCase() == 'market')
             .toList();
@@ -67,7 +67,7 @@ class _DecisionQueuePanelState extends State<DecisionQueuePanel> {
     return EarthPanel(
       title: 'PRIORITIZED DECISION QUEUE',
       infoDescription:
-          '• Unified Strategic Loop: Aggregates high-priority decisions across your corporate operations, pending contracts, civic referendums, machine maintenance, research initiatives, and house succession.\n\n• Decision Tiers:\n  - CRITICAL / HIGH: Immediate risk of asset loss, default penalty, or production stoppage.\n  - MEDIUM: Governance referendums, contractual obligations, and market price arbitrage.\n  - LOW: Research funding opportunities and non-blocking civic updates.\n\n• Primary Action: Tapping the action button primes the decision parameters and opens the target terminal for immediate execution.',
+          '• Unified Strategic Loop: Aggregates high-priority decisions across your corporate operations, pending contracts, civic referendums, building upkeep, research initiatives, and house succession.\n\n• Decision Tiers:\n  - CRITICAL / HIGH: Immediate risk of asset loss, default penalty, or production stoppage.\n  - MEDIUM: Governance referendums, contractual obligations, and market price arbitrage.\n  - LOW: Research funding opportunities and non-blocking civic updates.\n\n• Primary Action: Tapping the action button primes the decision parameters and opens the target terminal for immediate execution.',
       width: double.infinity,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,

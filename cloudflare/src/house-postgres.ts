@@ -63,7 +63,7 @@ export const HOUSE_PERK_CATALOG = [
     name: 'Industrialist Lineage',
     category: 'Operations',
     cost: 100,
-    description: '+10% Machine Build Speed & -15% Business Startup Fees',
+    description: '+10% Building Construction Speed & -15% Business Startup Fees',
   },
   {
     key: 'diplomatic_house',

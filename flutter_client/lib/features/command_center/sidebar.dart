@@ -57,17 +57,27 @@ class _SidebarState extends State<Sidebar> {
       [
         'business',
         'buildings',
-        'machines',
         'contracts',
-        'projects',
         'market',
-        'finance',
         'technology',
-        'patents',
       ],
-      ['corporation', 'my-corporation', 'city', 'my-community', 'civic', 'public-finance'],
-      ['life', 'house', 'dynasty'],
-      ['corporations', 'communities', 'civic-rankings', 'pantheon', 'history', 'constitution'],
+      [
+        'corporation',
+        'my-corporation',
+        'city',
+        'my-community',
+        'civic',
+        'public-finance'
+      ],
+      ['life', 'house', 'dynasty', 'finance'],
+      [
+        'corporations',
+        'communities',
+        'civic-rankings',
+        'pantheon',
+        'history',
+        'constitution'
+      ],
     ];
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
@@ -150,43 +160,19 @@ class _SidebarState extends State<Sidebar> {
         ]
       ),
       (
-        'BUSINESS',
+        'ECONOMY',
         Icons.apartment_rounded,
         [
           (
             'business',
-            (widget.activeBusiness?['name'] ?? 'Business').toString(),
+            'Business',
             Icons.storefront_outlined,
             null,
           ),
           (
             'buildings',
-            'Buildings & Estates',
+            'Buildings',
             Icons.domain_outlined,
-            null,
-          ),
-          (
-            'machines',
-            'Assets',
-            Icons.precision_manufacturing_outlined,
-            null,
-          ),
-          (
-            'market',
-            'Trade & Supplies',
-            Icons.swap_horiz_rounded,
-            null,
-          ),
-          (
-            'finance',
-            'Personal Finance',
-            Icons.account_balance_wallet_outlined,
-            null,
-          ),
-          (
-            'projects',
-            'Projects',
-            Icons.assignment_turned_in_outlined,
             null,
           ),
           (
@@ -196,9 +182,9 @@ class _SidebarState extends State<Sidebar> {
             null,
           ),
           (
-            'patents',
-            'Patents',
-            Icons.assignment_outlined,
+            'market',
+            'Market',
+            Icons.swap_horiz_rounded,
             null,
           ),
         ]
@@ -250,6 +236,12 @@ class _SidebarState extends State<Sidebar> {
             'house',
             houseName?.isNotEmpty == true ? houseName! : 'House',
             Icons.shield_outlined,
+            null,
+          ),
+          (
+            'finance',
+            'Finance',
+            Icons.account_balance_wallet_outlined,
             null,
           ),
         ]
@@ -477,7 +469,8 @@ class _SidebarState extends State<Sidebar> {
                             borderRadius: BorderRadius.circular(2),
                             boxShadow: [
                               BoxShadow(
-                                color: context.primaryColor.withValues(alpha: 0.65),
+                                color: context.primaryColor
+                                    .withValues(alpha: 0.65),
                                 blurRadius: 6,
                                 spreadRadius: 0.5,
                               ),

@@ -202,7 +202,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           title: 'CURRENT OPERATIONS',
           showSurface: false,
           infoBulletPoints: const [
-            'Active enterprise summary, machine capacity, output volume, and pending commercial contracts.',
+            'Active enterprise summary, building portfolio, output volume, and pending commercial contracts.',
           ],
           child: _buildIndustryContent(r),
         ),
@@ -229,7 +229,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       ),
       (
         'Operations',
-        '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeMachines} machines · ${r.businessSummary.pendingContractsCount} pending contracts',
+        '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeBuildings} buildings · ${r.businessSummary.pendingContractsCount} pending contracts',
         Icons.business_center_outlined,
         context.primaryColor,
       ),
@@ -316,16 +316,10 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           accentColor: context.successColor,
         ),
         EarthMetricTile(
-          label: 'ACTIVE MACHINES',
-          value: '${r.businessSummary.activeMachines}',
-          icon: Icons.settings_suggest_outlined,
+          label: 'ACTIVE BUILDINGS',
+          value: '${r.businessSummary.activeBuildings}',
+          icon: Icons.domain_outlined,
           accentColor: context.primaryColor,
-        ),
-        EarthMetricTile(
-          label: 'DEGRADED MACHINES',
-          value: '${r.businessSummary.degradedMachinesCount}',
-          icon: Icons.warning_amber_outlined,
-          accentColor: r.businessSummary.degradedMachinesCount > 0 ? context.errorColor : context.successColor,
         ),
         EarthMetricTile(
           label: 'PENDING CONTRACTS',

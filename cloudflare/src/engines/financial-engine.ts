@@ -1,5 +1,5 @@
 import type { PostgresRepository } from '../repository.ts';
-import { centsToMoney, moneyToCents, rateAmountToCents } from '../money.ts';
+import { centsToMoney, moneyToCents } from '../money.ts';
 import { transferCredits } from '../financial-postgres.ts';
 
 export interface FinancialSettlementResult {
@@ -20,23 +20,7 @@ export async function settleContinuousFinancials(
   let taxesCollectedCents = 0n;
   let supplyContractsSettled = 0;
 
-  // 1. Settle continuous machine depreciation (1% per game day)
-  const assets = await repo.query<{ business_id: string; machine_id: string; book_value: string }>(
-    'SELECT business_assets.business_id, business_assets.machine_id, COALESCE(machine_acquisitions.credit_cost, 1000) AS book_value FROM business_assets LEFT JOIN machine_acquisitions ON machine_acquisitions.machine_id = business_assets.machine_id',
-  );
-
-  for (const asset of assets.rows) {
-    const dailyDeprecCents = rateAmountToCents(moneyToCents(asset.book_value), '0.01', 1);
-    const amountCents = BigInt(Math.max(0, Math.floor(Number(dailyDeprecCents) * elapsedDays)));
-    if (amountCents <= 0n) continue;
-
-    const amount = centsToMoney(amountCents);
-    await repo.query(
-      'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
-      [amount, gameDay, asset.business_id],
-    );
-    depreciationCount += 1;
-  }
+// Machine depreciation logic removed; machines are now handled via buildings.
 
   // 2. Settle continuous supply contracts
   const activeContracts = await repo.query<{

@@ -11,6 +11,7 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
   final Map<String, dynamic> businessFinancials;
   final Map<String, dynamic> businessProfile;
   final Map<String, dynamic>? activeBusiness;
+  final ValueChanged<String>? onNavigate;
 
   const BusinessManagerOverviewPanel({
     super.key,
@@ -18,13 +19,14 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
     this.businessFinancials = const {},
     this.businessProfile = const {},
     this.activeBusiness,
+    this.onNavigate,
   });
 
   @override
   Widget build(BuildContext context) {
     final business = activeBusiness ?? state.business;
     final businessId = business['id']?.toString();
-    final businessName = (business['name'] ?? businessProfile['name'] ?? 'Enterprise Operations').toString();
+    final businessName = (business['name'] ?? businessProfile['name'] ?? 'Business Operations').toString();
     final fin = businessFinancials['business'] is Map
         ? Map<String, dynamic>.from(businessFinancials['business'] as Map)
         : businessFinancials;
@@ -45,28 +47,80 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
                     item['business_id']?.toString() == businessId))
             .length
         : 0;
-    final machineCount = state.machines
+    final buildingCount = state.buildings
         .whereType<Map>()
-        .where((item) =>
-            businessId == null ||
-            item['business_id'] == null ||
-            item['business_id']?.toString() == businessId)
+        .where((item) => _belongsToBusiness(item, businessId))
         .length;
+    final businessBuildings = state.buildings.whereType<Map>().where((item) {
+      return _belongsToBusiness(item, businessId);
+    }).toList();
+    final buildingNeeds = <String, double>{
+      'energy': 0,
+      'food': 0,
+      'material': 0,
+      'components': 0,
+      'compute': 0,
+    };
+    for (final building in businessBuildings) {
+      for (final entry in {
+        'energy': 'upkeep_energy',
+        'food': 'upkeep_food',
+        'material': 'upkeep_materials',
+        'components': 'upkeep_components',
+        'compute': 'upkeep_compute',
+      }.entries) {
+        buildingNeeds[entry.key] =
+            buildingNeeds[entry.key]! + asDoubleOr(building[entry.value], 0);
+      }
+    }
+    final resourceRisks = buildingNeeds.entries.where((entry) {
+      final stock = asDoubleOr(state.resources[entry.key] ??
+          (entry.key == 'material' ? state.resources['materials'] : null), 0);
+      return entry.value > 0 && stock < entry.value;
+    }).map((entry) => entry.key).toList();
+    final businessContracts = state.contracts.whereType<Map>().where((contract) {
+      final contractBusiness = contract['business_id'] ?? contract['businessId'];
+      return businessId == null ||
+          contractBusiness == null ||
+          contractBusiness.toString() == businessId;
+    }).toList();
+    final contractRisks = businessContracts.where((contract) {
+      final status = (contract['status']?.toString() ?? '').toLowerCase();
+      return status.contains('risk') ||
+          status.contains('default') ||
+          status.contains('overdue') ||
+          status.contains('pending');
+    }).length;
     final policy = (business['policy'] ??
             businessProfile['policy'] ??
             'No operating direction chosen')
         .toString();
     final bottlenecks = <String>[];
     if (workforce == 0) bottlenecks.add('staffing');
-    if (machineCount == 0) bottlenecks.add('machine capacity');
+    if (buildingCount == 0) bottlenecks.add('building capacity');
     if (profit != null && profit < 0) bottlenecks.add('cost control');
+    if (resourceRisks.isNotEmpty) bottlenecks.add('resource coverage');
+    final nextAction = profit != null && profit < 0
+        ? 'Review policy and operating costs before expanding.'
+        : resourceRisks.isNotEmpty
+            ? 'Secure ${resourceRisks.join(' · ')} before the next operating cycle.'
+            : buildingCount == 0
+                ? 'Connect a productive building before hiring or expanding.'
+                : 'Review capacity and consider expansion, contracts, or technology adoption.';
+    final nextSection = profit != null && profit < 0
+        ? 'finance'
+        : resourceRisks.isNotEmpty
+            ? 'market'
+            : buildingCount == 0
+                ? 'buildings'
+                : null;
 
     return EarthSection(
       title: 'MANAGER\'S BRIEF / $businessName',
       showSurface: false,
       infoBulletPoints: const [
         'The decision view for running this business: strategy, people, capacity, cash, and risks.',
-        'Detailed machine controls, AI settings, and production history remain in specialist views.',
+        'Buildings are the productive assets; operating policy, upkeep, and revenue are managed here.',
         'Values are shown only when current business data is available.',
       ],
       child: Column(
@@ -108,31 +162,337 @@ class BusinessManagerOverviewPanel extends StatelessWidget {
                 accentColor: context.secondaryColor,
               ),
               EarthMetricTile(
-                label: 'MACHINE CAPACITY',
-                value: '$machineCount',
-                icon: Icons.precision_manufacturing_outlined,
+                label: 'BUILDING CAPACITY',
+                value: '$buildingCount',
+                icon: Icons.business_outlined,
                 accentColor: context.warningColor,
               ),
             ],
           ),
           SizedBox(height: context.spacingControl),
+          Container(
+            width: double.infinity,
+            padding: EdgeInsets.all(context.cardPadding),
+            decoration: BoxDecoration(
+              color: context.surfaceColor,
+              borderRadius: BorderRadius.circular(context.radiusCard),
+              border: Border.all(color: context.primaryColor.withValues(alpha: .28)),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('OPERATING SIGNAL', style: context.captionStyle),
+                const SizedBox(height: 5),
+                Text(nextAction,
+                    style: context.widgetTitleStyle.copyWith(
+                        color: bottlenecks.isEmpty
+                            ? context.inkColor
+                            : context.warningColor)),
+                const SizedBox(height: 4),
+                Text(
+                    bottlenecks.isEmpty
+                        ? 'No immediate operating blocker is visible.'
+                        : 'Watch: ${bottlenecks.join(' · ')}',
+                    style: context.widgetFooterStyle),
+                if (nextSection != null && onNavigate != null) ...[
+                  const SizedBox(height: 8),
+                  EarthButton(
+                    label: nextSection == 'market'
+                        ? 'OPEN MARKET'
+                        : nextSection == 'buildings'
+                            ? 'OPEN BUILDINGS'
+                            : 'OPEN FINANCE',
+                    icon: Icons.arrow_forward_rounded,
+                    variant: EarthButtonVariant.secondary,
+                    onPressed: () => onNavigate!(nextSection),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          SizedBox(height: context.spacingControl),
+          _productiveAssetsCard(context, businessBuildings, buildingNeeds),
+          SizedBox(height: context.spacingControl),
+          _resourceRunwayCard(context, buildingNeeds),
+          SizedBox(height: context.spacingControl),
+          _contractExposureCard(context, businessContracts, contractRisks),
           Text(
             'STRATEGY: $policy',
             style: context.widgetTitleStyle.copyWith(color: context.inkColor),
           ),
           const SizedBox(height: 4),
           Text(
-            bottlenecks.isEmpty
-                ? 'No obvious bottleneck is recorded. Consider expansion, staff development, technology adoption, or a stronger contract.'
-                : 'Needs attention: ${bottlenecks.join(' · ')}',
+            'Policy trade-off: ${_policyExplanation(policy)}',
             style: context.widgetFooterStyle.copyWith(
               color: bottlenecks.isEmpty ? context.mutedColor : context.warningColor,
             ),
           ),
+          const SizedBox(height: 10),
+          _policyComparisonCard(context, policy),
           const SizedBox(height: 6),
           Text(
-            'Next decisions: hire · train · repair · buy supplies · accept work · adopt technology · expand · conserve cash.',
+            'Next decisions: hire · train · secure supplies · adjust policy · adopt technology · expand · conserve cash.',
             style: context.widgetFooterStyle,
+          ),
+        ],
+      ),
+    );
+  }
+
+  String _policyExplanation(String policy) {
+    final normalized = policy.toLowerCase();
+    if (normalized.contains('margin')) {
+      return 'protects profit by favoring cost control over maximum output.';
+    }
+    if (normalized.contains('capacity')) {
+      return 'pushes output and capacity, with greater operating pressure.';
+    }
+    return 'favors stable operation and predictable upkeep.';
+  }
+
+  bool _belongsToBusiness(Map item, String? businessId) {
+    if (businessId == null) return true;
+    final allBuildings = state.buildings.whereType<Map>();
+    final hasAssignments = allBuildings.any((building) =>
+        building['business_id'] != null || building['businessId'] != null);
+    if (!hasAssignments) return true;
+    return (item['business_id'] ?? item['businessId'])?.toString() == businessId;
+  }
+
+  Widget _policyComparisonCard(BuildContext context, String activePolicy) {
+    const options = [
+      ('reliability', 'Stable output', 'Predictable upkeep and lower operating volatility.'),
+      ('margin', 'Protect margin', 'Lower operating pressure with less emphasis on maximum output.'),
+      ('capacity', 'Push capacity', 'Higher output potential with greater resource demand.'),
+    ];
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text('POLICY COMPARISON', style: context.captionStyle),
+        const SizedBox(height: 7),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: options.map((option) {
+            final selected = activePolicy == option.$1;
+            return Container(
+              width: 190,
+              padding: const EdgeInsets.all(9),
+              decoration: BoxDecoration(
+                color: selected
+                    ? context.primaryColor.withValues(alpha: .12)
+                    : context.surfaceColor,
+                borderRadius: BorderRadius.circular(context.radiusControl),
+                border: Border.all(
+                    color: selected
+                        ? context.primaryColor
+                        : context.subtleBorderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(option.$2,
+                      style: context.widgetTitleStyle.copyWith(
+                          color: selected
+                              ? context.primaryColor
+                              : context.inkColor)),
+                  const SizedBox(height: 3),
+                  Text(option.$3, style: context.widgetFooterStyle),
+                  if (selected) ...[
+                    const SizedBox(height: 4),
+                    Text('CURRENT', style: context.captionStyle.copyWith(
+                        color: context.primaryColor)),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+        ),
+      ]),
+    );
+  }
+
+  Widget _productiveAssetsCard(BuildContext context, List<dynamic> buildings,
+      Map<String, double> needs) {
+    final rankedBuildings = List<dynamic>.from(buildings)
+      ..sort((a, b) => _buildingNet(b).compareTo(_buildingNet(a)));
+    final totalCapacity = buildings.fold<double>(
+        0, (sum, building) => sum + asDoubleOr(building['capacity'], 0));
+    final usedCapacity = buildings.fold<double>(
+        0, (sum, building) => sum + asDoubleOr(building['capacity_used'], 0));
+    final capacityText = totalCapacity > 0
+        ? '${formatWholeNumber(usedCapacity)} / ${formatWholeNumber(totalCapacity)} used'
+        : '${buildings.length} connected building${buildings.length == 1 ? '' : 's'}';
+    final activeNeeds = needs.entries
+        .where((entry) => entry.value > 0)
+        .map((entry) => '${formatWholeNumber(entry.value)} ${entry.key.toUpperCase()}')
+        .take(3)
+        .join(' · ');
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.domain_outlined, size: 16, color: context.primaryColor),
+          const SizedBox(width: 7),
+          Text('PRODUCTIVE ASSETS', style: context.widgetTitleStyle),
+        ]),
+        const SizedBox(height: 5),
+        Text(capacityText, style: context.widgetValueStyle),
+        const SizedBox(height: 3),
+        Text(
+            buildings.isEmpty
+                ? 'No building is connected to this business.'
+                : '${rankedBuildings.take(3).map((b) => b['name']?.toString() ?? 'Building').join(' · ')}${buildings.length > 3 ? ' · +${buildings.length - 3} more' : ''}',
+            style: context.widgetFooterStyle),
+        if (activeNeeds.isNotEmpty) ...[
+          const SizedBox(height: 5),
+          Text('INPUTS / CYCLE: $activeNeeds', style: context.widgetFooterStyle),
+        ],
+        if (buildings.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          const Divider(height: 1),
+          const SizedBox(height: 8),
+          ...rankedBuildings.take(4).map((building) {
+            final outputType = building['resource_output_type']?.toString();
+            final output = asDoubleOr(building['resource_output_amount'], 0);
+            final operatingCost = asDoubleOr(
+                building['daily_operating_credits'] ??
+                    building['operating_cost'],
+                0);
+            final outputLabel = outputType == null || outputType == 'credits'
+                ? '${formatWholeNumber(output)} C output'
+                : '${formatWholeNumber(output)} ${outputType.toUpperCase()}';
+            final name = building['name']?.toString() ?? 'Building';
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(name,
+                        overflow: TextOverflow.ellipsis,
+                        style: context.widgetFooterStyle),
+                  ),
+                  Text(outputLabel, style: context.widgetFooterStyle),
+                  const SizedBox(width: 8),
+                  Text('-${formatWholeNumber(operatingCost)} C',
+                      style: context.widgetFooterStyle),
+                ],
+              ),
+            );
+          }),
+          if (buildings.length > 4)
+            Text('+${buildings.length - 4} more connected buildings',
+                style: context.widgetFooterStyle),
+        ],
+      ]),
+    );
+  }
+
+  double _buildingNet(dynamic raw) {
+    if (raw is! Map) return 0;
+    final outputType = raw['resource_output_type']?.toString();
+    final output = outputType == null || outputType == 'credits'
+        ? asDoubleOr(raw['resource_output_amount'], 0)
+        : 0;
+    return output -
+        asDoubleOr(raw['daily_operating_credits'] ?? raw['operating_cost'], 0);
+  }
+
+  Widget _resourceRunwayCard(
+      BuildContext context, Map<String, double> buildingNeeds) {
+    final relevant = buildingNeeds.entries.where((entry) => entry.value > 0).toList();
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: context.subtleBorderColor),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          Icon(Icons.inventory_2_outlined, size: 16, color: context.secondaryColor),
+          const SizedBox(width: 7),
+          Text('RESOURCE RUNWAY', style: context.widgetTitleStyle),
+        ]),
+        const SizedBox(height: 5),
+        Text(
+            relevant.isEmpty
+                ? 'No building input requirements are recorded.'
+                : 'Estimated coverage before connected buildings need replenishment.',
+            style: context.widgetFooterStyle),
+        if (relevant.isNotEmpty) ...[
+          const SizedBox(height: 9),
+          ...relevant.map((entry) {
+            final stock = asDoubleOr(state.resources[entry.key] ??
+                (entry.key == 'material' ? state.resources['materials'] : null), 0);
+            final cycles = (stock / entry.value).floor();
+            final atRisk = cycles <= 1;
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Row(children: [
+                Expanded(
+                    child: Text(entry.key.toUpperCase(),
+                        style: context.captionStyle)),
+                Text('$cycles cycle${cycles == 1 ? '' : 's'} covered',
+                    style: context.widgetFooterStyle.copyWith(
+                        color: atRisk
+                            ? context.warningColor
+                            : context.mutedColor)),
+              ]),
+            );
+          }),
+        ],
+      ]),
+    );
+  }
+
+  Widget _contractExposureCard(
+      BuildContext context, List<dynamic> contracts, int risks) {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(context.cardPadding),
+      decoration: BoxDecoration(
+        color: context.surfaceColor,
+        borderRadius: BorderRadius.circular(context.radiusCard),
+        border: Border.all(color: risks > 0
+            ? context.warningColor.withValues(alpha: .4)
+            : context.subtleBorderColor),
+      ),
+      child: Row(
+        children: [
+          Icon(Icons.handshake_outlined,
+              size: 16,
+              color: risks > 0 ? context.warningColor : context.primaryColor),
+          const SizedBox(width: 7),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('CONTRACT EXPOSURE', style: context.widgetTitleStyle),
+                const SizedBox(height: 4),
+                Text(
+                    contracts.isEmpty
+                        ? 'No linked contracts are visible for this business.'
+                        : '${contracts.length} linked contract${contracts.length == 1 ? '' : 's'} · ${risks == 0 ? 'No immediate delivery risk' : '$risks need attention'}',
+                    style: context.widgetFooterStyle.copyWith(
+                        color: risks > 0
+                            ? context.warningColor
+                            : context.mutedColor)),
+              ],
+            ),
           ),
         ],
       ),
@@ -148,6 +508,7 @@ class BusinessPanel extends StatelessWidget {
   final Map<String, dynamic> businessProfile;
   final Map<String, dynamic>? activeBusiness;
   final ValueChanged<String>? onSelectBusiness;
+  final ValueChanged<String>? onNavigate;
   final Future<void> Function(Future<EarthState> Function()) action;
   final Key? panelKey;
 
@@ -161,6 +522,7 @@ class BusinessPanel extends StatelessWidget {
     required this.businessProfile,
     this.activeBusiness,
     this.onSelectBusiness,
+    this.onNavigate,
     required this.action,
   });
 
@@ -205,9 +567,9 @@ class BusinessPanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final business = activeBusiness ?? state.business;
-    final businessId = business['id']?.toString() ?? 'B-1048';
+    final businessId = business['id']?.toString() ?? '';
     final businessName =
-        (business['name'] as String?)?.toUpperCase() ?? 'KLINE WORKS';
+        (business['name'] as String?)?.toUpperCase() ?? 'BUSINESS OPERATIONS';
     final status = (business['status']?.toString() ?? 'active').toLowerCase();
     final condition = asIntOr(business['condition'], 96);
     final activePolicy =
@@ -218,28 +580,42 @@ class BusinessPanel extends StatelessWidget {
         ? (businessFinancials['business'] as Map<String, dynamic>)
         : business;
 
-    final revenue = asDoubleOr(finMap['revenue'], 1240.0);
-    final operatingCosts =
-        asDoubleOr(finMap['operating_costs'] ?? finMap['costs'], 820.0);
-    final profit = asDoubleOr(finMap['profit'], revenue - operatingCosts);
-    final taxedRevenue = asDoubleOr(finMap['taxed_revenue'], revenue);
-    final lastGameDay = finMap['last_game_day'] ?? state.clock['day'] ?? 184;
+    final revenue = asDouble(finMap['revenue']);
+    final operatingCosts = asDouble(finMap['operating_costs'] ?? finMap['costs']);
+    final profit = asDouble(finMap['profit']) ??
+        (revenue != null && operatingCosts != null
+            ? revenue - operatingCosts
+            : null);
+    final taxedRevenue = asDouble(finMap['taxed_revenue']);
+    final lastGameDay = finMap['last_game_day'] ?? state.clock['day'];
+    final workforceData = (state.json['workforce'] is List
+            ? state.json['workforce'] as List
+            : const [])
+        .whereType<Map>()
+        .toList();
+    final hasWorkforceAssignments = workforceData.any((employee) =>
+        employee['business_id'] != null || employee['businessId'] != null);
     final workforce = (state.json['workforce'] is List
             ? state.json['workforce'] as List
             : const [])
         .whereType<Map>()
         .where((employee) =>
             employee['status']?.toString() == 'active' &&
-            (employee['business_id'] == null ||
-                employee['business_id']?.toString() == businessId))
+            (!hasWorkforceAssignments ||
+                (employee['business_id'] ?? employee['businessId'])
+                        ?.toString() ==
+                    businessId))
         .toList();
     final payroll = workforce.fold<double>(
         0, (sum, employee) => sum + asDoubleOr(employee['wage'], 0));
 
-    final profitMargin = revenue > 0 ? (profit / revenue) * 100 : 0.0;
-    final costRatio =
-        revenue > 0 ? (operatingCosts / revenue).clamp(0.0, 1.0) : 0.66;
-    final profitRatio = (1.0 - costRatio).clamp(0.0, 1.0);
+    final profitMargin = revenue != null && revenue > 0 && profit != null
+        ? (profit / revenue) * 100
+        : null;
+    final costRatio = revenue != null && revenue > 0 && operatingCosts != null
+        ? (operatingCosts / revenue).clamp(0.0, 1.0)
+        : null;
+    final profitRatio = costRatio == null ? null : (1.0 - costRatio).clamp(0.0, 1.0);
 
     final isDistressed = status == 'distressed';
     final isInsolvent = status == 'insolvent';
@@ -258,7 +634,7 @@ class BusinessPanel extends StatelessWidget {
         1000);
     final controllingId = businessOwnership['controllingHumanId']?.toString() ??
         business['controlling_human_id']?.toString() ??
-        'H-0044';
+        'UNAVAILABLE';
 
     final shareholderThreshold =
         asDoubleOr(business['shareholder_vote_threshold'], 0.5);
@@ -268,16 +644,16 @@ class BusinessPanel extends StatelessWidget {
 
     return EarthSection(
       key: panelKey,
-      title: 'ENTERPRISE OPERATIONS / $businessName',
+      title: 'BUSINESS',
       showSurface: false,
       infoBulletPoints: const [
         'Decide what this business should improve: growth, stability, unit economics, or market share.',
-        'Operations, staff, policy, machine automation, and share distributions all coordinate here.',
+        'Buildings, staff, policy, technology adoption, and share distributions all coordinate here.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. EXECUTIVE ENTERPRISE HEADER CARD
+          // 1. EXECUTIVE BUSINESS HEADER CARD
         Container(
           width: double.infinity,
           padding: EdgeInsets.all(context.cardPadding),
@@ -320,7 +696,9 @@ class BusinessPanel extends StatelessWidget {
                             IconButton(
                               icon: Icon(Icons.edit_outlined, size: 15, color: context.mutedColor),
                               tooltip: 'Rename business',
-                              onPressed: busy ? null : () => _rename(context, businessId, businessName),
+                              onPressed: busy || businessId.isEmpty
+                                  ? null
+                                  : () => _rename(context, businessId, businessName),
                             ),
                             const SizedBox(width: 8),
                             EarthBadge(
@@ -331,8 +709,14 @@ class BusinessPanel extends StatelessWidget {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'ENTITY ID: $businessId  ·  SECTOR: ${(business['sector']?.toString() ?? 'MAINTENANCE').toUpperCase()}  ·  ASSESSED DAY $lastGameDay',
+                          'ENTITY ID: ${businessId.isEmpty ? 'UNAVAILABLE' : businessId}  ·  SECTOR: ${(business['sector']?.toString() ?? 'UNSPECIFIED').toUpperCase()}  ·  ASSESSED DAY ${lastGameDay ?? 'UNAVAILABLE'}',
                           style: context.widgetFooterStyle,
+                        ),
+                        const SizedBox(height: 3),
+                        Text(
+                          'BUSINESS OPERATIONS · LEGAL / OPERATOR VIEW',
+                          style: context.captionStyle.copyWith(
+                              color: context.primaryColor),
                         ),
                       ],
                     ),
@@ -353,7 +737,7 @@ class BusinessPanel extends StatelessWidget {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        'FLEET HEALTH:',
+                        'OPERATING HEALTH:',
                         style: context.captionStyle,
                       ),
                       const SizedBox(width: 8),
@@ -397,7 +781,7 @@ class BusinessPanel extends StatelessWidget {
                       const SizedBox(width: 8),
                       for (final policy in ['reliability', 'margin', 'capacity']) ...[
                         InkWell(
-                          onTap: busy || isDissolved
+                          onTap: busy || isDissolved || businessId.isEmpty
                               ? null
                               : () {
                                   EarthAudioEngine.instance.playClick();
@@ -432,6 +816,11 @@ class BusinessPanel extends StatelessWidget {
                   ),
                 ],
               ),
+              const SizedBox(height: 6),
+              Text(
+                'CURRENT POLICY EFFECT: ${_policyPreview(activePolicy)}',
+                style: context.widgetFooterStyle,
+              ),
             ],
           ),
         ),
@@ -456,13 +845,13 @@ class BusinessPanel extends StatelessWidget {
                     children: [
                       Text(
                         isInsolvent
-                            ? 'CRITICAL: ENTERPRISE INSOLVENCY'
+                            ? 'CRITICAL: BUSINESS INSOLVENCY'
                             : 'WARNING: FINANCIAL DISTRESS',
                         style: context.widgetTitleStyle.copyWith(color: context.errorColor),
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'Operating expenditures exceed reserves. You are eligible for sovereign restructuring or authorized liquidation with machine asset recovery.',
+                        'Operating expenditures exceed reserves. You are eligible for sovereign restructuring or authorized liquidation.',
                         style: context.widgetFooterStyle,
                       ),
                     ],
@@ -485,6 +874,7 @@ class BusinessPanel extends StatelessWidget {
           businessFinancials: businessFinancials,
           businessProfile: businessProfile,
           activeBusiness: activeBusiness,
+          onNavigate: onNavigate,
         ),
 
         if (portfolio.length > 1) ...[
@@ -518,8 +908,8 @@ class BusinessPanel extends StatelessWidget {
               ),
               SizedBox(height: context.spacingControl),
               if (workforce.isEmpty)
-                const EarthEmptyState(
-                  message: 'No staff are assigned yet. The operation is currently machine-led.',
+                  const EarthEmptyState(
+                  message: 'No staff are assigned yet. Connect productive buildings and hire the people needed to operate them.',
                   icon: Icons.groups_outlined,
                 )
               else
@@ -622,28 +1012,40 @@ class BusinessPanel extends StatelessWidget {
                 metrics: [
                   EarthMetricTile(
                     label: 'OPERATING REVENUE',
-                    value: '${formatWholeNumber(revenue)} C',
+                value: revenue == null ? 'UNAVAILABLE' : '${formatWholeNumber(revenue)} C',
                     subtitle: 'Market sales & contracts',
                     accentColor: context.successColor,
                     icon: Icons.trending_up_rounded,
                   ),
                   EarthMetricTile(
                     label: 'OPERATING COSTS',
-                    value: '${formatWholeNumber(operatingCosts)} C',
+                    value: operatingCosts == null
+                        ? 'UNAVAILABLE'
+                        : '${formatWholeNumber(operatingCosts)} C',
                     subtitle: 'Inputs, maint & taxes',
                     accentColor: context.warningColor,
                     icon: Icons.trending_down_rounded,
                   ),
                   EarthMetricTile(
                     label: 'NET PROFIT / CYCLE',
-                    value: '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} C',
-                    subtitle: 'Margin: ${profitMargin.toStringAsFixed(1)}%',
-                    accentColor: profit >= 0 ? context.successColor : context.errorColor,
+                    value: profit == null
+                        ? 'UNAVAILABLE'
+                        : '${profit >= 0 ? '+' : ''}${formatWholeNumber(profit)} C',
+                    subtitle: profitMargin == null
+                        ? 'Margin unavailable'
+                        : 'Margin: ${profitMargin.toStringAsFixed(1)}%',
+                    accentColor: profit == null
+                        ? context.mutedColor
+                        : profit >= 0
+                            ? context.successColor
+                            : context.errorColor,
                     icon: Icons.account_balance_wallet_outlined,
                   ),
                   EarthMetricTile(
                     label: 'TAX ASSESSMENT BASE',
-                    value: '${formatWholeNumber(taxedRevenue)} C',
+                    value: taxedRevenue == null
+                        ? 'UNAVAILABLE'
+                        : '${formatWholeNumber(taxedRevenue)} C',
                     subtitle: 'Audited canonical base',
                     accentColor: context.secondaryColor,
                     icon: Icons.receipt_long_outlined,
@@ -653,7 +1055,11 @@ class BusinessPanel extends StatelessWidget {
               SizedBox(height: context.spacingControl),
 
               // Visual Profit vs Cost Ratio Bar
-              Container(
+              if (profitMargin != null &&
+                  costRatio != null &&
+                  profitRatio != null &&
+                  profit != null)
+                Container(
                 padding: EdgeInsets.all(context.tokens.number('pageTopics.cardPadding', 12)),
                 decoration: BoxDecoration(
                   color: context.surfaceColor,
@@ -699,7 +1105,21 @@ class BusinessPanel extends StatelessWidget {
                     ),
                   ],
                 ),
-              ),
+                )
+              else
+                Container(
+                  padding: EdgeInsets.all(
+                      context.tokens.number('pageTopics.cardPadding', 12)),
+                  decoration: BoxDecoration(
+                    color: context.surfaceColor,
+                    borderRadius: BorderRadius.circular(context.radiusCard),
+                    border: Border.all(color: context.subtleBorderColor),
+                  ),
+                  child: Text(
+                    'Margin structure is unavailable until the business financial statement is refreshed.',
+                    style: context.widgetFooterStyle,
+                  ),
+                ),
             ],
           ),
         ),
@@ -923,14 +1343,14 @@ class BusinessPanel extends StatelessWidget {
 
                 SizedBox(height: context.spacingControl),
 
-                _actionGroupTitle(context, 'ENTERPRISE LIFECYCLE'),
+                _actionGroupTitle(context, 'BUSINESS LIFECYCLE'),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   runSpacing: 8,
                   children: [
                     EarthButton(
-                      label: 'NEW ENTERPRISE · 250 CR',
+                      label: 'NEW BUSINESS · 250 CR',
                       icon: Icons.add_business_outlined,
                       variant: EarthButtonVariant.primary,
                       onPressed: busy
@@ -951,7 +1371,7 @@ class BusinessPanel extends StatelessWidget {
                           : () => showReceivershipRestructuringDialog(context, action, businessId),
                     ),
                     EarthButton(
-                      label: 'LIQUIDATE ENTERPRISE',
+                      label: 'LIQUIDATE BUSINESS',
                       icon: Icons.delete_forever_outlined,
                       variant: EarthButtonVariant.danger,
                       onPressed: busy || isDissolved
@@ -1122,4 +1542,15 @@ class BusinessPanel extends StatelessWidget {
         title,
         style: context.captionStyle,
       );
+
+  String _policyPreview(String policy) {
+    switch (policy) {
+      case 'margin':
+        return 'lower operating pressure, with less emphasis on maximum output.';
+      case 'capacity':
+        return 'higher output potential, with greater resource and upkeep demand.';
+      default:
+        return 'more stable output and predictable operating costs.';
+    }
+  }
 }

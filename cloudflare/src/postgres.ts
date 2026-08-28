@@ -48,7 +48,7 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
            'humans', 'ledger_entries', 'market_orders', 'market_trades',
            'auth_credentials', 'auth_sessions', 'life_events',
            'ownership_events', 'authority_events', 'business_financials',
-           'business_assets', 'negotiated_contracts', 'contract_disputes',
+           'negotiated_contracts', 'contract_disputes',
            'earth_schema_migrations'
          )`,
       );

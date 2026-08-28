@@ -6,7 +6,7 @@ import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { businessSectorAccess } from './business-rules.ts';
 
 const sectors = new Set([
-  'energy', 'extraction', 'components', 'machines', 'maintenance', 'housing',
+  'energy', 'extraction', 'components', 'housing',
   'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare',
   'education',
 ]);
@@ -185,17 +185,15 @@ export async function liquidateBusiness(repository: PostgresRepository, input: {
     if (!['distressed', 'insolvent'].includes(business.rows[0].status) && !['distressed', 'insolvent'].includes(business.rows[0].financial_status ?? '')) throw new Error('Business must be distressed or insolvent before liquidation');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const machines = await tx.query<{ machine_id: string }>('SELECT machine_id FROM business_assets WHERE business_id = $1 FOR UPDATE', [input.businessId]);
-    await tx.query('UPDATE machines SET utilization = 0 WHERE id IN (SELECT machine_id FROM business_assets WHERE business_id = $1)', [input.businessId]);
-    await tx.query('DELETE FROM business_assets WHERE business_id = $1', [input.businessId]);
     await tx.query("UPDATE businesses SET status = 'bankrupt' WHERE id = $1", [input.businessId]);
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [input.businessId]);
     await tx.query("UPDATE financial_states SET status = 'dissolved', recovery_game_day = $1, last_reason = 'Owner-authorized business liquidation', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND status IN ('distressed','insolvent')", [day, input.businessId]);
     const eventId = `BUSINESS-LIQUIDATION-${input.businessId}-${day}`;
-    await tx.query("INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason,correlation_id) VALUES ($1,$2,'BUSINESS',$3,'dissolved',$4,$5,$6) ON CONFLICT (id) DO NOTHING", [eventId, input.businessId, business.rows[0].financial_status ?? business.rows[0].status, day, 'Owner-authorized business liquidation', input.correlationId]);
-    await tx.query("INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'business.liquidated',$3,$4) ON CONFLICT (id) DO NOTHING", [eventId, day, `Business ${input.businessId} was liquidated`, toNanoMarkup({ businessId: input.businessId, releasedMachines: machines.rows.length, ownerId: input.ownerId })]);
-    await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'business',$3,$4,$5) ON CONFLICT DO NOTHING", [crypto.randomUUID(), input.ownerId, 'Business liquidation recorded', `${input.businessId} was closed. ${machines.rows.length} productive machine(s) were detached and preserved under your Human ownership for future disposition.`, input.businessId]);
-    return { ok: true, businessId: input.businessId, releasedMachines: machines.rows.length, gameDay: day, correlationId: input.correlationId };
+    await tx.query(`INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason,correlation_id) VALUES ($1,$2,'BUSINESS',$3,'dissolved',$4,$5,$6) ON CONFLICT (id) DO NOTHING`, [eventId, input.businessId, business.rows[0].financial_status ?? business.rows[0].status, day, 'Owner-authorized business liquidation', input.correlationId]);
+    await tx.query(`INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,'business.liquidated',$3,$4) ON CONFLICT (id) DO NOTHING`, [eventId, day, `Business ${input.businessId} was liquidated`, toNanoMarkup({ businessId: input.businessId, ownerId: input.ownerId })]);
+    await tx.query(`INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,'business',$3,$4,$5) ON CONFLICT DO NOTHING`,
+      [crypto.randomUUID(), input.ownerId, 'Business liquidation recorded', `${input.businessId} has been closed and dissolved.`, input.businessId]);
+    return { ok: true, businessId: input.businessId, gameDay: day, correlationId: input.correlationId };
   });
 }
 
@@ -383,13 +381,10 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
         await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: acquirerAccount.rows[0].account_id, creditAccount: holderAccount.rows[0].account_id, amount: payout, reasonType: 'merger_acquisition_payout', reasonId: targetBusinessId, ruleVersion: 'merger-v1', correlationId: `${input.correlationId}-${row.holder_id}` });
       }
     }
-    const machines = await tx.query<{ machine_id: string }>('SELECT machine_id FROM business_assets WHERE business_id = $1 FOR UPDATE', [targetBusinessId]);
-    await tx.query('UPDATE business_assets SET business_id = $1 WHERE business_id = $2', [acquirerBusinessId, targetBusinessId]);
-    await tx.query('UPDATE machines SET owner_id = $1 WHERE id IN (SELECT machine_id FROM business_assets WHERE business_id = $2)', [contract.rows[0].proposer_id, acquirerBusinessId]);
     await tx.query("UPDATE businesses SET status = 'bankrupt' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [targetBusinessId]);
     await tx.query("UPDATE negotiated_contracts SET status = 'completed', accepted_game_day = $1 WHERE id = $2", [day, input.mergerId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, toNanoMarkup({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId }), input.correlationId]);
+    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'business.merged', `Business ${targetBusinessId} merged into ${acquirerBusinessId}`, toNanoMarkup({ mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, correlationId: input.correlationId }), input.correlationId]);
     await enqueueOutbox(tx, {
       eventKey: `business-merger:${input.correlationId}`,
       topic: 'world_activity',
@@ -397,6 +392,6 @@ export async function executeMerger(repository: PostgresRepository, input: { cal
       aggregateId: acquirerBusinessId,
       payload: { type: 'world_activity', category: 'business', action: 'business_merged', mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, gameDay: day },
     });
-    return { ok: true, mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, transferredMachines: machines.rows.length, correlationId: input.correlationId };
+    return { ok: true, mergerId: input.mergerId, acquirerBusinessId, targetBusinessId, correlationId: input.correlationId };
   });
 }

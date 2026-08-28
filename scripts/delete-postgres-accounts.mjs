@@ -27,17 +27,7 @@ const client = new Client({
 const deleteStatements = [
   ['contract_disputes', "DELETE FROM contract_disputes WHERE contract_id IN (SELECT id FROM earth_delete_contracts) OR claimant_id = ANY($1::text[]) OR respondent_id = ANY($1::text[]) OR resolved_by = ANY($1::text[])", 'humans'],
   ['negotiated_contracts', "DELETE FROM negotiated_contracts WHERE id IN (SELECT id FROM earth_delete_contracts) OR proposer_id = ANY($1::text[]) OR counterparty_id = ANY($1::text[])", 'humans'],
-  ['technology_licenses', "DELETE FROM technology_licenses WHERE patent_id IN (SELECT id FROM earth_delete_patents) OR licensor_id = ANY($1::text[]) OR licensee_id = ANY($1::text[])", 'humans'],
-  ['patents', "DELETE FROM patents WHERE id IN (SELECT id FROM earth_delete_patents) OR owner_id = ANY($1::text[]) OR technology_id IN (SELECT id FROM earth_delete_technologies)", 'humans'],
   ['research_projects', "DELETE FROM research_projects WHERE id IN (SELECT id FROM earth_delete_projects) OR owner_id = ANY($1::text[]) OR technology_id IN (SELECT id FROM earth_delete_technologies)", 'humans'],
-  ['business_assets', "DELETE FROM business_assets WHERE business_id IN (SELECT id FROM earth_delete_businesses) OR machine_id IN (SELECT id FROM earth_delete_machines)", 'none'],
-  ['maintenance_events', "DELETE FROM maintenance_events WHERE machine_id IN (SELECT id FROM earth_delete_machines) OR owner_id = ANY($1::text[])", 'humans'],
-  ['production_events', "DELETE FROM production_events WHERE machine_id IN (SELECT id FROM earth_delete_machines) OR owner_id = ANY($1::text[])", 'humans'],
-  ['machine_acquisitions', "DELETE FROM machine_acquisitions WHERE machine_id IN (SELECT id FROM earth_delete_machines) OR owner_id = ANY($1::text[])", 'humans'],
-  ['recycling_events', "DELETE FROM recycling_events WHERE machine_id IN (SELECT id FROM earth_delete_machines) OR owner_id = ANY($1::text[])", 'humans'],
-  ['machine_upgrade_events', "DELETE FROM machine_upgrade_events WHERE machine_id IN (SELECT id FROM earth_delete_machines) OR owner_id = ANY($1::text[])", 'humans'],
-  ['machine_sales', "DELETE FROM machine_sales WHERE machine_id IN (SELECT id FROM earth_delete_machines) OR seller_id = ANY($1::text[]) OR buyer_id = ANY($1::text[])", 'humans'],
-  ['machines', "DELETE FROM machines WHERE id IN (SELECT id FROM earth_delete_machines) OR owner_id = ANY($1::text[])", 'humans'],
   ['business_shares', "DELETE FROM business_shares WHERE business_id IN (SELECT id FROM earth_delete_businesses) OR holder_id = ANY($1::text[])", 'humans'],
   ['business_constitutions', "DELETE FROM business_constitutions WHERE business_id IN (SELECT id FROM earth_delete_businesses) OR updated_by = ANY($1::text[])", 'humans'],
   ['business_management', "DELETE FROM business_management WHERE business_id IN (SELECT id FROM earth_delete_businesses) OR manager_id = ANY($1::text[]) OR appointed_by = ANY($1::text[])", 'humans'],
@@ -84,11 +74,9 @@ try {
   const accounts = target.rows.map((row) => row.account_id);
 
   await client.query('CREATE TEMP TABLE earth_delete_humans AS SELECT id FROM humans WHERE id = ANY($1::text[])', [humans]);
-  await client.query('CREATE TEMP TABLE earth_delete_machines AS SELECT id FROM machines WHERE owner_id = ANY($1::text[])', [humans]);
   await client.query('CREATE TEMP TABLE earth_delete_businesses AS SELECT id FROM businesses WHERE owner_id = ANY($1::text[])', [humans]);
   await client.query('CREATE TEMP TABLE earth_delete_projects AS SELECT id, technology_id FROM research_projects WHERE owner_id = ANY($1::text[])', [humans]);
   await client.query('CREATE TEMP TABLE earth_delete_technologies AS SELECT id FROM technologies WHERE owner_id = ANY($1::text[]) OR id IN (SELECT technology_id FROM earth_delete_projects)', [humans]);
-  await client.query('CREATE TEMP TABLE earth_delete_patents AS SELECT id FROM patents WHERE owner_id = ANY($1::text[]) OR technology_id IN (SELECT id FROM earth_delete_technologies)', [humans]);
   await client.query('CREATE TEMP TABLE earth_delete_orders AS SELECT id FROM market_orders WHERE human_id = ANY($1::text[])', [humans]);
   await client.query('CREATE TEMP TABLE earth_delete_contracts AS SELECT id FROM negotiated_contracts WHERE proposer_id = ANY($1::text[]) OR counterparty_id = ANY($1::text[])', [humans]);
   await client.query('CREATE TEMP TABLE earth_delete_assets AS SELECT id FROM assets WHERE current_owner_id = ANY($1::text[])', [humans]);

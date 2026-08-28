@@ -18,7 +18,7 @@ test('Player Strategic Objectives Engine', async (t) => {
       netWorth: 28000,
     });
 
-    assert.equal(objectives.length, 10);
+    assert.equal(objectives.length, 9);
 
     const ids = objectives.map((o) => o.id);
     assert.ok(ids.includes('obj-valuable-corporation'));
@@ -29,7 +29,7 @@ test('Player Strategic Objectives Engine', async (t) => {
     assert.ok(ids.includes('obj-technology-licensor'));
     assert.ok(ids.includes('obj-financial-independence'));
     assert.ok(ids.includes('obj-public-service-score'));
-    assert.ok(ids.includes('obj-civic-project-builder'));
+    assert.ok(!ids.includes('obj-civic-project-builder'));
 
     for (const obj of objectives) {
       assert.ok(obj.id);
@@ -61,7 +61,7 @@ test('Player Strategic Objectives Engine', async (t) => {
       netWorth: 80000,
     });
 
-    assert.equal(objectives.length, 10);
+    assert.equal(objectives.length, 9);
     assert.ok(objectives.some((o) => o.status === 'completed'));
 
     const corpObj = objectives.find((o) => o.id === 'obj-valuable-corporation');

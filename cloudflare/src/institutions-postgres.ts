@@ -159,7 +159,10 @@ export async function adoptCityForCorporation(repository: PostgresRepository, in
       throw new Error('An active Corporation Executive term is required');
     }
     const corporation = await tx.query<{ id: string }>('SELECT id FROM corporations WHERE id = $1 FOR UPDATE', [input.corporationId]);
-    const city = await tx.query<{ id: string; corporation_id: string | null }>('SELECT id, corporation_id FROM cities WHERE id = $1 FOR UPDATE', [input.cityId]);
+    const city = await tx.query<{ id: string; corporation_id: string | null; admission_policy: string | null }>(
+      'SELECT cities.id, cities.corporation_id, corporations.admission_policy FROM cities LEFT JOIN corporations ON corporations.id = cities.corporation_id WHERE cities.id = $1 FOR UPDATE OF cities',
+      [input.cityId],
+    );
     if (!corporation.rows[0]) throw new Error('Corporation not found');
     if (!city.rows[0]) throw new Error('City not found');
     if (city.rows[0].corporation_id && city.rows[0].corporation_id !== input.corporationId) {
@@ -281,6 +284,9 @@ export async function changeCityResidency(repository: PostgresRepository, input:
     const cityCorporationId = city.rows[0]?.corporation_id ?? null;
     if (input.action === 'join' && existing.rows[0]?.corporation_id && existing.rows[0].corporation_id !== cityCorporationId) {
       throw new Error(cityCorporationId ? 'This city belongs to another corporation' : 'Corporation members may move only to a city in their corporation network');
+    }
+    if (input.action === 'join' && cityCorporationId && !existing.rows[0]?.corporation_id && city.rows[0]?.admission_policy === 'approval') {
+      throw new Error('This city follows its parent corporation approval policy. Apply to the corporation before establishing residency.');
     }
     const gameDay = await day(tx);
     if (input.action === 'join') {

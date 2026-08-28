@@ -27,8 +27,6 @@ class EarthState {
   Map<String, dynamic> get governance => _toMap(json['governance']);
   Map<String, dynamic> get institutions => _toMap(json['institutions']);
   Map<String, dynamic> get life => _toMap(json['life']);
-  List<dynamic> get machines => _toList(json['machines']);
-  List<dynamic> get productionEvents => _toList(json['productionEvents']);
   List<dynamic> get aiAssistants => _toList(json['aiAssistants']);
   List<dynamic> get aiRecommendations => _toList(json['aiRecommendations']);
   Map<String, dynamic> get market =>

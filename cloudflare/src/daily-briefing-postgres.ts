@@ -15,7 +15,7 @@ export interface DailyBriefingData {
     netProfit: number;
     businessDividends: number;
     marketSales: number;
-    machineMaintenance: number;
+    buildingUpkeep: number;
     civicTaxes: number;
   };
   marketMovements: Array<{
@@ -29,8 +29,7 @@ export interface DailyBriefingData {
   businessSummary: {
     activeBusinesses: number;
     totalDailyOutput: number;
-    activeMachines: number;
-    degradedMachinesCount: number;
+    activeBuildings: number;
     pendingContractsCount: number;
   };
   civicSummary: {
@@ -59,14 +58,12 @@ export async function getDailyBriefing(
   client: any,
   humanId: string
 ): Promise<DailyBriefingData> {
-  // 1. Get current world game day
   const worldRes = await client.query<{ game_day: number }>(
     `select game_day from world_state where id = 'WORLD'`
   );
   const currentDay = worldRes.rows[0]?.game_day ?? 185;
   const previousDay = Math.max(1, currentDay - 1);
 
-  // 2. Fetch Net Worth Snapshots (current vs previous)
   const nwRes = await client.query<{
     game_day: number;
     total_net_worth: string;
@@ -87,16 +84,14 @@ export async function getDailyBriefing(
   const nwDelta = curNw - prevNw;
   const nwDeltaPct = prevNw > 0 ? (nwDelta / prevNw) * 100 : 0;
 
-  // 3. Cashflow breakdown
   const income = 14250.0;
   const expenses = 4820.0;
   const dividends = 6500.0;
   const marketSales = 7750.0;
-  const maintenance = 2620.0;
+  const buildingUpkeep = 2620.0;
   const taxes = 2200.0;
   const netProfit = income - expenses;
 
-  // 4. Market Movements (Energy, Material, Compute, Food)
   const commodities = [
     { commodity: 'ENERGY', currentPrice: 108.5, previousPrice: 102.0, deltaPct: 6.37, trend: 'up' as const, volume24h: 14200 },
     { commodity: 'MATERIAL', currentPrice: 42.1, previousPrice: 44.8, deltaPct: -6.03, trend: 'down' as const, volume24h: 9800 },
@@ -105,27 +100,29 @@ export async function getDailyBriefing(
     { commodity: 'FOOD', currentPrice: 19.8, previousPrice: 19.5, deltaPct: 1.54, trend: 'up' as const, volume24h: 18900 },
   ];
 
-  // 5. Business & Machines
   const busRes = await client.query<{ count: string }>(
     `select count(*) from businesses b left join business_management bm on bm.business_id = b.id where b.owner_id = $1 or bm.manager_id = $1`,
     [humanId]
   );
   const activeBusinesses = parseInt(busRes.rows[0]?.count ?? '2', 10);
 
-  // 6. Civic & Governance
+  const bldRes = await client.query<{ count: string }>(
+    `select count(*) from buildings b where b.owner_id = $1`,
+    [humanId]
+  );
+  const activeBuildings = parseInt(bldRes.rows[0]?.count ?? '0', 10);
+
   const civicRes = await client.query<{ count: string }>(
     `select count(*) from proposals where status = 'open' or status = 'active'`,
   );
   const activeProposals = parseInt(civicRes.rows[0]?.count ?? '3', 10);
 
-  // 7. Unread counts
   const notifRes = await client.query<{ count: string }>(
     `select count(*) from notifications where human_id = $1 and read_at is null`,
     [humanId]
   );
   const unreadNotifs = parseInt(notifRes.rows[0]?.count ?? '2', 10);
 
-  // 8. Dynamic Recommended Directives
   const recommendedDirectives = [
     {
       id: 'rec_market_energy',
@@ -134,14 +131,6 @@ export async function getDailyBriefing(
       reason: 'Energy spot price is up +6.37% over the last batch auction. Consider liquidating surplus reserves.',
       actionLabel: 'SELL ENERGY',
       targetSection: 'market',
-    },
-    {
-      id: 'rec_machine_maintenance',
-      title: 'Perform Preventive Machine Maintenance',
-      urgency: 'medium' as const,
-      reason: '1 automated extraction unit has reached 74% condition. Overhaul before breakdown penalties apply.',
-      actionLabel: 'INSPECT MACHINES',
-      targetSection: 'business',
     },
     {
       id: 'rec_senate_ballot',
@@ -158,31 +147,25 @@ export async function getDailyBriefing(
     gameDay: currentDay,
     daysElapsed: 1,
     sinceDay: previousDay,
-    netWealthDelta: {
-      current: curNw,
-      previous: prevNw,
-      delta: nwDelta,
-      deltaPct: nwDeltaPct,
-    },
+    netWealthDelta: { current: curNw, previous: prevNw, delta: nwDelta, deltaPct: nwDeltaPct },
     cashflow: {
       totalIncome: income,
       totalExpenses: expenses,
-      netProfit: netProfit,
+      netProfit,
       businessDividends: dividends,
-      marketSales: marketSales,
-      machineMaintenance: maintenance,
+      marketSales,
+      buildingUpkeep,
       civicTaxes: taxes,
     },
     marketMovements: commodities,
     businessSummary: {
       activeBusinesses: Math.max(1, activeBusinesses),
       totalDailyOutput: 3840,
-      activeMachines: 4,
-      degradedMachinesCount: 1,
+      activeBuildings,
       pendingContractsCount: 2,
     },
     civicSummary: {
-      activeProposals: activeProposals,
+      activeProposals,
       passedProposals24h: 1,
       cityResidency: 'New Geneva',
       cityTaxRatePct: 4.5,
@@ -191,11 +174,7 @@ export async function getDailyBriefing(
         'Proposed: AI Research Grant & Autonomous Compute Standard',
       ],
     },
-    unreadAlerts: {
-      unreadNotifications: unreadNotifs,
-      unreadComms: 1,
-      criticalAlertsCount: 0,
-    },
-    recommendedDirectives: recommendedDirectives,
+    unreadAlerts: { unreadNotifications: unreadNotifs, unreadComms: 1, criticalAlertsCount: 0 },
+    recommendedDirectives,
   };
 }

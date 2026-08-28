@@ -4,23 +4,19 @@ import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
-import 'patent_licensing_dialog.dart';
 
 Future<void> showBuildingDetailUpgradeDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
   Map<String, dynamic> building,
-  List<dynamic> catalog, {
-  List<dynamic>? activeLicenses,
-  String? myCorpId,
-}) async {
+  List<dynamic> catalog,
+) async {
   final bId = building['id']?.toString() ?? '';
   final bName = building['name']?.toString() ?? 'Facility';
   final bType = building['building_type']?.toString() ?? 'restaurant';
   final currentTier = asIntOr(building['tier'], 1);
   final condition = asDoubleOr(building['condition'], 100);
   final footprint = asIntOr(building['slot_footprint'], 1);
-  final cityId = building['city_id']?.toString();
 
   // Find catalog archetype spec and tier tree
   final match = catalog.whereType<Map>().firstWhere(
@@ -81,19 +77,6 @@ Future<void> showBuildingDetailUpgradeDialog(
   final upgradeCompCost = asIntOr(nextTierSpec['upgradeComponentsCost'], 20 * nextTier);
   final upgradeComputeCost = asIntOr(nextTierSpec['upgradeComputeCost'], 0);
   final reqPop = asIntOr(nextTierSpec['requiredCityPopulation'], 0);
-  final reqPatent = nextTierSpec['requiredPatent'] as Map<String, dynamic>?;
-
-  bool hasPatentAccess = true;
-  if (reqPatent != null) {
-    final pId = reqPatent['patentId']?.toString();
-    final pCorp = reqPatent['owningCorporationId']?.toString();
-    final isCorpMember = myCorpId != null && myCorpId == pCorp;
-    final isLicensed = (activeLicenses ?? []).whereType<Map>().any(
-      (l) => l['patent_id'] == pId && l['status'] != 'expired',
-    );
-    hasPatentAccess = isCorpMember || isLicensed;
-  }
-
   await showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
@@ -144,7 +127,7 @@ Future<void> showBuildingDetailUpgradeDialog(
               const SizedBox(height: 14),
 
               // Visual Upgrade Tree Progression
-              Text('MULTI-TIER UPGRADE PROGRESSION & PATENT GATES', style: context.captionStyle),
+              Text('MULTI-TIER UPGRADE PROGRESSION', style: context.captionStyle),
               const SizedBox(height: 8),
               Column(
                 children: tiers.map((t) {
@@ -154,8 +137,6 @@ Future<void> showBuildingDetailUpgradeDialog(
                   final tOp = asDoubleOr(t['dailyOperatingCredits'], 0);
                   final perks = (t['unlockedPerks'] as List?)?.map((e) => e.toString()).toList() ?? [];
                   final popPrereq = asIntOr(t['requiredCityPopulation'], 0);
-                  final patentPrereq = t['requiredPatent'] as Map?;
-
                   final isCompleted = tNum <= currentTier;
                   final isNext = tNum == nextTier;
                   final isLocked = tNum > nextTier;
@@ -211,12 +192,12 @@ Future<void> showBuildingDetailUpgradeDialog(
                               label: isCompleted
                                   ? 'ACTIVE'
                                   : isNext
-                                      ? (hasPatentAccess ? 'AVAILABLE' : 'PATENT LOCKED')
+                                      ? 'AVAILABLE'
                                       : 'LOCKED',
                               variant: isCompleted
                                   ? EarthBadgeVariant.success
                                   : isNext
-                                      ? (hasPatentAccess ? EarthBadgeVariant.primary : EarthBadgeVariant.danger)
+                                      ? EarthBadgeVariant.primary
                                       : EarthBadgeVariant.neutral,
                             ),
                           ],
@@ -245,20 +226,6 @@ Future<void> showBuildingDetailUpgradeDialog(
                         if (popPrereq > 0) ...[
                           const SizedBox(height: 4),
                           Text('Requires: City Population $popPrereq+', style: context.captionStyle.copyWith(fontSize: 10)),
-                        ],
-                        if (patentPrereq != null) ...[
-                          const SizedBox(height: 4),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: context.warningColor.withValues(alpha: .1),
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              '📜 Required Patent: ${patentPrereq['patentName']} (${patentPrereq['owningCorporationName']})',
-                              style: TextStyle(fontSize: 10, color: context.warningColor),
-                            ),
-                          ),
                         ],
                       ],
                     ),
@@ -290,14 +257,6 @@ Future<void> showBuildingDetailUpgradeDialog(
                           if (upgradeCompCost > 0) Text('• $upgradeCompCost Components', style: context.bodyStyle),
                           if (upgradeComputeCost > 0) Text('• $upgradeComputeCost Compute', style: context.bodyStyle),
                           if (reqPop > 0) Text('• City Pop >= $reqPop', style: context.bodyStyle),
-                          if (reqPatent != null)
-                            Text(
-                              hasPatentAccess ? '• Patent: Licensed/Member' : '• Patent: Unlicensed',
-                              style: context.bodyStyle.copyWith(
-                                color: hasPatentAccess ? context.successColor : context.dangerColor,
-                                fontWeight: FontWeight.bold,
-                              ),
-                            ),
                         ],
                       ),
                     ],
@@ -314,24 +273,7 @@ Future<void> showBuildingDetailUpgradeDialog(
           variant: EarthButtonVariant.neutral,
           onPressed: () => Navigator.of(dialogContext).pop(),
         ),
-        if (hasNextTier && !hasPatentAccess && reqPatent != null)
-          EarthButton(
-            label: 'PROCURE PATENT LICENSE',
-            icon: Icons.workspace_premium_outlined,
-            variant: EarthButtonVariant.secondary,
-            onPressed: () {
-              Navigator.of(dialogContext).pop();
-              showPatentLicensingDialog(
-                context,
-                action,
-                reqPatent,
-                buildingId: bId,
-                cityId: cityId,
-                isMemberOfOwningCorp: myCorpId == reqPatent['owningCorporationId'],
-              );
-            },
-          ),
-        if (hasNextTier && hasPatentAccess)
+        if (hasNextTier)
           EarthButton(
             label: 'COMMENCE TIER $nextTier UPGRADE',
             icon: Icons.arrow_upward_outlined,

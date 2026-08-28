@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 60,
+  "migrationVersion": 70,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -74,21 +74,6 @@
       "invested_credits",
       "accumulated_dividends_crd"
     ],
-    "building_patent_licenses": [
-      "id",
-      "patent_id",
-      "patent_name",
-      "license_type",
-      "licensee_id",
-      "licensor_corporation_id",
-      "building_id",
-      "city_id",
-      "is_permanent",
-      "granted_game_day",
-      "expiry_game_day",
-      "royalty_per_day_crd",
-      "status"
-    ],
     "buildings": [
       "id",
       "city_id",
@@ -122,10 +107,6 @@
       "condition_end",
       "auto_repaired"
     ],
-    "business_assets": [
-      "business_id",
-      "machine_id"
-    ],
     "business_technology_adoptions": [
       "business_id",
       "technology_id",
@@ -145,6 +126,13 @@
     "business_constitutions": [
       "business_id",
       "version"
+    ],
+    "business_tax_allocation_rules": [
+      "id",
+      "city_share",
+      "corporation_share",
+      "earth_share",
+      "active"
     ],
     "business_financials": [
       "business_id",
@@ -220,7 +208,8 @@
       "part_number",
       "rule_number",
       "title",
-      "default_value"
+      "default_value",
+      "authority"
     ],
     "contract_delivery_ticks": [
       "id",
@@ -271,27 +260,6 @@
       "subject",
       "status"
     ],
-    "social_initiatives": [
-      "id",
-      "creator_human_id",
-      "kind",
-      "status",
-      "deadline_game_day",
-      "escrow_amount"
-    ],
-    "social_initiative_members": [
-      "initiative_id",
-      "human_id",
-      "status",
-      "contribution"
-    ],
-    "social_relationships": [
-      "human_id",
-      "other_human_id",
-      "trust",
-      "completed_agreements",
-      "broken_commitments"
-    ],
     "earth_schema_migrations": [
       "version",
       "name",
@@ -314,7 +282,8 @@
       "institution_id",
       "category",
       "quorum_threshold",
-      "approval_threshold"
+      "approval_threshold",
+      "implementation_delay_days"
     ],
     "humans": [
       "id",
@@ -344,34 +313,6 @@
       "id",
       "human_id",
       "event_type"
-    ],
-    "machine_acquisitions": [
-      "id",
-      "machine_id",
-      "owner_id"
-    ],
-    "machine_sales": [
-      "id",
-      "machine_id",
-      "seller_id",
-      "buyer_id"
-    ],
-    "machine_upgrade_events": [
-      "id",
-      "machine_id",
-      "capacity_after"
-    ],
-    "machines": [
-      "id",
-      "owner_id",
-      "condition",
-      "productive_capacity",
-      "focus"
-    ],
-    "maintenance_events": [
-      "id",
-      "machine_id",
-      "condition_after"
     ],
     "market_orders": [
       "id",
@@ -423,20 +364,10 @@
       "asset_id",
       "to_owner_id"
     ],
-    "patents": [
-      "id",
-      "technology_id",
-      "owner_id"
-    ],
     "personal_financial_states": [
       "human_id",
       "status",
       "protected_credits"
-    ],
-    "production_events": [
-      "id",
-      "machine_id",
-      "amount"
     ],
     "proposals": [
       "id",
@@ -454,12 +385,6 @@
       "game_day",
       "ranking_type",
       "rank"
-    ],
-    "recycling_events": [
-      "id",
-      "machine_id",
-      "material_returned",
-      "correlation_id"
     ],
     "research_projects": [
       "id",
@@ -514,12 +439,6 @@
       "event_type",
       "actor_id",
       "game_day"
-    ],
-    "technology_licenses": [
-      "id",
-      "patent_id",
-      "licensor_id",
-      "licensee_id"
     ],
     "technology_prerequisites": [
       "technology_id",
@@ -655,25 +574,16 @@
     "building_shares_building_idx",
     "building_shares_investor_idx",
     "civic_dividends_city_day_idx",
-    "idx_bld_patent_lic_licensee",
-    "idx_bld_patent_lic_building",
-    "idx_bld_patent_lic_city",
-    "uq_building_patent_active",
-    "uq_city_patent_active",
     "ledger_game_day_idx",
     "market_orders_book_idx",
     "ownership_history_idx",
     "auth_sessions_token_idx",
     "auth_login_block_idx",
     "auth_action_tokens_lookup_idx",
-    "machines_output_resource_idx",
-    "machines_input_resource_idx",
-    "production_events_owner_idx",
     "market_orders_reserved_idx",
     "event_outbox_pending_idx",
     "event_outbox_aggregate_idx",
     "proposals_game_deadline_idx",
-    "recycling_events_machine_correlation_idx",
     "bankruptcy_events_institution_correlation_idx",
     "world_events_correlation_idx",
     "character_lineage_email_idx",

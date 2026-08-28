@@ -321,7 +321,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
                     padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.menu_rounded, size: 21, color: context.inkColor),
+                    child: Icon(Icons.menu_rounded,
+                        size: 21, color: context.inkColor),
                   ),
                 ),
               ],
@@ -333,8 +334,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   }
 
   // --- BRAND HEADER ---
-  Widget _buildBrandHeader(
-      BuildContext context, bool isMobile, bool isTablet) {
+  Widget _buildBrandHeader(BuildContext context, bool isMobile, bool isTablet) {
     return InkWell(
       onTap: () {
         EarthAudioEngine.instance.playClick();
@@ -503,9 +503,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     required VoidCallback onTap,
     required bool isMobile,
   }) {
-    final netStr = net == 0
-        ? ''
-        : ' (${net > 0 ? '+' : ''}${net.toStringAsFixed(1)}/d)';
+    final netStr =
+        net == 0 ? '' : ' (${net > 0 ? '+' : ''}${net.toStringAsFixed(1)}/d)';
     final tooltipText = '$label: $value$netStr';
 
     return Tooltip(
@@ -563,7 +562,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
   // --- LIVE TELEMETRY STATUS PILL ---
   Widget _buildLiveTelemetryPill(
-      BuildContext context, LiveConnectionStatus status, {bool isMobile = false}) {
+      BuildContext context, LiveConnectionStatus status,
+      {bool isMobile = false}) {
     return Tooltip(
       message: '${status.label}\n${status.description}',
       waitDuration: const Duration(milliseconds: 150),
@@ -646,8 +646,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           widget.onNavigate?.call('notifications');
         } else if (value == 'messages') {
           widget.onCommLink?.call();
-        } else if (value == 'social') {
-          widget.onNavigate?.call('projects');
         }
       },
       itemBuilder: (context) => [
@@ -669,12 +667,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
               ? '${widget.unreadCommMessages}'
               : null,
         ),
-        _menuItem(
-          context,
-          'social',
-          Icons.assignment_turned_in_outlined,
-          'Invitations',
-        ),
       ],
       child: Tooltip(
         message: 'Alerts & Communications ($unreadTotal unread)',
@@ -686,7 +678,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
               Icon(
                 Icons.notifications_none_outlined,
                 size: 21,
-                color: unreadTotal > 0 ? context.primaryColor : context.mutedColor,
+                color:
+                    unreadTotal > 0 ? context.primaryColor : context.mutedColor,
               ),
               if (unreadTotal > 0)
                 Positioned(
@@ -814,7 +807,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         _menuItem(
           context,
           'audio',
-          EarthAudioEngine.instance.isMuted ? Icons.volume_off : Icons.volume_up,
+          EarthAudioEngine.instance.isMuted
+              ? Icons.volume_off
+              : Icons.volume_up,
           EarthAudioEngine.instance.isMuted ? 'Enable Audio' : 'Mute Audio',
         ),
         _menuItem(
@@ -943,4 +938,3 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     return 'EX';
   }
 }
-

@@ -10,7 +10,6 @@ export type Opportunity = {
 };
 
 type MarketSignal = { product: string; supply: unknown; demand: unknown; price: unknown };
-type MachineSignal = { id: string; name: string; output_resource: string; condition: unknown; utilization: unknown };
 type ProposalSignal = { id: string; title: string; status: string; closes_at?: unknown };
 type CommunitySignal = { id: string; name: string; status: string };
 type BusinessSignal = { id: string; name?: string; sector?: string; status?: string };
@@ -25,7 +24,6 @@ const label = (value: string): string => value.charAt(0).toUpperCase() + value.s
  */
 export function rankOpportunities(input: {
   market: MarketSignal[];
-  machines: MachineSignal[];
   businesses?: BusinessSignal[];
   proposals: ProposalSignal[];
   communities: CommunitySignal[];
@@ -44,20 +42,6 @@ export function rankOpportunities(input: {
       priority: pressure >= 1.5 ? 'high' : 'medium',
       subject: product.product,
       score: pressure,
-    });
-  }
-
-  const scarceProducts = new Set(opportunities.filter((item) => item.signal === 'market').map((item) => item.subject));
-  for (const machine of input.machines) {
-    if (!scarceProducts.has(machine.output_resource) || numeric(machine.condition) <= 0) continue;
-    opportunities.push({
-      id: `production-${machine.id}`,
-      signal: 'production',
-      title: `${machine.name} can answer demand`,
-      detail: `Its ${label(machine.output_resource)} output matches a live market shortage · condition ${Math.round(numeric(machine.condition))}%`,
-      priority: numeric(machine.condition) < 40 ? 'high' : 'medium',
-      subject: machine.id,
-      score: 2 + numeric(machine.condition) / 100,
     });
   }
 

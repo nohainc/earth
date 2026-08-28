@@ -41,7 +41,7 @@ class TechnologyPortfolioPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Researched does not always mean deployed. A capability must be adopted by a business, city service, or personal life before it changes outcomes.\n\n• Use this view to see what is active, what is ready to adopt, and what still needs investment.\n\n• Patents are advanced corporation records; everyday gameplay is about choosing where to apply completed capabilities.',
+          '• Researched does not always mean deployed. A capability must be adopted by a business, city service, or personal life before it changes outcomes.\n\n• Use this view to see what is active, what is ready to adopt, and what still needs investment.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         _portfolioRow('IN DEVELOPMENT', name, '$progress% complete',
             Colors.lightBlueAccent),
@@ -169,48 +169,96 @@ class TechnologyPortfolioPanel extends StatelessWidget {
   }
 }
 
-class TechnologyOutcomePanel extends StatelessWidget {
+class TechnologyOutcomePanel extends StatefulWidget {
   final EarthState state;
 
   const TechnologyOutcomePanel({super.key, required this.state});
 
   @override
+  State<TechnologyOutcomePanel> createState() => _TechnologyOutcomePanelState();
+}
+
+class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
+  String _selectedBranch = 'ALL';
+
+  @override
   Widget build(BuildContext context) {
-    final rawCatalog = state.technologyRegistry['catalog'];
+    final rawCatalog = widget.state.technologyRegistry['catalog'];
     final catalog = rawCatalog is List && rawCatalog.isNotEmpty
         ? rawCatalog
         : const [
             {
               'name': 'Automated Assembly',
+              'branch': 'Construction & Industry',
               'description':
-                  'Improves machine throughput for component and manufactured-goods production.',
-              'effect': 'Higher production output'
+                  'Improves building construction and component output for industrial facilities.',
+              'effect': 'Higher building output',
+              'target': 'Industrial buildings · Components',
             },
             {
               'name': 'Clean Energy Systems',
+              'branch': 'Energy & Infrastructure',
               'description':
-                  'Reduces the operating burden of energy-intensive workplaces and infrastructure.',
-              'effect': 'Lower energy costs'
+                  'Reduces energy demand across productive buildings and civic infrastructure.',
+              'effect': 'Lower energy upkeep',
+              'target': 'Utilities · Operating buildings',
             },
             {
               'name': 'Food Synthesis',
+              'branch': 'Life Support',
               'description':
-                  'Enables high-yield food production for resilient local supply.',
-              'effect': 'Stronger food reserves'
+                  'Expands reliable food production and improves city resilience during shortages.',
+              'effect': 'Stronger food supply',
+              'target': 'Food buildings · City services',
             },
             {
               'name': 'Predictive Maintenance',
+              'branch': 'Construction & Industry',
               'description':
-                  'Reduces machine wear when actively adopted by a workplace.',
-              'effect': 'Longer machine life'
+                  'Reduces building upkeep pressure and protects productive capacity over time.',
+              'effect': 'Lower upkeep pressure',
+              'target': 'Industrial buildings · Estates',
             },
             {
               'name': 'Civic Network Infrastructure',
+              'branch': 'Civic Systems',
               'description':
                   'Improves the coordination capacity of city services and civic institutions.',
-              'effect': 'Better civic capacity'
+              'effect': 'Better civic capacity',
+              'target': 'Civic buildings · Public services',
             },
           ];
+    final items = catalog
+        .map((raw) => raw is Map
+            ? Map<String, dynamic>.from(raw)
+            : <String, dynamic>{'name': raw.toString()})
+        .toList();
+    final branches = <String>[];
+    for (final item in items) {
+      final branch = _branchFor(item);
+      if (!branches.contains(branch)) branches.add(branch);
+    }
+    final visibleItems = _selectedBranch == 'ALL'
+        ? items
+        : items.where((item) => _branchFor(item) == _selectedBranch).toList();
+    final adoptedNames = _names(widget.state.technologyRegistry['adopted'] ??
+        widget.state.technologyRegistry['adoptedTechnologies'] ??
+        widget.state.technologyRegistry['capabilities']);
+    final resourceFlows = widget.state.json['resourceFlows'] is Map
+        ? Map<String, dynamic>.from(widget.state.json['resourceFlows'] as Map)
+        : const <String, dynamic>{};
+    final pressuredResource = ['energy', 'food', 'material', 'components', 'compute']
+        .map((key) {
+          final raw = resourceFlows[key] ??
+              (key == 'material' ? resourceFlows['materials'] : null);
+          return MapEntry(key, asDoubleOr(raw is Map ? raw['net'] : raw, 0));
+        })
+        .where((entry) => entry.value < 0)
+        .fold<MapEntry<String, double>?>(null, (current, entry) =>
+            current == null || entry.value < current.value ? entry : current);
+    final recommendation = pressuredResource == null
+        ? 'Choose the path that supports your next building milestone.'
+        : 'Consider ${_recommendationFor(pressuredResource.key)} because ${pressuredResource.key} is in net decline.';
     return EarthPanel(
       title: 'CAPABILITY OUTCOMES',
       showSurface: false,
@@ -219,11 +267,79 @@ class TechnologyOutcomePanel extends StatelessWidget {
       helpAfterTitle: true,
       infoDescription:
           '• Each approved capability has a practical target.\n\n• Research creates potential; adoption connects it to a business or civic workplace.\n\n• Compare the outcome with your current bottleneck before spending research Credits.',
-      child: Column(
-          children: catalog.take(8).map((raw) {
-        final item = raw is Map
-            ? Map<String, dynamic>.from(raw)
-            : const <String, dynamic>{};
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: violetColor.withValues(alpha: .1),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: violetColor.withValues(alpha: .28)),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Icon(Icons.lightbulb_outline,
+                  size: 17, color: violetColor),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('NEXT RESEARCH DIRECTION',
+                        style: TextStyle(
+                            color: violetColor,
+                            fontSize: 9,
+                            fontWeight: FontWeight.w800,
+                            letterSpacing: .8)),
+                    const SizedBox(height: 3),
+                    Text(recommendation,
+                        style: const TextStyle(
+                            color: inkColor,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 14),
+        const Text('RESEARCH PATHS',
+            style: TextStyle(
+                color: mutedColor,
+                fontSize: 10,
+                fontWeight: FontWeight.w800,
+                letterSpacing: 1.1)),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 7,
+          runSpacing: 7,
+          children: ['ALL', ...branches]
+              .map((branch) => ActionChip(
+                    label: Text(branch,
+                        style: const TextStyle(
+                            fontSize: 9, fontWeight: FontWeight.w700)),
+                    visualDensity: VisualDensity.compact,
+                    side: BorderSide(
+                        color: (_selectedBranch == branch
+                                ? cyanAccentColor
+                                : violetColor)
+                            .withValues(alpha: .45)),
+                    backgroundColor: (_selectedBranch == branch
+                            ? cyanAccentColor
+                            : surfaceColor)
+                        .withValues(alpha: .65),
+                    labelPadding: const EdgeInsets.symmetric(horizontal: 2),
+                    avatar: null,
+                    clipBehavior: Clip.none,
+                    padding: EdgeInsets.zero,
+                    onPressed: () => setState(() => _selectedBranch = branch),
+                  ))
+              .toList(),
+        ),
+        const SizedBox(height: 14),
+        ...visibleItems.take(8).map((item) {
         final name =
             (item['name'] ?? item['title'] ?? 'Approved capability').toString();
         final description = (item['description'] ??
@@ -232,6 +348,25 @@ class TechnologyOutcomePanel extends StatelessWidget {
         final effect = (item['effect'] ?? 'Practical capability improvement')
             .toString()
             .replaceAll('_', ' ');
+        final branch = _branchFor(item);
+        final target = (item['target'] ??
+                item['affected_buildings'] ??
+                item['resource_effect'] ??
+                'Buildings, businesses, or civic services')
+            .toString()
+            .replaceAll('_', ' ');
+        final requirement = item['requirements'] ?? item['requirement'];
+        final locked = item['locked'] == true;
+        final prerequisite = item['prerequisites'] ?? item['requires'];
+        final prerequisiteText = _formatPrerequisites(prerequisite);
+        final researchCost = item['researchCost'] ??
+            item['research_cost'] ??
+            item['cost'] ??
+            item['cost_credits'];
+        final before = item['before'] ?? item['currentValue'] ?? item['current_value'];
+        final after = item['after'] ?? item['projectedValue'] ?? item['projected_value'];
+        final milestone = item['milestone'] ?? item['tier'] ?? _milestoneFor(item);
+        final adopted = adoptedNames.contains(name);
         return Container(
           width: double.infinity,
           margin: const EdgeInsets.only(bottom: 7),
@@ -253,7 +388,7 @@ class TechnologyOutcomePanel extends StatelessWidget {
                         child: Text(name,
                             style: const TextStyle(
                                 fontSize: 10.5, fontWeight: FontWeight.w800))),
-                    Text(effect.toUpperCase(),
+                    Text(_effectLabel(effect).toUpperCase(),
                         style: const TextStyle(
                             color: violetColor,
                             fontSize: 8,
@@ -262,11 +397,143 @@ class TechnologyOutcomePanel extends StatelessWidget {
                   const SizedBox(height: 3),
                   Text(description,
                       style: const TextStyle(color: mutedColor, fontSize: 9.5)),
+                  const SizedBox(height: 5),
+                  Text('PATH: $branch · $milestone · APPLIES TO: $target',
+                      style: const TextStyle(
+                          color: cyanAccentColor,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700)),
+                  const SizedBox(height: 3),
+                  Text(
+                      'COST: ${researchCost == null ? 'Set by project' : '${researchCost.toString()} C'} · PREREQUISITE: $prerequisiteText',
+                      style: const TextStyle(
+                          color: mutedColor,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w600)),
+                  if (before != null || after != null) ...[
+                    const SizedBox(height: 5),
+                    Text('BEFORE → AFTER: ${before ?? 'Current'} → ${after ?? 'Improved'}',
+                        style: const TextStyle(
+                            color: Colors.tealAccent,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                  if (adopted) ...[
+                    const SizedBox(height: 3),
+                    const Text('ADOPTED · Currently affecting outcomes',
+                        style: TextStyle(
+                            color: cyanAccentColor,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                  if (prerequisite != null) ...[
+                    const SizedBox(height: 3),
+                    Text('PREREQUISITE · $prerequisite',
+                        style: const TextStyle(
+                            color: Colors.orangeAccent,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700)),
+                  ],
+                  if (locked || requirement != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                        locked
+                            ? 'LOCKED · ${requirement ?? 'Complete the prerequisite research first.'}'
+                            : 'REQUIREMENT · $requirement',
+                        style: const TextStyle(
+                            color: Colors.orangeAccent,
+                            fontSize: 8.5,
+                            fontWeight: FontWeight.w700)),
+                  ],
                 ])),
           ]),
         );
-      }).toList()),
+        }),
+      ]),
     );
+  }
+
+  List<String> _names(dynamic raw) {
+    if (raw is! List) return const [];
+    return raw
+        .map((item) => item is Map
+            ? (item['name'] ?? item['title'] ?? item['id'])?.toString()
+            : item.toString())
+        .whereType<String>()
+        .where((name) => name.isNotEmpty)
+        .toList();
+  }
+
+  String _milestoneFor(Map<String, dynamic> item) {
+    final name = (item['name'] ?? item['title'] ?? '').toString().toLowerCase();
+    if (name.contains('civic')) return 'CIVIC INNOVATION';
+    if (name.contains('energy') || name.contains('food')) {
+      return 'APPLIED SYSTEMS';
+    }
+    return 'FOUNDATION';
+  }
+
+  String _branchFor(Map<String, dynamic> item) {
+    final explicit = item['branch'] ?? item['category'] ?? item['domain'];
+    if (explicit != null && explicit.toString().trim().isNotEmpty) {
+      return explicit.toString().replaceAll('_', ' ');
+    }
+    final name = (item['name'] ?? item['title'] ?? '').toString().toLowerCase();
+    if (name.contains('energy')) return 'Energy & Infrastructure';
+    if (name.contains('food')) return 'Life Support';
+    if (name.contains('civic')) return 'Civic Systems';
+    if (name.contains('assembly') || name.contains('maintenance')) {
+      return 'Construction & Industry';
+    }
+    return 'General Capability';
+  }
+
+  String _recommendationFor(String resource) {
+    switch (resource) {
+      case 'energy':
+        return 'Energy & Infrastructure';
+      case 'food':
+        return 'Life Support';
+      case 'material':
+      case 'components':
+        return 'Construction & Industry';
+      case 'compute':
+        return 'Computing & Research';
+      default:
+        return 'the path matching your current bottleneck';
+    }
+  }
+
+  String _formatPrerequisites(dynamic raw) {
+    if (raw == null) return 'None';
+    if (raw is List) {
+      if (raw.isEmpty) return 'None';
+      return raw
+          .map((item) => item is Map
+              ? (item['name'] ?? item['title'] ?? item['id'])?.toString()
+              : item.toString())
+          .whereType<String>()
+          .join(', ');
+    }
+    final text = raw.toString().trim();
+    return text.isEmpty ? 'None' : text;
+  }
+
+  String _effectLabel(String effect) {
+    switch (effect) {
+      case 'assembly_output_bonus':
+        return 'Higher building output';
+      case 'energy_efficiency':
+        return 'Lower energy upkeep';
+      case 'food_output_bonus':
+        return 'Stronger food supply';
+      case 'maintenance_reduction':
+        return 'Lower building upkeep';
+      case 'civic_capacity_bonus':
+        return 'Higher civic capacity';
+      default:
+        return effect.replaceAll('_', ' ');
+    }
   }
 }
 
@@ -303,27 +570,21 @@ class TechnologyPanel extends StatelessWidget {
     final budgetNum = research['budget'] ?? research['budgetPerDay'] ?? 240;
     final budget = asDoubleOr(budgetNum, 240.0);
     final isComplete = progress >= 100;
+    final computeReserve = asDoubleOr(state.resources['compute'], 0);
+    final buildingCount = state.buildings.length;
+    final historyEvents = state.history['events'] is List
+        ? (state.history['events'] as List).whereType<Map>().toList()
+        : <Map>[];
+    final researchEvents = historyEvents.where((event) {
+      final text = '${event['event_type'] ?? ''} ${event['title'] ?? ''} ${event['details'] ?? ''}'.toLowerCase();
+      return text.contains('research') || text.contains('technology');
+    }).take(4).toList();
 
-    final activePatents =
-        asIntOr(state.technologyRegistry['activePatents'], isComplete ? 1 : 0);
-    final activeLicenses =
-        asIntOr(state.technologyRegistry['activeLicenses'], 1);
-    final sharedPatents = (tech['corporationSharedPatents'] is List)
-        ? (tech['corporationSharedPatents'] as List)
-        : const <dynamic>[];
 
     Color focusColor = cyanAccentColor;
     if (focus == 'DURABILITY') focusColor = Colors.tealAccent;
     if (focus == 'SAFETY') focusColor = Colors.lightGreenAccent;
     if (focus == 'COST') focusColor = Colors.amberAccent;
-
-    final currentDay = asIntOr(state.clock['day'], 184);
-    final patentGrantedDay = asIntOr(research['patentGrantedDay'], 1);
-    const patentDurationDays = 288; // 24 World years (12 World days/year)
-    final patentExpiryDay = patentGrantedDay + patentDurationDays;
-    final daysToPublicDomain =
-        (patentExpiryDay - currentDay).clamp(0, patentDurationDays);
-    final isPublicDomain = isComplete && daysToPublicDomain <= 0;
 
     return EarthPanel(
       key: panelKey,
@@ -333,11 +594,11 @@ class TechnologyPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Research is a city capability: you must be affiliated with a city before starting or funding an upgrade. Independent characters can use their existing starter capability, but cannot expand the technology tree until they join a city.\n\n• Choose and fund a capability that improves your businesses, city, or personal life. Compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, adopt the capability where it matters. Corporation patents and shared research are advanced institutional actions. Physical machines and production decisions belong in Businesses & Operations.',
+          '• Research is a city capability: you must be affiliated with a city before starting or funding an upgrade. Independent characters can use their existing starter capability, but cannot expand the technology tree until they join a city.\n\n• Choose and fund a capability that improves your businesses, city, or personal life. Compare the practical benefit: efficiency, durability, safety, or lower cost.\n\n• Once complete, adopt the capability where it matters in Businesses & Operations or civic infrastructure.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // 1. ACTIVE RESEARCH PROJECT COCKPIT
+          // ACTIVE RESEARCH PROJECT COCKPIT
           Container(
             width: double.infinity,
             padding: const EdgeInsets.all(18),
@@ -513,7 +774,24 @@ class TechnologyPanel extends StatelessWidget {
                         border: Border.all(color: Colors.white12),
                       ),
                       child: Text(
-                        'Focus: ${focus.toLowerCase()} · Budget: ${formatWholeNumber(budget)} C · Status: ${isComplete ? 'COMPLETED' : 'IN RESEARCH'}',
+                        'Funding: ${formatWholeNumber(budget)} C · Compute reserve: ${formatWholeNumber(computeReserve)} · ${isComplete ? 'Ready to deploy' : '${(100 - progress).toStringAsFixed(0)}% remaining'}',
+                        style: const TextStyle(
+                          fontSize: 9.5,
+                          fontWeight: FontWeight.w600,
+                          color: mutedColor,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: .04),
+                        borderRadius: BorderRadius.circular(4),
+                        border: Border.all(color: Colors.white12),
+                      ),
+                      child: Text(
+                        'City context: $buildingCount active building${buildingCount == 1 ? '' : 's'}',
                         style: const TextStyle(
                           fontSize: 9.5,
                           fontWeight: FontWeight.w600,
@@ -529,100 +807,7 @@ class TechnologyPanel extends StatelessWidget {
 
           const SizedBox(height: 18),
 
-          // 2. INTELLECTUAL PROPERTY & LICENSING METRICS
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 4),
-            child: Text(
-              'COMMERCIAL OPTIONS FOR COMPLETED RESEARCH',
-              style: TextStyle(
-                fontSize: 10,
-                letterSpacing: 1.2,
-                fontWeight: FontWeight.w700,
-                color: mutedColor,
-              ),
-            ),
-          ),
-          const SizedBox(height: 8),
-
-          LayoutBuilder(
-            builder: (context, ipConstraints) {
-              final ipWidth = ipConstraints.maxWidth;
-              final numCols = ipWidth >= 650 ? 3 : (ipWidth >= 440 ? 2 : 1);
-              final itemWidth = (ipWidth - (numCols - 1) * 12) / numCols;
-
-              return Wrap(
-                spacing: 12,
-                runSpacing: 12,
-                children: [
-                  _ipMetricCard(
-                    width: itemWidth,
-                    title: 'PATENTS REGISTERED',
-                    value: '$activePatents',
-                    subtext: 'Patents granted: $activePatents',
-                    accent: violetColor,
-                    icon: Icons.verified_user_outlined,
-                  ),
-                  _ipMetricCard(
-                    width: itemWidth,
-                    title: 'COMMERCIAL LICENSES',
-                    value: '$activeLicenses',
-                    subtext: 'Active licenses: $activeLicenses (5.00% royalty)',
-                    accent: cyanAccentColor,
-                    icon: Icons.gavel_outlined,
-                  ),
-                  _ipMetricCard(
-                    width: itemWidth,
-                    title: 'PUBLIC DOMAIN TERM',
-                    value: isPublicDomain
-                        ? 'PUBLIC DOMAIN'
-                        : '${daysToPublicDomain}d remaining',
-                    subtext: isPublicDomain
-                        ? '0% open royalty blueprint'
-                        : '24-year statutory term',
-                    accent: isPublicDomain
-                        ? Colors.lightGreenAccent
-                        : Colors.amberAccent,
-                    icon: Icons.public_outlined,
-                  ),
-                ],
-              );
-            },
-          ),
-
-          const SizedBox(height: 18),
-
-          if (sharedPatents.isNotEmpty) ...[
-            Container(
-              width: double.infinity,
-              padding: const EdgeInsets.all(14),
-              decoration: BoxDecoration(
-                color: violetColor.withValues(alpha: .08),
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: violetColor.withValues(alpha: .3)),
-              ),
-              child: Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Icon(Icons.hub_outlined, size: 18, color: violetColor),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'CORPORATION RESEARCH COMMONS\n${sharedPatents.map((raw) => (raw is Map ? raw['name'] : null)?.toString() ?? 'Shared patent').join(' · ')}',
-                      style: const TextStyle(
-                        fontSize: 10,
-                        height: 1.5,
-                        fontWeight: FontWeight.w700,
-                        color: inkColor,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 18),
-          ],
-
-          // 3. R&D ACTIONS & IP MONETIZATION HUB
+          // R&D ACTIONS
           const Padding(
             padding: EdgeInsets.symmetric(vertical: 4),
             child: Text(
@@ -662,7 +847,7 @@ class TechnologyPanel extends StatelessWidget {
                       : () => action(() => const EarthApi().fundResearch()),
                   icon: const Icon(Icons.bolt_rounded, size: 15),
                   label: const Text(
-                    'FUND 240 C',
+                    'FUND 240 C · +4% MAX',
                     style: TextStyle(
                       fontSize: 10.5,
                       fontWeight: FontWeight.w800,
@@ -691,90 +876,49 @@ class TechnologyPanel extends StatelessWidget {
                     ),
                   ),
                 ),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: violetColor,
-                    side: BorderSide(color: violetColor.withValues(alpha: .4)),
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    visualDensity: VisualDensity.compact,
-                  ),
-                  onPressed: busy || !isComplete
-                      ? null
-                      : () => action(() => const EarthApi().grantPatent()),
-                  icon: const Icon(Icons.verified_user_outlined, size: 15),
-                  label: const Text(
-                    'GRANT PATENT',
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: .6,
-                    ),
-                  ),
-                ),
               ],
             ),
           ),
+          if (researchEvents.isNotEmpty) ...[
+            const SizedBox(height: 18),
+            const Text(
+              'RESEARCH RECORD',
+              style: TextStyle(
+                fontSize: 10,
+                letterSpacing: 1.2,
+                fontWeight: FontWeight.w700,
+                color: mutedColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ...researchEvents.map((event) {
+              final title = (event['title'] ??
+                      event['event_type'] ??
+                      'Research event')
+                  .toString()
+                  .replaceAll('_', ' ');
+              final day = event['game_day'] ?? event['day'];
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 5),
+                child: Row(
+                  children: [
+                    const Icon(Icons.history, size: 13, color: mutedColor),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        day == null ? title : 'Day $day · $title',
+                        style: const TextStyle(
+                            color: mutedColor, fontSize: 9.5),
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
         ],
       ),
     );
   }
 
-  Widget _ipMetricCard({
-    required double width,
-    required String title,
-    required String value,
-    required String subtext,
-    required Color accent,
-    required IconData icon,
-  }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .75),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .9,
-                  color: mutedColor,
-                ),
-              ),
-              Icon(icon, size: 14, color: accent),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -.3,
-              color: accent,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtext,
-            style: const TextStyle(
-              fontSize: 9.5,
-              color: mutedColor,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
 }

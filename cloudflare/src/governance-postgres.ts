@@ -31,12 +31,12 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposal: prior.rows[0], correlationId: input.correlationId };
     if (!(await eligible(tx, input.humanId, input.institutionId))) throw new Error('Human is not eligible to propose at this institution');
     const rule = input.ruleVersionId
-      ? await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days FROM governance_rules WHERE id = $1 AND institution_id = $2 AND status = 'active'", [input.ruleVersionId, input.institutionId])
-      : await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days FROM governance_rules WHERE institution_id = $1 AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
+      ? await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE id = $1 AND institution_id = $2 AND status = 'active'", [input.ruleVersionId, input.institutionId])
+      : await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE institution_id = $1 AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
     if (!rule.rows[0]) throw new Error('An active governance rule version is required');
-    const quorum = Number(rule.rows[0].quorum_threshold ?? 0.25);
-    const approvalThreshold = Number(rule.rows[0].approval_threshold ?? 0.5);
-    const implementationDelay = 1;
+    const quorum = Number(rule.rows[0].quorum_threshold);
+    const approvalThreshold = Number(rule.rows[0].approval_threshold);
+    const implementationDelay = Number(rule.rows[0].implementation_delay_days);
     if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
@@ -131,8 +131,8 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           daily_operating_credits,
           resource_output_type, resource_output_amount,
           construction_started_game_day, construction_complete_game_day, construction_progress,
-          patent_license_status, status, created_game_day
-        ) VALUES ($1, $2, $2, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 0.0, 'active', 'under_construction', $17)`,
+          status, created_game_day
+        ) VALUES ($1, $2, $2, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 0.0, 'under_construction', $17)`,
         [
           buildingId,
           current.institution_id,

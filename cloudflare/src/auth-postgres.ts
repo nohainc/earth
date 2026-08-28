@@ -21,7 +21,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const accountId = `account-${humanId.toLowerCase()}`;
     const businessId = `B-${humanId.slice(2)}`;
     const technologyId = `TECH-${humanId.slice(2)}`;
-    const machineId = `M-${humanId.slice(2)}-01`;
     const researchId = `R-${humanId.slice(2)}`;
     const assistantId = `AI-${humanId.slice(2)}-01`;
     const salt = crypto.getRandomValues(new Uint8Array(16));
@@ -40,11 +39,9 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query("INSERT INTO financial_states (institution_id, institution_kind, status, since_game_day, last_reason) VALUES ($1, 'BUSINESS', 'active', $2, 'starter-package')", [businessId, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
     await tx.query('INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,$2,$3,0)', [technologyId, 'Automated Assembly', humanId]);
-    await tx.query("INSERT INTO machines (id,owner_id,name,machine_type,condition,utilization,maintenance_due,productive_capacity) VALUES ($1,$2,$3,'service-robot',100,25,0,1)", [machineId, humanId, `${input.displayName} Service Unit`]);
-    await tx.query("INSERT INTO business_assets (business_id,machine_id,assigned_game_day,assigned_by) VALUES ($1,$2,$3,'starter-package')", [businessId, machineId, worldDay]);
     await tx.query("INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,status,started_game_day) VALUES ($1,$2,$3,0,0,'active',$4)", [researchId, technologyId, humanId, worldDay]);
     await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
-    await tx.query("INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,'BUSINESS',$2,NULL,$3,1,'starter_package',$3,$4),($5,'BUSINESS_SHARES',$2,NULL,$3,100,'starter_package',$3,$4),($6,'MACHINE',$7,NULL,$3,1,'starter_package',$3,$4)", [crypto.randomUUID(), businessId, humanId, worldDay, crypto.randomUUID(), crypto.randomUUID(), machineId]);
+    await tx.query("INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,'BUSINESS',$2,NULL,$3,1,'starter_package',$3,$4),($5,'BUSINESS_SHARES',$2,NULL,$3,100,'starter_package',$3,$4)", [crypto.randomUUID(), businessId, humanId, worldDay, crypto.randomUUID()]);
     await enqueueOutbox(tx, {
       eventKey: `starter-package:${humanId}`,
       topic: 'world_activity',
@@ -111,7 +108,6 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     const newHumanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const newAccountId = `account-${newHumanId.toLowerCase()}`;
     const businessId = `B-${newHumanId.slice(2)}`;
-    const machineId = `M-${newHumanId.slice(2)}-01`;
     const technologyId = `TECH-${newHumanId.slice(2)}`;
     const researchId = `R-${newHumanId.slice(2)}`;
     const cityId = input.startingCityId ?? 'CITY-0084';
@@ -127,17 +123,15 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\'');
     await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = $1', [`account-${cityId}-treasury`]).catch(() => tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\''));
 
-    // 3. Setup starter business, machine, resources, technology
+    // 3. Setup starter business, resources, and technology.
     await tx.query("INSERT INTO institutions (id,kind,name,status) VALUES ($1,'BUSINESS',$2,'active')", [businessId, `${input.displayName} Enterprise`]);
-    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'machines')", [businessId, newHumanId, `${input.displayName} Enterprise`]);
+    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, newHumanId, `${input.displayName} Enterprise`]);
     await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
     await tx.query('INSERT INTO business_constitutions (business_id,updated_by,updated_game_day) VALUES ($1,$2,$3)', [businessId, newHumanId, worldDay]);
     await tx.query('INSERT INTO business_management (business_id,manager_id,appointed_by,appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, newHumanId, worldDay]);
     await tx.query("INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,last_reason) VALUES ($1,'BUSINESS','active',$2,'rebirth')", [businessId, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id,status,since_game_day,protected_credits,last_reason) VALUES ($1,'active',$2,100,'rebirth')", [newHumanId, worldDay]);
     await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,1000)', [businessId, newHumanId]);
-    await tx.query('INSERT INTO machines (id,owner_id,name,machine_type,condition,utilization,maintenance_due,productive_capacity) VALUES ($1,$2,\'Core Fabricator Mark I\',\'fabricator\',100,0,$3,1)', [machineId, newHumanId, worldDay + 30]);
-    await tx.query("INSERT INTO business_assets (business_id,machine_id,assigned_game_day,assigned_by) VALUES ($1,$2,$3,'rebirth')", [businessId, machineId, worldDay]);
     for (const [res, amt] of Object.entries(starter.resources)) {
       await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [newHumanId, res, amt]);
     }

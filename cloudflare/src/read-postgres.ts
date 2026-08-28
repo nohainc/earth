@@ -2,14 +2,12 @@ import type { PostgresRepository } from './repository';
 import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
 
 export async function listEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
-  const [ledger, trades, maintenance, production, proposals] = await Promise.all([
+  const [ledger, trades, proposals] = await Promise.all([
     repository.query('SELECT id, created_at AS occurred_at, reason_type AS type, amount, game_day, debit_account AS actor FROM ledger_entries ORDER BY created_at DESC LIMIT $1', [limit]),
     repository.query("SELECT id, created_at AS occurred_at, 'market_trade' AS type, quantity AS amount, game_day, product AS actor FROM market_trades ORDER BY created_at DESC LIMIT $1", [limit]),
-    repository.query("SELECT id, created_at AS occurred_at, 'machine_maintenance' AS type, amount, game_day, machine_id AS actor FROM maintenance_events WHERE owner_id = $1 ORDER BY created_at DESC LIMIT $2", [humanId, limit]),
-    repository.query("SELECT id, created_at AS occurred_at, 'machine_production' AS type, amount, game_day, machine_id AS actor FROM production_events WHERE owner_id = $1 ORDER BY created_at DESC LIMIT $2", [humanId, limit]),
     repository.query("SELECT id, opens_at AS occurred_at, 'proposal_opened' AS type, 0 AS amount, EXTRACT(EPOCH FROM opens_at)::integer AS game_day, institution_id AS actor FROM proposals ORDER BY opens_at DESC LIMIT $1", [limit]),
   ]);
-  const events = [...ledger.rows, ...trades.rows, ...maintenance.rows, ...production.rows, ...proposals.rows]
+  const events = [...ledger.rows, ...trades.rows, ...proposals.rows]
     .sort((a, b) => String((b as Record<string, unknown>).occurred_at).localeCompare(String((a as Record<string, unknown>).occurred_at)))
     .slice(0, limit);
   return { ok: true, events, generatedAt: new Date().toISOString() };
@@ -34,15 +32,14 @@ export async function markAllNotificationsRead(repository: PostgresRepository, h
 }
 
 export async function auditWorld(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const [balances, ledger, machines, succession, corporations, cities] = await Promise.all([
+  const [balances, ledger, succession, corporations, cities] = await Promise.all([
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account'),
-    repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM machines WHERE condition < 0 OR condition > 100'),
     repository.query<{ count: string }>('SELECT COUNT(*)::integer AS count FROM succession_plans WHERE human_id = $1', [humanId]),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)'),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)'),
   ]);
-  const checks = { balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(ledger.rows[0]?.invalid ?? 0) === 0, machineConditionsBounded: Number(machines.rows[0]?.invalid ?? 0) === 0, oneSuccessionPlanPerHuman: Number(succession.rows[0]?.count ?? 0) <= 1, corporationMemberCountsConsistent: Number(corporations.rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(cities.rows[0]?.invalid ?? 0) === 0 };
+  const checks = { balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(ledger.rows[0]?.invalid ?? 0) === 0, oneSuccessionPlanPerHuman: Number(succession.rows[0]?.count ?? 0) <= 1, corporationMemberCountsConsistent: Number(corporations.rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(cities.rows[0]?.invalid ?? 0) === 0 };
   return { ok: Object.values(checks).every(Boolean), checks };
 }
 
@@ -266,15 +263,8 @@ export async function listAuthorityEvents(repository: PostgresRepository, humanI
 }
 
 export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const [projects, patents, licenses] = await Promise.all([
-    repository.query('SELECT * FROM research_projects WHERE owner_id = $1 ORDER BY id', [humanId]),
-    repository.query(`SELECT DISTINCT patents.* FROM patents
-      LEFT JOIN corporation_technology_shares shares ON shares.patent_id = patents.id AND shares.status = 'active'
-      LEFT JOIN memberships member ON member.corporation_id = shares.corporation_id AND member.human_id = $1
-      WHERE patents.owner_id = $1 OR member.human_id IS NOT NULL ORDER BY patents.id`, [humanId]),
-    repository.query('SELECT * FROM technology_licenses WHERE licensor_id = $1 OR licensee_id = $1 ORDER BY id', [humanId]),
-  ]);
-  return { catalog: TECHNOLOGY_CATALOG_DETAILS, projects: projects.rows, patents: patents.rows, licenses: licenses.rows };
+  const projects = await repository.query('SELECT * FROM research_projects WHERE owner_id = $1 ORDER BY id', [humanId]);
+  return { catalog: TECHNOLOGY_CATALOG_DETAILS, projects: projects.rows };
 }
 
 export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {
@@ -303,10 +293,7 @@ export async function getServiceStatus(repository: PostgresRepository, humanId: 
   return { cityId: city?.id ?? null, provider: city ? 'city-capacity' : 'ouc-independent-minimum', ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)) };
 }
 
-export async function listProductionEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
-  const events = await repository.query('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = $1 ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT $2', [humanId, limit]);
-  return { events: events.rows };
-}
+export async function listProductionEvents(_repository: PostgresRepository, _humanId: string, _limit: number): Promise<Record<string, unknown>> { return { events: [] }; }
 
 export async function readBusiness(repository: PostgresRepository, businessId: string, viewerId: string): Promise<Record<string, unknown>> {
   const business = await repository.query("SELECT businesses.id, businesses.name, businesses.owner_id, businesses.status, COALESCE(business_financials.revenue, 0) AS revenue, COALESCE(business_financials.operating_costs, 0) AS operating_costs, COALESCE(business_financials.profit, 0) AS profit, COALESCE(business_financials.taxed_revenue, 0) AS taxed_revenue, COALESCE(business_financials.last_game_day, 1) AS last_game_day, business_financials.updated_at FROM businesses LEFT JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id WHERE businesses.id = $1 AND (businesses.owner_id = $2 OR business_management.manager_id = $2 OR EXISTS (SELECT 1 FROM business_shares WHERE business_shares.business_id = businesses.id AND business_shares.holder_id = $2))", [businessId, viewerId]);
@@ -325,7 +312,7 @@ export async function readBusinessProfile(repository: PostgresRepository, busine
     repository.query('SELECT revenue, operating_costs, profit, taxed_revenue, last_game_day, updated_at FROM business_financials WHERE business_id = $1', [businessId]),
     repository.query('SELECT business_management.manager_id, humans.display_name AS manager_name, business_management.appointed_by, business_management.appointed_game_day, business_management.updated_at FROM business_management JOIN humans ON humans.id = business_management.manager_id WHERE business_management.business_id = $1', [businessId]),
     repository.query('SELECT version, shareholder_vote_threshold, board_approval_threshold, dilution_notice_days, updated_by, updated_game_day, updated_at FROM business_constitutions WHERE business_id = $1', [businessId]),
-    repository.query('SELECT business_assets.machine_id, machines.name, machines.machine_type, machines.condition, machines.utilization, business_assets.assigned_game_day, business_assets.assigned_by FROM business_assets JOIN machines ON machines.id = business_assets.machine_id WHERE business_assets.business_id = $1 ORDER BY business_assets.machine_id', [businessId]),
+    repository.query('SELECT id, name, building_type, condition, status FROM buildings WHERE business_id = $1 ORDER BY id', [businessId]),
     repository.query('SELECT business_shares.holder_id, humans.display_name, business_shares.shares FROM business_shares JOIN humans ON humans.id = business_shares.holder_id WHERE business_shares.business_id = $1 ORDER BY business_shares.shares DESC, business_shares.holder_id', [businessId]),
   ]);
   const totalIssuedShares = holders.rows.reduce((total, holder) => total + Number((holder as { shares: unknown }).shares ?? 0), 0);

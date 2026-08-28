@@ -55,12 +55,6 @@ extension EarthApiWorld on EarthApi {
     return (response['events'] as List<dynamic>?) ?? const [];
   }
 
-  Future<List<dynamic>> productionCatalog() async {
-    final response =
-        (await _request('/api/production/catalog')) as Map<String, dynamic>;
-    return (response['sectors'] as List<dynamic>?) ?? const [];
-  }
-
   Future<Map<String, dynamic>> pantheon() async =>
       (await _request('/api/pantheon')) as Map<String, dynamic>;
 

@@ -1,5 +1,4 @@
 import type { PostgresRepository } from '../repository.ts';
-import { calculateMachineRates } from './production-engine.ts';
 
 export interface ResourceFlowRate {
   grossProductionPerSecond: number;
@@ -27,19 +26,7 @@ export async function computeResourceFlows(
     };
   }
 
-  // 1. Machine production flows
-  const machineRates = await calculateMachineRates(repo, humanId);
-  for (const m of machineRates) {
-    if (!m.isActive) continue;
-    if (flows[m.outputResource]) {
-      flows[m.outputResource].grossProductionPerSecond += m.outputRatePerSec;
-    }
-    if (flows[m.inputResource]) {
-      flows[m.inputResource].grossConsumptionPerSecond += m.inputRatePerSec;
-    }
-  }
-
-  // 2. Supply contract flows
+  // Supply contract flows
   const supplyContracts = await repo.query<{
     resource_type: string;
     daily_quantity: string;
@@ -70,7 +57,7 @@ export async function computeResourceFlows(
     }
   }
 
-  // 3. Research project funding flows (credits consumption)
+  // Research project funding flows (credits consumption)
   const research = await repo.query<{ budget: string }>(
     "SELECT budget FROM research_projects WHERE owner_id = $1 AND status = 'active'",
     [humanId],
@@ -80,7 +67,7 @@ export async function computeResourceFlows(
     flows.credits.grossConsumptionPerSecond += dailyBudget / 1440;
   }
 
-  // 4. Compute final net per second and net per game day
+  // Compute final net per second and net per game day
   for (const c of COMMODITIES) {
     const grossProd = Math.round(flows[c].grossProductionPerSecond * 10000) / 10000;
     const grossCons = Math.round(flows[c].grossConsumptionPerSecond * 10000) / 10000;

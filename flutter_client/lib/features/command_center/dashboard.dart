@@ -12,7 +12,6 @@ import '../lifecycle/lifecycle_panels.dart';
 import '../market/market_panels.dart';
 import '../operations/ai_panel.dart';
 import '../operations/business_panel.dart';
-import '../operations/machines_panel.dart';
 import '../operations/technology_panel.dart';
 import '../operations/buildings_hub_screen.dart';
 import 'hero_card.dart';
@@ -25,7 +24,6 @@ import '../finance/net_worth_analytics_dialog.dart';
 import 'daily_briefing_dialog.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/player_objective.dart';
-import '../communications/social_gameplay_panel.dart';
 import '../communications/comm_link_dialog.dart';
 import '../activity/activity_panel.dart';
 import '../lifecycle/historical_archive_panel.dart';
@@ -54,8 +52,6 @@ String dashboardSectionTitle(String section) => switch (section) {
       'house' => 'HOUSE',
       'dynasty' => 'HOUSE',
       'technology' => 'TECHNOLOGY',
-      'patents' => 'PATENTS & LICENSING',
-      'machines' => 'MACHINES & PRODUCTION',
       'public-finance' => 'PUBLIC FINANCE',
       'civic-rankings' => 'CIVIC RANKINGS',
       'history' => 'MEMORIAL',
@@ -64,7 +60,6 @@ String dashboardSectionTitle(String section) => switch (section) {
       'pantheon' => 'MEMORIAL',
       'constitution' => 'CONSTITUTION',
       'contracts' => 'CONTRACTS',
-      'projects' => 'PROJECTS',
       'finance' => 'FINANCE',
       'activity' => 'ACTIVITY & EVENTS',
       _ => 'COMMAND CENTER',
@@ -83,12 +78,10 @@ class Dashboard extends StatelessWidget {
   final ValueChanged<String>? onSelectBusiness;
   final List<dynamic> membershipEvents;
   final List<dynamic> authorityEvents;
-  final List<dynamic> productionCatalog;
   final Map<String, dynamic> marketHistory;
   final Map<String, dynamic> pantheon;
   final Map<String, dynamic> personalFinanceData;
   final List<dynamic> contracts;
-  final List<dynamic> socialInitiatives;
   final bool isLiveConnected;
   final bool isReconnecting;
   final LiveConnectionStatus? connectionStatus;
@@ -115,12 +108,10 @@ class Dashboard extends StatelessWidget {
     this.onSelectBusiness,
     required this.membershipEvents,
     required this.authorityEvents,
-    required this.productionCatalog,
     this.marketHistory = const {},
     this.pantheon = const {},
     this.personalFinanceData = const {},
     this.contracts = const [],
-    this.socialInitiatives = const [],
     this.isLiveConnected = true,
     this.isReconnecting = false,
     this.connectionStatus,
@@ -364,61 +355,12 @@ class Dashboard extends StatelessWidget {
     switch (selectedSection) {
       case 'market':
         return [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final signals = MarketSignalsPanel(
-                panelKey: sectionKeys['market'],
-                state: state,
-                busy: busy,
-                priceHistory: marketHistory,
-                action: action,
-              );
-              final supplies = SuppliesTodayPanel(state: state);
-              final orderBook = MarketOrderBookPanel(state: state);
-              final orders =
-                  MyMarketOrdersPanel(state: state, busy: busy, action: action);
-              final macro = MacroLiquidityPanel(state: state);
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  supplies,
-                  const SizedBox(height: 24),
-                  signals,
-                  const SizedBox(height: 24),
-                  Theme(
-                    data: Theme.of(context).copyWith(
-                      dividerColor: Colors.transparent,
-                      splashColor: Colors.transparent,
-                    ),
-                    child: ExpansionTile(
-                      tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                      childrenPadding: EdgeInsets.zero,
-                      title: const Text(
-                        'ADVANCED TRADE TOOLS',
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 1.1,
-                          color: mutedColor,
-                        ),
-                      ),
-                      subtitle: const Text(
-                        'Order book, open orders, and macro liquidity analysis',
-                        style: TextStyle(fontSize: 11, color: mutedColor),
-                      ),
-                      children: [
-                        const SizedBox(height: 12),
-                        orderBook,
-                        const SizedBox(height: 24),
-                        orders,
-                        const SizedBox(height: 24),
-                        macro,
-                      ],
-                    ),
-                  ),
-                ],
-              );
-            },
+          MarketWorkspace(
+            key: sectionKeys['market'],
+            state: state,
+            busy: busy,
+            priceHistory: marketHistory,
+            action: action,
           ),
         ];
       case 'derivatives':
@@ -503,6 +445,7 @@ class Dashboard extends StatelessWidget {
                 businessProfile: businessProfile,
                 activeBusiness: activeBusiness,
                 onSelectBusiness: onSelectBusiness,
+                onNavigate: onNavigate,
                 action: action,
               );
               final aiAssistant =
@@ -702,19 +645,6 @@ class Dashboard extends StatelessWidget {
             },
           ),
         ];
-      case 'operations':
-      case 'machines':
-        return [
-          MachinesPanel(
-            state: state,
-            busy: busy,
-            productionCatalog: productionCatalog,
-            activeBusiness: activeBusiness,
-            action: action,
-          )
-        ];
-      case 'patents':
-        return [TechnologyPortfolioPanel(state: state, action: action)];
       case 'public-finance':
         return [
           PublicFinanceGovernancePanel(state: state, busy: busy, action: action)
@@ -735,8 +665,8 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final lifeToday = LifeTodayPanel(
-                  state: state, busy: busy, action: action);
+              final lifeToday =
+                  LifeTodayPanel(state: state, busy: busy, action: action);
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -816,14 +746,6 @@ class Dashboard extends StatelessWidget {
                 ],
               );
             },
-          ),
-        ];
-      case 'projects':
-        return [
-          SocialGameplayPanel(
-            initiatives: socialInitiatives,
-            gameDay: asInt((state.json['clock'] as Map<String, dynamic>?)?['day']) ?? 1,
-            onChanged: onRefreshEvents,
           ),
         ];
       case 'finance':

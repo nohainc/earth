@@ -4,12 +4,10 @@ export type DecisionCategory =
   | 'governance'
   | 'civic'
   | 'technology'
-  | 'machines'
   | 'house'
   | 'dynasty'
   | 'market'
-  | 'finance'
-  | 'social';
+  | 'finance';
 
 export type DecisionRiskLevel = 'critical' | 'high' | 'medium' | 'low';
 
@@ -28,7 +26,6 @@ export interface DecisionQueueItem {
 
 export interface DecisionQueueInput {
   resources?: Record<string, unknown>;
-  machines?: Array<{ id: string; name?: string; condition?: unknown; utilization?: unknown; output_resource?: string }>;
   contracts?: Array<{ id: string; title?: string; status?: string; delivery_tick?: unknown; terms?: string }>;
   proposals?: Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>;
   technology?: { progress?: unknown; active_patents?: unknown; is_funding_open?: boolean };
@@ -36,7 +33,6 @@ export interface DecisionQueueInput {
   dynasty?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
   business?: { id?: string; name?: string; profit?: unknown; net_income?: unknown; condition?: unknown };
   finance?: { unpaid_tax?: unknown; status?: string; debt?: unknown };
-  social?: Array<{ id: string; title?: string; status?: string; deadline_game_day?: unknown; member_status?: string }>;
   city?: { id?: string; residents?: unknown; housing_capacity?: unknown; energy_capacity?: unknown; connectivity_capacity?: unknown; health_capacity?: unknown };
   market?: Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>;
   gameDay?: number;
@@ -52,16 +48,6 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
   const items: DecisionQueueItem[] = [];
   const gameDay = input.gameDay ?? 184;
 
-  const socialDecision = (input.social ?? []).find((initiative) => initiative.member_status === 'invited' || initiative.status === 'proposed');
-  if (socialDecision) items.push({
-    id: `decision-social-${socialDecision.id}`, category: 'social',
-    title: socialDecision.title ?? 'A social initiative needs your response',
-    whyItMatters: 'Accepting builds trust and unlocks shared civic, corporate, or diplomatic outcomes.',
-    deadline: socialDecision.deadline_game_day ? `By game day ${socialDecision.deadline_game_day}` : 'Before the initiative expires',
-    expectedImpact: 'Shape an alliance or shared project and improve relationship standing.', riskLevel: 'medium',
-    primaryActionLabel: 'Open Social Commons', targetSection: 'messages', urgencyScore: 58,
-  });
-
   const city = input.city;
   if (city?.id) {
     const residents = Math.max(1, num(city.residents));
@@ -74,7 +60,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
       deadline: 'Before the next civic cycle',
       expectedImpact: 'Restore reliable city services and protect local production from brownouts.',
       riskLevel: energyRatio < 0.75 ? 'critical' : 'high',
-      primaryActionLabel: 'Open City Projects', targetSection: 'city',
+      primaryActionLabel: 'Review City Capacity', targetSection: 'city',
       urgencyScore: Math.round(85 + Math.max(0, 1 - energyRatio) * 15),
     });
     if (healthRatio < 0.5) items.push({
@@ -83,7 +69,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
       whyItMatters: `Health capacity is at ${Math.round(healthRatio * 100)}%; a prolonged deficit can trigger relocation pressure.`,
       deadline: 'Before the next civic cycle',
       expectedImpact: 'Raise health capacity and keep your household and workforce in place.',
-      riskLevel: 'critical', primaryActionLabel: 'Open City Projects', targetSection: 'city', urgencyScore: 92,
+      riskLevel: 'critical', primaryActionLabel: 'Review City Capacity', targetSection: 'city', urgencyScore: 92,
     });
   }
 
@@ -171,26 +157,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   }
 
-  // 4. Machinery & Asset Maintenance
-  const degradedMachines = (input.machines ?? []).filter((m) => num(m.condition) < 60);
-  if (degradedMachines.length > 0) {
-    const worstMachine = degradedMachines.sort((a, b) => num(a.condition) - num(b.condition))[0];
-    const cond = Math.round(num(worstMachine.condition));
-    items.push({
-      id: `decision-machine-maintenance-${worstMachine.id}`,
-      category: 'machines',
-      title: 'Your machine needs maintenance',
-      whyItMatters: `${worstMachine.name || 'Primary Machinery'} is at ${cond}% condition. Degraded machinery suffers severe breakdown risk and reduced output rate.`,
-      deadline: 'Before Next Production Cycle',
-      expectedImpact: 'Restore 100% productive capacity and prevent permanent machinery destruction.',
-      riskLevel: cond < 30 ? 'critical' : 'high',
-      primaryActionLabel: 'Service Machine',
-      targetSection: 'business',
-      urgencyScore: cond < 30 ? 95 : 80,
-    });
-  }
-
-  // 5. Research & Technology Funding
+  // 4. Research & Technology Funding
   const techProgress = num(input.technology?.progress ?? 45);
   if (techProgress < 100) {
     items.push({

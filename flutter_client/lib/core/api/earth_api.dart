@@ -6,7 +6,6 @@ part 'earth_api_auth.dart';
 part 'earth_api_world.dart';
 part 'earth_api_business.dart';
 part 'earth_api_technology.dart';
-part 'earth_api_machines.dart';
 part 'earth_api_market.dart';
 part 'earth_api_lifecycle.dart';
 part 'earth_api_governance.dart';

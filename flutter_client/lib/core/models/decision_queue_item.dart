@@ -284,10 +284,10 @@ class DecisionQueueItem {
         category: 'technology',
         title: 'Research funding is available',
         whyItMatters:
-            'Collective R&D in clean energy & automation requires capital contributions to unlock universal patents and production multipliers.',
+            'Fund research to unlock new building, business, and civic capabilities.',
         deadline: 'Current Research Cycle',
         expectedImpact:
-            'Advance global tech level and secure perpetual licensing dividend rights.',
+            'Advance the current technology and prepare it for direct adoption.',
         riskLevel: 'low',
         primaryActionLabel: 'Fund Research',
         targetSection: 'technology',
@@ -295,26 +295,7 @@ class DecisionQueueItem {
       ));
     }
 
-    // 5. Technology patenting & research
-    final researchProgress = asDoubleOr(state.json['technology']?['research']?['progress'], 45.0);
-    if (researchProgress >= 100.0) {
-      items.add(const DecisionQueueItem(
-        id: 'decision-tech-patent-ready',
-        category: 'technology',
-        title: 'Research ready for patent registration',
-        whyItMatters:
-            'Completed R&D discovery is unpatented. Registering grants exclusive commercial licensing rights across Earth.',
-        deadline: 'Open Registration',
-        expectedImpact:
-            'Generates perpetual licensing royalty streams from all active planetary manufacturers.',
-        riskLevel: 'low',
-        primaryActionLabel: 'Register Patent',
-        targetSection: 'technology',
-        urgencyScore: 52.0,
-      ));
-    }
-
-    // 6. House & successor
+    // 5. House & successor
     final rawLife = state.json['life'];
     final life = rawLife is Map ? rawLife : const {};
     final successor = life['successor'];

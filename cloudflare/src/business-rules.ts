@@ -1,4 +1,4 @@
-const independentSectors = new Set(['maintenance', 'machines', 'components']);
+const independentSectors = new Set(['maintenance', 'components']);
 const serviceSectors = new Set(['it-services', 'consulting', 'logistics', 'healthcare', 'education']);
 
 export function businessSectorAccess(sector: string, hasCity: boolean, hasCorporation: boolean): { allowed: boolean; reason?: string } {

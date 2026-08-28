@@ -72,7 +72,7 @@ class _ObjectivesPanelState extends State<ObjectivesPanel> {
       showSurface: false,
       infoBulletPoints: const [
         'Current Direction: Choose the kind of manager and citizen you want to become.',
-        'Direction Tracks: Enterprise (profitable businesses), Civic (city laws & capacity), House (family succession), Technology (capabilities & patents), Finance (solvency & independence).',
+        'Direction Tracks: Enterprise (profitable businesses), Civic (city laws & capacity), House (family succession), Technology (research and capabilities), Finance (solvency and independence).',
         'Progression: Directions track against live world metrics and unlock practical rewards, titles, and new opportunities.',
       ],
       child: Column(

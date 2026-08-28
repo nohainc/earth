@@ -11,10 +11,10 @@ export const TECHNOLOGY_CATALOG = [
 ] as const;
 
 export const TECHNOLOGY_CATALOG_DETAILS = [
-  { name: 'Automated Assembly', description: 'Improves machine throughput for component and manufactured-goods production.', researchCost: 240, prerequisites: [], effect: 'assembly_output_bonus' },
+  { name: 'Automated Assembly', description: 'Improves building throughput for component and manufactured-goods production facilities.', researchCost: 240, prerequisites: [], effect: 'assembly_output_bonus' },
   { name: 'Clean Energy Systems', description: 'Reduces the operating burden of energy-intensive workplaces and infrastructure.', researchCost: 320, prerequisites: [], effect: 'energy_efficiency' },
   { name: 'Food Synthesis', description: 'Enables high-yield food production for resilient local supply.', researchCost: 280, prerequisites: [], effect: 'food_output_bonus' },
-  { name: 'Predictive Maintenance', description: 'Reduces machine wear when actively adopted by a workplace.', researchCost: 300, prerequisites: [], effect: 'maintenance_reduction' },
+  { name: 'Predictive Maintenance', description: 'Reduces building upkeep costs when actively adopted by a business.', researchCost: 300, prerequisites: [], effect: 'maintenance_reduction' },
   { name: 'Civic Network Infrastructure', description: 'Improves the coordination capacity of city services and civic institutions.', researchCost: 360, prerequisites: [], effect: 'civic_capacity_bonus' },
 ].map((technology) => ({
   ...technology,
@@ -56,7 +56,7 @@ export async function adoptTechnology(repository: PostgresRepository, input: { h
 async function requireResearchJurisdiction(tx: PostgresRepository, ownerId: string): Promise<void> {
   const membership = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1', [ownerId]);
   if (!membership.rows[0]?.city_id) {
-    throw new Error('Research and machine upgrades require an active city affiliation');
+    throw new Error('Research requires an active city affiliation');
   }
 }
 

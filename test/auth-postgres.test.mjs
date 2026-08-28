@@ -81,7 +81,6 @@ after(async () => {
     await tx.query('DELETE FROM personal_financial_states WHERE human_id = $1', [humanId]);
     await tx.query('DELETE FROM businesses WHERE owner_id = $1', [humanId]);
     await tx.query('DELETE FROM institutions WHERE id = $1', [`B-${humanId.slice(2)}`]);
-    await tx.query('DELETE FROM patents WHERE owner_id = $1', [humanId]);
     await tx.query('DELETE FROM technologies WHERE owner_id = $1', [humanId]);
     await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [humanId]);
     await tx.query('DELETE FROM account_balances WHERE owner_id = $1', [humanId]);

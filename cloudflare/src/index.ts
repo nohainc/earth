@@ -6,8 +6,6 @@ import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPos
 import { acceptContract as acceptContractPostgres, cancelContract as cancelContractPostgres, createContract as createContractPostgres, openDispute as openDisputePostgres } from './contracts-postgres';
 import { resolveContractDispute as resolveContractDisputePostgres } from './arbitration-postgres';
 import { appointManager as appointManagerPostgres, createBusiness as createBusinessPostgres, dismissEmployee as dismissEmployeePostgres, distributeDividends as distributeDividendsPostgres, executeMerger as executeMergerPostgres, hireEmployee as hireEmployeePostgres, issueShares as issueSharesPostgres, liquidateBusiness as liquidateBusinessPostgres, ownershipRegistry as ownershipRegistryPostgres, proposeMerger as proposeMergerPostgres, reassignEmployee as reassignEmployeePostgres, renameBusiness as renameBusinessPostgres, setPolicy as setBusinessPolicyPostgres, trainEmployee as trainEmployeePostgres, transferShares as transferSharesPostgres, updateConstitution as updateConstitutionPostgres } from './business-postgres';
-import { acquireMachine as acquireMachinePostgres, assignMachineToBusiness as assignMachineToBusinessPostgres, maintainMachine as maintainMachinePostgres, sellMachine as sellMachinePostgres, setMachineUtilization as setMachineUtilizationPostgres, upgradeMachine as upgradeMachinePostgres } from './machines-postgres';
-import { recycleMachine as recycleMachinePostgres } from './machines-recycling-postgres';
 import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres, grantPatent as grantPatentPostgres, licenseTechnology as licenseTechnologyPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, challengeProposal as challengeProposalPostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveConstitutionalAppeal as resolveConstitutionalAppealPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
@@ -19,7 +17,6 @@ import { deliverOutbox } from './outbox-postgres';
 import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, createCorporationWithCapital as createCorporationWithCapitalPostgres, decideCorporationMembershipRequest as decideCorporationMembershipRequestPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationAdmissionPolicy as setCorporationAdmissionPolicyPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listAuthorityEvents as listAuthorityEventsPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres, readBusiness as readBusinessPostgres, readBusinessProfile as readBusinessProfilePostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
-import { MACHINE_CATALOG, productionCatalogResponse } from './production-catalog';
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
 import { healthResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
@@ -30,10 +27,10 @@ import { getHouseOverview, unlockHousePerk, equipHouseHeirloom, forgeHouseHeirlo
 import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
-import { createSocialInitiative, listSocialInitiatives, listSocialDirectory, listSocialTimeline, listSocialRelationships, respondToSocialInitiative, contributeToSocialInitiative, type SocialKind } from './social-gameplay-postgres.ts';
+import { listSocialDirectory } from './social-directory-postgres.ts';
 import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
 import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
-import { BUILDING_CATALOG, PATENT_CATALOG } from './real-estate-catalog.ts';
+import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -148,9 +145,7 @@ async function productionEventsFromPostgres(request: Request, env: Env): Promise
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const url = new URL(request.url);
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
-  const result = await withRepository(env, (repository) => repository.query('SELECT production_events.*, machines.name AS machine_name FROM production_events JOIN machines ON machines.id = production_events.machine_id WHERE production_events.owner_id = $1 ORDER BY production_events.game_day DESC, production_events.created_at DESC LIMIT $2', [viewer.id, limit]));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ events: result.rows, persistence: 'planetscale-postgres' });
+  return Response.json({ events: [], limit, persistence: 'planetscale-postgres' });
 }
 
 async function servicesStatusFromPostgres(request: Request, env: Env): Promise<Response> {
@@ -307,6 +302,9 @@ const worker = {
 
   async handleRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/api/real-estate/license/acquire' || url.pathname === '/api/real-estate/license/renew' || url.pathname.endsWith('/patent') || url.pathname.endsWith('/license')) {
+      return Response.json({ ok: false, error: 'Patents and technology licensing have been retired' }, { status: 404 });
+    }
     if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
     if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);
     if (url.pathname === '/api/services/status' && request.method === 'GET') return servicesStatusFromPostgres(request, env);
@@ -345,12 +343,6 @@ const worker = {
     }
     const commResponse = await communicationsRoutes(request, env, url);
     if (commResponse) return commResponse;
-    if (url.pathname === '/api/social/initiatives' && request.method === 'GET') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const initiatives = await withRepository(env, repo => listSocialInitiatives(repo, human.id));
-      return Response.json({ ok: true, initiatives: initiatives ?? [] });
-    }
     if (url.pathname === '/api/social/directory' && request.method === 'GET') {
       // Succession planning is a read-only directory action and must remain
       // available while the authenticated predecessor is in Estate/Deceased
@@ -359,39 +351,6 @@ const worker = {
       if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const directory = await withRepository(env, repo => listSocialDirectory(repo, human.id, url.searchParams.get('q') ?? ''));
       return Response.json({ ok: true, ...directory });
-    }
-    if (url.pathname === '/api/social/relationships' && request.method === 'GET') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const relationships = await withRepository(env, repo => listSocialRelationships(repo, human.id));
-      return Response.json({ ok: true, relationships: relationships ?? [] });
-    }
-    if (url.pathname === '/api/social/timeline' && request.method === 'GET') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const timeline = await withRepository(env, repo => listSocialTimeline(repo, human.id, Number(url.searchParams.get('limit') ?? 50)));
-      return Response.json({ ok: true, timeline: timeline ?? [] });
-    }
-    if (url.pathname === '/api/social/initiatives' && request.method === 'POST') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ targetId?: string; kind?: SocialKind; title?: string; body?: string; terms?: Record<string, unknown>; gameDay?: number }>(request);
-      if (!parsed.ok) return parsed.response;
-      const value = parsed.value;
-      if (!value.kind || !value.title?.trim() || !value.body?.trim()) return Response.json({ ok: false, error: 'kind, title, and body are required' }, { status: 400 });
-      const initiative = await withRepository(env, repo => createSocialInitiative(repo, { creatorId: human.id, targetId: value.targetId, kind: value.kind!, title: value.title!.trim(), body: value.body!.trim(), terms: value.terms, gameDay: value.gameDay }));
-      return Response.json({ ok: true, initiative });
-    }
-    const socialResponse = url.pathname.match(/^\/api\/social\/initiatives\/([^/]+)\/(accept|decline|contribute)$/);
-    if (socialResponse && request.method === 'POST') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ contribution?: number }>(request);
-      if (!parsed.ok) return parsed.response;
-      const result = await withRepository(env, repo => socialResponse[2] === 'contribute'
-        ? contributeToSocialInitiative(repo, human.id, socialResponse[1], Number(parsed.value.contribution ?? 1))
-        : respondToSocialInitiative(repo, human.id, socialResponse[1], socialResponse[2] === 'accept'));
-      return Response.json({ ok: true, initiative: result });
     }
     const authRouteResponse = await authenticatedAuthRoute(request, env, url);
     if (authRouteResponse) return authRouteResponse;
@@ -924,32 +883,6 @@ const worker = {
       }
     }
 
-    if (url.pathname === '/api/machines' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, async (repository) => repository.query('SELECT * FROM machines WHERE owner_id = $1 ORDER BY id', [viewer.id]));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ machines: result.rows, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/machines/acquire' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ machineType?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const type = body.machineType?.trim() ?? '';
-      const spec = MACHINE_CATALOG[type];
-      if (!spec) return Response.json({ ok: false, error: 'Unsupported machine type' }, { status: 400 });
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => acquireMachinePostgres(repository, { ownerId: viewer.id, machineType: type, name: `${spec.name ?? type.replaceAll('-', ' ')} ${viewer.id.slice(-4)}`, credit: spec.credit, material: spec.material, capacity: spec.capacity, output: spec.output, inputResource: spec.inputResource ?? 'energy', correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine acquisition failed' }, { status: 409 });
-      }
-    }
     if (url.pathname === '/api/real-estate/purchase' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -1070,7 +1003,6 @@ const worker = {
       return Response.json({
         ok: true,
         catalog: Object.values(BUILDING_CATALOG),
-        patents: Object.values(PATENT_CATALOG),
       });
     }
     if (url.pathname === '/api/real-estate/zoning' && request.method === 'GET') {
@@ -1170,9 +1102,6 @@ const worker = {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'License renewal failed' }, { status: 409 });
       }
     }
-    if (url.pathname === '/api/production/catalog' && request.method === 'GET') {
-      return productionCatalogResponse();
-    }
     if (url.pathname === '/api/technology' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -1269,14 +1198,13 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const result = await withRepository(env, async (repository) => {
-        const [account, state, machines, businesses] = await Promise.all([
+        const [account, state, businesses] = await Promise.all([
           repository.query("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
           repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-          repository.query("SELECT id, machine_type, condition FROM machines WHERE owner_id = $1 AND machine_type != 'service-robot'", [viewer.id]),
           repository.query('SELECT id, name, status FROM businesses WHERE owner_id = $1', [viewer.id]),
         ]);
         const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
-        return { account: account.rows[0] ?? null, state: stateRow, liquidatableAssets: { machines: machines.rows, businesses: businesses.rows }, protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100), basicServiceRobot: true } };
+        return { account: account.rows[0] ?? null, state: stateRow, liquidatableAssets: { businesses: businesses.rows }, protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100), basicServiceRobot: true } };
       });
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -1992,7 +1920,7 @@ const worker = {
       const body = parsed.value;
       const name = body.name?.trim();
       const sector = body.sector?.trim() ?? 'maintenance';
-      const sectors = ['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare', 'education'];
+      const sectors = ['energy', 'extraction', 'components', 'maintenance', 'housing', 'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare', 'education'];
       if (!name || name.length < 3 || name.length > 80 || !sectors.includes(sector)) return Response.json({ ok: false, error: 'Business name or sector is invalid' }, { status: 400 });
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
@@ -2263,120 +2191,6 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Successor registration failed';
         return Response.json({ ok: false, error: message }, { status: /another active/i.test(message) ? 400 : 409 });
-      }
-    }
-    const maintenanceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/maintenance$/);
-    if (maintenanceMatch && request.method === 'POST') {
-      const machineId = maintenanceMatch[1];
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const amount = Number(body.amount ?? 10);
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!Number.isFinite(amount) || amount <= 0) return Response.json({ ok: false, error: 'Maintenance amount must be positive' }, { status: 400 });
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => maintainMachinePostgres(repository, { machineId, ownerId: viewer.id, amount, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Machine maintenance failed';
-        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-      }
-    }
-    const decommissionMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/decommission$/);
-    if (decommissionMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ otp?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for decommissioning an asset' }, { status: 401 });
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => recycleMachinePostgres(repository, { machineId: decommissionMatch[1], ownerId: viewer.id, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Machine recycling failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-    const utilizationMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/utilization$/);
-    if (utilizationMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ utilization?: number }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const utilization = Number(body.utilization);
-      if (!Number.isInteger(utilization) || utilization < 0 || utilization > 100) return Response.json({ ok: false, error: 'Utilization must be a whole percentage from 0 to 100' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => setMachineUtilizationPostgres(repository, { machineId: utilizationMatch[1], ownerId: viewer.id, utilization }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Machine utilization update failed' }, { status: 404 });
-      }
-    }
-    const workplaceMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/workplace$/);
-    if (workplaceMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ businessId?: string | null }>(request);
-      if (!parsed.ok) return parsed.response;
-      const businessId = parsed.value.businessId?.trim() || null;
-      try {
-        const result = await withRepository(env, (repository) => assignMachineToBusinessPostgres(repository, { machineId: workplaceMatch[1], ownerId: viewer.id, businessId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Machine workplace update failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-    const upgradeMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/upgrade$/);
-    if (upgradeMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ otp?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine upgrades' }, { status: 401 });
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => upgradeMachinePostgres(repository, { machineId: upgradeMatch[1], ownerId: viewer.id, correlationId, creditCost: 600, componentsCost: 20 }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Machine upgrade failed';
-        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
-      }
-    }
-    const saleMatch = url.pathname.match(/^\/api\/machines\/([^/]+)\/sell$/);
-    if (saleMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ buyerId?: string; price?: number; otp?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const buyerId = body.buyerId?.trim();
-      const price = Math.round(Number(body.price) * 100) / 100;
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!buyerId || buyerId === viewer.id || !Number.isFinite(price) || price <= 0 || price > 1000000) return Response.json({ ok: false, error: 'Buyer and sale price are invalid' }, { status: 400 });
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for machine sale' }, { status: 401 });
-      try {
-        const result = await withRepository(env, (repository) => sellMachinePostgres(repository, { machineId: saleMatch[1], sellerId: viewer.id, buyerId, price, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Machine sale failed';
-        return Response.json({ ok: false, error: message }, { status: message.includes('not found') ? 404 : 409 });
       }
     }
     return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });

@@ -6,8 +6,8 @@ import {
   adoptTechnologyPostgres,
   createResearchProjectPostgres,
   fundResearchProjectPostgres,
-  grantPatentPostgres,
-  licenseTechnologyPostgres,
+  grantPatent as grantPatentPostgres,
+  licenseTechnology as licenseTechnologyPostgres,
 } from './technology-postgres.ts';
 
 export async function handleTechnologyRoutes(
@@ -17,6 +17,9 @@ export async function handleTechnologyRoutes(
   viewer: { id: string },
   sensitiveActionAllowed: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
+  if (url.pathname.endsWith('/patent') || url.pathname.endsWith('/license')) {
+    return Response.json({ ok: false, error: 'Patents and technology licensing have been retired' }, { status: 404 });
+  }
   if (url.pathname === '/api/technology' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listTechnologyPostgres(repository, viewer.id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

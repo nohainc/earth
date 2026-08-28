@@ -1,7 +1,5 @@
 import type { PostgresRepository } from '../repository.ts';
 import { deriveContinuousGameTime, REAL_SECONDS_PER_GAME_MINUTE } from './time-engine.ts';
-import { settleContinuousProduction } from './production-engine.ts';
-import { settleContinuousTechnology } from './technology-engine.ts';
 import { settleContinuousFinancials } from './financial-engine.ts';
 import { settleContinuousMarket } from './market-engine.ts';
 import { settleContinuousInstitutions } from './institutions-engine.ts';
@@ -65,10 +63,6 @@ export async function reconcileWorldSimulation(
 
     // 2. Run simulation engines if time has elapsed
     if (elapsedSeconds >= 1) {
-      const prodRes = await settleContinuousProduction(tx, elapsedSeconds, currDay);
-      productionEvents = prodRes.settledEvents;
-
-      await settleContinuousTechnology(tx, elapsedDays, currDay);
       await settleContinuousFinancials(tx, elapsedDays, currDay);
       const marketRes = await settleContinuousMarket(tx, currDay);
       ordersSettled = marketRes.settledOrders;

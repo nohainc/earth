@@ -36,14 +36,15 @@ class QuickActionsPanel extends StatelessWidget {
         label: 'CHECK CITY SERVICES',
         detail: membership['city_id'] == null
             ? 'Choose a city to unlock services'
-            : 'Review local capacity and projects',
+            : 'Review local capacity and infrastructure',
         section: 'city',
         icon: Icons.location_city_outlined,
         color: context.successColor,
       ),
       (
         label: 'DIRECT RESEARCH',
-        detail: '${researchProgress.toStringAsFixed(0)}% current project progress',
+        detail:
+            '${researchProgress.toStringAsFixed(0)}% current project progress',
         section: 'technology',
         icon: Icons.biotech_outlined,
         color: context.secondaryColor,

@@ -325,7 +325,6 @@ export async function settleContinuousRankings(
       standing: number;
       legacy: number;
       credits: number | string;
-      machine_assets_val: number | string;
       city_name: string | null;
       corporation_name: string | null;
     }>(`
@@ -334,7 +333,6 @@ export async function settleContinuousRankings(
              GREATEST(0, humans.standing) AS standing,
              GREATEST(0, humans.legacy) AS legacy,
              GREATEST(0, COALESCE(ab.balance, 0)) AS credits,
-             COALESCE((SELECT COUNT(*) * 5000 FROM machines m WHERE m.owner_id = humans.id), 0)::numeric AS machine_assets_val,
              COALESCE(
                (SELECT i.name FROM institutions i WHERE i.id = memberships.city_id),
                (SELECT i.name FROM cities c JOIN institutions i ON i.id = c.institution_id WHERE c.id = memberships.city_id)
@@ -355,8 +353,7 @@ export async function settleContinuousRankings(
     const leg = Number(h.legacy) || 0;
     const std = Number(h.standing) || 0;
     const liquidCredits = Number(h.credits) || 0;
-    const machineVal = Number(h.machine_assets_val) || 0;
-    const personalCapitalization = liquidCredits + machineVal;
+    const personalCapitalization = liquidCredits; // machine assets retired in migration 069
 
     return {
       ...h,

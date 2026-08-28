@@ -94,13 +94,10 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         : const [];
     final activeStaff = workforce.where((e) => e is Map && e['status'] != 'dismissed').length;
     final capacity = asInt(business['workforceCapacity'] ?? business['staffCapacity']);
-    final machines = widget.state.machines;
-    final degradedMachines = machines.where((machine) {
-      return machine is Map && (asDouble(machine['condition']) ?? 100) < 60;
-    }).length;
     final city = widget.state.institutions['city'];
     final cityMap = city is Map ? Map<String, dynamic>.from(city) : const <String, dynamic>{};
     final cityPressure = asDouble(cityMap['service_pressure'] ?? cityMap['servicePressure']);
+    final buildings = widget.state.buildings;
 
     return EarthMetricGrid(
       metrics: [
@@ -140,14 +137,14 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           },
         ),
         EarthMetricTile(
-          label: 'OPERATIONS',
-          value: machines.isEmpty ? 'NO MACHINES' : '${machines.length} MACHINES',
-          subtitle: degradedMachines == 0 ? 'Running normally' : '$degradedMachines need attention',
-          icon: Icons.precision_manufacturing_outlined,
-          accentColor: degradedMachines == 0 ? context.successColor : context.warningColor,
+          label: 'BUILDINGS',
+          value: buildings.isEmpty ? 'NO BUILDINGS' : '${buildings.length} BUILDINGS',
+          subtitle: 'Productive assets',
+          icon: Icons.domain_outlined,
+          accentColor: context.successColor,
           onTap: () {
             EarthAudioEngine.instance.playClick();
-            widget.onNavigate?.call('business');
+            widget.onNavigate?.call('buildings');
           },
         ),
         EarthMetricTile(
@@ -243,12 +240,12 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             spacing: 6,
             runSpacing: 6,
             children: [
-              if (briefing.businessSummary.degradedMachinesCount > 0)
+              if (briefing.businessSummary.activeBuildings > 0)
                 _headlineChip(
                   context,
-                  Icons.precision_manufacturing_outlined,
-                  '${briefing.businessSummary.degradedMachinesCount} machine${briefing.businessSummary.degradedMachinesCount == 1 ? '' : 's'} need attention',
-                  context.warningColor,
+                  Icons.domain_outlined,
+                  '${briefing.businessSummary.activeBuildings} building${briefing.businessSummary.activeBuildings == 1 ? '' : 's'} operating',
+                  context.successColor,
                 ),
               if (briefing.businessSummary.pendingContractsCount > 0)
                 _headlineChip(
@@ -431,7 +428,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
         return items
             .where((i) =>
                 i.category.toLowerCase() == 'business' ||
-                i.category.toLowerCase() == 'machines' ||
+                i.category.toLowerCase() == 'buildings' ||
                 i.category.toLowerCase() == 'contracts' ||
                 i.category.toLowerCase() == 'market')
             .toList();
@@ -534,7 +531,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   Color _getDecisionCategoryColor(BuildContext context, DecisionQueueItem item) {
     switch (item.category.toLowerCase()) {
       case 'business':
-      case 'machines':
+      case 'buildings':
         return context.warningColor;
       case 'governance':
       case 'civic':
@@ -551,8 +548,8 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
     switch (item.category.toLowerCase()) {
       case 'business':
         return Icons.storefront_outlined;
-      case 'machines':
-        return Icons.build_outlined;
+      case 'buildings':
+        return Icons.domain_outlined;
       case 'governance':
       case 'civic':
         return Icons.how_to_vote_outlined;

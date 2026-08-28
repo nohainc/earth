@@ -275,10 +275,10 @@ class ConstitutionPanel extends StatelessWidget {
 
   Widget _buildCodeFromRules(BuildContext context, List<Map<String, dynamic>> rules) {
     const partTitles = {
-      1: 'PART 1 · GENERAL PROVISIONS',
-      2: 'PART 2 · REVENUE & FINANCE',
-      3: 'PART 3 · DEMOCRATIC GOVERNANCE',
-      4: 'PART 4 · INSTITUTIONAL MEMBERSHIP',
+      1: 'PART 1 · REVENUE',
+      2: 'PART 2 · GOVERNANCE',
+      3: 'PART 3 · MEMBERSHIP',
+      4: 'PART 4 · SUCCESSION',
     };
     final grouped = <int, List<Map<String, dynamic>>>{};
     for (final rule in rules) {
@@ -295,12 +295,33 @@ class ConstitutionPanel extends StatelessWidget {
           rows.asMap().entries.map((indexed) {
             final rule = indexed.value;
             final permitted = rule['permitted_values']?.toString();
+            final authority = rule['authority']?.toString();
+            final defaultValue = rule['default_value']?.toString() ?? '—';
+            final ruleTitleSize = context.widgetValueStyle.fontSize;
             return EarthDataRow(
               title: rule['title']?.toString() ?? 'Rule',
               subtitle: rule['description']?.toString() ?? '',
-              secondarySubtitle: permitted == null || permitted.isEmpty
-                  ? 'Default: ${rule['default_value'] ?? '—'}'
-                  : 'Default: ${rule['default_value'] ?? '—'} · Permitted values: $permitted',
+              secondarySubtitleSpan: TextSpan(
+                children: [
+                  const TextSpan(text: 'Default: '),
+                  TextSpan(text: defaultValue, style: const TextStyle(color: Colors.white)),
+                  if (permitted != null && permitted.isNotEmpty) ...[
+                    const TextSpan(text: ' · Permitted values: '),
+                    TextSpan(text: permitted, style: const TextStyle(color: Colors.white)),
+                  ],
+                ],
+              ),
+              tertiarySubtitleSpan: authority == null || authority.toLowerCase() == 'earth'
+                  ? null
+                  : TextSpan(
+                      children: [
+                        const TextSpan(text: 'Authority: '),
+                        TextSpan(text: authority, style: const TextStyle(color: Colors.white)),
+                      ],
+                    ),
+              subtitleFontSize: ruleTitleSize,
+              secondarySubtitleFontSize: ruleTitleSize,
+              allowSubtitleWrap: true,
               leading: SizedBox(
                 width: 30,
                 child: Text(

@@ -77,7 +77,7 @@ export async function handleBusinessRoutes(
     const body = parsed.value;
     const name = body.name?.trim();
     const sector = body.sector?.trim() ?? 'maintenance';
-    const sectors = ['energy', 'extraction', 'components', 'machines', 'maintenance', 'housing', 'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare', 'education'];
+    const sectors = ['energy', 'extraction', 'components', 'housing', 'compute', 'r-and-d', 'it-services', 'consulting', 'logistics', 'healthcare', 'education'];
     if (!name || name.length < 3 || name.length > 80 || !sectors.includes(sector)) {
       return Response.json({ ok: false, error: 'Business name or sector is invalid' }, { status: 400 });
     }

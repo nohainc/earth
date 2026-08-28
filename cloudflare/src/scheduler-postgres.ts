@@ -6,7 +6,6 @@ import { classifyBusinessFinancialStatus } from './business-finance.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
 import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
-import { expireSocialInitiatives } from './social-gameplay-postgres.ts';
 import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 
@@ -30,17 +29,8 @@ function effectiveRate(cityRules: unknown, corporationRules: unknown, key: strin
 }
 
 async function settleBusinessDepreciation(tx: PostgresRepository, day: number): Promise<void> {
-  const assets = await tx.query<{ business_id: string; machine_id: string; book_value: string }>('SELECT business_assets.business_id, business_assets.machine_id, COALESCE(machine_acquisitions.credit_cost, 0) AS book_value FROM business_assets LEFT JOIN machine_acquisitions ON machine_acquisitions.machine_id = business_assets.machine_id');
-  for (const asset of assets.rows) {
-    const amountCents = rateAmountToCents(moneyToCents(asset.book_value), '0.01', 1);
-    if (amountCents <= 0n) continue;
-    const amount = centsToMoney(amountCents);
-    const correlationId = `DEPRECIATION-${asset.business_id}-${asset.machine_id}-${day}`;
-    const prior = await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'business_depreciation\' AND correlation_id = $1', [correlationId]);
-    if (prior.rows[0]) continue;
-    await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, asset.business_id]);
-    await tx.query('INSERT INTO ledger_entries (id,game_day,debit_account,credit_account,amount,currency,reason_type,reason_id,rule_version,correlation_id) VALUES ($1,$2,$3,$4,$5,\'CREDIT\',\'business_depreciation\',$6,\'business-finance-v1\',$7)', [crypto.randomUUID(), day, `business-${asset.business_id}`, 'account-depreciation-expense', amount, asset.machine_id, correlationId]);
-  }
+  // Building upkeep and revenue are settled by the real-estate engine.
+  // Legacy machine depreciation has been retired.
 }
 
 async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Promise<void> {
@@ -108,7 +98,9 @@ async function settleInstitutionBusinessEffects(tx: PostgresRepository, day: num
 
 async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise<void> {
   const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true");
+  const allocation = await tx.query<{ city_share: string; corporation_share: string; earth_share: string }>("SELECT city_share, corporation_share, earth_share FROM business_tax_allocation_rules WHERE active = true ORDER BY version DESC LIMIT 1");
   if (!rule.rows[0]) return;
+  if (!allocation.rows[0]) throw new Error('An active business-tax allocation rule is required');
   const businesses = await tx.query<{ id: string; owner_id: string; revenue: string; taxed_revenue: string; city_id: string | null; corporation_id: string | null; city_charter: string | null; corporation_charter: string | null }>("SELECT businesses.id, businesses.owner_id, business_financials.revenue, business_financials.taxed_revenue, memberships.city_id, memberships.corporation_id, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM businesses JOIN business_financials ON business_financials.business_id = businesses.id LEFT JOIN memberships ON memberships.human_id = businesses.owner_id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE businesses.status = 'active'");
   for (const business of businesses.rows) {
     const taxableCents = moneyToCents(business.revenue) - moneyToCents(business.taxed_revenue);
@@ -122,9 +114,11 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [business.owner_id]);
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < taxCents) continue;
 
-    // 3-Way Pro-Rata Tax Distribution: 60% City, 25% Corp, 15% Planetary
-    const cityCents = (taxCents * 60n) / 100n;
-    const corpCents = (taxCents * 25n) / 100n;
+    const allocationScale = 1000000n;
+    const cityShare = BigInt(Math.round(Number(allocation.rows[0].city_share) * Number(allocationScale)));
+    const corporationShare = BigInt(Math.round(Number(allocation.rows[0].corporation_share) * Number(allocationScale)));
+    const cityCents = (taxCents * cityShare) / allocationScale;
+    const corpCents = (taxCents * corporationShare) / allocationScale;
     const oucCents = taxCents - cityCents - corpCents;
 
     const cityTarget = business.city_id ? `account-city-${business.city_id}` : 'account-ouc-treasury';
@@ -161,15 +155,7 @@ async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<voi
 }
 
 async function runAiMaintenance(tx: PostgresRepository, day: number): Promise<void> {
-  const assistants = await tx.query<{ owner_id: string; machine_id: string }>("SELECT ai_assistants.owner_id, machines.id AS machine_id FROM ai_assistants JOIN machines ON machines.owner_id = ai_assistants.owner_id WHERE ai_assistants.enabled = true AND ai_assistants.policy = 'maintenance' AND machines.maintenance_due > 0 AND machines.condition < 100");
-  for (const assistant of assistants.rows) {
-    const components = await tx.query<{ amount: string }>("SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE", [assistant.owner_id]);
-    const amount = Math.min(5, Number(components.rows[0]?.amount ?? 0));
-    if (amount <= 0) continue;
-    await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components' AND amount >= $1", [amount, assistant.owner_id]);
-    await tx.query('UPDATE machines SET condition = LEAST(100, condition + $1 * 0.8), maintenance_due = GREATEST(0, maintenance_due - $1) WHERE id = $2 AND owner_id = $3', [amount, assistant.machine_id, assistant.owner_id]);
-    await tx.query("INSERT INTO maintenance_events (id,machine_id,owner_id,resource,amount,condition_before,condition_after,game_day) SELECT $1,id,owner_id,'components',$2,condition,LEAST(100,condition + $2 * 0.8),$3 FROM machines WHERE id = $4", [crypto.randomUUID(), amount, day, assistant.machine_id]);
-  }
+  // AI remains advisory; machine-maintenance automation has been retired.
 }
 
 async function settleSupplyContracts(tx: PostgresRepository, day: number): Promise<void> {
@@ -367,10 +353,10 @@ async function settleServiceContracts(tx: PostgresRepository, day: number): Prom
 }
 
 async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): Promise<void> {
+  return;
   const licenses = await tx.query<{ id: string; licensor_id: string; licensee_id: string; licensee_business_id: string | null; royalty_rate: string }>("SELECT technology_licenses.id, licensor_id, licensee_id, licensee_business_id, royalty_rate FROM technology_licenses JOIN patents ON patents.id = technology_licenses.patent_id WHERE technology_licenses.status = 'active' AND patents.status = 'active' AND licensor_id <> licensee_id");
   for (const license of licenses.rows) {
-    const usage = await tx.query<{ amount: string }>('SELECT COALESCE(SUM(amount), 0) AS amount FROM production_events WHERE owner_id = $1 AND game_day = $2', [license.licensee_id, day]);
-    const royaltyCents = compoundRateAmountToCents(quantityToCents(usage.rows[0]?.amount ?? '0'), String(license.royalty_rate), '0.1');
+    const royaltyCents = 0n;
     const royalty = centsToMoney(royaltyCents);
     if (royaltyCents <= 0n) continue;
     const correlationId = `ROYALTY-${license.id}-${day}`;
@@ -389,6 +375,7 @@ async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): P
 }
 
 async function settleBuildingPatentLicenses(tx: PostgresRepository, day: number): Promise<void> {
+  return;
   const licenses = await tx.query<{
     id: string;
     patent_id: string;
@@ -588,6 +575,7 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
 }
 
 async function processPatentExpirations(tx: PostgresRepository, day: number): Promise<void> {
+  return;
   const expiredPatents = await tx.query<{ id: string; technology_id: string }>("SELECT id, technology_id FROM patents WHERE expiry_game_day <= $1 AND status = 'active'", [day]);
   if (expiredPatents.rows.length > 0) {
     await tx.query("UPDATE patents SET status = 'expired' WHERE expiry_game_day <= $1 AND status = 'active'", [day]);
@@ -603,36 +591,11 @@ async function ensureMarketLiquidity(tx: PostgresRepository, day: number): Promi
 }
 
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
-  const machines = await tx.query<{ id: string; owner_id: string; business_id: string | null; productive_capacity: string; utilization: string; condition: string; output_resource: string; input_resource: string; input_per_output: string; focus: string; has_assembly: boolean; has_food_synthesis: boolean }>("SELECT machines.id, machines.owner_id, business_assets.business_id, machines.productive_capacity, machines.utilization, machines.condition, machines.output_resource, machines.input_resource, machines.input_per_output, COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC, started_game_day DESC LIMIT 1), 'efficiency') AS focus, (EXISTS (SELECT 1 FROM technologies WHERE technologies.owner_id = machines.owner_id AND technologies.name = 'Automated Assembly' AND technologies.progress >= 100 AND (business_assets.business_id IS NULL OR EXISTS (SELECT 1 FROM business_technology_adoptions bta WHERE bta.business_id = business_assets.business_id AND bta.technology_id = technologies.id AND bta.status = 'active'))) OR EXISTS (SELECT 1 FROM memberships m JOIN corporation_technology_shares cts ON cts.corporation_id = m.corporation_id AND cts.status = 'active' JOIN patents p ON p.id = cts.patent_id JOIN technologies shared_tech ON shared_tech.id = p.technology_id WHERE m.human_id = machines.owner_id AND shared_tech.name = 'Automated Assembly' AND shared_tech.progress >= 100 AND (business_assets.business_id IS NULL OR EXISTS (SELECT 1 FROM business_technology_adoptions bta WHERE bta.business_id = business_assets.business_id AND bta.technology_id = shared_tech.id AND bta.status = 'active')))) AS has_assembly, (EXISTS (SELECT 1 FROM technologies WHERE technologies.owner_id = machines.owner_id AND technologies.name = 'Food Synthesis' AND technologies.progress >= 100 AND (business_assets.business_id IS NULL OR EXISTS (SELECT 1 FROM business_technology_adoptions bta WHERE bta.business_id = business_assets.business_id AND bta.technology_id = technologies.id AND bta.status = 'active'))) OR EXISTS (SELECT 1 FROM memberships m JOIN corporation_technology_shares cts ON cts.corporation_id = m.corporation_id AND cts.status = 'active' JOIN patents p ON p.id = cts.patent_id JOIN technologies shared_tech ON shared_tech.id = p.technology_id WHERE m.human_id = machines.owner_id AND shared_tech.name = 'Food Synthesis' AND shared_tech.progress >= 100 AND (business_assets.business_id IS NULL OR EXISTS (SELECT 1 FROM business_technology_adoptions bta WHERE bta.business_id = business_assets.business_id AND bta.technology_id = shared_tech.id AND bta.status = 'active')))) AS has_food_synthesis FROM machines LEFT JOIN business_assets ON business_assets.machine_id = machines.id WHERE machines.condition > 0 AND machines.utilization > 0");
-  const housePerks = await tx.query<{ human_id: string; perk_key: string }>("SELECT ac.human_id, hp.perk_key FROM auth_credentials ac JOIN houses h ON h.email = ac.email JOIN house_perks hp ON hp.house_id = h.id WHERE hp.perk_key = 'planetary_agronomists'");
-  const agronomistOwners = new Set(housePerks.rows.map((row) => row.human_id));
-  const equippedSeals = await tx.query<{ human_id: string }>("SELECT equipped_by_human_id AS human_id FROM house_heirlooms WHERE heirloom_type = 'founder_seal' AND equipped_by_human_id IS NOT NULL");
-  const sealOwners = new Set(equippedSeals.rows.map((row) => row.human_id));
-  let events = 0;
-  for (const machine of machines.rows) {
-    const houseOutputFactor = agronomistOwners.has(machine.owner_id) && machine.output_resource === 'food' ? 1.2 : 1;
-    const heirloomOutputFactor = sealOwners.has(machine.owner_id) ? 1.1 : 1;
-    const technologyOutputFactor = machine.has_food_synthesis && machine.output_resource === 'food' ? 1.2 : machine.has_assembly ? 1.15 : 1;
-    const outputFactor = (machine.focus === 'efficiency' ? 1.1 : machine.focus === 'cost' ? 1 : 0.9) * technologyOutputFactor * houseOutputFactor * heirloomOutputFactor;
-    const inputFactor = machine.focus === 'cost' ? 0.85 : 1;
-    const theoretical = Math.max(0, Number(machine.productive_capacity) * Number(machine.utilization) / 100 * Math.min(1, Number(machine.condition) / 100) * 2 * outputFactor);
-    const input = await tx.query<{ amount: string }>('SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = $2 FOR UPDATE', [machine.owner_id, machine.input_resource]);
-    const available = Number(input.rows[0]?.amount ?? 0);
-    const perOutput = Number(machine.input_per_output) * inputFactor;
-    const output = Math.round(Math.min(theoretical, perOutput > 0 ? available / perOutput : theoretical) * 100) / 100;
-    const consumed = Math.round(output * perOutput * 100) / 100;
-    if (output <= 0 || consumed <= 0) continue;
-    const price = await tx.query<{ price: string }>('SELECT price FROM market_prices WHERE product = $1', [machine.input_resource]);
-    const inputCost = Math.round(consumed * Number(price.rows[0]?.price ?? 0) * 100) / 100;
-    await tx.query('UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3 AND amount >= $1', [consumed, machine.owner_id, machine.input_resource]);
-    await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT(owner_id,resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [machine.owner_id, machine.output_resource, output]);
-    const eventId = crypto.randomUUID();
-    await tx.query('INSERT INTO production_events (id, machine_id, owner_id, resource, amount, game_day) VALUES ($1,$2,$3,$4,$5,$6)', [eventId, machine.id, machine.owner_id, machine.output_resource, output, day]);
-    if (machine.business_id) await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [inputCost, day, machine.business_id]);
-    events += 1;
-  }
-  return events;
+  // Buildings are the productive assets; machine-based production was retired in migration 069.
+  void tx; void day;
+  return 0;
 }
+
 
 export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
   validateWorldAdvanceMinutes(minutesPerTick);
@@ -659,11 +622,8 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     }
     await tx.query("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
     await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
-    await tx.query("UPDATE machines SET condition = GREATEST(0, condition - GREATEST(0.05, utilization * 0.005 * CASE WHEN ((EXISTS (SELECT 1 FROM technologies WHERE technologies.owner_id = machines.owner_id AND technologies.name = 'Predictive Maintenance' AND technologies.progress >= 100 AND (NOT EXISTS (SELECT 1 FROM business_assets WHERE business_assets.machine_id = machines.id) OR EXISTS (SELECT 1 FROM business_technology_adoptions bta JOIN business_assets adopted_asset ON adopted_asset.business_id = bta.business_id AND adopted_asset.machine_id = machines.id WHERE bta.technology_id = technologies.id AND bta.status = 'active'))) OR EXISTS (SELECT 1 FROM memberships m JOIN corporation_technology_shares cts ON cts.corporation_id = m.corporation_id AND cts.status = 'active' JOIN patents p ON p.id = cts.patent_id JOIN technologies shared_tech ON shared_tech.id = p.technology_id WHERE m.human_id = machines.owner_id AND shared_tech.name = 'Predictive Maintenance' AND shared_tech.progress >= 100 AND (NOT EXISTS (SELECT 1 FROM business_assets WHERE business_assets.machine_id = machines.id) OR EXISTS (SELECT 1 FROM business_technology_adoptions bta JOIN business_assets adopted_asset ON adopted_asset.business_id = bta.business_id AND adopted_asset.machine_id = machines.id WHERE bta.technology_id = shared_tech.id AND bta.status = 'active')))) THEN 0.65 ELSE 1 END * CASE COALESCE((SELECT focus FROM research_projects WHERE owner_id = machines.owner_id AND status = 'active' ORDER BY progress DESC LIMIT 1), 'efficiency') WHEN 'durability' THEN 0.7 WHEN 'safety' THEN 0.8 ELSE 1 END)), maintenance_due = maintenance_due + GREATEST(1, utilization * 0.25)");
-    await tx.query("UPDATE machines SET condition = LEAST(100, condition + utilization * 0.001) WHERE owner_id IN (SELECT equipped_by_human_id FROM house_heirlooms WHERE heirloom_type = 'pioneer_chronometer' AND equipped_by_human_id IS NOT NULL)");
     await tx.query("UPDATE market_prices SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)), game_day = $1", [day]);
     if (newDay) {
-      await expireSocialInitiatives(tx, day);
       await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
       await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
@@ -687,7 +647,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     }
     await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
-    await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM machines) * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
+    await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM buildings WHERE status = 'active') * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'world_clock','A new game tick begins',$3) ON CONFLICT (id) DO NOTHING", [`CLOCK-${day}-${minute}`, day, toNanoMarkup({ newDay })]);
     const productionEvents = await settleProduction(tx, day);
     await settleTechnologyRoyalties(tx, day);

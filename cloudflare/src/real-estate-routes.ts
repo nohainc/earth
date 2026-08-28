@@ -21,6 +21,9 @@ export async function handleRealEstateRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (url.pathname === '/api/real-estate/license/acquire' || url.pathname === '/api/real-estate/license/renew') {
+    return Response.json({ ok: false, error: 'Patent licensing has been retired' }, { status: 404 });
+  }
   if (url.pathname === '/api/real-estate/purchase' && request.method === 'POST') {
     const parsed = await parseJsonBody<{
       cityId?: string;

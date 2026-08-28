@@ -981,6 +981,13 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
   },
 };
 
+// Research is directly usable by the owner. Patent gates and licensing are
+// retired, so legacy catalog fixtures must not leak into API responses.
+for (const building of Object.values(BUILDING_CATALOG)) {
+  delete building.requiredPatent;
+  for (const tier of building.tiers) delete tier.requiredPatent;
+}
+
 export const PATENT_CATALOG: Record<string, RequiredPatentSpec> = Object.values(BUILDING_CATALOG).reduce(
   (acc, bld) => {
     if (bld.requiredPatent) {

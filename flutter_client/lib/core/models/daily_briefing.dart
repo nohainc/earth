@@ -3,7 +3,6 @@ double _parseNum(dynamic v) {
   if (v is num) return v.toDouble();
   return double.tryParse(v.toString()) ?? 0.0;
 }
-
 int _parseInt(dynamic v) {
   if (v == null) return 0;
   if (v is num) return v.toInt();
@@ -42,7 +41,7 @@ class FinancialCashflowDelta {
   final double netProfit;
   final double businessDividends;
   final double marketSales;
-  final double machineMaintenance;
+  final double buildingUpkeep;
   final double civicTaxes;
 
   const FinancialCashflowDelta({
@@ -51,7 +50,7 @@ class FinancialCashflowDelta {
     required this.netProfit,
     required this.businessDividends,
     required this.marketSales,
-    required this.machineMaintenance,
+    required this.buildingUpkeep,
     required this.civicTaxes,
   });
 
@@ -63,7 +62,7 @@ class FinancialCashflowDelta {
         netProfit: 0,
         businessDividends: 0,
         marketSales: 0,
-        machineMaintenance: 0,
+        buildingUpkeep: 0,
         civicTaxes: 0,
       );
     }
@@ -73,7 +72,7 @@ class FinancialCashflowDelta {
       netProfit: _parseNum(json['netProfit']),
       businessDividends: _parseNum(json['businessDividends']),
       marketSales: _parseNum(json['marketSales']),
-      machineMaintenance: _parseNum(json['machineMaintenance']),
+      buildingUpkeep: _parseNum(json['buildingUpkeep'] ?? json['machineMaintenance']),
       civicTaxes: _parseNum(json['civicTaxes']),
     );
   }
@@ -111,15 +110,13 @@ class MarketMovementSummary {
 class BusinessProductionSummary {
   final int activeBusinesses;
   final int totalDailyOutput;
-  final int activeMachines;
-  final int degradedMachinesCount;
+  final int activeBuildings;
   final int pendingContractsCount;
 
   const BusinessProductionSummary({
     required this.activeBusinesses,
     required this.totalDailyOutput,
-    required this.activeMachines,
-    required this.degradedMachinesCount,
+    required this.activeBuildings,
     required this.pendingContractsCount,
   });
 
@@ -128,16 +125,14 @@ class BusinessProductionSummary {
       return const BusinessProductionSummary(
         activeBusinesses: 0,
         totalDailyOutput: 0,
-        activeMachines: 0,
-        degradedMachinesCount: 0,
+        activeBuildings: 0,
         pendingContractsCount: 0,
       );
     }
     return BusinessProductionSummary(
       activeBusinesses: _parseInt(json['activeBusinesses']),
       totalDailyOutput: _parseInt(json['totalDailyOutput']),
-      activeMachines: _parseInt(json['activeMachines']),
-      degradedMachinesCount: _parseInt(json['degradedMachinesCount']),
+      activeBuildings: _parseInt(json['activeBuildings']),
       pendingContractsCount: _parseInt(json['pendingContractsCount']),
     );
   }
@@ -296,7 +291,7 @@ class DailyBriefingReport {
           netProfit: 930,
           businessDividends: 400,
           marketSales: 850,
-          machineMaintenance: 120,
+          buildingUpkeep: 120,
           civicTaxes: 200,
         ),
         marketMovements: [
@@ -304,7 +299,7 @@ class DailyBriefingReport {
           MarketMovementSummary(commodity: 'materials', currentPrice: 4.8, previousPrice: 4.9, deltaPct: -2.0, trend: 'down', volume24h: 1800),
           MarketMovementSummary(commodity: 'components', currentPrice: 28.5, previousPrice: 26.0, deltaPct: 9.6, trend: 'up', volume24h: 640),
         ],
-        businessSummary: BusinessProductionSummary(activeBusinesses: 1, totalDailyOutput: 85, activeMachines: 2, degradedMachinesCount: 0, pendingContractsCount: 1),
+        businessSummary: BusinessProductionSummary(activeBusinesses: 1, totalDailyOutput: 85, activeBuildings: 0, pendingContractsCount: 1),
         civicSummary: CivicEventSummary(activeProposals: 2, passedProposals24h: 1, cityResidency: 'Pacific Rim Sprawl', cityTaxRatePct: 4.5, recentCivicEvents: ['Civic Infrastructure Bond passed in Pacific Rim Sprawl']),
         unreadAlerts: UnreadAlertsSummary(unreadNotifications: 2, unreadComms: 1, criticalAlertsCount: 0),
         recommendedDirectives: [],
@@ -360,15 +355,14 @@ class DailyBriefingReport {
         netProfit: net,
         businessDividends: inflow * 0.4,
         marketSales: inflow * 0.6,
-        machineMaintenance: outflow * 0.4,
+        buildingUpkeep: outflow * 0.4,
         civicTaxes: outflow * 0.6,
       ),
       marketMovements: marketList,
       businessSummary: const BusinessProductionSummary(
         activeBusinesses: 1,
         totalDailyOutput: 85,
-        activeMachines: 1,
-        degradedMachinesCount: 0,
+        activeBuildings: 0,
         pendingContractsCount: 1,
       ),
       civicSummary: const CivicEventSummary(

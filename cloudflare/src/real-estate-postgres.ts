@@ -93,14 +93,17 @@ export async function getCityDistrictZoning(
   cityId: string,
 ): Promise<DistrictZoningSummary> {
   const cityRes = await repository.query<{ id: string; name: string }>(
-    'SELECT id, name FROM cities WHERE id = $1',
+    `SELECT cities.id, institutions.name
+       FROM cities
+       JOIN institutions ON institutions.id = cities.institution_id
+      WHERE cities.id = $1`,
     [cityId],
   );
   const city = cityRes.rows[0];
   const cityName = city?.name ?? 'Metropolitan District';
 
   const popRes = await repository.query<{ count: string }>(
-    "SELECT COUNT(*)::integer AS count FROM memberships WHERE city_id = $1 AND status = 'active'",
+    'SELECT COUNT(*)::integer AS count FROM memberships WHERE city_id = $1',
     [cityId],
   );
   const population = Number(popRes.rows[0]?.count ?? 1);
@@ -180,20 +183,6 @@ export async function purchasePrivatePlotAndConstruct(
       [input.ownerId],
     );
     const citizenCityId = membership.rows[0]?.city_id ?? input.cityId;
-
-    // Check Corporate Patent Access (if required)
-    if (spec.requiredPatent) {
-      const patentAccess = await checkBuildingPatentAccess(tx, {
-        humanId: input.ownerId,
-        cityId: citizenCityId,
-        requiredPatent: spec.requiredPatent,
-      });
-      if (!patentAccess.hasAccess) {
-        throw new Error(
-          `Construction locked: Requires Patent "${spec.requiredPatent.patentName}". Join ${spec.requiredPatent.owningCorporationName}, acquire a private license (${spec.requiredPatent.privateLicenseCostCrd} CRD), or request city civic procurement.`,
-        );
-      }
-    }
 
     // Check District Zoning Capacity
     const zoning = await getCityDistrictZoning(repository, citizenCityId);
@@ -332,19 +321,6 @@ export async function upgradeBuilding(
     const nextTier = bld.tier + 1;
     const spec = BUILDING_CATALOG[bld.building_type];
     const tierSpec = spec?.tiers?.find((t) => t.tier === nextTier);
-
-    if (tierSpec?.requiredPatent) {
-      const patentAccess = await checkBuildingPatentAccess(tx, {
-        humanId: input.humanId,
-        cityId: bld.city_id,
-        requiredPatent: tierSpec.requiredPatent,
-      });
-      if (!patentAccess.hasAccess) {
-        throw new Error(
-          `Tier ${nextTier} upgrade locked: Requires Patent "${tierSpec.requiredPatent.patentName}". Join ${tierSpec.requiredPatent.owningCorporationName} or acquire a private building license (${tierSpec.requiredPatent.privateLicenseCostCrd} CRD).`,
-        );
-      }
-    }
 
     if (tierSpec?.requiredCityPopulation) {
       const popRes = await tx.query<{ count: string }>(
@@ -1028,5 +1004,3 @@ export async function renewBuildingPatentLicense(
     return { ok: true, license: updated.rows[0], correlationId: input.correlationId };
   });
 }
-
-

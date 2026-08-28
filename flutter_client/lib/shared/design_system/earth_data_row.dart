@@ -7,6 +7,12 @@ class EarthDataRow extends StatelessWidget {
   final String title;
   final String? subtitle;
   final String? secondarySubtitle;
+  final InlineSpan? secondarySubtitleSpan;
+  final String? tertiarySubtitle;
+  final InlineSpan? tertiarySubtitleSpan;
+  final double? subtitleFontSize;
+  final double? secondarySubtitleFontSize;
+  final bool allowSubtitleWrap;
   final Widget? trailing;
   final List<Widget>? badges;
   final VoidCallback? onTap;
@@ -21,6 +27,12 @@ class EarthDataRow extends StatelessWidget {
     this.leading,
     this.subtitle,
     this.secondarySubtitle,
+    this.secondarySubtitleSpan,
+    this.tertiarySubtitle,
+    this.tertiarySubtitleSpan,
+    this.subtitleFontSize,
+    this.secondarySubtitleFontSize,
+    this.allowSubtitleWrap = false,
     this.trailing,
     this.badges,
     this.onTap,
@@ -92,20 +104,55 @@ class EarthDataRow extends StatelessWidget {
                     subtitle!,
                     style: context.widgetFooterStyle.copyWith(
                       color: isHighlight ? context.primaryColor.withValues(alpha: 0.85) : null,
+                      fontSize: subtitleFontSize,
                     ),
-                    overflow: TextOverflow.ellipsis,
+                    maxLines: allowSubtitleWrap ? null : 1,
+                    overflow: allowSubtitleWrap ? TextOverflow.visible : TextOverflow.ellipsis,
                   ),
                 ],
-                if (secondarySubtitle != null &&
-                    secondarySubtitle!.isNotEmpty) ...[
+                if ((secondarySubtitle != null && secondarySubtitle!.isNotEmpty) ||
+                    secondarySubtitleSpan != null) ...[
                   const SizedBox(height: 2),
-                  Text(
-                    secondarySubtitle!,
-                    style: context.widgetFooterStyle.copyWith(
-                      color: isHighlight ? context.primaryColor.withValues(alpha: 0.75) : null,
+                  if (secondarySubtitleSpan != null)
+                    Text.rich(
+                      secondarySubtitleSpan!,
+                      style: context.widgetFooterStyle.copyWith(
+                        color: isHighlight ? context.primaryColor.withValues(alpha: 0.75) : null,
+                        fontSize: secondarySubtitleFontSize,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    Text(
+                      secondarySubtitle!,
+                      style: context.widgetFooterStyle.copyWith(
+                        color: isHighlight ? context.primaryColor.withValues(alpha: 0.75) : null,
+                        fontSize: secondarySubtitleFontSize,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+                ],
+                if ((tertiarySubtitle != null && tertiarySubtitle!.isNotEmpty) ||
+                    tertiarySubtitleSpan != null) ...[
+                  const SizedBox(height: 2),
+                  if (tertiarySubtitleSpan != null)
+                    Text.rich(
+                      tertiarySubtitleSpan!,
+                      style: context.widgetFooterStyle.copyWith(
+                        color: isHighlight ? context.primaryColor.withValues(alpha: 0.75) : null,
+                        fontSize: secondarySubtitleFontSize,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    )
+                  else
+                    Text(
+                      tertiarySubtitle!,
+                      style: context.widgetFooterStyle.copyWith(
+                        color: isHighlight ? context.primaryColor.withValues(alpha: 0.75) : null,
+                        fontSize: secondarySubtitleFontSize,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
                 ],
               ],
             ),
