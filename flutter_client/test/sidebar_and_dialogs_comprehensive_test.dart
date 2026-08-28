@@ -47,24 +47,25 @@ void main() {
     expect(find.text('Messages'), findsOneWidget);
     expect(find.text('Trade & Supplies'), findsNothing);
 
-    await tester.tap(find.text('BUSINESS'));
+    await tester.tap(find.text('ECONOMY'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('NOW'));
     await tester.pumpAndSettle();
     expect(find.text('Daily Priorities'), findsOneWidget);
     expect(find.text('Command Center'), findsOneWidget);
 
-    await tester.tap(find.text('BUSINESS'));
+    await tester.tap(find.text('ECONOMY'));
     await tester.pumpAndSettle();
-    expect(find.text('Trade & Supplies'), findsOneWidget);
-    expect(find.text('Personal Finance'), findsOneWidget);
+    expect(find.text('Market'), findsOneWidget);
+    expect(find.text('Research'), findsOneWidget);
     expect(find.text('Daily Priorities'), findsNothing);
 
-    final financeButton = find.text('Personal Finance');
+    await tester.tap(find.text('LIFE'));
+    await tester.pumpAndSettle();
+    final financeButton = find.text('Finance');
     expect(financeButton, findsOneWidget);
     await tester.tap(financeButton);
     await tester.pumpAndSettle();
-
     expect(navigatedTo, 'finance');
 
     // Test expanding EARTH group

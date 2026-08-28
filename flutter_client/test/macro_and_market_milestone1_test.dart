@@ -90,7 +90,7 @@ void main() {
       ),
     );
 
-    expect(find.text('PERIODIC BATCH AUCTION'), findsOneWidget);
+    expect(find.text('NEXT MARKET CLEARING'), findsOneWidget);
     expect(find.text('#12'), findsOneWidget);
     expect(find.text('02:00'), findsOneWidget);
   });

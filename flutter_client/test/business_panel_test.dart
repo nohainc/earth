@@ -22,16 +22,18 @@ void main() {
 
     await tester.pumpWidget(const MaterialApp(
       home: Scaffold(
-        body: BusinessManagerOverviewPanel(
-          state: state,
-          businessFinancials: {
-            'business': {
-              'revenue': 1000.0,
-              'operating_costs': 700.0,
-              'cash': 5000.0,
-              'payroll': 500.0,
+        body: SingleChildScrollView(
+          child: BusinessManagerOverviewPanel(
+            state: state,
+            businessFinancials: {
+              'business': {
+                'revenue': 1000.0,
+                'operating_costs': 700.0,
+                'cash': 5000.0,
+                'payroll': 500.0,
+              },
             },
-          },
+          ),
         ),
       ),
     ));
@@ -40,7 +42,7 @@ void main() {
     expect(find.text('300 C'), findsOneWidget);
     expect(find.text('10 cycles'), findsOneWidget);
     expect(find.text('ACTIVE STAFF'), findsOneWidget);
-    expect(find.text('MACHINE CAPACITY'), findsOneWidget);
+    expect(find.text('BUILDING CAPACITY'), findsOneWidget);
     expect(find.textContaining('Next decisions:'), findsOneWidget);
   });
 
@@ -106,7 +108,7 @@ void main() {
       ),
     );
 
-    expect(find.text('ENTERPRISE OPERATIONS / KLINE WORKS'), findsOneWidget);
+    expect(find.text('KLINE WORKS'), findsOneWidget);
     expect(find.text('ACTIVE'), findsOneWidget);
     expect(find.text('OPERATING REVENUE'), findsOneWidget);
     expect(find.text('1240 C'), findsWidgets);
@@ -192,10 +194,10 @@ void main() {
     expect(find.text('DISTRESSED'), findsOneWidget);
     expect(find.text('-400 C'), findsWidgets);
     expect(find.text('WARNING: FINANCIAL DISTRESS'), findsOneWidget);
-    expect(find.text('LIQUIDATE ENTERPRISE'), findsWidgets);
+    expect(find.text('LIQUIDATE BUSINESS'), findsWidgets);
 
-    await tester.ensureVisible(find.text('LIQUIDATE ENTERPRISE'));
-    await tester.tap(find.text('LIQUIDATE ENTERPRISE'));
+    await tester.ensureVisible(find.text('LIQUIDATE BUSINESS'));
+    await tester.tap(find.text('LIQUIDATE BUSINESS'));
     await tester.pumpAndSettle();
 
     expect(find.text('Liquidate business?'), findsOneWidget);

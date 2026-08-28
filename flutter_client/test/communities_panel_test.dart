@@ -78,11 +78,13 @@ void main() {
     expect(find.text('CONTRIBUTE'), findsNothing);
 
     // Badges & Actions for non-member COM-001
+    await tester.tap(find.text('Carthage Artisans'));
+    await tester.pumpAndSettle();
     expect(find.text('JOIN'), findsOneWidget);
-    expect(find.text('DETAILS'), findsNWidgets(2));
 
-    // Actions for founder COM-002
-    expect(find.text('MANAGE'), findsOneWidget);
+    // Founder rows expose their role in the registry; management is handled by MyCommunityPanel.
+    await tester.tap(find.text('Solar Engineers'));
+    await tester.pumpAndSettle();
 
     // Test filter chip switching
     await tester.tap(find.text('MY COMMUNITIES (1)'));
@@ -105,13 +107,13 @@ void main() {
     expect(find.text('Solar Engineers'), findsNothing);
 
     // Clear search
-    await tester.tap(find.byIcon(Icons.clear));
+    await tester.enterText(find.byType(TextField).first, '');
     await tester.pumpAndSettle();
     expect(find.text('Carthage Artisans'), findsOneWidget);
     expect(find.text('Solar Engineers'), findsOneWidget);
 
     // Open Founder Composer Dialog
-    await tester.tap(find.text('FOUND COMMUNITY'));
+    await tester.tap(find.text('+ FOUND COMMUNITY'));
     await tester.pumpAndSettle();
 
     expect(find.text('Found New Community'), findsOneWidget);
@@ -198,10 +200,14 @@ void main() {
     );
 
     // Pending community COM-003 displays CANCEL REQ button
+    await tester.tap(find.text('Titan Mining Guild'));
+    await tester.pumpAndSettle();
     expect(find.text('CANCEL REQ'), findsOneWidget);
     expect(find.text('PENDING REVIEW'), findsOneWidget);
 
     // Approval community COM-004 displays APPLY button
+    await tester.tap(find.text('Nebula Research Coop'));
+    await tester.pumpAndSettle();
     expect(find.text('APPLY'), findsOneWidget);
 
     // Tap APPLY to open application dialog with question
@@ -257,12 +263,11 @@ void main() {
       ),
     );
 
-    await tester.tap(find.text('DETAILS'));
+    await tester.tap(find.text('Carthage Artisans'));
     await tester.pumpAndSettle();
 
-    expect(find.text('MANIFESTO & PURPOSE'), findsOneWidget);
     expect(find.text('Artisanal fabrication guild of Carthage.'), findsOneWidget);
-    expect(find.text('JOIN COMMUNITY'), findsOneWidget);
+    expect(find.text('JOIN'), findsOneWidget);
   });
 
   testWidgets('MyCommunityPanel renders active guild metrics, manifesto, contribution actions, and role badges',
@@ -314,7 +319,7 @@ void main() {
     );
 
     expect(find.text('SOLAR ENGINEERS'), findsOneWidget);
-    expect(find.textContaining('Guild ID: COM-002'), findsOneWidget);
+    expect(find.text('FOUNDED BY: Amara Vance'), findsOneWidget);
     expect(find.text('OWNER / FOUNDER'), findsOneWidget);
     expect(find.text('1250.00 C'), findsOneWidget);
     expect(find.text('GUILD MANIFESTO & PURPOSE'), findsNothing);

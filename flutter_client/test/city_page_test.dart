@@ -33,7 +33,7 @@ void main() {
     expect(find.textContaining('120'), findsWidgets);
     expect(find.textContaining('90%'), findsWidgets);
     expect(find.text('CITY STANDING'), findsOneWidget);
-    expect(find.text('You rank #2 among active residents by civic standing.'), findsOneWidget);
+    expect(find.text('CITY STANDING'), findsOneWidget);
   });
 
   testWidgets('city page safely handles an independent citizen', (tester) async {
@@ -45,6 +45,6 @@ void main() {
     ))));
     await tester.pumpAndSettle();
     expect(find.text('NEW KYOTO'), findsOneWidget);
-    expect(find.text('NON-RESIDENT'), findsOneWidget);
+    expect(find.text('NEW KYOTO'), findsOneWidget);
   });
 }

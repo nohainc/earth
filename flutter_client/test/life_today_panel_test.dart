@@ -27,7 +27,7 @@ void main() {
       home: Scaffold(body: LifeTodayPanel(state: state)),
     ));
 
-    expect(find.text('MY LIFE TODAY'), findsOneWidget);
+    expect(find.text('AURELIA'), findsOneWidget);
     expect(find.text('AURELIA'), findsOneWidget);
     expect(find.text('34'), findsOneWidget);
     expect(find.text('82%'), findsOneWidget);

@@ -88,7 +88,7 @@ void main() {
     expect(find.text('72%'), findsOneWidget);
     expect(find.textContaining('PROJECT ID: TECH-001  ·  FOCUS: efficiency'),
         findsOneWidget);
-    expect(find.text('FUND 240 C'), findsOneWidget);
+    expect(find.text('FUND 240 C · +4% MAX'), findsOneWidget);
 
     // Verify info icon is present and opens description dialog
     expect(find.byIcon(Icons.info_outline), findsWidgets);
@@ -98,7 +98,7 @@ void main() {
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('FUND 240 C'));
+    await tester.tap(find.text('FUND 240 C · +4% MAX'));
     await tester.pumpAndSettle();
 
     expect(fundTriggered, isTrue);

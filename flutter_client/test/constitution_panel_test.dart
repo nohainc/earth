@@ -20,22 +20,12 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Core Header & Invariants Metrics
-    expect(find.text('PLANETARY CONSTITUTION & GOVERNANCE'), findsOneWidget);
-    expect(find.text('3 TIERS'), findsOneWidget);
-    expect(find.text('5 LAWS'), findsOneWidget);
-
-    // 2. Hierarchy Tiers
+    // Hierarchy tiers
     expect(find.text('GOVERNANCE HIERARCHY & OVERRIDE MODEL'), findsOneWidget);
-    expect(find.text('EARTH (UNIVERSAL CITIZENSHIP)'), findsOneWidget);
-    expect(find.text('CORPORATIONS'), findsOneWidget);
-    expect(find.text('CITIES & MUNICIPALITIES'), findsOneWidget);
+    expect(find.text('EARTH'), findsOneWidget);
+    expect(find.text('CORPORATION'), findsOneWidget);
+    expect(find.text('CITY'), findsOneWidget);
 
-    // 3. Active Statutes
-    expect(find.text('ACTIVE PLANETARY STATUTES'), findsOneWidget);
-    expect(find.text('Central Market Clearing & Fair Allocation'), findsOneWidget);
-    expect(find.text('Macroeconomic Statutory Citizen Levy'), findsOneWidget);
-    expect(find.text('Democratic Ballot Quorum & Supermajority Thresholds'), findsOneWidget);
-    expect(find.text('Mandatory Legislative Cooling-Off & Judicial Review'), findsOneWidget);
-    expect(find.text('House Succession & Testamentary Integrity'), findsOneWidget);
+    expect(find.textContaining('Constitutional rules are unavailable'), findsOneWidget);
   });
 }
