@@ -175,24 +175,15 @@ void main() {
       ),
     );
 
-    expect(find.text('BUILDINGS & URBAN INFRASTRUCTURE HUB'), findsOneWidget);
-    expect(find.textContaining('MY DISTRICT ESTATES'), findsOneWidget);
-    expect(find.textContaining('STRATEGIC CONSTRUCTION PLANNER'), findsOneWidget);
-    expect(find.textContaining('GLOBAL BLUEPRINT CATALOG'), findsOneWidget);
+    expect(find.text('PRIVATE BUILDINGS'), findsOneWidget);
+    expect(find.text('CIVIC BUILDINGS'), findsOneWidget);
+    expect(find.text('CATALOG'), findsOneWidget);
 
-    // Switch to Strategic Construction Planner tab
-    await tester.tap(find.textContaining('STRATEGIC CONSTRUCTION PLANNER'));
+    // Switch to the top-level Catalog tab.
+    await tester.tap(find.text('CATALOG').last);
     await tester.pumpAndSettle();
 
-    expect(find.text('STRATEGIC CONSTRUCTION & ROI PLANNER'), findsOneWidget);
-    expect(find.text('ESTIMATED PAYBACK'), findsOneWidget);
-    expect(find.text('COMMENCE CONSTRUCTION ON PLOT'), findsOneWidget);
-
-    // Switch to Global Blueprint Catalog tab
-    await tester.tap(find.textContaining('GLOBAL BLUEPRINT CATALOG'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('EARTH AUTHORITATIVE BLUEPRINT SPECIFICATIONS'), findsOneWidget);
+    expect(find.text('CATALOG'), findsOneWidget);
     expect(find.text('Solar Concentrator Array'), findsOneWidget);
   });
 

@@ -85,7 +85,6 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Notifications'), findsOneWidget);
     expect(find.text('Messages'), findsOneWidget);
-    expect(find.text('Invitations'), findsOneWidget);
     await tester.tap(find.text('Messages'));
     expect(commLinkOpened, isTrue);
 

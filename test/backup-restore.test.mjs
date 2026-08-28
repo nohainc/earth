@@ -15,8 +15,8 @@ test('Database Backup, Migration Preflight, and Checksum Verification', async ()
     const content = (await readFile(resolve(migrationsDir, file), 'utf8')).toUpperCase();
     assert.ok(content.length > 0, `Migration ${file} must not be empty`);
     assert.ok(
-      content.includes('CREATE') || content.includes('ALTER') || content.includes('INSERT') || content.includes('UPDATE'),
-      `Migration ${file} must contain valid DDL statements`
+      content.includes('CREATE') || content.includes('ALTER') || content.includes('INSERT') || content.includes('UPDATE') || content.includes('DELETE') || content.includes('DROP'),
+      `Migration ${file} must contain valid SQL statements`
     );
   }
 

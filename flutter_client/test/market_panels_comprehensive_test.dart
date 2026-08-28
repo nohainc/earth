@@ -70,8 +70,8 @@ void main() {
       ),
     );
 
-    expect(find.text('CENTRAL MARKET / ORDER BOOK'), findsOneWidget);
-    expect(find.text('MY MARKET ORDERS / LIFECYCLE'), findsOneWidget);
+    expect(find.text('ORDER BOOK'), findsOneWidget);
+    expect(find.text('MY ORDERS'), findsOneWidget);
     expect(find.textContaining('BUY FOOD'), findsOneWidget);
 
     // Cancel order

@@ -1359,8 +1359,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             style: context.widgetFooterStyle,
           ),
           const SizedBox(height: 12),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          Wrap(
+            spacing: 8,
+            runSpacing: 4,
             children: [
               Text('PRIVATE BUILDINGS', style: context.captionStyle),
               Text('$privateUsed / $privateCapacity used', style: context.widgetFooterStyle),
@@ -1829,8 +1830,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     borderRadius: BorderRadius.circular(context.radiusControl),
                     border: Border.all(color: context.subtleBorderColor),
                   ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
                     children: [
                       Expanded(
                         child: Column(

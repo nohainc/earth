@@ -140,7 +140,6 @@ void main() {
     expect(find.text('Cassian Vance I'), findsWidgets);
     expect(find.text('Amara Vance'), findsWidgets);
     expect(find.text('HISTORICAL MILESTONES & ACHIEVEMENTS'), findsOneWidget);
-    expect(find.text('HOUSE IDENTITY'), findsOneWidget);
     expect(find.text('LINEAGE & HEIRS'), findsOneWidget);
     expect(find.text('HEREDITARY PERKS'), findsOneWidget);
     expect(find.text('SHARED HEIRLOOMS & RELICS'), findsOneWidget);

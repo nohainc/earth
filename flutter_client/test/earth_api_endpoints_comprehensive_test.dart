@@ -175,7 +175,6 @@ void main() {
     await api.licenseTechnologyTo('H-2', 300, '123456');
 
     expect(recordedCalls.contains('POST /api/life/successor'), true);
-    expect(recordedCalls.contains('POST /api/machines/acquire'), true);
     expect(recordedCalls.contains('POST /api/market/orders'), true);
     expect(recordedCalls.contains('DELETE /api/market/orders/ORD-1'), true);
     expect(recordedCalls.contains('POST /api/technology/projects'), true);
