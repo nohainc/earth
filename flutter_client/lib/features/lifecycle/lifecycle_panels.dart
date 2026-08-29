@@ -41,12 +41,15 @@ class LifeTodayPanel extends StatelessWidget {
   final bool busy;
   final Future<void> Function(Future<EarthState> Function())? action;
 
-  const LifeTodayPanel({super.key, required this.state, this.busy = false, this.action});
+  const LifeTodayPanel(
+      {super.key, required this.state, this.busy = false, this.action});
 
   Future<void> _editName(BuildContext context) async {
-    final rawName =
-        (state.human['display_name'] ?? state.human['name'] ?? '').toString().trim();
-    final initialName = rawName.contains(' ') ? rawName.split(' ').first : rawName;
+    final rawName = (state.human['display_name'] ?? state.human['name'] ?? '')
+        .toString()
+        .trim();
+    final initialName =
+        rawName.contains(' ') ? rawName.split(' ').first : rawName;
     final controller = TextEditingController(text: initialName);
     await showDialog<void>(
       context: context,
@@ -57,7 +60,8 @@ class LifeTodayPanel extends StatelessWidget {
           side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
         ),
         title: Text('Edit name',
-            style: context.topicTitleStyle.copyWith(color: context.primaryColor)),
+            style:
+                context.topicTitleStyle.copyWith(color: context.primaryColor)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -72,7 +76,8 @@ class LifeTodayPanel extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: Text('CANCEL',
-                style: context.controlStyle.copyWith(color: context.mutedColor)),
+                style:
+                    context.controlStyle.copyWith(color: context.mutedColor)),
           ),
           EarthButton(
             label: 'SAVE',
@@ -82,7 +87,8 @@ class LifeTodayPanel extends StatelessWidget {
                     final name = controller.text.trim();
                     if (name.length < 2) return;
                     Navigator.pop(dialogContext);
-                    await action!(() => const EarthApi().updateDisplayName(name));
+                    await action!(
+                        () => const EarthApi().updateDisplayName(name));
                   },
           ),
         ],
@@ -102,7 +108,8 @@ class LifeTodayPanel extends StatelessWidget {
           side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
         ),
         title: Text('Edit citizen epitaph',
-            style: context.topicTitleStyle.copyWith(color: context.primaryColor)),
+            style:
+                context.topicTitleStyle.copyWith(color: context.primaryColor)),
         content: TextField(
           controller: controller,
           autofocus: true,
@@ -118,7 +125,8 @@ class LifeTodayPanel extends StatelessWidget {
           TextButton(
             onPressed: () => Navigator.pop(dialogContext),
             child: Text('CANCEL',
-                style: context.controlStyle.copyWith(color: context.mutedColor)),
+                style:
+                    context.controlStyle.copyWith(color: context.mutedColor)),
           ),
           EarthButton(
             label: 'SAVE',
@@ -141,16 +149,26 @@ class LifeTodayPanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final human = state.human;
     final life = state.life;
-    final health = asDouble(human['health'] ?? human['vitality'] ?? life['health'] ?? life['vitality']) ?? 100.0;
-    final energy = asDouble(human['energy'] ?? human['stamina'] ?? life['energy'] ?? life['stamina']) ?? 100.0;
-    final age = asInt(human['age_years'] ?? human['age'] ?? life['ageYears']) ?? 31;
+    final health = asDouble(human['health'] ??
+            human['vitality'] ??
+            life['health'] ??
+            life['vitality']) ??
+        100.0;
+    final energy = asDouble(human['energy'] ??
+            human['stamina'] ??
+            life['energy'] ??
+            life['stamina']) ??
+        100.0;
+    final age =
+        asInt(human['age_years'] ?? human['age'] ?? life['ageYears']) ?? 31;
     final legacy = asDouble(human['legacy'] ?? life['legacy']) ?? 0.0;
     final standing = asIntOr(human['standing'], 0);
     final credits = asDouble(human['credits']) ?? 0.0;
     final humanId = (human['id'] ?? 'H-0001').toString();
     final rawFullName =
         (human['display_name'] ?? human['name'] ?? 'CITIZEN').toString().trim();
-    final displayName = rawFullName.contains(' ') ? rawFullName.split(' ').first : rawFullName;
+    final displayName =
+        rawFullName.contains(' ') ? rawFullName.split(' ').first : rawFullName;
     final initials = displayName.length >= 2
         ? displayName.substring(0, 2).toUpperCase()
         : 'OP';
@@ -159,8 +177,9 @@ class LifeTodayPanel extends StatelessWidget {
             'Pioneered civilization across the frontier of Earth.')
         .toString()
         .trim();
-    final lifeStatus =
-        life['status']?.toString() ?? human['life_status']?.toString() ?? 'ACTIVE';
+    final lifeStatus = life['status']?.toString() ??
+        human['life_status']?.toString() ??
+        'ACTIVE';
 
     final houseName = (life['houseName'] ??
             life['house_name'] ??
@@ -181,13 +200,16 @@ class LifeTodayPanel extends StatelessWidget {
 
     final isMatured = human['politicalMaturity'] == true ||
         (human['political_eligibility_game_day'] != null &&
-            asIntOr(state.clock['day'], 0) >= asIntOr(human['political_eligibility_game_day'], 0));
+            asIntOr(state.clock['day'], 0) >=
+                asIntOr(human['political_eligibility_game_day'], 0));
 
     final cityName = state.institutions['city'] is Map
         ? (state.institutions['city'] as Map)['name']?.toString().toUpperCase()
         : null;
     final corporationName = (state.institutions['corporation'] is Map
-            ? (state.institutions['corporation'] as Map)['name']?.toString().toUpperCase()
+            ? (state.institutions['corporation'] as Map)['name']
+                ?.toString()
+                .toUpperCase()
             : null) ??
         (state.membership?['corporation_name']?.toString().toUpperCase()) ??
         (state.membership?['name']?.toString().toUpperCase());
@@ -287,7 +309,9 @@ class LifeTodayPanel extends StatelessWidget {
                                 size: 16,
                                 color: context.primaryColor,
                               ),
-                              onPressed: busy ? null : () => _editEpitaph(context, epitaph),
+                              onPressed: busy
+                                  ? null
+                                  : () => _editEpitaph(context, epitaph),
                               padding: EdgeInsets.zero,
                               constraints: const BoxConstraints(),
                             ),
@@ -333,7 +357,8 @@ class LifeTodayPanel extends StatelessWidget {
                     icon: Icons.how_to_vote_outlined,
                     label: 'POLITICAL STATUS',
                     value: isMatured ? 'ELIGIBLE' : 'IN TRAINING',
-                    accentColor: isMatured ? context.successColor : context.mutedColor,
+                    accentColor:
+                        isMatured ? context.successColor : context.mutedColor,
                   ),
                 ];
 
@@ -461,7 +486,8 @@ class SuccessionPanel extends StatelessWidget {
     required this.action,
   });
 
-  Future<void> _editSuccessorName(BuildContext context, String currentName) async {
+  Future<void> _editSuccessorName(
+      BuildContext context, String currentName) async {
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => _EditSuccessorDialog(
@@ -533,7 +559,8 @@ class SuccessionPanel extends StatelessWidget {
               children: [
                 CircleAvatar(
                   radius: 24,
-                  backgroundColor: context.secondaryColor.withValues(alpha: .15),
+                  backgroundColor:
+                      context.secondaryColor.withValues(alpha: .15),
                   child: Text(
                     initials,
                     style: context.widgetTitleStyle.copyWith(
@@ -601,7 +628,8 @@ class SuccessionPanel extends StatelessWidget {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Icon(Icons.gavel_outlined,
-                            size: context.iconSize, color: context.primaryColor),
+                            size: context.iconSize,
+                            color: context.primaryColor),
                         const SizedBox(width: 8),
                         Text(
                           'CANONICAL SUCCESSION RULES',
@@ -616,7 +644,9 @@ class SuccessionPanel extends StatelessWidget {
                       label: lifeStatus.toUpperCase(),
                       customColor: isEstatePeriod
                           ? context.warningColor
-                          : (isDeceased ? context.errorColor : context.successColor),
+                          : (isDeceased
+                              ? context.errorColor
+                              : context.successColor),
                     ),
                   ],
                 ),
@@ -661,7 +691,8 @@ class SuccessionPanel extends StatelessWidget {
                 const SizedBox(height: 8),
                 Text(
                   'Est. Net Transfer: ~${formatCreditsAmount(estimatedNet)} (after ~${formatCreditsAmount(estimatedTax)} estate tax)',
-                  style: context.widgetFooterStyle.copyWith(fontWeight: FontWeight.w600),
+                  style: context.widgetFooterStyle
+                      .copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 4),
                 Text(
@@ -669,7 +700,9 @@ class SuccessionPanel extends StatelessWidget {
                       ? 'Estate state: ACTIVE ESTATE PERIOD (Awaiting settlement or liquidation)'
                       : 'Estate state: PENDING (Protected transition ready upon mortality)',
                   style: context.widgetFooterStyle.copyWith(
-                    color: isEstatePeriod ? context.warningColor : context.primaryColor,
+                    color: isEstatePeriod
+                        ? context.warningColor
+                        : context.primaryColor,
                   ),
                 ),
               ],
@@ -797,14 +830,6 @@ class LegacyPersonalFinancePanel extends StatelessWidget {
             style: TextStyle(color: mutedColor, fontSize: 10),
           ),
           const SizedBox(height: 8),
-          if (state.personalFinance['status'] != 'bankrupt')
-            OutlinedButton(
-              onPressed: busy
-                  ? null
-                  : () => action(
-                      () => const EarthApi().declarePersonalInsolvency()),
-              child: const Text('DECLARE INSOLVENCY RESTRUCTURING'),
-            ),
         ],
       ),
     );
@@ -1256,7 +1281,8 @@ class NotificationsPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: notifications.take(8).map((raw) {
                 final notification = raw as Map<String, dynamic>;
-                final unread = notification['read'] != true && notification['read_at'] == null;
+                final unread = notification['read'] != true &&
+                    notification['read_at'] == null;
                 return Padding(
                   padding: const EdgeInsets.only(bottom: 8),
                   child: Row(
@@ -2057,7 +2083,8 @@ class PantheonPanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.surfaceColor.withValues(alpha: .75),
               borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.primaryColor.withValues(alpha: .35)),
+              border: Border.all(
+                  color: context.primaryColor.withValues(alpha: .35)),
             ),
             child: Row(
               children: [
@@ -2073,7 +2100,8 @@ class PantheonPanel extends StatelessWidget {
                     children: [
                       Text(
                         'PLANETARY CEMETERY & MEMORIAL ARCHIVE',
-                        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
+                        style: context.topicTitleStyle
+                            .copyWith(color: context.primaryColor),
                       ),
                       const SizedBox(height: 3),
                       Text(
@@ -2096,8 +2124,12 @@ class PantheonPanel extends StatelessWidget {
 
           Builder(builder: (context) {
             final recorded = <Map<String, dynamic>>[
-              ...deceased.whereType<Map>().map((raw) => Map<String, dynamic>.from(raw)),
-              ...living.whereType<Map>().map((raw) => Map<String, dynamic>.from(raw)),
+              ...deceased
+                  .whereType<Map>()
+                  .map((raw) => Map<String, dynamic>.from(raw)),
+              ...living
+                  .whereType<Map>()
+                  .map((raw) => Map<String, dynamic>.from(raw)),
             ];
             if (recorded.isEmpty) {
               return Padding(
@@ -2115,16 +2147,23 @@ class PantheonPanel extends StatelessWidget {
                 final generation = entry['generation'] ?? indexed.$1 + 1;
                 final isLiving = entry['death_game_day'] == null &&
                     entry['deathGameDay'] == null;
-                final name = entry['display_name'] ?? entry['name'] ?? 'Unknown Human';
+                final name =
+                    entry['display_name'] ?? entry['name'] ?? 'Unknown Human';
                 final score = entry['final_legacy'] ??
-                    entry['composite_legacy_score'] ?? entry['legacy'] ?? 0;
+                    entry['composite_legacy_score'] ??
+                    entry['legacy'] ??
+                    0;
                 final node = _houseNode(
                   context: context,
-                  generation: 'GEN $generation · ${isLiving ? 'CURRENT ACTIVE CITIZEN' : 'ANCESTOR'}',
+                  generation:
+                      'GEN $generation · ${isLiving ? 'CURRENT ACTIVE CITIZEN' : 'ANCESTOR'}',
                   name: name.toString(),
-                  details: isLiving ? 'Active · Current house member' : 'Archived · Historical house member',
+                  details: isLiving
+                      ? 'Active · Current house member'
+                      : 'Archived · Historical house member',
                   score: score.toString(),
-                  color: isLiving ? context.primaryColor : context.secondaryColor,
+                  color:
+                      isLiving ? context.primaryColor : context.secondaryColor,
                   isLast: indexed.$1 == recorded.length - 1,
                 );
                 return indexed.$1 == recorded.length - 1
@@ -2176,13 +2215,15 @@ class PantheonPanel extends StatelessWidget {
               return Container(
                 margin: const EdgeInsets.only(bottom: 6),
                 padding: EdgeInsets.symmetric(
-                  horizontal: context.tokens.number('pageTopics.cardPadding', 10),
+                  horizontal:
+                      context.tokens.number('pageTopics.cardPadding', 10),
                   vertical: 7,
                 ),
                 decoration: BoxDecoration(
                   color: context.primaryColor.withValues(alpha: .05),
                   borderRadius: BorderRadius.circular(context.radiusCard),
-                  border: Border.all(color: context.primaryColor.withValues(alpha: .2)),
+                  border: Border.all(
+                      color: context.primaryColor.withValues(alpha: .2)),
                 ),
                 child: Row(
                   children: [
@@ -2198,10 +2239,12 @@ class PantheonPanel extends StatelessWidget {
                         children: [
                           Text(
                             entry['name']?.toString() ?? 'Achievement',
-                            style: context.widgetValueStyle.copyWith(color: context.inkColor),
+                            style: context.widgetValueStyle
+                                .copyWith(color: context.inkColor),
                           ),
                           Text(
-                            entry['description']?.toString() ?? 'Completed milestone',
+                            entry['description']?.toString() ??
+                                'Completed milestone',
                             style: context.widgetFooterStyle,
                           ),
                         ],
@@ -2227,7 +2270,8 @@ class PantheonPanel extends StatelessWidget {
     required bool isLast,
   }) {
     return Container(
-      padding: EdgeInsets.all(context.tokens.number('pageTopics.cardPadding', 10)),
+      padding:
+          EdgeInsets.all(context.tokens.number('pageTopics.cardPadding', 10)),
       decoration: BoxDecoration(
         color: color.withValues(alpha: .08),
         borderRadius: BorderRadius.circular(context.radiusCard),
@@ -2265,7 +2309,8 @@ class PantheonPanel extends StatelessWidget {
                 const SizedBox(height: 2),
                 Text(
                   name,
-                  style: context.widgetValueStyle.copyWith(color: context.inkColor),
+                  style: context.widgetValueStyle
+                      .copyWith(color: context.inkColor),
                 ),
                 Text(
                   details,
@@ -2510,7 +2555,9 @@ class HumanServicesPanel extends StatelessWidget {
     if (lower.contains('safe') || lower.contains('security')) {
       return Icons.shield_outlined;
     }
-    if (lower.contains('power') || lower.contains('utility') || lower.contains('energy')) {
+    if (lower.contains('power') ||
+        lower.contains('utility') ||
+        lower.contains('energy')) {
       return Icons.bolt_outlined;
     }
     if (lower.contains('water') || lower.contains('food')) {
@@ -2521,7 +2568,8 @@ class HumanServicesPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final services = ((state.world['serviceStatus'] as Map<String, dynamic>?) ?? const {});
+    final services =
+        ((state.world['serviceStatus'] as Map<String, dynamic>?) ?? const {});
 
     return EarthSection(
       key: panelKey,
@@ -2551,18 +2599,21 @@ class HumanServicesPanel extends StatelessWidget {
 
                 return Container(
                   padding: EdgeInsets.symmetric(
-                    horizontal: context.tokens.number('pageTopics.cardPadding', 12),
+                    horizontal:
+                        context.tokens.number('pageTopics.cardPadding', 12),
                     vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     color: context.surfaceColor,
                     borderRadius: BorderRadius.circular(context.radiusCard),
-                    border: Border.all(color: statusColor.withValues(alpha: .3)),
+                    border:
+                        Border.all(color: statusColor.withValues(alpha: .3)),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(_getServiceIcon(entry.key), size: context.iconSize, color: statusColor),
+                      Icon(_getServiceIcon(entry.key),
+                          size: context.iconSize, color: statusColor),
                       SizedBox(width: context.spacingInline),
                       Text(
                         serviceName,

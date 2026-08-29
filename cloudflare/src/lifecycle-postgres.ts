@@ -190,7 +190,7 @@ export async function liquidateExpiredEstates(repository: PostgresRepository, da
         if (!estate.account_id) throw new Error('Estate Credit account is required for liquidation');
         await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: estate.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(balanceCents), reasonType: 'estate_liquidation', reasonId: estate.id, ruleVersion: 'life-v3', correlationId: `ESTATE-LIQUIDATION-${estate.id}-${day}` });
       }
-      await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_type = 'private'", [estate.id]);
+      await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [estate.id]);
       for (const business of businesses.rows) await tx.query('DELETE FROM business_shares WHERE business_id = $1', [business.id]);
       await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [estate.id]);
       await tx.query('DELETE FROM businesses WHERE owner_id = $1', [estate.id]);

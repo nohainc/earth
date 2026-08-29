@@ -62,23 +62,24 @@ extension EarthApiAuth on EarthApi {
   }
 
   Future<Map<String, dynamic>> register(
-          String email, String password, String displayName,
+          String email, String password, String personName, String houseSurname,
           {String passwordConfirmation = ''}) async =>
       (await _request('/api/auth/register', method: 'POST', body: {
         'email': email,
         'password': password,
         'passwordConfirmation': passwordConfirmation,
-        'displayName': displayName,
+        'personName': personName,
+        'houseSurname': houseSurname,
       })) as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> resendVerification(String email) async =>
       (await _request('/api/auth/verify-email/resend',
           method: 'POST', body: {'email': email})) as Map<String, dynamic>;
 
-  Future<Map<String, dynamic>> verifyEmail(String token) async =>
-      (await _request(
-              '/api/auth/verify-email?token=${Uri.encodeQueryComponent(token)}'))
-          as Map<String, dynamic>;
+  Future<
+      Map<String, dynamic>> verifyEmail(String token) async => (await _request(
+          '/api/auth/verify-email?token=${Uri.encodeQueryComponent(token)}'))
+      as Map<String, dynamic>;
 
   Future<Map<String, dynamic>> requestPasswordReset(String email) async =>
       (await _request('/api/auth/password-reset/request',
@@ -99,17 +100,16 @@ extension EarthApiAuth on EarthApi {
   Future<Map<String, dynamic>> rebirth(String displayName,
       {String? houseName, String? dynastyName, String? startingCityId}) async {
     final finalHouseName = houseName ?? dynastyName;
-    final response = (await _request('/api/auth/rebirth',
-        method: 'POST',
-        body: {
-          'displayName': displayName,
-          if (finalHouseName != null && finalHouseName.isNotEmpty) ...{
-            'houseName': finalHouseName,
-            'dynastyName': finalHouseName,
-          },
-          if (startingCityId != null && startingCityId.isNotEmpty)
-            'startingCityId': startingCityId,
-        })) as Map<String, dynamic>;
+    final response =
+        (await _request('/api/auth/rebirth', method: 'POST', body: {
+      'displayName': displayName,
+      if (finalHouseName != null && finalHouseName.isNotEmpty) ...{
+        'houseName': finalHouseName,
+        'dynastyName': finalHouseName,
+      },
+      if (startingCityId != null && startingCityId.isNotEmpty)
+        'startingCityId': startingCityId,
+    })) as Map<String, dynamic>;
     final token = response['token']?.toString();
     if (token != null && token.isNotEmpty) {
       await AuthStorage.saveToken(token);
@@ -118,8 +118,9 @@ extension EarthApiAuth on EarthApi {
   }
 
   Future<Map<String, dynamic>> claimHeir() async {
-    final response = (await _request('/api/auth/claim-heir',
-        method: 'POST', body: {})) as Map<String, dynamic>;
+    final response =
+        (await _request('/api/auth/claim-heir', method: 'POST', body: {}))
+            as Map<String, dynamic>;
     final token = response['token']?.toString();
     if (token != null && token.isNotEmpty) {
       await AuthStorage.saveToken(token);

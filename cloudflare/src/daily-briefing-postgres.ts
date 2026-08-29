@@ -1,3 +1,5 @@
+import { buildDailyBriefing, type DailyBriefing } from './engines/ai-briefing-engine.ts';
+
 export interface DailyBriefingData {
   ok: boolean;
   gameDay: number;
@@ -52,6 +54,7 @@ export interface DailyBriefingData {
     actionLabel: string;
     targetSection: string;
   }>;
+  aiBriefing?: DailyBriefing;
 }
 
 export async function getDailyBriefing(
@@ -142,7 +145,7 @@ export async function getDailyBriefing(
     },
   ];
 
-  return {
+  const briefing = {
     ok: true,
     gameDay: currentDay,
     daysElapsed: 1,
@@ -177,4 +180,5 @@ export async function getDailyBriefing(
     unreadAlerts: { unreadNotifications: unreadNotifs, unreadComms: 1, criticalAlertsCount: 0 },
     recommendedDirectives,
   };
+  return { ...briefing, aiBriefing: buildDailyBriefing({ worldSnapshot: { gameDay: currentDay }, decisionQueue: recommendedDirectives, previousGameDay: previousDay, marketMovements: commodities }) };
 }

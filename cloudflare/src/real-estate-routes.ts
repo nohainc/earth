@@ -1,5 +1,5 @@
 import type { Env } from './index.ts';
-import { withRepository } from './postgres.ts';
+import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   purchasePrivatePlotAndConstruct,
@@ -7,6 +7,7 @@ import {
   setBuildingOperatingPolicy,
   repairBuilding,
   investInPublicBuilding,
+  openPublicInvestmentOffering,
   demolishBuilding,
   getCityDistrictZoning,
   getCivicDividendHistory,
@@ -130,6 +131,23 @@ export async function handleRealEstateRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share investment failed' }, { status: 409 });
+    }
+  }
+
+  if (url.pathname === '/api/real-estate/public-offering' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ cityId?: string; buildingType?: string; name?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
+    const cityId = body.cityId?.trim() ?? '';
+    const buildingType = body.buildingType?.trim() ?? '';
+    const correlationId = resolveIdempotencyKey(request, body.correlationId);
+    if (!cityId || !buildingType || !correlationId) return Response.json({ ok: false, error: 'City, building type, and correlation ID are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => openPublicInvestmentOffering(repository, { humanId: viewer.id, cityId, buildingType, name: body.name?.trim() ?? '', correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Public offering creation failed' }, { status: 409 });
     }
   }
 

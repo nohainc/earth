@@ -3,24 +3,26 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../shared/design_system/earth_logo.dart';
-import 'admin_email_deliveries_dialog.dart';
 
 String? validateAuthInput({
   required String email,
   required String password,
-  String displayName = '',
+  String personName = '',
+  String houseSurname = '',
   String passwordConfirmation = '',
   bool registration = false,
   bool passwordReset = false,
 }) {
   if (!passwordReset && email.trim().isEmpty) return 'Email is required';
   if (password.length < 12) return 'Password must be at least 12 characters';
-  if ((registration || passwordReset) &&
-      password != passwordConfirmation) {
+  if ((registration || passwordReset) && password != passwordConfirmation) {
     return 'Passwords do not match';
   }
-  if (registration && displayName.trim().isEmpty) {
-    return 'Display name is required';
+  if (registration && personName.trim().length < 2) {
+    return 'Given name must be at least 2 characters';
+  }
+  if (registration && houseSurname.trim().length < 2) {
+    return 'House surname must be at least 2 characters';
   }
   return null;
 }
@@ -47,13 +49,15 @@ class _AuthScreenState extends State<AuthScreen> {
   final email = TextEditingController();
   final password = TextEditingController();
   final passwordConfirmation = TextEditingController();
-  final displayName = TextEditingController();
+  final personName = TextEditingController();
+  final houseSurname = TextEditingController();
   final otp = TextEditingController();
   bool registerMode = false;
   bool recoveryMode = false;
   late bool resetMode;
   late String? resetToken;
   bool verificationPending = false;
+  bool mfaRequired = false;
   bool busy = false;
   String? error;
   bool noticeIsSuccess = false;
@@ -118,7 +122,8 @@ class _AuthScreenState extends State<AuthScreen> {
       }
       if (recoveryMode) {
         if (_cooldownSeconds > 0) {
-          throw Exception('Please wait $_cooldownSeconds seconds before requesting another recovery email.');
+          throw Exception(
+              'Please wait $_cooldownSeconds seconds before requesting another recovery email.');
         }
         if (email.text.trim().isEmpty) throw Exception('Email is required');
         final res = await widget.api.requestPasswordReset(email.text.trim());
@@ -137,20 +142,21 @@ class _AuthScreenState extends State<AuthScreen> {
         final validation = validateAuthInput(
           email: email.text,
           password: password.text,
-          displayName: displayName.text,
+          personName: personName.text,
+          houseSurname: houseSurname.text,
           passwordConfirmation: passwordConfirmation.text,
           registration: true,
         );
         if (validation != null) throw Exception(validation);
-        await widget.api.register(email.text.trim(), password.text,
-            displayName.text.trim(),
+        final result = await widget.api.register(email.text.trim(),
+            password.text, personName.text.trim(), houseSurname.text.trim(),
             passwordConfirmation: passwordConfirmation.text);
         if (mounted) {
           _startCooldown(60);
           setState(() {
             registerMode = false;
             verificationPending = true;
-            error =
+            error = result['message']?.toString() ??
                 'Identity created. Check your email to verify it, then sign in.';
             noticeIsSuccess = true;
           });
@@ -161,8 +167,8 @@ class _AuthScreenState extends State<AuthScreen> {
           password: password.text,
         );
         if (validation != null) throw Exception(validation);
-        final result = await widget.api.login(email.text.trim(), password.text,
-            otp: otp.text.trim());
+        final result = await widget.api
+            .login(email.text.trim(), password.text, otp: otp.text.trim());
         if (mounted) {
           widget.onAuthenticated(
               {'authenticated': true, 'human': result['human']});
@@ -172,7 +178,11 @@ class _AuthScreenState extends State<AuthScreen> {
       final message = exception.toString().replaceFirst('Exception: ', '');
       if (mounted) {
         setState(() {
-          error = message;
+          mfaRequired =
+              message.toLowerCase().contains('authenticator code required');
+          error = mfaRequired
+              ? 'Enter the six-digit code from your authenticator app.'
+              : message;
           noticeIsSuccess = false;
           verificationPending =
               message.toLowerCase().contains('verify your email');
@@ -225,7 +235,8 @@ class _AuthScreenState extends State<AuthScreen> {
     email.dispose();
     password.dispose();
     passwordConfirmation.dispose();
-    displayName.dispose();
+    personName.dispose();
+    houseSurname.dispose();
     otp.dispose();
     super.dispose();
   }
@@ -250,173 +261,202 @@ class _AuthScreenState extends State<AuthScreen> {
                   child: Column(
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: [
-                      const Center(
-                        child: EarthLogo(
-                          size: 68,
-                          showGlow: true,
+                      children: [
+                        const Center(
+                          child: EarthLogo(
+                            size: 68,
+                            showGlow: true,
+                          ),
                         ),
-                      ),
-                      const SizedBox(height: 16),
-                      const Text('EARTH',
-                          style: TextStyle(
-                              fontSize: 30,
-                              fontWeight: FontWeight.w800,
-                              letterSpacing: 2)),
-                      const SizedBox(height: 6),
-                      Text(
-                          resetMode
-                              ? 'Set a new password'
-                              : recoveryMode
-                                  ? 'Recover your identity'
-                                  : registerMode
-                                      ? 'Create your Human identity'
-                                      : 'Enter the shared world',
-                          style: const TextStyle(color: mutedColor)),
-                      const SizedBox(height: 24),
-                      if (registerMode && !recoveryMode) ...[
-                        TextField(
-                            controller: displayName,
-                            textInputAction: TextInputAction.next,
-                            decoration: const InputDecoration(
-                                labelText: 'Display name')),
-                        const SizedBox(height: 12),
-                      ],
-                      if (!resetMode)
-                        TextField(
-                            controller: email,
-                            keyboardType: TextInputType.emailAddress,
-                            textInputAction: TextInputAction.next,
-                            decoration:
-                                const InputDecoration(labelText: 'Email')),
-                      const SizedBox(height: 12),
-                      if (!recoveryMode)
-                        TextField(
-                            controller: password,
-                            obscureText: true,
-                            onSubmitted: (_) => submit(),
-                            decoration: InputDecoration(
-                                labelText: resetMode
-                                    ? 'New password (12+ characters)'
-                                    : 'Password (12+ characters)')),
-                      if ((registerMode || resetMode) && !recoveryMode) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                            controller: passwordConfirmation,
-                            obscureText: true,
-                            onSubmitted: (_) => submit(),
-                            decoration: const InputDecoration(
-                                labelText: 'Repeat password')),
-                      ],
-                      if (!registerMode && !recoveryMode) ...[
-                        const SizedBox(height: 12),
-                        TextField(
-                            controller: otp,
-                            keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                                labelText: 'Authenticator code (if enabled)')),
-                      ],
-                      if (error != null) ...[
-                        const SizedBox(height: 12),
-                        Text(error!,
+                        const SizedBox(height: 16),
+                        const Text('EARTH',
                             style: TextStyle(
-                                color: noticeIsSuccess
-                                    ? cyanAccentColor
-                                    : Colors.redAccent))
-                      ],
-                      if (_cooldownSeconds > 0) ...[
+                                fontSize: 30,
+                                fontWeight: FontWeight.w800,
+                                letterSpacing: 2)),
+                        const SizedBox(height: 6),
+                        Text(
+                            resetMode
+                                ? 'Set a new password'
+                                : recoveryMode
+                                    ? 'Recover your identity'
+                                    : registerMode
+                                        ? 'Create an identity'
+                                        : mfaRequired
+                                            ? 'Verify your identity'
+                                            : 'The United Corporations',
+                            style: const TextStyle(color: mutedColor)),
+                        const SizedBox(height: 24),
+                        if (registerMode && !recoveryMode) ...[
+                          TextField(
+                              controller: personName,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                  labelText: 'Given name')),
+                          const SizedBox(height: 12),
+                          TextField(
+                              controller: houseSurname,
+                              textInputAction: TextInputAction.next,
+                              decoration: const InputDecoration(
+                                  labelText: 'House surname')),
+                          const SizedBox(height: 12),
+                        ],
+                        if (!resetMode)
+                          TextField(
+                              controller: email,
+                              keyboardType: TextInputType.emailAddress,
+                              textInputAction: TextInputAction.next,
+                              decoration:
+                                  const InputDecoration(labelText: 'Email')),
                         const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF38BDF8).withAlpha(20),
-                            borderRadius: BorderRadius.circular(6),
-                            border: Border.all(color: const Color(0xFF38BDF8).withAlpha(80)),
-                          ),
-                          child: Row(
-                            children: [
-                              const Icon(Icons.timer_outlined, size: 14, color: Color(0xFF38BDF8)),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'Cooldown active: retry in ${_cooldownSeconds}s. Check your spam folder if no email arrives.',
-                                  style: const TextStyle(color: Color(0xFF38BDF8), fontSize: 9.5),
+                        if (!recoveryMode)
+                          TextField(
+                              controller: password,
+                              obscureText: true,
+                              onSubmitted: (_) => submit(),
+                              decoration: InputDecoration(
+                                  labelText: resetMode
+                                      ? 'New password (12+ characters)'
+                                      : 'Password (12+ characters)')),
+                        if ((registerMode || resetMode) && !recoveryMode) ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                              controller: passwordConfirmation,
+                              obscureText: true,
+                              onSubmitted: (_) => submit(),
+                              decoration: const InputDecoration(
+                                  labelText: 'Repeat password')),
+                        ],
+                        if (!registerMode && !recoveryMode && mfaRequired) ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                              controller: otp,
+                              keyboardType: TextInputType.number,
+                              decoration: const InputDecoration(
+                                  labelText: 'Six-digit authenticator code')),
+                        ],
+                        if (error != null) ...[
+                          const SizedBox(height: 12),
+                          Text(error!,
+                              style: TextStyle(
+                                  color: noticeIsSuccess
+                                      ? cyanAccentColor
+                                      : Colors.redAccent))
+                        ],
+                        if (_cooldownSeconds > 0) ...[
+                          const SizedBox(height: 12),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 10, vertical: 6),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF38BDF8).withAlpha(20),
+                              borderRadius: BorderRadius.circular(6),
+                              border: Border.all(
+                                  color: const Color(0xFF38BDF8).withAlpha(80)),
+                            ),
+                            child: Row(
+                              children: [
+                                const Icon(Icons.timer_outlined,
+                                    size: 14, color: Color(0xFF38BDF8)),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    'Cooldown active: retry in ${_cooldownSeconds}s. Check your spam folder if no email arrives.',
+                                    style: const TextStyle(
+                                        color: Color(0xFF38BDF8),
+                                        fontSize: 9.5),
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                      const SizedBox(height: 20),
-                      FilledButton(
-                          onPressed: busy || (recoveryMode && _cooldownSeconds > 0) ? null : submit,
-                          child: Text(busy
-                              ? 'Connecting…'
-                              : resetMode
-                                  ? 'Set new password'
-                                  : recoveryMode
-                                      ? (_cooldownSeconds > 0
-                                          ? 'Wait (${_cooldownSeconds}s)'
-                                          : 'Send recovery email')
-                                      : registerMode
-                                          ? 'Create identity'
-                                          : 'Enter EARTH')),
-                      if (!resetMode &&
-                          !registerMode &&
-                          !recoveryMode &&
-                          (verificationPending ||
-                              (error
-                                      ?.toLowerCase()
-                                      .contains('verify your email') ??
-                                  false)))
-                        TextButton(
-                            onPressed: busy || _cooldownSeconds > 0 ? null : resendVerification,
-                            child: Text(_cooldownSeconds > 0
-                                ? 'Resend verification (${_cooldownSeconds}s)'
-                                : 'Resend verification email')),
-                      if (!resetMode && !registerMode && !recoveryMode)
-                        TextButton(
+                        ],
+                        const SizedBox(height: 20),
+                        FilledButton(
+                            onPressed:
+                                busy || (recoveryMode && _cooldownSeconds > 0)
+                                    ? null
+                                    : submit,
+                            child: Text(busy
+                                ? 'Connecting…'
+                                : resetMode
+                                    ? 'Set new password'
+                                    : recoveryMode
+                                        ? (_cooldownSeconds > 0
+                                            ? 'Wait (${_cooldownSeconds}s)'
+                                            : 'Send recovery email')
+                                        : registerMode
+                                            ? 'Create identity'
+                                            : mfaRequired
+                                                ? 'Verify code'
+                                                : 'Enter EARTH')),
+                        if (!resetMode &&
+                            !registerMode &&
+                            !recoveryMode &&
+                            (verificationPending ||
+                                (error
+                                        ?.toLowerCase()
+                                        .contains('verify your email') ??
+                                    false)))
+                          TextButton(
+                              onPressed: busy || _cooldownSeconds > 0
+                                  ? null
+                                  : resendVerification,
+                              child: Text(_cooldownSeconds > 0
+                                  ? 'Resend verification (${_cooldownSeconds}s)'
+                                  : 'Resend verification email')),
+                        if (!resetMode && !registerMode && !recoveryMode)
+                          TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => setState(() {
+                                        recoveryMode = true;
+                                        error = null;
+                                      }),
+                              child: const Text('Forgot password?')),
+                        if (!resetMode && (recoveryMode || registerMode))
+                          TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => setState(() {
+                                        recoveryMode = false;
+                                        registerMode = false;
+                                        mfaRequired = false;
+                                        verificationPending = false;
+                                        error = null;
+                                      }),
+                              child: Text(recoveryMode || registerMode
+                                  ? 'Back to sign in'
+                                  : 'Create an identity')),
+                        if (!resetMode &&
+                            !registerMode &&
+                            !recoveryMode &&
+                            !mfaRequired)
+                          TextButton(
                             onPressed: busy
                                 ? null
                                 : () => setState(() {
-                                      recoveryMode = true;
-                                      error = null;
-                                    }),
-                            child: const Text('Forgot password?')),
-                      if (!resetMode)
-                        TextButton(
-                            onPressed: busy
-                                ? null
-                                : () => setState(() {
-                                      recoveryMode = false;
-                                      registerMode = !registerMode;
+                                      registerMode = true;
                                       verificationPending = false;
                                       error = null;
                                     }),
-                            child: Text(recoveryMode || registerMode
-                                ? 'Back to sign in'
-                                : 'New to EARTH? Create an identity')),
-                      if (resetMode)
-                        TextButton(
-                            onPressed: busy
-                                ? null
-                                : () => setState(() {
-                                      resetMode = false;
-                                      resetToken = null;
-                                      error = null;
-                                    }),
-                            child: const Text('Back to sign in')),
-                      const SizedBox(height: 8),
-                      TextButton.icon(
-                        onPressed: () => showAdminEmailDeliveriesDialog(context, api: widget.api),
-                        icon: const Icon(Icons.mark_email_read_outlined, size: 13, color: EarthColors.textMuted),
-                        label: const Text('Email Observability & Audit', style: TextStyle(color: EarthColors.textMuted, fontSize: 10)),
-                      ),
-                    ]),
+                            child: const Text('Create an identity'),
+                          ),
+                        if (resetMode)
+                          TextButton(
+                              onPressed: busy
+                                  ? null
+                                  : () => setState(() {
+                                        resetMode = false;
+                                        resetToken = null;
+                                        error = null;
+                                      }),
+                              child: const Text('Back to sign in')),
+                      ]),
+                ),
               ),
             ),
           ),
         ),
-      ),
-    );
+      );
 }

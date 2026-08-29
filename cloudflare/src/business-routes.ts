@@ -1,5 +1,5 @@
 import type { Env } from './index.ts';
-import { withRepository } from './postgres.ts';
+import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   createBusinessPostgres,

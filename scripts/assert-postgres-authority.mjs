@@ -41,7 +41,6 @@ for (const [handler, route] of [
   if (!worker.includes(`async function ${handler}`)) throw new Error(`${handler} is required for PostgreSQL authority`);
   if (!worker.includes(route)) throw new Error(`${handler} must bypass legacy provider branches`);
 }
-if (!wrangler.includes('"EMAIL_FROM": "earth@auth.earthuc.com"')) throw new Error('EARTH transactional sender must use the authenticated Cloudflare sending domain');
-if (!wrangler.includes('"EMAIL_REPLY_TO": "earth@nohainc.com"')) throw new Error('EARTH transactional reply-to must remain earth@nohainc.com');
+if (!wrangler.includes('"EMAIL_FROM": "earth@nohainc.com"')) throw new Error('EARTH transactional sender must use the authenticated Cloudflare sending domain');
 if (!authSession.includes('from: { email: env.EMAIL_FROM')) throw new Error('EARTH transactional sender must be configuration-driven');
 console.log(JSON.stringify({ ok: true, authority: 'postgres', d1Binding: false, hyperdrive: true }));

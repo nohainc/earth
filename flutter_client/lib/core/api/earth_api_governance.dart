@@ -8,7 +8,7 @@ extension EarthApiGovernance on EarthApi {
   }
 
   Future<EarthState> createProposal(String title, String body,
-      {String institutionId = 'OUC-001', String? targetCategory, double? targetRate}) async {
+      {String institutionId = 'OUC-001', String? targetCategory, double? targetRate, Map<String, dynamic>? targetValue}) async {
     await _request('/api/governance/proposals', method: 'POST', body: {
       'institutionId': institutionId,
       'title': title,
@@ -17,7 +17,7 @@ extension EarthApiGovernance on EarthApi {
       if (targetCategory != null && targetCategory.isNotEmpty)
         'target': {
           'category': targetCategory,
-          if (targetRate != null) 'value': {'rate': targetRate},
+          'value': targetValue ?? (targetRate != null ? {'rate': targetRate} : <String, dynamic>{}),
         },
       'correlationId':
           'governance-proposal-${DateTime.now().microsecondsSinceEpoch}',

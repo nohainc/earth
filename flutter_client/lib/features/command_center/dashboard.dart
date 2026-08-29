@@ -558,6 +558,10 @@ class Dashboard extends StatelessWidget {
                 children: [
                   institutions,
                   const SizedBox(height: 34),
+                  if (cityId != null && cityId.isNotEmpty)
+                    ActiveGovernanceRulePanel(
+                        state: state, institutionId: cityId),
+                  const SizedBox(height: 34),
                   cityImpact,
                   if (cityProposal != null) ...[
                     const SizedBox(height: 34),
@@ -759,10 +763,6 @@ class Dashboard extends StatelessWidget {
                 personalFinanceData: personalFinanceData,
                 action: action,
               );
-              final financialOutlook = FinancialOutlookPanel(
-                state: state,
-                personalFinanceData: personalFinanceData,
-              );
               if (constraints.maxWidth > 1000) {
                 return Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -772,8 +772,6 @@ class Dashboard extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
                           personalFinance,
-                          const SizedBox(height: 34),
-                          financialOutlook
                         ],
                       ),
                     ),
@@ -785,8 +783,6 @@ class Dashboard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   personalFinance,
-                  const SizedBox(height: 34),
-                  financialOutlook,
                 ],
               );
             },

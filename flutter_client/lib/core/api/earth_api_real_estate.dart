@@ -92,6 +92,20 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
+  Future<EarthState> openPublicInvestmentOffering({
+    required String cityId,
+    required String buildingType,
+    required String name,
+  }) async {
+    final res = await _request('/api/real-estate/public-offering', method: 'POST', body: {
+      'cityId': cityId,
+      'buildingType': buildingType,
+      'name': name,
+      'correlationId': 'PUBLIC-OFFER-${DateTime.now().millisecondsSinceEpoch}',
+    });
+    return EarthState(res as Map<String, dynamic>);
+  }
+
   Future<EarthState> demolishBuilding({
     required String buildingId,
   }) async {

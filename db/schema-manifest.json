@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 70,
+  "migrationVersion": 77,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -10,6 +10,14 @@
     "ai_assistants": [
       "id",
       "owner_id"
+    ],
+    "ai_recommendation_feedback": [
+      "id",
+      "human_id",
+      "recommendation_type",
+      "recommendation_id",
+      "action",
+      "created_at"
     ],
     "asset_ownership_events": [
       "id",
@@ -253,6 +261,29 @@
       "epitaph",
       "house_name"
     ],
+    "daily_settlement_profiles": [
+      "owner_id",
+      "owner_kind",
+      "profile_version",
+      "status",
+      "effective_game_day",
+      "last_settled_game_day",
+      "credits_delta",
+      "energy_delta",
+      "food_delta",
+      "materials_delta",
+      "components_delta",
+      "compute_delta"
+    ],
+    "daily_settlement_profile_runs": [
+      "owner_id",
+      "game_day",
+      "profile_version",
+      "last_settled_game_day",
+      "elapsed_days",
+      "mode",
+      "expected_delta"
+    ],
     "diplomatic_dispatches": [
       "id",
       "sender_human_id",
@@ -369,6 +400,18 @@
       "status",
       "protected_credits"
     ],
+    "personal_life_maintenance": [
+      "human_id",
+      "game_day",
+      "food_used",
+      "energy_used",
+      "compute_used",
+      "credits_for_resources",
+      "life_condition_after",
+      "paid",
+      "unpaid",
+      "status"
+    ],
     "proposals": [
       "id",
       "institution_id",
@@ -397,6 +440,12 @@
       "owner_id",
       "resource",
       "amount"
+    ],
+    "human_life_conditions": [
+      "human_id",
+      "score",
+      "updated_game_day",
+      "last_reason"
     ],
     "role_assignments": [
       "id",
@@ -444,6 +493,13 @@
       "technology_id",
       "required_technology_id"
     ],
+    "scheduler_tick_logs": [
+      "id",
+      "game_day",
+      "engine",
+      "status",
+      "created_at"
+    ],
     "world_events": [
       "id",
       "game_day",
@@ -456,7 +512,8 @@
       "essential_services_index",
       "last_scheduler_at",
       "genesis_at",
-      "simulated_day_offset"
+      "simulated_day_offset",
+      "daily_settlement_mode"
     ],
     "houses": [
       "id",
@@ -568,6 +625,15 @@
       "civic_dividend_payouts",
       "city_id",
       "day"
+    ],
+    [
+      "personal_life_maintenance",
+      "human_id",
+      "game_day"
+    ],
+    [
+      "human_life_conditions",
+      "human_id"
     ]
   ],
   "requiredIndexes": [
@@ -607,6 +673,11 @@
     "idx_net_worth_human_day",
     "technology_events_tech_idx",
     "technology_events_actor_idx",
-    "business_technology_adoptions_technology_idx"
+    "business_technology_adoptions_technology_idx",
+    "idx_ai_rec_feedback_human",
+    "idx_scheduler_tick_logs_day",
+    "personal_life_maintenance_human_day_idx",
+    "daily_settlement_profiles_due_idx",
+    "daily_settlement_profile_runs_day_idx"
   ]
 }

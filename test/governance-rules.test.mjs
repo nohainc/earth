@@ -8,3 +8,9 @@ test('political maturity is locked until the eligibility game day', () => {
   assert.equal(politicalMaturityReached(214, 214), true);
   assert.equal(politicalMaturityReached(215, 214), true);
 });
+
+test('political maturity rejects non-finite values and accepts the deadline boundary', () => {
+  assert.equal(politicalMaturityReached(Number.NaN, 214), false);
+  assert.equal(politicalMaturityReached(214, Number.POSITIVE_INFINITY), false);
+  assert.equal(politicalMaturityReached(0, 0), true);
+});

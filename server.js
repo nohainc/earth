@@ -148,7 +148,7 @@ function resolveSession(req) {
 const state = {
   clock: { day: 184, minute: 462, realSecondsPerGameMinute: 1 },
   world: { health: 68, batch: 498 },
-  humans: { amara: { id: 'H-0044', name: 'Amara Kline', credits: 18420, standing: 742, legacy: 31, ageYears: 31, votingWeight: 1 } },
+  humans: { amara: { id: 'H-0044', name: 'Amara Kline', credits: 48420, standing: 742, legacy: 31, ageYears: 31, votingWeight: 1 } },
   life: { generation: 1, successor: null, estatePeriodDays: 30 },
   institutions: {
     ouc: { id: 'OUC-001', kind: 'OUC', name: 'Organization of United Corporations', treasury: 0 },

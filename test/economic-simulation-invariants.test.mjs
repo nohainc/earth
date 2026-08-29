@@ -12,3 +12,11 @@ test('Economic Simulation Invariant Stress Testing across 100 Game Days', () => 
   assert.equal(result.institutionBalancesNonNegative, true);
   assert.equal(result.boundedMachineCondition, true);
 });
+
+test('economic invariants remain stable across deterministic replay seeds', () => {
+  const first = runSimulation({ days: 25, humans: 12, seed: 9876 });
+  const replay = runSimulation({ days: 25, humans: 12, seed: 9876 });
+  assert.deepEqual(replay, first);
+  assert.equal(first.creditsConserved, true);
+  assert.equal(first.nonNegativeBalances, true);
+});

@@ -33,7 +33,7 @@ On macOS without Docker, use the Homebrew PostgreSQL service:
 brew install postgresql@16
 brew services start postgresql@16
 createdb earth
-psql -d earth -f db/migrations/001_initial.sql
+psql -d earth -f db/initial.sql
 psql -d earth -f db/seed.sql
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
 ```

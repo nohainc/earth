@@ -48,7 +48,11 @@ const num = (v: unknown, fallback = 0): number => {
  * Evaluates the primary long-term strategic objectives for the player.
  * Objectives are optional, measurable, and tied to existing planetary systems.
  */
-export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): PlayerObjective[] {
+export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput, rules: Record<string, number> = {}): PlayerObjective[] {
+  const rule = (key: string, fallback: number) => {
+    const value = Number(rules[key]);
+    return Number.isFinite(value) && value >= 0 ? value : fallback;
+  };
   const objectives: PlayerObjective[] = [];
 
   // 1. Build the most valuable corporation
@@ -57,7 +61,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     num(input.business?.valuation, 0),
     corpTreasury + Math.max(0, num(input.business?.profit, 0) * 12) + 25000
   );
-  const targetCorpVal = 100000;
+  const targetCorpVal = rule('objectives.corporation_valuation', 100000);
   const corpProgress = Math.min(100, Math.round((businessValuation / targetCorpVal) * 100));
   objectives.push({
     id: 'obj-valuable-corporation',
@@ -76,7 +80,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
 
   // 4. Build a service enterprise
   const serviceBusinessCount = Math.max(0, num(input.business?.service_business_count, 0));
-  const serviceTarget = 2;
+  const serviceTarget = rule('objectives.service_business_count', 2);
   const serviceEnterpriseProgress = Math.min(100, Math.round((serviceBusinessCount / serviceTarget) * 100));
   objectives.push({
     id: 'obj-service-enterprise',
@@ -95,7 +99,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
 
   // 2. Build a productive food reserve
   const foodReserve = Math.max(0, num(input.resources?.food, 0));
-  const targetFoodReserve = 500;
+  const targetFoodReserve = rule('objectives.food_reserve', 500);
   const foodProgress = Math.min(100, Math.round((foodReserve / targetFoodReserve) * 100));
   objectives.push({
     id: 'obj-food-security',
@@ -114,7 +118,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
 
   // 3. Build a portfolio of independent operations
   const businessCount = Math.max(0, num(input.business?.business_count, input.business?.id ? 1 : 0));
-  const targetBusinessCount = 3;
+  const targetBusinessCount = rule('objectives.business_count', 3);
   const portfolioProgress = Math.min(100, Math.round((businessCount / targetBusinessCount) * 100));
   objectives.push({
     id: 'obj-enterprise-portfolio',
@@ -136,7 +140,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
     num(input.governance?.voting_weight, 0),
     num(input.human?.voting_weight, 1)
   );
-  const targetVotingWeight = 25;
+  const targetVotingWeight = rule('objectives.voting_weight', 25);
   const civicProgress = Math.min(100, Math.round((votingWeight / targetVotingWeight) * 100));
   objectives.push({
     id: 'obj-civic-delegate',
@@ -157,7 +161,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
   const houseData = input.house || input.dynasty;
   const houseGen = num(houseData?.generation, 1);
   const perksCount = num(houseData?.perks_count, 0) + num(houseData?.heirlooms_count, 0) + (houseData?.successor_id ? 1 : 0);
-  const targetHousePerks = 3;
+  const targetHousePerks = rule('objectives.house_traits', 3);
   const houseProgressUnits = Math.max(0, houseGen - 1) + perksCount;
   const houseTargetUnits = targetHousePerks + 1;
   const houseProgress = Math.min(
@@ -183,7 +187,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
   const activePatents = num(input.technology?.active_patents, 0);
   const activeLicenses = num(input.technology?.active_licenses, 0);
   const techScore = activePatents * 2 + activeLicenses;
-  const targetTechScore = 6;
+  const targetTechScore = rule('objectives.tech_score', 6);
   const techProgress = Math.min(100, Math.round((techScore / targetTechScore) * 100));
   objectives.push({
     id: 'obj-technology-licensor',
@@ -203,7 +207,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
   // 6. Reach financial independence
   const credits = num(input.human?.credits, 0);
   const netWorth = input.netWorth ?? credits + businessValuation * 0.25;
-  const targetNetWorth = 50000;
+  const targetNetWorth = rule('objectives.net_worth', 50000);
   const financeProgress = Math.min(100, Math.round((netWorth / targetNetWorth) * 100));
   objectives.push({
     id: 'obj-financial-independence',
@@ -224,7 +228,7 @@ export function evaluatePlayerObjectives(input: ObjectivesEvaluationInput): Play
   const cityServiceRatio = num(input.institutions?.city?.essential_services_index, 0.75) * 100;
   const standing = num(input.human?.standing, 70);
   const publicServiceScore = Math.round((cityServiceRatio + standing) / 2);
-  const targetServiceScore = 90;
+  const targetServiceScore = rule('objectives.public_service_score', 90);
   const serviceProgress = Math.min(100, Math.round((publicServiceScore / targetServiceScore) * 100));
   objectives.push({
     id: 'obj-public-service-score',

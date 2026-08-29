@@ -332,7 +332,11 @@ class _CommandCenterState extends State<CommandCenter> {
       error = null;
     });
     try {
-      final value = await action();
+      // Mutation endpoints may return only the changed slice of state. Always
+      // follow them with the canonical world snapshot so panels do not lose
+      // unrelated collections such as buildings, businesses, or holdings.
+      await action();
+      final value = await const EarthApi().world();
       if (mounted && requestGeneration == _requestGeneration) {
         setState(() {
           state = value;

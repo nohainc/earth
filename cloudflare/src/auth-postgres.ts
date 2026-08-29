@@ -9,7 +9,7 @@ import {
 } from './auth-crypto.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 
-export async function registerIdentity(repository: PostgresRepository, input: { email: string; displayName: string; password: string }): Promise<Record<string, unknown>> {
+export async function registerIdentity(repository: PostgresRepository, input: { email: string; personName: string; houseSurname: string; password: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const existing = await tx.query('SELECT human_id FROM auth_credentials WHERE email = $1', [input.email]);
     if (existing.rows[0]) throw new Error('Email is already registered');
@@ -23,15 +23,21 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const technologyId = `TECH-${humanId.slice(2)}`;
     const researchId = `R-${humanId.slice(2)}`;
     const assistantId = `AI-${humanId.slice(2)}-01`;
+    const houseId = `HOUSE-${humanId.slice(2)}`;
+    const displayName = `${input.personName} ${input.houseSurname}`;
+    const houseName = `House ${input.houseSurname}`;
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iterations = 100000;
     const passwordHash = await derivePassword(input.password, salt, iterations);
-    await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,political_eligibility_game_day) VALUES ($1,$2,$3,31,0,0,$4)', [humanId, accountId, input.displayName, worldDay + 30]);
+    await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,political_eligibility_game_day) VALUES ($1,$2,$3,31,0,0,$4)', [humanId, accountId, displayName, worldDay + 30]);
     await tx.query('INSERT INTO auth_credentials (human_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5)', [humanId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,$3,'CREDIT')", [accountId, humanId, starter.credits]);
     for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
-    await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, `${input.displayName} Works`]);
-    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, humanId, `${input.displayName} Works`]);
+    await tx.query('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,0,0)', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', humanId]);
+    await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
+    await tx.query('INSERT INTO character_lineage (id,email,human_id,generation,birth_game_day,house_name) VALUES ($1,$2,$3,1,$4,$5)', [crypto.randomUUID(), input.email, humanId, worldDay, houseName]);
+    await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, `${displayName} Works`]);
+    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, humanId, `${displayName} Works`]);
     await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
     await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,100)', [businessId, humanId]);
     await tx.query('INSERT INTO business_constitutions (business_id, updated_by, updated_game_day) VALUES ($1,$2,$3)', [businessId, humanId, worldDay]);
@@ -49,7 +55,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
       aggregateId: humanId,
       payload: { type: 'world_activity', category: 'identity', action: 'starter_package_created', humanId, businessId, gameDay: worldDay },
     });
-    return { ok: true, human: { id: humanId, displayName: input.displayName, email: input.email }, starterPackage: starter };
+    return { ok: true, human: { id: humanId, displayName, personName: input.personName, houseSurname: input.houseSurname, houseName, email: input.email }, starterPackage: starter };
   });
 }
 
@@ -59,12 +65,12 @@ export async function updateDisplayName(repository: PostgresRepository, input: {
     await repository.query('UPDATE house_lineage_records SET name = $1 WHERE human_id = $2 AND is_incumbent = true', [input.displayName, input.humanId]);
   }
   if (input.epitaph !== undefined) {
-    await repository.query('UPDATE house_lineage_records SET epitaph = $1 WHERE human_id = $2 AND is_incumbent = true', [input.epitaph, input.humanId]);
+    await repository.query('UPDATE house_lineage_records SET epitaph = $1 WHERE human_id = $2', [input.epitaph, input.humanId]);
     await repository.query('UPDATE deceased_profiles SET epitaph = $1 WHERE human_id = $2', [input.epitaph, input.humanId]);
   }
   const result = await repository.query<{ id: string; display_name: string }>('SELECT id, display_name FROM humans WHERE id = $1', [input.humanId]);
   if (!result.rows[0]) throw new Error('Human not found');
-  return { ok: true, human: result.rows[0] };
+  return { ok: true, human: result.rows[0], epitaph: input.epitaph };
 }
 
 export async function loginIdentity(repository: PostgresRepository, input: { email: string; password: string; otp: string; validTotp: (secret: string, code: string) => Promise<boolean> }): Promise<Record<string, unknown>> {

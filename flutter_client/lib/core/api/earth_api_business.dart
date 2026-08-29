@@ -15,13 +15,16 @@ extension EarthApiBusiness on EarthApi {
       (await _request('/api/businesses/$businessId')) as Map<String, dynamic>;
 
   Future<EarthState> renameBusiness(String businessId, String name) async {
-    await _request('/api/businesses/$businessId/name', method: 'POST', body: {'name': name.trim()});
+    await _request('/api/businesses/$businessId/name',
+        method: 'POST', body: {'name': name.trim()});
     return world();
   }
 
   Future<EarthState> setPolicy(String policy, {String? businessId}) async {
-    await _request('/api/businesses/me/policy',
-        method: 'POST', body: {'policy': policy, if (businessId != null) 'businessId': businessId});
+    await _request('/api/businesses/me/policy', method: 'POST', body: {
+      'policy': policy,
+      if (businessId != null) 'businessId': businessId
+    });
     return world();
   }
 
@@ -61,8 +64,7 @@ extension EarthApiBusiness on EarthApi {
     return world();
   }
 
-  Future<EarthState> trainEmployee(
-      String businessId, String employeeId) async {
+  Future<EarthState> trainEmployee(String businessId, String employeeId) async {
     await _request('/api/businesses/$businessId/employees/$employeeId/train',
         method: 'POST',
         body: {
@@ -90,7 +92,8 @@ extension EarthApiBusiness on EarthApi {
         body: {
           'role': role.trim(),
           'wage': wage,
-          'correlationId': 'employee-reassign-${DateTime.now().microsecondsSinceEpoch}',
+          'correlationId':
+              'employee-reassign-${DateTime.now().microsecondsSinceEpoch}',
         });
     return world();
   }
@@ -141,13 +144,6 @@ extension EarthApiBusiness on EarthApi {
     return world();
   }
 
-  Future<EarthState> settleTax(double taxableAmount) async {
-    await _request('/api/taxes/settle', method: 'POST', body: {
-      'taxableAmount': taxableAmount,
-    });
-    return world();
-  }
-
   Future<EarthState> spendPublicFinance(
       String cityId, String category, double amount) async {
     final correlationId =
@@ -167,13 +163,6 @@ extension EarthApiBusiness on EarthApi {
       'institutionId': institutionId,
       'amount': amount,
       if (otp != null && otp.isNotEmpty) 'otp': otp,
-    });
-    return world();
-  }
-
-  Future<EarthState> declarePersonalInsolvency({String reason = ''}) async {
-    await _request('/api/finance/personal/declare', method: 'POST', body: {
-      if (reason.trim().isNotEmpty) 'reason': reason.trim(),
     });
     return world();
   }
@@ -216,5 +205,4 @@ extension EarthApiBusiness on EarthApi {
         });
     return world();
   }
-
 }

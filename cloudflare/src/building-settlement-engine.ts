@@ -72,12 +72,20 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     tier: number;
     condition: string;
     auto_repair_enabled: boolean | null;
-  }>("SELECT * FROM buildings WHERE status = 'active'");
+    profile_resources_applied: boolean;
+  }>(`SELECT b.*, EXISTS (
+      SELECT 1 FROM daily_settlement_profiles p
+      WHERE p.owner_id = CASE WHEN b.ownership_class = 'civic' THEN b.city_id ELSE b.owner_id END
+        AND p.last_settled_game_day = $1
+    ) AS profile_resources_applied
+    FROM buildings b WHERE b.status = 'active'`, [day]);
 
   for (const bld of bldQuery.rows) {
     const oClass = (bld.ownership_class || 'private').toLowerCase();
     const policy = (bld.operating_policy || 'balanced').toLowerCase();
     const initialCondition = Number(bld.condition || 100);
+    const resourceOwner = oClass === 'civic' ? bld.city_id : bld.owner_id;
+    const profileResourcesApplied = (oClass === 'private' || oClass === 'civic') && bld.profile_resources_applied;
     let condition = initialCondition;
     let autoRepaired = false;
     let actualGrossRevenueCrd = 0;
@@ -133,7 +141,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     let policyYield = 1.0;
     let policyCost = 1.0;
     let policyDecay = 1.0;
-    if (policy === 'frugal') {
+    if (policy === 'frugal' || policy === 'eco_reserve') {
       policyYield = 0.75;
       policyCost = 0.70;
       policyDecay = 0.50;
@@ -248,10 +256,11 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
     let hasAllUpkeep = true;
     for (const u of upkeeps) {
+      if (profileResourcesApplied) break;
       if (u.amount <= 0) continue;
       const resCheck = await tx.query<{ amount: string }>(
         'SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = $2 FOR UPDATE',
-        [bld.owner_id, u.resource],
+          [resourceOwner, u.resource],
       );
       if (Number(resCheck.rows[0]?.amount ?? 0) < u.amount) {
         hasAllUpkeep = false;
@@ -263,12 +272,14 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
     if (oClass === 'private' || oClass === 'civic') {
       if (hasAllUpkeep) {
-        for (const u of upkeeps) {
-          if (u.amount <= 0) continue;
-          await tx.query(
-            'UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3',
-            [u.amount, bld.owner_id, u.resource],
-          );
+        if (!profileResourcesApplied) {
+          for (const u of upkeeps) {
+            if (u.amount <= 0) continue;
+            await tx.query(
+              'UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3',
+              [u.amount, resourceOwner, u.resource],
+            );
+          }
         }
 
         // Produce Output (Credits or Physical Commodity)
@@ -413,10 +424,10 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               actualGrossRevenueCrd = Number(clearedAmt);
             }
           }
-        } else if (!isCreditOutput && outAmt > 0 && bld.resource_output_type) {
+        } else if (!profileResourcesApplied && !isCreditOutput && outAmt > 0 && bld.resource_output_type) {
           await tx.query(
             'INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1, $2, $3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount',
-            [bld.owner_id, bld.resource_output_type, outAmt],
+            [resourceOwner, bld.resource_output_type, outAmt],
           );
         }
 

@@ -15,13 +15,18 @@ class CivicStatusPanel extends StatelessWidget {
     final human = state.human;
     final membership = state.membership;
     final city = state.institutions['city'];
-    final cityMap = city is Map ? Map<String, dynamic>.from(city) : const <String, dynamic>{};
-    final citizenship =
-        membership?['status']?.toString() ?? membership?['type']?.toString() ?? 'Independent citizen';
-    final standing = human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
-    final voting = membership?['voting_eligible'] ?? membership?['votingEligible'] ?? true;
-    final obligations =
-        membership?['obligations']?.toString() ?? 'Review current laws and tax obligations';
+    final cityMap = city is Map
+        ? Map<String, dynamic>.from(city)
+        : const <String, dynamic>{};
+    final citizenship = membership?['status']?.toString() ??
+        membership?['type']?.toString() ??
+        'Independent citizen';
+    final standing =
+        human['standing'] ?? human['civic_standing'] ?? 'UNAVAILABLE';
+    final voting =
+        membership?['voting_eligible'] ?? membership?['votingEligible'] ?? true;
+    final obligations = membership?['obligations']?.toString() ??
+        'Review current laws and tax obligations';
 
     return EarthSection(
       title: 'CIVIC STATUS',
@@ -38,7 +43,8 @@ class CivicStatusPanel extends StatelessWidget {
             metrics: [
               EarthMetricTile(
                 label: 'RESIDENCY',
-                value: cityMap['name']?.toString().toUpperCase() ?? 'INDEPENDENT',
+                value:
+                    cityMap['name']?.toString().toUpperCase() ?? 'INDEPENDENT',
                 icon: Icons.location_city_outlined,
                 accentColor: context.primaryColor,
               ),
@@ -52,7 +58,9 @@ class CivicStatusPanel extends StatelessWidget {
                 label: 'VOTING',
                 value: voting == true ? 'ELIGIBLE' : 'RESTRICTED',
                 icon: Icons.how_to_vote_outlined,
-                accentColor: voting == true ? context.successColor : context.warningColor,
+                accentColor: voting == true
+                    ? context.successColor
+                    : context.warningColor,
               ),
               EarthMetricTile(
                 label: 'STANDING',
@@ -73,6 +81,75 @@ class CivicStatusPanel extends StatelessWidget {
   }
 }
 
+class ActiveGovernanceRulePanel extends StatelessWidget {
+  final EarthState state;
+  final String institutionId;
+
+  const ActiveGovernanceRulePanel(
+      {super.key, required this.state, required this.institutionId});
+
+  @override
+  Widget build(BuildContext context) {
+    final rules = ((state.governance['rules'] as List<dynamic>?) ?? const [])
+        .where((raw) =>
+            raw is Map &&
+            raw['institution_id']?.toString() == institutionId &&
+            raw['status']?.toString() == 'active')
+        .toList();
+    final rule =
+        rules.isEmpty ? null : Map<String, dynamic>.from(rules.first as Map);
+    final quorum =
+        ((asDoubleOr(rule?['quorum_threshold'], 0.25)) * 100).round();
+    final approval =
+        ((asDoubleOr(rule?['approval_threshold'], 0.5)) * 100).round();
+
+    return EarthSection(
+      title: 'ACTIVE GOVERNANCE RULE',
+      showSurface: false,
+      infoBulletPoints: const [
+        'Quorum is the minimum participation required for a valid vote.',
+        'Approval is the share of decisive votes required for a proposal to pass.',
+        'The implementation delay is the cooling-off period after approval.',
+      ],
+      child: rule == null
+          ? const EarthEmptyState(
+              message: 'No active governance rule is configured for this city.',
+              icon: Icons.rule_outlined)
+          : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                    '${rule['name'] ?? 'City governance rule'} · Version ${rule['version'] ?? '—'}',
+                    style: context.widgetTitleStyle),
+                const SizedBox(height: 10),
+                EarthMetricGrid(metrics: [
+                  EarthMetricTile(
+                      label: 'QUORUM',
+                      value: '$quorum%',
+                      icon: Icons.groups_outlined,
+                      accentColor: context.primaryColor),
+                  EarthMetricTile(
+                      label: 'APPROVAL',
+                      value: '$approval%',
+                      icon: Icons.how_to_vote_outlined,
+                      accentColor: context.secondaryColor),
+                  EarthMetricTile(
+                      label: 'VOTING PERIOD',
+                      value: '${rule['voting_period_days'] ?? '—'} DAYS',
+                      icon: Icons.schedule_outlined,
+                      accentColor: context.primaryColor),
+                  EarthMetricTile(
+                      label: 'IMPLEMENTATION DELAY',
+                      value: '${rule['implementation_delay_days'] ?? '—'} DAYS',
+                      icon: Icons.hourglass_bottom_outlined,
+                      accentColor: context.warningColor),
+                ]),
+              ],
+            ),
+    );
+  }
+}
+
 class CivicInfluencePanel extends StatelessWidget {
   final EarthState state;
 
@@ -81,9 +158,12 @@ class CivicInfluencePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final heldRoles = state.roles
-        .where((raw) => raw is Map && raw['human_id']?.toString() == state.human['id']?.toString())
+        .where((raw) =>
+            raw is Map &&
+            raw['human_id']?.toString() == state.human['id']?.toString())
         .length;
-    final proposals = (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
+    final proposals =
+        (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
     final communities = state.communities.length;
 
     return EarthSection(
@@ -153,10 +233,14 @@ class ProposalPanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final proposals = ((state.governance['proposals'] as List<dynamic>?) ?? const [])
-        .where((raw) =>
-            raw is Map && (raw['institution_id'] ?? raw['institutionId'] ?? institutionId)?.toString() == institutionId)
-        .toList();
+    final proposals =
+        ((state.governance['proposals'] as List<dynamic>?) ?? const [])
+            .where((raw) =>
+                raw is Map &&
+                (raw['institution_id'] ?? raw['institutionId'] ?? institutionId)
+                        ?.toString() ==
+                    institutionId)
+            .toList();
     final createProposalButton = EarthButton(
       label: 'CREATE $scopeLabel PROPOSAL',
       icon: Icons.note_add_outlined,
@@ -227,14 +311,19 @@ class ProposalPanel extends StatelessWidget {
     );
   }
 
-  Widget _buildProposalItem(BuildContext context, Map<String, dynamic> proposal) {
-    final votes = Map<String, dynamic>.from((proposal['votes'] as Map<String, dynamic>?) ?? const {});
+  Widget _buildProposalItem(
+      BuildContext context, Map<String, dynamic> proposal) {
+    final votes = Map<String, dynamic>.from(
+        (proposal['votes'] as Map<String, dynamic>?) ?? const {});
     final proposalId = proposal['id']?.toString() ?? '';
-    final isPassed = proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
-    final executionStatus =
-        (proposal['execution_status']?.toString() ?? (isPassed ? 'ready' : 'pending')).toLowerCase();
+    final isPassed =
+        proposal['outcome'] == 'passed' || proposal['status'] == 'passed';
+    final executionStatus = (proposal['execution_status']?.toString() ??
+            (isPassed ? 'ready' : 'pending'))
+        .toLowerCase();
     final isChallenged = executionStatus == 'challenged';
-    final isVoided = executionStatus == 'voided' || proposal['outcome'] == 'voided';
+    final isVoided =
+        executionStatus == 'voided' || proposal['outcome'] == 'voided';
     final isExecuted = executionStatus == 'executed';
 
     final currentDay = asIntOr(state.clock['day'], 1);
@@ -244,9 +333,14 @@ class ProposalPanel extends StatelessWidget {
                 asInt(proposal['implementation_delay_days'])!
             : (isPassed ? currentDay : null));
     final delayDaysRemaining =
-        (implDay != null && currentDay < implDay && isPassed) ? (implDay - currentDay) : 0;
-    final isCoolingOff =
-        isPassed && delayDaysRemaining > 0 && !isChallenged && !isVoided && !isExecuted;
+        (implDay != null && currentDay < implDay && isPassed)
+            ? (implDay - currentDay)
+            : 0;
+    final isCoolingOff = isPassed &&
+        delayDaysRemaining > 0 &&
+        !isChallenged &&
+        !isVoided &&
+        !isExecuted;
 
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
@@ -254,7 +348,8 @@ class ProposalPanel extends StatelessWidget {
     final totalVotes = supportCount + opposeCount + uncastCount;
 
     final quorumNum = asDoubleOr(proposal['quorum'], .25);
-    final approvalThresholdNum = asDoubleOr(proposal['approval_threshold'], .50);
+    final approvalThresholdNum =
+        asDoubleOr(proposal['approval_threshold'], .50);
     final quorumPercent = (quorumNum * 100).round();
     final approvalPercent = (approvalThresholdNum * 100).round();
 
@@ -264,7 +359,9 @@ class ProposalPanel extends StatelessWidget {
       final holder = role['human_id']?.toString();
       final name = role['name']?.toString().toLowerCase() ?? '';
       return holder == state.human['id'] &&
-          (name.contains('court') || name.contains('judge') || name.contains('jurist'));
+          (name.contains('court') ||
+              name.contains('judge') ||
+              name.contains('jurist'));
     });
 
     Color statusColor = context.primaryColor;
@@ -272,7 +369,11 @@ class ProposalPanel extends StatelessWidget {
     if (isVoided) statusColor = context.errorColor;
     if (isExecuted) statusColor = context.successColor;
     if (isCoolingOff) statusColor = context.warningColor;
-    if (isPassed && !isCoolingOff && !isChallenged && !isVoided && !isExecuted) {
+    if (isPassed &&
+        !isCoolingOff &&
+        !isChallenged &&
+        !isVoided &&
+        !isExecuted) {
       statusColor = context.successColor;
     }
 
@@ -288,7 +389,8 @@ class ProposalPanel extends StatelessWidget {
                 color: statusColor.withValues(alpha: .15),
                 borderRadius: BorderRadius.circular(context.radiusControl),
               ),
-              child: Icon(Icons.how_to_vote_outlined, size: context.iconSize + 4, color: statusColor),
+              child: Icon(Icons.how_to_vote_outlined,
+                  size: context.iconSize + 4, color: statusColor),
             ),
             SizedBox(width: context.spacingTitleOffset),
             Expanded(
@@ -306,7 +408,9 @@ class ProposalPanel extends StatelessWidget {
                       if (proposalId.isNotEmpty) ...[
                         SizedBox(width: context.spacingInline),
                         EarthBadge(
-                          label: isCoolingOff ? 'COOLING-OFF' : executionStatus.toUpperCase(),
+                          label: isCoolingOff
+                              ? 'COOLING-OFF'
+                              : executionStatus.toUpperCase(),
                           customColor: statusColor,
                         ),
                       ],
@@ -324,15 +428,19 @@ class ProposalPanel extends StatelessWidget {
                   if (isCoolingOff) ...[
                     const SizedBox(height: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: context.warningColor.withValues(alpha: .12),
-                        borderRadius: BorderRadius.circular(context.radiusControl),
-                        border: Border.all(color: context.warningColor.withValues(alpha: .3)),
+                        borderRadius:
+                            BorderRadius.circular(context.radiusControl),
+                        border: Border.all(
+                            color: context.warningColor.withValues(alpha: .3)),
                       ),
                       child: Row(
                         children: [
-                          Icon(Icons.timer_outlined, size: 13, color: context.warningColor),
+                          Icon(Icons.timer_outlined,
+                              size: 13, color: context.warningColor),
                           const SizedBox(width: 6),
                           Expanded(
                             child: Text(
@@ -350,7 +458,8 @@ class ProposalPanel extends StatelessWidget {
                   if (proposal['deadline'] is Map) ...[
                     const SizedBox(height: 4),
                     Text(
-                      formatProposalDeadline(proposal['deadline'] as Map<String, dynamic>),
+                      formatProposalDeadline(
+                          proposal['deadline'] as Map<String, dynamic>),
                       style: context.widgetFooterStyle.copyWith(
                         color: context.warningColor,
                         fontWeight: FontWeight.w600,
@@ -376,7 +485,8 @@ class ProposalPanel extends StatelessWidget {
             if (totalVotes > 0)
               Text(
                 '${((supportCount / totalVotes) * 100).toStringAsFixed(1)}% SUPPORT',
-                style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
+                style: context.widgetTitleStyle
+                    .copyWith(color: context.primaryColor),
               ),
           ],
         ),
@@ -431,33 +541,53 @@ class ProposalPanel extends StatelessWidget {
                 label: choice,
                 variant: choice == 'support'
                     ? EarthButtonVariant.primary
-                    : (choice == 'oppose' ? EarthButtonVariant.danger : EarthButtonVariant.ghost),
+                    : (choice == 'oppose'
+                        ? EarthButtonVariant.danger
+                        : EarthButtonVariant.ghost),
                 onPressed: busy || proposalId.isEmpty || isExecuted || isVoided
                     ? null
-                    : () => action(() => const EarthApi().vote(proposalId, choice)),
+                    : () =>
+                        action(() => const EarthApi().vote(proposalId, choice)),
               ),
-            if (proposalId.isNotEmpty && isPassed && !isChallenged && !isVoided && !isExecuted)
+            if (proposalId.isNotEmpty &&
+                isPassed &&
+                !isChallenged &&
+                !isVoided &&
+                !isExecuted)
               EarthButton(
-                label: isCoolingOff ? 'COOLING-OFF (DAY $implDay)' : 'EXECUTE PROPOSAL',
-                icon: isCoolingOff ? Icons.lock_clock_outlined : Icons.check_circle_outline,
+                label: isCoolingOff
+                    ? 'COOLING-OFF (DAY $implDay)'
+                    : 'EXECUTE PROPOSAL',
+                icon: isCoolingOff
+                    ? Icons.lock_clock_outlined
+                    : Icons.check_circle_outline,
                 variant: EarthButtonVariant.primary,
                 onPressed: busy || isCoolingOff
                     ? null
-                    : () => action(() => const EarthApi().executeProposal(proposalId)),
+                    : () => action(
+                        () => const EarthApi().executeProposal(proposalId)),
               ),
-            if (proposalId.isNotEmpty && isPassed && !isChallenged && !isVoided && !isExecuted)
+            if (proposalId.isNotEmpty &&
+                isPassed &&
+                !isChallenged &&
+                !isVoided &&
+                !isExecuted)
               EarthButton(
                 label: 'CHALLENGE PROPOSAL',
                 icon: Icons.gavel_outlined,
                 variant: EarthButtonVariant.danger,
-                onPressed: busy ? null : () => showChallengeDialog(context, action, proposalId),
+                onPressed: busy
+                    ? null
+                    : () => showChallengeDialog(context, action, proposalId),
               ),
             if (proposalId.isNotEmpty && isChallenged && hasJudicialAuthority)
               EarthButton(
                 label: 'ISSUE RULING',
                 icon: Icons.balance_outlined,
                 variant: EarthButtonVariant.secondary,
-                onPressed: busy ? null : () => showAppealRulingDialog(context, action, proposalId),
+                onPressed: busy
+                    ? null
+                    : () => showAppealRulingDialog(context, action, proposalId),
               ),
           ],
         ),
@@ -515,11 +645,15 @@ class RolesPanel extends StatelessWidget {
                   leading: Icon(
                     isMine
                         ? Icons.account_circle_outlined
-                        : (holder == null ? Icons.help_outline : Icons.badge_outlined),
+                        : (holder == null
+                            ? Icons.help_outline
+                            : Icons.badge_outlined),
                     size: context.iconSize,
                     color: isMine
                         ? context.primaryColor
-                        : (holder == null ? context.warningColor : context.secondaryColor),
+                        : (holder == null
+                            ? context.warningColor
+                            : context.secondaryColor),
                   ),
                   badges: [
                     if (isMine)
@@ -538,14 +672,16 @@ class RolesPanel extends StatelessWidget {
                           variant: EarthButtonVariant.danger,
                           onPressed: busy
                               ? null
-                              : () => action(() => const EarthApi().resignRole(role['id'] as String)),
+                              : () => action(() => const EarthApi()
+                                  .resignRole(role['id'] as String)),
                         ),
                         EarthButton(
                           label: 'DELEGATE',
                           variant: EarthButtonVariant.secondary,
                           onPressed: busy
                               ? null
-                              : () => showDelegateDialog(context, action, role['id'] as String),
+                              : () => showDelegateDialog(
+                                  context, action, role['id'] as String),
                         ),
                       ] else if (holder == null) ...[
                         EarthButton(
@@ -553,7 +689,8 @@ class RolesPanel extends StatelessWidget {
                           variant: EarthButtonVariant.primary,
                           onPressed: busy
                               ? null
-                              : () => action(() => const EarthApi().claimRole(role['id'] as String)),
+                              : () => action(() => const EarthApi()
+                                  .claimRole(role['id'] as String)),
                         ),
                       ] else ...[
                         EarthButton(
@@ -561,7 +698,8 @@ class RolesPanel extends StatelessWidget {
                           variant: EarthButtonVariant.danger,
                           onPressed: busy
                               ? null
-                              : () => action(() => const EarthApi().recallRole(role['id'] as String)),
+                              : () => action(() => const EarthApi()
+                                  .recallRole(role['id'] as String)),
                         ),
                       ],
                     ],
@@ -577,7 +715,8 @@ class RolesPanel extends StatelessWidget {
       ? state.roles
       : state.roles.where((raw) {
           if (raw is! Map) return false;
-          return (raw['institution_id'] ?? raw['institutionId'])?.toString() == institutionId;
+          return (raw['institution_id'] ?? raw['institutionId'])?.toString() ==
+              institutionId;
         }).toList();
 }
 
@@ -595,7 +734,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final taxRules = ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
+    final taxRules =
+        ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
 
     return EarthSection(
       title: 'LAWS IN FORCE / TAXES & PUBLIC SERVICES',
@@ -615,7 +755,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
             decoration: BoxDecoration(
               color: context.surfaceColor,
               borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.primaryColor.withValues(alpha: .3)),
+              border:
+                  Border.all(color: context.primaryColor.withValues(alpha: .3)),
             ),
             child: Row(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,7 +773,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
                     children: [
                       Text(
                         'WHY THIS MATTERS TO YOU',
-                        style: context.topicTitleStyle.copyWith(color: context.warningColor),
+                        style: context.topicTitleStyle
+                            .copyWith(color: context.warningColor),
                       ),
                       const SizedBox(height: 5),
                       Text(
@@ -654,7 +796,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
 
                 return EarthDataRow(
                   title: '${rule['scope']} / ${rule['category']}',
-                  subtitle: 'Rate: ${NumberFormatHelper.percent(rule['rate'])} · Version ${rule['version']}',
+                  subtitle:
+                      'Rate: ${NumberFormatHelper.percent(rule['rate'])} · Version ${rule['version']}',
                   leading: Icon(
                     Icons.receipt_long_outlined,
                     size: context.iconSize,
@@ -674,12 +817,6 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
           Text(
             'Treasury settlement and public spending require authenticated player action.',
             style: context.widgetFooterStyle,
-          ),
-          SizedBox(height: context.spacingControl),
-          EarthButton(
-            label: 'SETTLE BASIC LEVY ON 1,000 C',
-            icon: Icons.account_balance_outlined,
-            onPressed: busy ? null : () => action(() => const EarthApi().settleTax(1000)),
           ),
         ],
       ),

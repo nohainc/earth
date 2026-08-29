@@ -28,9 +28,12 @@ import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesCont
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { listSocialDirectory } from './social-directory-postgres.ts';
-import { getEmailDeliveriesPostgres } from './admin-deliveries-postgres.ts';
-import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, investInPublicBuilding, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
+import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, investInPublicBuilding, openPublicInvestmentOffering, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
+import { handleAiRoutes } from './ai-routes.ts';
+import { handleHouseRoutes } from './house-routes.ts';
+import { handleReadModelRoutes } from './read-model-routes.ts';
+import { handleFinanceRoutes } from './finance-routes.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -308,39 +311,9 @@ const worker = {
     if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
     if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);
     if (url.pathname === '/api/services/status' && request.method === 'GET') return servicesStatusFromPostgres(request, env);
-    if (url.pathname === '/api/world/activity' && request.method === 'GET') return worldActivityFromPostgres(request, env);
-    if (url.pathname === '/api/events' && request.method === 'GET') return eventsFromPostgres(request, env);
-    if (url.pathname === '/api/notifications' && request.method === 'GET') return notificationsFromPostgres(request, env);
-    if (url.pathname === '/api/notifications/read-all' && request.method === 'POST') return markAllNotificationsReadFromPostgres(request, env);
-    if (url.pathname === '/api/audit' && request.method === 'GET') return auditFromPostgres(request, env);
-    const notificationReadRoute = url.pathname.match(/^\/api\/notifications\/([^/]+)\/read$/);
-    if (notificationReadRoute && request.method === 'POST') return markNotificationReadFromPostgres(request, env, notificationReadRoute[1]);
-    if (url.pathname === '/api/world/audit' && request.method === 'GET') return auditFromPostgres(request, env);
-    if (url.pathname === '/api/institutions' && request.method === 'GET') return institutionsFromPostgres(request, env);
-    if (url.pathname === '/api/rankings' && request.method === 'GET') return rankingsFromPostgres(request, env);
-    if (url.pathname === '/api/history' && request.method === 'GET') return historyFromPostgres(request, env);
-    if (url.pathname === '/api/ownership/events' && request.method === 'GET') return ownershipHistoryFromPostgres(request, env);
-    if (url.pathname === '/api/membership/events' && request.method === 'GET') return membershipHistoryFromPostgres(request, env);
-    if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') return authorityHistoryFromPostgres(request, env);
-    if (url.pathname === '/api/admin/email-deliveries' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, (repository) => getEmailDeliveriesPostgres(repository, { bindingConfigured: Boolean(env.EMAIL && env.EMAIL_FROM) }));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/health/email' && request.method === 'GET') {
-      const bindingConfigured = Boolean(env.EMAIL && env.EMAIL_FROM);
-      const result = await withRepository(env, (repository) => getEmailDeliveriesPostgres(repository, { limit: 10, bindingConfigured }));
-      const ok = bindingConfigured;
-      return Response.json({
-        ok,
-        status: ok ? 'healthy' : 'unconfigured',
-        bindingConfigured,
-        emailFromConfigured: Boolean(env.EMAIL_FROM),
-        recentDeliveries: result?.metrics ?? null,
-      });
-    }
+    // ── Read-model routes → read-model-routes.ts ────────────────────────────
+    const readModelResponse = await handleReadModelRoutes(request, env, url);
+    if (readModelResponse) return readModelResponse;
     const commResponse = await communicationsRoutes(request, env, url);
     if (commResponse) return commResponse;
     if (url.pathname === '/api/social/directory' && request.method === 'GET') {
@@ -361,8 +334,19 @@ const worker = {
     if (url.pathname.startsWith('/api/') && request.method === 'POST' && !publicMutation && !(await currentHuman(request, env, estateMutation))) {
       return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     }
-    if (url.pathname === '/api/ai' && !(await currentHuman(request, env))) {
-      return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    if (url.pathname === '/api/finance/personal/declare' || url.pathname === '/api/taxes/settle') {
+      return Response.json({ ok: false, error: 'This manual finance action has been retired. Life maintenance and the basic levy are calculated automatically.' }, { status: 404 });
+    }
+    if (url.pathname.startsWith('/api/finance')) {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const financeResponse = await handleFinanceRoutes(request, env, url, viewer, sensitiveActionAllowed);
+      if (financeResponse) return financeResponse;
+    }
+    // ── AI Advisor routes → ai-routes.ts ────────────────────────────────────
+    if (url.pathname.startsWith('/api/ai')) {
+      const aiResponse = await handleAiRoutes(request, env, url);
+      if (aiResponse) return aiResponse;
     }
     if (url.pathname === '/edge/market') {
       const human = await currentHuman(request, env);
@@ -392,41 +376,6 @@ const worker = {
       } catch (error) {
         console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
         return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
-      }
-    }
-    if (url.pathname === '/api/ai' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, (repository) => listAssistantsPostgres(repository, viewer.id));
-      return Response.json({ ...result, constraints: { governance: false, authority: false, allowedPolicies: ['recommend', 'maintenance'] }, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/ai/policy' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ assistantId?: string; policy?: string; enabled?: boolean }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!body.assistantId || !['recommend', 'maintenance'].includes(body.policy ?? '')) return Response.json({ ok: false, error: 'Basic AI supports only recommend or maintenance policies' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => updateAssistantPolicyPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId, policy: body.policy ?? 'recommend', enabled: body.enabled !== false }));
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'AI assistant not found' }, { status: 404 });
-      }
-    }
-    if (url.pathname === '/api/ai/upgrade' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ assistantId?: string; otp?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for AI upgrade' }, { status: 401 });
-      try {
-        const result = await withRepository(env, (repository) => upgradeAssistantPostgres(repository, { ownerId: viewer.id, assistantId: body.assistantId ?? '' }));
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'AI upgrade failed';
-        return Response.json({ ok: false, error: message }, { status: /insufficient/i.test(message) ? 409 : 404 });
       }
     }
     if (url.pathname === '/api/health' || url.pathname === '/health' || url.pathname === '/api/ready' || url.pathname === '/ready') return healthResponse(request, env);
@@ -984,6 +933,24 @@ const worker = {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Share investment failed' }, { status: 409 });
       }
     }
+    if (url.pathname === '/api/real-estate/public-offering' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ cityId?: string; buildingType?: string; name?: string; correlationId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const cityId = body.cityId?.trim() ?? '';
+      const buildingType = body.buildingType?.trim() ?? '';
+      const correlationId = resolveIdempotencyKey(request, body.correlationId);
+      if (!cityId || !buildingType || !correlationId) return Response.json({ ok: false, error: 'City, building type, and correlation ID are required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => openPublicInvestmentOffering(repository, { humanId: viewer.id, cityId, buildingType, name: body.name?.trim() ?? '', correlationId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Public offering creation failed' }, { status: 409 });
+      }
+    }
     if (url.pathname === '/api/real-estate/demolish' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -1421,87 +1388,9 @@ const worker = {
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
 
-    if ((url.pathname === '/api/house' || url.pathname === '/api/dynasty') && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      const email = viewer?.email || 'amara@earth.local';
-      const humanId = viewer?.id || 'H-0044';
-      const humanName = viewer?.name || 'Amara Vance';
-      const result = await withRepository(env, (repository) => getHouseOverview(repository, email, humanId, humanName));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-
-    if ((url.pathname === '/api/house/perks/unlock' || url.pathname === '/api/dynasty/perks/unlock') && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ perkKey?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const perkKey = parsed.value.perkKey?.trim() ?? '';
-      if (!perkKey) return Response.json({ ok: false, error: 'Perk key is required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => unlockHousePerk(repository, viewer.email || 'amara@earth.local', perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Perk unlock failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-
-    if ((url.pathname === '/api/house/heirlooms/equip' || url.pathname === '/api/dynasty/heirlooms/equip') && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ heirloomId?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const heirloomId = parsed.value.heirloomId?.trim() ?? '';
-      if (!heirloomId) return Response.json({ ok: false, error: 'Heirloom ID is required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => equipHouseHeirloom(repository, viewer.email || 'amara@earth.local', heirloomId, viewer.id, resolveIdempotencyKey(request, parsed.value.correlationId)));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Equip failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-
-    if ((url.pathname === '/api/house/heirlooms/forge' || url.pathname === '/api/dynasty/heirlooms/forge') && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ name?: string; heirloomType?: string; inscription?: string; statBuff?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const name = parsed.value.name?.trim() ?? '';
-      const heirloomType = parsed.value.heirloomType?.trim() ?? 'house_standard';
-      const inscription = parsed.value.inscription?.trim() ?? 'Forged by the house patriarch.';
-      const statBuff = parsed.value.statBuff?.trim() ?? '+5% Prestige & Influence';
-      if (!name) return Response.json({ ok: false, error: 'Heirloom name is required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => forgeHouseHeirloom(repository, viewer.email || 'amara@earth.local', name, heirloomType, inscription, statBuff, resolveIdempotencyKey(request, parsed.value.correlationId)));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Heirloom forge failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-
-    if ((url.pathname === '/api/house/motto' || url.pathname === '/api/dynasty/motto') && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ motto?: string; houseName?: string; dynastyName?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const motto = parsed.value.motto?.trim() ?? '';
-      const houseName = parsed.value.houseName?.trim() ?? parsed.value.dynastyName?.trim();
-      if (houseName !== undefined && houseName.length < 2) return Response.json({ ok: false, error: 'House name must be at least 2 characters' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => updateHouseMotto(repository, viewer.email || 'amara@earth.local', motto, houseName, resolveIdempotencyKey(request, parsed.value.correlationId)));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Motto update failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
+    // ── House / dynasty routes → house-routes.ts ────────────────────────────
+    const houseResponse = await handleHouseRoutes(request, env, url);
+    if (houseResponse) return houseResponse;
 
     if (url.pathname === '/api/market/derivatives' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
@@ -1762,7 +1651,7 @@ const worker = {
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       const targetCategory = body.target?.category?.trim() || null;
-      if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
+      if (targetCategory && !['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue: body.target?.value ?? null, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -2198,7 +2087,8 @@ const worker = {
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     const result = await withRepository(env, async (repository) => {
       await resolveProposalsPostgres(repository);
-      const world = await advanceWorldPostgres(repository, 5, String(_event.scheduledTime));
+      // One real minute advances one game hour: a game day is 24 real minutes.
+      const world = await advanceWorldPostgres(repository, 60, String(_event.scheduledTime));
       await repository.query('UPDATE world_state SET last_scheduler_at = to_timestamp($1 / 1000.0) WHERE id = \'WORLD\'', [_event.scheduledTime]);
       const outboxDelivered = await deliverOutbox(repository, (outboxEvent) =>
         env.MARKET_COORDINATOR.getByName('events-global').broadcast({

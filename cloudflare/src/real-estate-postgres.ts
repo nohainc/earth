@@ -570,6 +570,28 @@ export async function investInPublicBuilding(
   });
 }
 
+export async function openPublicInvestmentOffering(
+  repository: PostgresRepository,
+  input: { humanId: string; cityId: string; buildingType: string; name: string; correlationId: string },
+): Promise<Record<string, unknown>> {
+  return repository.transaction(async (tx) => {
+    const prior = await tx.query('SELECT * FROM buildings WHERE id = $1', [`PUB-OFFER-${input.correlationId}`]);
+    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, building: prior.rows[0] };
+    const member = await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND city_id = $2', [input.humanId, input.cityId]);
+    if (!member.rows[0]) throw new Error('Only an active city member can open a public investment offering');
+    const spec = BUILDING_CATALOG[input.buildingType];
+    if (!spec || spec.defaultOwnershipClass !== 'public_investment') throw new Error('This blueprint is not a public investment project');
+    if (spec.resourceOutputType && spec.resourceOutputType !== 'credits') throw new Error('Public investment projects must produce credits');
+    const existing = await tx.query("SELECT id FROM buildings WHERE city_id = $1 AND building_type = $2 AND ownership_class = 'public_investment' AND status NOT IN ('closed', 'foreclosed') LIMIT 1", [input.cityId, input.buildingType]);
+    if (existing.rows[0]) throw new Error('A public investment offering for this building is already active');
+    const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+    const day = Number(world.rows[0]?.game_day ?? 1);
+    const buildingId = `PUB-OFFER-${input.correlationId.replace(/[^A-Za-z0-9_-]/g, '').slice(-24).toUpperCase()}`;
+    await tx.query(`INSERT INTO buildings (id, city_id, owner_id, ownership_class, building_type, name, tier, condition, slot_footprint, operating_policy, auto_repair_enabled, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, daily_operating_credits, resource_output_type, resource_output_amount, status, created_game_day) VALUES ($1,$2,$2,'public_investment',$3,$4,$5,100,$6,'balanced',true,$7,$8,$9,$10,$11,$12,$13,$14,'active',$15)`, [buildingId, input.cityId, spec.type, input.name || spec.name, spec.tier, spec.slotFootprint ?? 2, spec.dailyEnergyUpkeep ?? 0, spec.dailyFoodUpkeep ?? 0, spec.dailyMaterialsUpkeep ?? 0, spec.dailyComponentsUpkeep ?? 0, spec.dailyComputeUpkeep ?? 0, spec.dailyStaffingCredits ?? 0, spec.resourceOutputType ?? 'credits', spec.resourceOutputAmount ?? 0, day]);
+    return { ok: true, buildingId, building: (await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId])).rows[0] };
+  });
+}
+
 export async function demolishBuilding(
   repository: PostgresRepository,
   input: {

@@ -6,26 +6,34 @@ import { withRepository } from './repository';
 
 export async function publicAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (url.pathname === '/api/auth/register' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ email?: string; password?: string; passwordConfirmation?: string; displayName?: string }>(request);
+    const parsed = await parseJsonBody<{ email?: string; password?: string; passwordConfirmation?: string; personName?: string; houseSurname?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
     const email = body.email?.trim().toLowerCase();
-    const displayName = body.displayName?.trim();
+    const personName = body.personName?.trim();
+    const houseSurname = body.houseSurname?.trim();
     const password = body.password ?? '';
     if (!email || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return Response.json({ ok: false, error: 'A valid email is required' }, { status: 400 });
-    if (!displayName || displayName.length < 2 || displayName.length > 80) return Response.json({ ok: false, error: 'Display name must be 2–80 characters' }, { status: 400 });
+    if (!personName || personName.length < 2 || personName.length > 40) return Response.json({ ok: false, error: 'Given name must be 2–40 characters' }, { status: 400 });
+    if (!houseSurname || houseSurname.length < 2 || houseSurname.length > 40) return Response.json({ ok: false, error: 'House surname must be 2–40 characters' }, { status: 400 });
     if (password.length < 12) return Response.json({ ok: false, error: 'Password must be at least 12 characters' }, { status: 400 });
     if (password !== (body.passwordConfirmation ?? '')) return Response.json({ ok: false, error: 'Passwords do not match' }, { status: 400 });
     try {
-      const result = await withRepository(env, (repository) => registerIdentity(repository, { email, displayName, password }));
+      const result = await withRepository(env, (repository) => registerIdentity(repository, { email, personName, houseSurname, password }));
       if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
       try {
         const identity = result.human as { id: string; email: string };
         await issueActionToken(env, identity.id, 'verify_email', identity.email);
       } catch {
-        return Response.json({ ok: false, error: 'Identity created, but the verification email could not be sent. Please retry shortly.' }, { status: 503 });
+        return Response.json({
+          ...result,
+          verificationPending: true,
+          verificationDelivery: 'unavailable',
+          message: 'Identity created. We could not send the verification email yet; use “Resend verification email” to try again.',
+          persistence: 'planetscale-postgres',
+        }, { status: 201 });
       }
-      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
+      return Response.json({ ...result, verificationPending: true, persistence: 'planetscale-postgres' }, { status: 201 });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Identity creation failed';
       return Response.json({ ok: false, error: message }, { status: /already registered/i.test(message) ? 409 : 400 });

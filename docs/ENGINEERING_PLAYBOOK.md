@@ -171,7 +171,10 @@ vertical slice when possible.
 
 ### Database changes
 
-1. Add the next numbered SQL migration under `db/migrations/`.
+1. Read `db/initial.sql` and `db/schema-manifest.json`; do not review historical
+   migrations `001–074` unless an investigation specifically needs them. Add
+   the next available numbered SQL migration under `db/migrations/` (the
+   profile-settlement work begins at `075`).
 2. Update `db/schema-manifest.json` when schema or indexes change.
 3. Run `npm run db:migrate:postgres` and `npm run db:verify:manifest`.
 4. Confirm `/api/health` reports PostgreSQL authority, schema readiness, data

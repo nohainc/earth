@@ -9,6 +9,48 @@ import '../governance/governance_panels.dart';
 import '../house/house_lineage_dialog.dart';
 import 'institutions_dialogs.dart';
 
+Widget _institutionBudgetCard(
+  BuildContext context, {
+  required String title,
+  required String amount,
+  required IconData icon,
+  required String description,
+  required Color accent,
+}) {
+  return Container(
+    width: double.infinity,
+    padding: EdgeInsets.all(context.cardPadding),
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: .07),
+      borderRadius: BorderRadius.circular(context.radiusCard),
+      border: Border.all(color: accent.withValues(alpha: .25)),
+    ),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(icon, color: accent, size: 20),
+        SizedBox(width: context.spacingInline),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(title, style: context.captionStyle.copyWith(color: accent)),
+                  Text(amount, style: context.widgetValueStyle.copyWith(color: accent)),
+                ],
+              ),
+              const SizedBox(height: 4),
+              Text(description, style: context.widgetFooterStyle),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
 class CorporationDirectoryPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
@@ -2569,6 +2611,8 @@ class _CorporationHubPanelState extends State<CorporationHubPanel> {
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             directory,
+            const SizedBox(height: 34),
+            overview,
             ...proposalsAndRoles,
           ],
         );
@@ -2671,6 +2715,7 @@ class CorporationOverviewPanel extends StatelessWidget {
         'Corporation membership determines which shared rules, cities, technologies, contracts, and services are available to you.',
         'A city belongs to a corporation: moving between cities changes your local services and opportunities while preserving corporation membership.',
         'Independent people use Earth default rules and do not participate in corporation decisions.',
+        'Corporate Budget: The corporate treasury is separate from city and personal accounts and funds research, patents, payroll, and corporate projects.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2728,7 +2773,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                 Divider(height: 1, color: context.subtleBorderColor),
                 const SizedBox(height: 10),
                 LayoutBuilder(
-                  builder: (context, constraints) {
+                builder: (context, constraints) {
                     // Match the personal page: two columns when there is room,
                     // with a single-column fallback on narrow screens.
                     final isWide = constraints.maxWidth >= 450;
@@ -2782,7 +2827,7 @@ class CorporationOverviewPanel extends StatelessWidget {
                       _buildAttributeRow(
                         context,
                         icon: Icons.account_balance_wallet_outlined,
-                        label: 'TREASURY',
+                        label: 'CORPORATE BUDGET',
                         value: treasury == null
                             ? 'UNAVAILABLE'
                             : '${formatWholeNumber(treasury)} C',
@@ -2815,6 +2860,18 @@ class CorporationOverviewPanel extends StatelessWidget {
                 ),
               ],
             ),
+          ),
+          const SizedBox(height: 12),
+          _institutionBudgetCard(
+            context,
+            title: 'CORPORATE BUDGET',
+            amount: treasury == null
+                ? 'UNAVAILABLE'
+                : '${formatWholeNumber(treasury)} C',
+            icon: Icons.account_balance_wallet_outlined,
+            description:
+                'Separate corporate funds for research, patents, payroll, and corporate projects. This budget is not the city budget or your personal account.',
+            accent: context.warningColor,
           ),
           SizedBox(height: context.spacingTopic),
           Container(
@@ -3216,6 +3273,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final residents = asIntOr(city['residents'], 100);
     final housingCap = asIntOr(city['housing_capacity'], 120);
     final energyCap = asIntOr(city['energy_capacity'], 200);
+    final cityTreasury = asDouble(city['treasury']) ?? 0.0;
 
     final isCityResident = state.membership?['city_id'] != null;
 
@@ -3239,6 +3297,7 @@ class InstitutionsCapacityPanel extends StatelessWidget {
       infoBulletPoints: const [
         'Municipal Administration & Service Capacity: Oversight of public housing, energy grid, connectivity, and healthcare.',
         'City Standing: Civic prestige and influence among resident citizens.',
+        'City Budget: The municipal treasury pays for civic operations, public services, and explicit resident subsidies.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3315,6 +3374,11 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                           label: 'STANDING',
                           value: '$standing',
                           accentColor: context.primaryColor),
+                      _buildAttributeRow(context,
+                          icon: Icons.account_balance_wallet_outlined,
+                          label: 'CITY BUDGET',
+                          value: '${formatWholeNumber(cityTreasury)} C',
+                          accentColor: context.warningColor),
                     ];
                     if (constraints.maxWidth < 450)
                       return Column(children: attributes);
@@ -3331,6 +3395,17 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                       ],
                     );
                   },
+                ),
+
+                const SizedBox(height: 12),
+                _institutionBudgetCard(
+                  context,
+                  title: 'CITY BUDGET',
+                  amount: '${formatWholeNumber(cityTreasury)} C',
+                  icon: Icons.account_balance_wallet_outlined,
+                  description:
+                      'Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies. This is separate from personal and corporate money.',
+                  accent: context.warningColor,
                 ),
 
                 SizedBox(height: context.spacingTitleOffset),

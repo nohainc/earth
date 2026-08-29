@@ -15,7 +15,8 @@ test('registration and verified login are atomic PostgreSQL flows', { skip: !con
   const repository = new PostgresRepository(client);
   const registration = await registerIdentity(repository, {
     email,
-    displayName: 'Auth Test Human',
+    personName: 'Auth',
+    houseSurname: 'Tester',
     password: 'correct-horse-battery-staple',
   });
   humanId = registration.human.id;
@@ -79,6 +80,9 @@ after(async () => {
     await tx.query('DELETE FROM business_management WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [humanId]);
     await tx.query('DELETE FROM financial_states WHERE institution_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [humanId]);
     await tx.query('DELETE FROM personal_financial_states WHERE human_id = $1', [humanId]);
+    await tx.query('DELETE FROM house_lineage_records WHERE human_id = $1', [humanId]);
+    await tx.query('DELETE FROM character_lineage WHERE human_id = $1', [humanId]);
+    await tx.query('DELETE FROM houses WHERE founder_human_id = $1', [humanId]);
     await tx.query('DELETE FROM businesses WHERE owner_id = $1', [humanId]);
     await tx.query('DELETE FROM institutions WHERE id = $1', [`B-${humanId.slice(2)}`]);
     await tx.query('DELETE FROM technologies WHERE owner_id = $1', [humanId]);

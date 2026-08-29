@@ -1,952 +1,397 @@
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
-import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
-Widget _financeTopicHeading(BuildContext context, String title,
-    {required String description}) {
-  return Padding(
-    padding: const EdgeInsets.only(bottom: 10),
-    child: Row(children: [
-      Flexible(
-        child: Text(title,
-            style: const TextStyle(
-                color: mutedColor,
-                fontSize: 10,
-                fontWeight: FontWeight.bold,
-                letterSpacing: 1.1)),
-      ),
-      const SizedBox(width: 5),
-      IconButton(
-        tooltip: 'About $title',
-        padding: EdgeInsets.zero,
-        constraints: const BoxConstraints(),
-        icon: Icon(Icons.info_outline,
-            size: 14, color: mutedColor.withValues(alpha: .8)),
-        onPressed: () => showEarthInfoDialog(context,
-            title: title, description: description),
-      ),
-    ]),
-  );
-}
-
-class FinancialOutlookPanel extends StatelessWidget {
-  final EarthState state;
-  final Map<String, dynamic> personalFinanceData;
-
-  const FinancialOutlookPanel({
-    super.key,
-    required this.state,
-    this.personalFinanceData = const {},
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final finState = personalFinanceData['state'] is Map
-        ? Map<String, dynamic>.from(personalFinanceData['state'] as Map)
-        : const <String, dynamic>{};
-    final account = personalFinanceData['account'] is Map
-        ? Map<String, dynamic>.from(personalFinanceData['account'] as Map)
-        : const <String, dynamic>{};
-    final balance = asDouble(state.human['credits'] ?? account['balance']);
-    final income = asDouble(finState['income']);
-    final expenses = asDouble(finState['expenses']);
-    final taxes = asDouble(finState['tax_obligations']);
-    final net = income != null && expenses != null && taxes != null
-        ? income - expenses - taxes
-        : null;
-    final obligations = <String>[];
-    if ((taxes ?? 0) > 0) {
-      obligations.add('Tax assessment: ${formatWholeNumber(taxes!)} C');
-    }
-    final goals = personalFinanceData['goals'] is List
-        ? (personalFinanceData['goals'] as List)
-            .whereType<Map>()
-            .map(
-                (goal) => goal['name']?.toString() ?? goal['title']?.toString())
-            .whereType<String>()
-            .toList()
-        : const <String>[];
-    final assets = personalFinanceData['assets'] is List
-        ? (personalFinanceData['assets'] as List)
-            .whereType<Map>()
-            .map((asset) =>
-                asset['name']?.toString() ?? asset['title']?.toString())
-            .whereType<String>()
-            .toList()
-        : const <String>[];
-    final incomeSources = personalFinanceData['incomeSources'] is List
-        ? (personalFinanceData['incomeSources'] as List)
-            .whereType<Map>()
-            .map((item) =>
-                item['name']?.toString() ?? item['source']?.toString())
-            .whereType<String>()
-            .toList()
-        : const <String>[];
-    final liabilities = personalFinanceData['liabilities'] is List
-        ? (personalFinanceData['liabilities'] as List)
-            .whereType<Map>()
-            .map(
-                (item) => item['name']?.toString() ?? item['title']?.toString())
-            .whereType<String>()
-            .toList()
-        : const <String>[];
-    final reserveTarget = asDouble(
-        finState['reserve_target'] ?? finState['emergency_reserve_target']);
-    final forecast = net == null
-        ? 'Future risk is unavailable until current income and expense data are reported.'
-        : net < 0
-            ? 'Cash flow is negative. Reduce outflow, add income, or review obligations.'
-            : reserveTarget != null &&
-                    balance != null &&
-                    balance < reserveTarget
-                ? 'Cash flow is positive, but the balance is below the reserve target.'
-                : 'Cash flow is positive. Decide how much to save, invest, or support.';
-
-    return EarthPanel(
-      title: 'FINANCIAL OUTLOOK',
-      showSurface: false,
-      contentPadding: EdgeInsets.zero,
-      helpAfterTitle: true,
-      titleColor: mutedColor,
-      infoDescription:
-          '• This view connects money to decisions: obligations, goals, assets, and financial risk.\n\n• Trade & Supplies handles resources and market orders; Personal Finance handles credits and commitments.\n\n• Values are shown only when current financial data is available.',
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Wrap(spacing: 10, runSpacing: 10, children: [
-          _outlookTile(
-              'AVAILABLE CREDITS',
-              balance == null
-                  ? 'UNAVAILABLE'
-                  : '${formatWholeNumber(balance)} C',
-              Icons.account_balance_wallet_outlined,
-              EarthResourceColors.credits),
-          _outlookTile(
-              'NET DAILY CHANGE',
-              net == null
-                  ? 'UNAVAILABLE'
-                  : '${net >= 0 ? '+' : ''}${formatWholeNumber(net)} C',
-              Icons.trending_up_outlined,
-              net == null || net >= 0
-                  ? Colors.tealAccent
-                  : Colors.orangeAccent),
-          _outlookTile(
-              'UPCOMING OBLIGATIONS',
-              obligations.isEmpty ? 'None recorded' : obligations.join(' · '),
-              Icons.receipt_long_outlined,
-              Colors.orangeAccent),
-        ]),
-        const SizedBox(height: 12),
-        Text(
-            goals.isEmpty
-                ? 'No financial goal is recorded yet. Consider an emergency reserve, business investment, family support, or financial independence goal.'
-                : 'Goals: ${goals.join(' · ')}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        const SizedBox(height: 6),
-        Text(
-            assets.isEmpty
-                ? 'Assets and investments are not itemized in the current financial record.'
-                : 'Assets: ${assets.join(' · ')}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        const SizedBox(height: 10),
-        Text(
-            incomeSources.isEmpty
-                ? 'Income sources are not itemized in the current financial record.'
-                : 'Income: ${incomeSources.join(' · ')}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        const SizedBox(height: 6),
-        Text(
-            liabilities.isEmpty
-                ? 'No liabilities are recorded.'
-                : 'Liabilities: ${liabilities.join(' · ')}',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
-        const SizedBox(height: 10),
-        Text('OUTLOOK: $forecast',
-            style: TextStyle(
-                color: net != null && net < 0 ? Colors.orangeAccent : inkColor,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w700)),
-        const SizedBox(height: 8),
-        const Text(
-            'Plan before acting: save · invest · pay · borrow · transfer · support family.',
-            style: TextStyle(
-                color: inkColor, fontSize: 10.5, fontWeight: FontWeight.w700)),
-      ]),
-    );
-  }
-
-  Widget _outlookTile(String label, String value, IconData icon, Color color) {
-    return Container(
-        width: 170,
-        padding: const EdgeInsets.all(10),
-        decoration: BoxDecoration(
-            color: surfaceColor.withValues(alpha: .75),
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(color: color.withValues(alpha: .28))),
-        child: Row(children: [
-          Icon(icon, size: 15, color: color),
-          const SizedBox(width: 7),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(label,
-                    style: const TextStyle(
-                        color: mutedColor,
-                        fontSize: 8.5,
-                        fontWeight: FontWeight.w800)),
-                const SizedBox(height: 3),
-                Text(value,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                        color: color,
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800))
-              ]))
-        ]));
-  }
-}
-
-class PersonalFinancePanel extends StatefulWidget {
+class PersonalFinancePanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
   final Map<String, dynamic> personalFinanceData;
   final Future<void> Function(Future<EarthState> Function()) action;
   final Key? panelKey;
 
-  const PersonalFinancePanel({
-    super.key,
-    this.panelKey,
-    required this.state,
-    required this.busy,
-    this.personalFinanceData = const {},
-    required this.action,
-  });
-
-  @override
-  State<PersonalFinancePanel> createState() => _PersonalFinancePanelState();
-}
-
-class _PersonalFinancePanelState extends State<PersonalFinancePanel> {
-  String? _localStatusMessage;
-  bool _localBusy = false;
-
-  Future<void> _settleTax(BuildContext context) async {
-    final controller = TextEditingController(text: '1000');
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141A24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Colors.white12),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.receipt_long_outlined, size: 18, color: cyanAccentColor),
-            SizedBox(width: 8),
-            Text(
-              'Settle Tax Obligations',
-              style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w800, color: inkColor),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Tax calculations are canonically assessed by the municipal authority. Settle assessed dues to maintain civic standing and avoid penalty surcharges:',
-              style: TextStyle(fontSize: 11.5, color: mutedColor, height: 1.4),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: controller,
-              keyboardType:
-                  const TextInputType.numberWithOptions(decimal: true),
-              style: const TextStyle(fontSize: 13, color: inkColor),
-              decoration: InputDecoration(
-                labelText: 'Assessed Amount to Pay (C)',
-                labelStyle: const TextStyle(fontSize: 11, color: mutedColor),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: .04),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.white12),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.white12),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: cyanAccentColor),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCEL',
-                style: TextStyle(color: mutedColor, fontSize: 11)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: cyanAccentColor,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('CONFIRM SETTLEMENT',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      final val = double.tryParse(controller.text.trim()) ?? 1000.0;
-      setState(() => _localBusy = true);
-      try {
-        await widget.action(() => const EarthApi().settlePersonalTax(val));
-        if (mounted) {
-          setState(() {
-            _localBusy = false;
-            _localStatusMessage =
-                'Tax obligations settled successfully through central authority.';
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _localBusy = false;
-            _localStatusMessage = 'Settlement failed: $e';
-          });
-        }
-      }
-    }
-  }
-
-  Future<void> _declareInsolvency(BuildContext context) async {
-    final reasonController =
-        TextEditingController(text: 'Liquidity deficit restructuring');
-    final otpController = TextEditingController();
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: const Color(0xFF141A24),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(14),
-          side: const BorderSide(color: Colors.redAccent),
-        ),
-        title: const Row(
-          children: [
-            Icon(Icons.warning_amber_rounded,
-                size: 18, color: Colors.redAccent),
-            SizedBox(width: 8),
-            Text(
-              'Declare Personal Insolvency',
-              style: TextStyle(
-                  fontSize: 14, fontWeight: FontWeight.w800, color: inkColor),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Sovereign insolvency restructuring reorganizes liabilities. Statutory protection guarantees your 100 Credit minimum reserve and basic service robot immunity against liquidation.',
-              style: TextStyle(fontSize: 11.5, color: mutedColor, height: 1.4),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: reasonController,
-              style: const TextStyle(fontSize: 13, color: inkColor),
-              decoration: InputDecoration(
-                labelText: 'Restructuring Reason',
-                labelStyle: const TextStyle(fontSize: 11, color: mutedColor),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: .04),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.white12),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: otpController,
-              keyboardType: TextInputType.number,
-              style: const TextStyle(fontSize: 13, color: inkColor),
-              decoration: InputDecoration(
-                labelText: 'MFA Authenticator Code (if enabled)',
-                labelStyle: const TextStyle(fontSize: 11, color: mutedColor),
-                filled: true,
-                fillColor: Colors.white.withValues(alpha: .04),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  borderSide: const BorderSide(color: Colors.white12),
-                ),
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(false),
-            child: const Text('CANCEL',
-                style: TextStyle(color: mutedColor, fontSize: 11)),
-          ),
-          FilledButton(
-            style: FilledButton.styleFrom(
-              backgroundColor: Colors.redAccent,
-              foregroundColor: Colors.white,
-            ),
-            onPressed: () => Navigator.of(ctx).pop(true),
-            child: const Text('EXECUTE RESTRUCTURING',
-                style: TextStyle(fontWeight: FontWeight.w800, fontSize: 11)),
-          ),
-        ],
-      ),
-    );
-
-    if (confirmed == true && mounted) {
-      setState(() => _localBusy = true);
-      try {
-        await widget
-            .action(() => const EarthApi().declareInsolvencyRestructuring(
-                  reason: reasonController.text,
-                  otp: otpController.text.isEmpty ? null : otpController.text,
-                ));
-        if (mounted) {
-          setState(() {
-            _localBusy = false;
-            _localStatusMessage =
-                'Personal insolvency restructuring processed and registered.';
-          });
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            _localBusy = false;
-            _localStatusMessage = 'Restructuring request failed: $e';
-          });
-        }
-      }
-    }
-  }
+  const PersonalFinancePanel(
+      {super.key,
+      this.panelKey,
+      required this.state,
+      required this.busy,
+      this.personalFinanceData = const {},
+      required this.action});
 
   @override
   Widget build(BuildContext context) {
-    final data = widget.personalFinanceData;
-    final account = data['account'] as Map<String, dynamic>?;
-    final finState = data['state'] as Map<String, dynamic>?;
-    final protected = data['protectedMinimum'] as Map<String, dynamic>?;
-
-    final balanceNum =
-        widget.state.human['credits'] ?? account?['balance'] ?? 0;
-    final balance = asDoubleOr(balanceNum, 0.0);
-    final income = asDoubleOr(finState?['income'], 760.0);
-    final expenses = asDoubleOr(finState?['expenses'], 240.0);
-    final taxObligations = asDoubleOr(finState?['tax_obligations'], 48.0);
-    final netAccumulation = income - expenses - taxObligations;
-    final accumulationMargin =
-        income > 0 ? (netAccumulation / income) * 100 : 0.0;
-
-    final rawLiquidity =
-        (finState?['liquidity_status'] ?? (balance > 500 ? 'healthy' : 'tight'))
-            .toString()
-            .toLowerCase();
-    final insolvencyStatus = (finState?['insolvency_status'] ??
-            finState?['status'] ??
-            (balance >= 100 ? 'SOLVENT' : 'INSOLVENT'))
-        .toString()
-        .toUpperCase();
-    final protectedCredits = asIntOr(protected?['credits'], 100);
-
-    final isTight = rawLiquidity == 'tight';
-    final isAtRisk =
-        rawLiquidity == 'at_risk' || insolvencyStatus == 'INSOLVENT';
-
-    Color statusColor = cyanAccentColor;
-    String statusText = 'HEALTHY LIQUIDITY';
-    if (isTight) {
-      statusColor = Colors.orangeAccent;
-      statusText = 'TIGHT LIQUIDITY';
-    } else if (isAtRisk) {
-      statusColor = Colors.redAccent;
-      statusText = 'AT RISK · INSOLVENT';
-    }
-
-    final expenseRatio =
-        income > 0 ? (expenses / income).clamp(0.0, 1.0) : 0.35;
-    final taxRatio =
-        income > 0 ? (taxObligations / income).clamp(0.0, 1.0) : 0.08;
-    final retainedRatio = (1.0 - expenseRatio - taxRatio).clamp(0.0, 1.0);
-
-    final isBusy = widget.busy || _localBusy;
+    final maintenance = _map(personalFinanceData['lifeMaintenance']);
+    final dailyProfile = _map(personalFinanceData['dailyProfile']);
+    final lastSettlement = _map(maintenance['lastSettlement']);
+    final taxes = _map(personalFinanceData['taxes']);
+    final taxRules = (taxes['rules'] as List? ?? const [])
+        .whereType<Map>()
+        .map((rule) => Map<String, dynamic>.from(rule))
+        .toList();
+    final viewerId = state.human['id']?.toString();
+    final privateBuildings = state.buildings
+        .whereType<Map>()
+        .where((building) =>
+            building['ownership_class']?.toString() == 'private' &&
+            building['owner_id']?.toString() == viewerId &&
+            building['status']?.toString() != 'closed')
+        .map((building) => Map<String, dynamic>.from(building))
+        .toList();
+    final publicBuildings = state.buildings
+        .whereType<Map>()
+        .where((building) =>
+            building['ownership_class']?.toString() == 'public_investment' &&
+            building['status']?.toString() != 'closed')
+        .map((building) => Map<String, dynamic>.from(building))
+        .toList();
+    final investmentDividend = _investmentDividend(
+        publicBuildings,
+        state.investmentShares
+            .whereType<Map>()
+            .map((share) => Map<String, dynamic>.from(share))
+            .toList());
+    final buildingChange = _buildingResourceChange(privateBuildings);
+    final preparedBuildingChange = dailyProfile['status'] == 'clean'
+        ? _profileChange(dailyProfile)
+        : buildingChange;
+    final basicRule = taxRules
+        .where((rule) => rule['category']?.toString() == 'basic_income')
+        .firstOrNull;
+    final basicRate = asDoubleOr(basicRule?['rate'], 0);
+    final grossCredits =
+        preparedBuildingChange['credits']! + investmentDividend;
+    final incomeTax = grossCredits > 0 ? grossCredits * basicRate : 0.0;
+    final maintenanceChange = _maintenanceResourceChange(lastSettlement);
+    final finalChange = _addChanges(
+        _addChanges(preparedBuildingChange, {'credits': investmentDividend}),
+        _addChanges(maintenanceChange, {'credits': -incomeTax}));
+    final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
+    final protected = asDoubleOr(
+        _map(personalFinanceData['protectedMinimum'])['credits'], 100);
+    final statusColor = unpaid > 0 ? Colors.orangeAccent : cyanAccentColor;
 
     return EarthPanel(
-      key: widget.panelKey,
-      title: 'MONEY TODAY / PERSONAL FINANCE',
+      key: panelKey,
+      title: 'PERSONAL FINANCE',
       showSurface: false,
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Keep enough Credits for daily life, taxes, and unexpected problems.\n\n• Use surplus to improve businesses, support your family, or build a reserve.\n\n• This page covers personal money and commitments; resources and market orders belong in Trade & Supplies.\n\n• Detailed income and expense breakdowns remain available when you need to investigate a problem.',
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              _financeTopicHeading(
-                context,
-                'MONEY TODAY / PERSONAL FINANCE',
-                description:
-                    '• Personal Wealth & Solvency Cockpit: Real-time liquid credit balance, solvency classification, and immutable statutory asset protection guarantees.',
-              ),
-              // 1. EXECUTIVE WEALTH & SOLVENCY HEADER
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color:
-                              EarthResourceColors.credits.withValues(alpha: .2),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(
-                              color: EarthResourceColors.credits
-                                  .withValues(alpha: .4)),
-                        ),
-                        alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.account_balance_wallet_rounded,
-                          size: 22,
-                          color: EarthResourceColors.credits,
-                        ),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Row(
-                                    children: [
-                                      Text(
-                                        formatWholeNumber(balance),
-                                        style: const TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.5,
-                                          color: inkColor,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 6),
-                                      const Text(
-                                        'C',
-                                        style: TextStyle(
-                                          fontSize: 24,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: -0.5,
-                                          color: inkColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 8, vertical: 3.5),
-                                  decoration: BoxDecoration(
-                                    color: statusColor.withValues(alpha: .15),
-                                    borderRadius: BorderRadius.circular(5),
-                                    border: Border.all(
-                                        color:
-                                            statusColor.withValues(alpha: .4)),
-                                  ),
-                                  child: Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Container(
-                                        width: 6,
-                                        height: 6,
-                                        decoration: BoxDecoration(
-                                          color: statusColor,
-                                          shape: BoxShape.circle,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 5),
-                                      Text(
-                                        statusText,
-                                        style: TextStyle(
-                                          fontSize: 9.5,
-                                          fontWeight: FontWeight.w800,
-                                          letterSpacing: .8,
-                                          color: statusColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                            ),
-                            const SizedBox(height: 4),
-                            Text(
-                              'ACCOUNT: ${widget.state.human['id'] ?? 'H-0044'}  ·  AUDIT STATUS: AUDITED DOUBLE-ENTRY  ·  SOLVENCY: $insolvencyStatus',
-                              style: const TextStyle(
-                                fontSize: 10,
-                                color: mutedColor,
-                                letterSpacing: .6,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-
-                  // Statutory Asset Protection Shield
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 14, vertical: 10),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: .04),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: Colors.white10),
-                    ),
-                    child: Row(
-                      children: [
-                        const Icon(Icons.shield_outlined,
-                            size: 16, color: violetColor),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Text(
-                            'STATUTORY PROTECTION SHIELD · Guaranteed minimum reserve: $protectedCredits C (Basic Service Robot protected from forfeiture)',
-                            style: const TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: inkColor,
-                              letterSpacing: .4,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 34),
-
-              // 2. CASH FLOW & PERSONAL UNIT ECONOMICS
-              _financeTopicHeading(
-                context,
-                'CASH FLOW / WHERE MONEY COMES FROM AND GOES',
-                description:
-                    '• Decide whether today\'s money should cover life, taxes, family, business investment, or savings.',
-              ),
-              const SizedBox(height: 8),
-
-              LayoutBuilder(
-                builder: (context, finConstraints) {
-                  final finWidth = finConstraints.maxWidth;
-                  final numCols = finWidth >= 900
-                      ? 4
-                      : finWidth >= 500
-                          ? 2
-                          : 1;
-                  final itemWidth = numCols == 1
-                      ? finWidth
-                      : (finWidth - (numCols - 1) * 12) / numCols;
-
-                  return Wrap(
-                    spacing: 12,
-                    runSpacing: 12,
-                    children: [
-                      _financeMetricBox(
-                        width: itemWidth,
-                        title: 'DAILY INFLOW',
-                        value: '${formatWholeNumber(income)} C',
-                        subtext:
-                            'Income stream: ${formatWholeNumber(income)} C / day',
-                        accent: Colors.tealAccent,
-                        icon: Icons.trending_up_rounded,
-                      ),
-                      _financeMetricBox(
-                        width: itemWidth,
-                        title: 'BASELINE OUTFLOW',
-                        value: '${formatWholeNumber(expenses)} C',
-                        subtext:
-                            'Estimated baseline expenses: ${formatWholeNumber(expenses)} C / day',
-                        accent: Colors.orangeAccent,
-                        icon: Icons.trending_down_rounded,
-                      ),
-                      _financeMetricBox(
-                        width: itemWidth,
-                        title: 'NET DAILY ACCUMULATION',
-                        value:
-                            '${netAccumulation >= 0 ? '+' : ''}${formatWholeNumber(netAccumulation)} C',
-                        subtext:
-                            'Savings Margin: ${accumulationMargin.toStringAsFixed(1)}%',
-                        accent: netAccumulation >= 0
-                            ? cyanAccentColor
-                            : Colors.redAccent,
-                        icon: Icons.savings_outlined,
-                      ),
-                      _financeMetricBox(
-                        width: itemWidth,
-                        title: 'ASSESSED TAX DUES',
-                        value: '${formatWholeNumber(taxObligations)} C',
-                        subtext:
-                            'Assessed tax obligations: ${formatWholeNumber(taxObligations)} C',
-                        accent: violetColor,
-                        icon: Icons.receipt_long_outlined,
-                      ),
-                    ],
-                  );
-                },
-              ),
-
-              const SizedBox(height: 12),
-
-              // Visual Cash Flow Allocation Bar
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                decoration: BoxDecoration(
-                  color: surfaceColor.withValues(alpha: .7),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.white10),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'INCOME ALLOCATION BREAKDOWN',
-                          style: TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: .8,
-                            color: mutedColor.withValues(alpha: .9),
-                          ),
-                        ),
-                        Text(
-                          '${(expenseRatio * 100).toStringAsFixed(0)}% Living  ·  ${(taxRatio * 100).toStringAsFixed(0)}% Tax  ·  ${(retainedRatio * 100).toStringAsFixed(0)}% Retained',
-                          style: const TextStyle(
-                            fontSize: 9.5,
-                            fontWeight: FontWeight.w700,
-                            color: inkColor,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: SizedBox(
-                        height: 8,
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: (expenseRatio * 100).toInt().clamp(1, 100),
-                              child: Container(
-                                color:
-                                    Colors.orangeAccent.withValues(alpha: .8),
-                              ),
-                            ),
-                            const SizedBox(width: 2),
-                            Expanded(
-                              flex: (taxRatio * 100).toInt().clamp(1, 100),
-                              child: Container(
-                                color: violetColor.withValues(alpha: .8),
-                              ),
-                            ),
-                            const SizedBox(width: 2),
-                            Expanded(
-                              flex: (retainedRatio * 100).toInt().clamp(1, 100),
-                              child: Container(
-                                color: netAccumulation >= 0
-                                    ? cyanAccentColor
-                                    : Colors.redAccent,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              if (_localStatusMessage != null) ...[
-                const SizedBox(height: 14),
-                Container(
-                  width: double.infinity,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: violetColor.withValues(alpha: .15),
-                    borderRadius: BorderRadius.circular(8),
-                    border:
-                        Border.all(color: violetColor.withValues(alpha: .3)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.info_outline,
-                          size: 16, color: violetColor),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Text(
-                          _localStatusMessage!,
-                          style: const TextStyle(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: inkColor,
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 34),
-
-              // 3. COMPLIANCE & LEGAL ACTION HUB
-              _financeTopicHeading(
-                context,
-                'COMPLIANCE & SOVEREIGN ACTIONS',
-                description:
-                    '• Settle tax dues immediately to preserve civic standing, or invoke sovereign restructuring when facing severe deficits.',
-              ),
-
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: [
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: cyanAccentColor,
-                      side: BorderSide(
-                          color: cyanAccentColor.withValues(alpha: .3)),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed: isBusy ? null : () => _settleTax(context),
-                    icon: const Icon(Icons.receipt_long_outlined, size: 15),
-                    label: const Text(
-                      'SETTLE TAXES',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .6,
-                      ),
-                    ),
-                  ),
-                  OutlinedButton.icon(
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: Colors.redAccent,
-                      side: BorderSide(
-                          color: Colors.redAccent.withValues(alpha: .3)),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 9),
-                      visualDensity: VisualDensity.compact,
-                    ),
-                    onPressed:
-                        isBusy ? null : () => _declareInsolvency(context),
-                    icon: const Icon(Icons.warning_amber_rounded, size: 15),
-                    label: const Text(
-                      'INSOLVENCY RESTRUCTURING',
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: .6,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  Widget _financeMetricBox({
-    required double width,
-    required String title,
-    required String value,
-    required String subtext,
-    required Color accent,
-    required IconData icon,
-  }) {
-    return Container(
-      width: width,
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: surfaceColor.withValues(alpha: .75),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: Colors.white10),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                title,
-                style: const TextStyle(
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: .9,
-                  color: mutedColor,
-                ),
-              ),
-              Icon(icon, size: 14, color: accent),
-            ],
-          ),
+          'A clear daily statement of your personal income, tax, essential resources, and resulting change.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Row(children: [
+          const Text('PERSONAL FINANCE', style: _headingStyle),
+          const Spacer(),
+          _statusPill(unpaid > 0 ? 'NEEDS ATTENTION' : 'ON TRACK', statusColor)
+        ]),
+        const SizedBox(height: 22),
+        const Text('DAILY INCOME', style: _sectionStyle),
+        const SizedBox(height: 8),
+        _creditRow('Private buildings', preparedBuildingChange['credits']!,
+            positive: true),
+        _creditRow('Investment dividend', investmentDividend,
+            positive: true, displayAsWhole: true),
+        _creditRow('Gross credit income', grossCredits,
+            positive: true, emphasis: true),
+        const SizedBox(height: 20),
+        const Text('ESTIMATED TAX ON THIS INCOME', style: _sectionStyle),
+        const SizedBox(height: 8),
+        _taxRow(basicRate, incomeTax),
+        const SizedBox(height: 7),
+        _creditRow('Net credit income', grossCredits - incomeTax,
+            positive: grossCredits - incomeTax > 0, emphasis: true),
+        const SizedBox(height: 24),
+        if (privateBuildings.isNotEmpty) ...[
+          const Text('FROM PRIVATE BUILDINGS', style: _sectionStyle),
           const SizedBox(height: 8),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 16,
-              fontWeight: FontWeight.w800,
-              letterSpacing: -.3,
-              color: accent,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtext,
-            style: const TextStyle(
-              fontSize: 9.5,
-              color: mutedColor,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
+          _resourceLine(_withoutZeroes(
+              Map<String, double>.from(preparedBuildingChange)
+                ..remove('credits'))),
+          const SizedBox(height: 24),
         ],
-      ),
+        const Text('LIFE MAINTENANCE', style: _sectionStyle),
+        const SizedBox(height: 8),
+        _resourceLine(_withoutZeroes(maintenanceChange)),
+        if (unpaid > 0) ...[
+          const SizedBox(height: 10),
+          _notice(Icons.warning_amber_rounded, Colors.orangeAccent,
+              '${_credits(unpaid)} of essential costs remain unpaid.'),
+        ],
+        const SizedBox(height: 24),
+        const Text('YOUR DAILY RESULT', style: _sectionStyle),
+        const SizedBox(height: 8),
+        _resourceLine(_withoutZeroes(finalChange), emphasize: true),
+        const SizedBox(height: 24),
+        _notice(Icons.shield_outlined, violetColor,
+            'Protected reserve: ${_credits(protected)}. Essential shortfalls are recorded; they do not remove you from the game.'),
+      ]),
     );
   }
+
+  static const _headingStyle = TextStyle(
+      color: mutedColor,
+      fontSize: 10,
+      fontWeight: FontWeight.w800,
+      letterSpacing: 1.1);
+  static const _sectionStyle = TextStyle(
+      color: mutedColor,
+      fontSize: 11,
+      fontWeight: FontWeight.w800,
+      letterSpacing: .6);
+  static Map<String, dynamic> _map(dynamic value) => value is Map
+      ? Map<String, dynamic>.from(value)
+      : const <String, dynamic>{};
+  static Map<String, double> _profileChange(Map<String, dynamic> profile) => {
+        'credits': asDoubleOr(profile['credits_delta'], 0),
+        'energy': asDoubleOr(profile['energy_delta'], 0),
+        'food': asDoubleOr(profile['food_delta'], 0),
+        'materials': asDoubleOr(profile['materials_delta'], 0),
+        'components': asDoubleOr(profile['components_delta'], 0),
+        'compute': asDoubleOr(profile['compute_delta'], 0),
+      };
+  static String _number(double value) => value.abs() >= 100
+      ? value.abs().toStringAsFixed(0)
+      : value
+          .abs()
+          .toStringAsFixed(2)
+          .replaceFirst(RegExp(r'0+$'), '')
+          .replaceFirst(RegExp(r'\.$'), '');
+  static String _credits(double value) => '${_number(value)} C';
+
+  static Widget _creditRow(String label, double value,
+          {required bool positive,
+          bool emphasis = false,
+          bool displayAsWhole = false}) =>
+      Padding(
+        padding: const EdgeInsets.only(bottom: 7),
+        child: Row(children: [
+          Expanded(
+              child: Text(label,
+                  style: TextStyle(
+                      color: emphasis ? inkColor : mutedColor,
+                      fontSize: emphasis ? 13 : 11,
+                      fontWeight:
+                          emphasis ? FontWeight.w800 : FontWeight.w600))),
+          Icon(Icons.account_balance_wallet_outlined,
+              size: emphasis ? 17 : 15, color: EarthResourceColors.credits),
+          const SizedBox(width: 5),
+          Text(
+              '${positive && value > 0 ? '+' : value < 0 ? '-' : ''}${displayAsWhole ? value.abs().round() : _number(value)} C',
+              style: TextStyle(
+                  color: value < 0
+                      ? Colors.redAccent
+                      : value > 0
+                          ? Colors.tealAccent
+                          : mutedColor,
+                  fontSize: emphasis ? 14 : 12,
+                  fontWeight: FontWeight.w800)),
+        ]),
+      );
+
+  static Widget _taxRow(double rate, double amount) => Row(children: [
+        const Expanded(
+            child: Text('Basic income tax',
+                style: TextStyle(color: mutedColor, fontSize: 11))),
+        Text('${(rate * 100).toStringAsFixed(2)}%',
+            style: const TextStyle(color: mutedColor, fontSize: 11)),
+        const SizedBox(width: 14),
+        Text('−${_credits(amount)}',
+            style: const TextStyle(
+                color: Colors.redAccent,
+                fontSize: 12,
+                fontWeight: FontWeight.w800)),
+      ]);
+
+  static Map<String, double> _emptyChanges() => {
+        'credits': 0,
+        'energy': 0,
+        'food': 0,
+        'materials': 0,
+        'components': 0,
+        'compute': 0
+      };
+  static Map<String, double> _addChanges(
+      Map<String, double> left, Map<String, double> right) {
+    final result = _emptyChanges();
+    for (final key in result.keys) {
+      result[key] = (left[key] ?? 0) + (right[key] ?? 0);
+    }
+    return result;
+  }
+
+  static Map<String, double> _withoutZeroes(Map<String, double> values) =>
+      Map.fromEntries(values.entries.where((entry) => entry.value != 0));
+
+  static Map<String, double> _buildingResourceChange(
+      List<Map<String, dynamic>> buildings) {
+    final changes = _emptyChanges();
+    for (final building in buildings) {
+      final policy = building['operating_policy']?.toString() ?? 'balanced';
+      final outputMultiplier = policy == 'high_output'
+          ? 1.3
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .75
+              : 1.0;
+      final costMultiplier = policy == 'high_output'
+          ? 1.4
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .7
+              : 1.0;
+      final output =
+          asDoubleOr(building['resource_output_amount'], 0) * outputMultiplier;
+      final outputType =
+          building['resource_output_type']?.toString() ?? 'credits';
+      changes[outputType] = (changes[outputType] ?? 0) + output;
+      changes['credits'] = changes['credits']! -
+          asDoubleOr(building['daily_operating_credits'], 0) * costMultiplier;
+      final condition = asDoubleOr(building['condition'], 100);
+      final conditionCostMultiplier = condition >= 80
+          ? 1.0
+          : condition >= 50
+              ? 1.15
+              : condition >= 20
+                  ? 1.4
+                  : 2.0;
+      final autoRepair = building['auto_repair_enabled'] == true ||
+          building['auto_repair_enabled']?.toString() == 'true';
+      final repairResource = building['ownership_class']?.toString() == 'civic'
+          ? 'materials'
+          : 'components';
+      for (final key in [
+        'energy',
+        'food',
+        'materials',
+        'components',
+        'compute'
+      ]) {
+        changes[key] = changes[key]! -
+            asDoubleOr(building['upkeep_$key'], 0) *
+                costMultiplier *
+                conditionCostMultiplier -
+            (autoRepair && key == repairResource ? 1 : 0);
+      }
+    }
+    return changes;
+  }
+
+  static Map<String, double> _maintenanceResourceChange(
+          Map<String, dynamic> settlement) =>
+      {
+        'credits': -asDoubleOr(settlement['credits_for_resources'], 0),
+        'energy':
+            -asDoubleOr(settlement['energy_used'], settlement.isEmpty ? 1 : 0),
+        'food':
+            -asDoubleOr(settlement['food_used'], settlement.isEmpty ? 1 : 0),
+        'compute': -asDoubleOr(
+            settlement['compute_used'], settlement.isEmpty ? .25 : 0),
+      };
+
+  static double _investmentDividend(
+      List<Map<String, dynamic>> buildings, List<Map<String, dynamic>> shares) {
+    var total = 0.0;
+    for (final building in buildings) {
+      final holding = shares
+          .where((share) =>
+              share['building_id']?.toString() == building['id']?.toString())
+          .firstOrNull;
+      if (holding == null) continue;
+      final policy = building['operating_policy']?.toString() ?? 'balanced';
+      final yieldMultiplier = policy == 'high_output'
+          ? 1.3
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .75
+              : 1.0;
+      final costMultiplier = policy == 'high_output'
+          ? 1.4
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .7
+              : 1.0;
+      final condition = asDoubleOr(building['condition'], 100);
+      final conditionCostMultiplier = condition >= 80
+          ? 1.0
+          : condition >= 50
+              ? 1.15
+              : condition >= 20
+                  ? 1.4
+                  : 2.0;
+      final gross =
+          asDoubleOr(building['resource_output_amount'], 0) * yieldMultiplier;
+      final cost = asDoubleOr(building['daily_operating_credits'], 0) *
+          costMultiplier *
+          conditionCostMultiplier;
+      total += (gross - cost).clamp(0, double.infinity) *
+          asDoubleOr(holding['shares_owned'], 0) /
+          asDoubleOr(holding['total_shares_issued'], 1000)
+              .clamp(1, double.infinity);
+    }
+    return total;
+  }
+
+  static Widget _resourceLine(Map<String, double> changes,
+      {bool emphasize = false}) {
+    if (changes.isEmpty)
+      return const Text('No daily resource change',
+          style: TextStyle(color: mutedColor, fontSize: 11));
+    final icons = {
+      'credits': Icons.account_balance_wallet_outlined,
+      'energy': Icons.bolt_rounded,
+      'food': Icons.eco_outlined,
+      'materials': Icons.terrain_outlined,
+      'components': Icons.precision_manufacturing_outlined,
+      'compute': Icons.memory_rounded
+    };
+    return Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: changes.entries.map((entry) {
+          final value = entry.value;
+          final color = value < 0
+              ? Colors.redAccent
+              : value > 0
+                  ? Colors.tealAccent
+                  : mutedColor;
+          return SizedBox(
+              width: 62,
+              child: Column(children: [
+                Icon(icons[entry.key],
+                    size: emphasize ? 18 : 16,
+                    color: EarthResourceMeta.forCommodity(entry.key).color),
+                Text(
+                    '${value > 0 ? '+' : value < 0 ? '-' : ''}${_number(value)}',
+                    style: TextStyle(
+                        color: color,
+                        fontSize: emphasize ? 13 : 12,
+                        fontWeight: FontWeight.w800)),
+              ]));
+        }).toList());
+  }
+
+  static Widget _statusPill(String label, Color color) => Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: .14),
+          border: Border.all(color: color.withValues(alpha: .35)),
+          borderRadius: BorderRadius.circular(6)),
+      child: Text(label,
+          style: TextStyle(
+              color: color,
+              fontSize: 9.5,
+              fontWeight: FontWeight.w800,
+              letterSpacing: .6)));
+  static Widget _notice(IconData icon, Color color, String text) => Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+          color: color.withValues(alpha: .08),
+          border: Border.all(color: color.withValues(alpha: .25)),
+          borderRadius: BorderRadius.circular(8)),
+      child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Icon(icon, size: 16, color: color),
+        const SizedBox(width: 9),
+        Expanded(
+            child: Text(text,
+                style: const TextStyle(
+                    color: inkColor, fontSize: 10.5, height: 1.35)))
+      ]));
 }

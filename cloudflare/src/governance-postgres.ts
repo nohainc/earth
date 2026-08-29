@@ -2,6 +2,8 @@ import type { PostgresRepository } from './repository';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { moneyToCents, centsToMoney } from './money.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -29,6 +31,15 @@ export async function createProposal(repository: PostgresRepository, input: { hu
   return repository.transaction(async (tx) => {
     const prior = await tx.query('SELECT * FROM proposals WHERE institution_id = $1 AND correlation_id = $2', [input.institutionId, input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposal: prior.rows[0], correlationId: input.correlationId };
+    if (input.targetCategory === 'megaproject_procurement' && input.targetValue?.buildingType) {
+      await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`${input.institutionId}:megaproject_procurement:${String(input.targetValue.buildingType)}`]);
+      const existing = await tx.query<{ id: string; title: string; status: string; outcome: string | null; execution_status: string | null; target_value_json: unknown }>(
+        "SELECT id, title, status, outcome, execution_status, target_value_json FROM proposals WHERE institution_id = $1 AND target_category = 'megaproject_procurement' AND executed_at IS NULL AND (status IN ('open', 'pending') OR outcome = 'passed' OR execution_status IN ('ready', 'queued')) ORDER BY updated_at DESC",
+        [input.institutionId],
+      );
+      const duplicate = existing.rows.find((proposal) => jsonObject(proposal.target_value_json).buildingType === input.targetValue?.buildingType);
+      if (duplicate) throw new Error('A civic proposal for this building is already active or queued. No duplicate proposal was created.');
+    }
     if (!(await eligible(tx, input.humanId, input.institutionId))) throw new Error('Human is not eligible to propose at this institution');
     const rule = input.ruleVersionId
       ? await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE id = $1 AND institution_id = $2 AND status = 'active'", [input.ruleVersionId, input.institutionId])
@@ -116,6 +127,26 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     if (category === 'megaproject_procurement') {
       const bType = String(value.buildingType ?? 'geothermal-grid');
       const spec = BUILDING_CATALOG[bType] ?? BUILDING_CATALOG['geothermal-grid'];
+      const cityId = current.institution_id;
+      const cityAccount = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE account_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [`account-city-${cityId}`],
+      );
+      const cityMaterials = await tx.query<{ amount: string }>(
+        "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'material' FOR UPDATE",
+        [cityId],
+      );
+      const requiredCredits = Number(spec.baseCreditCost ?? 0);
+      const requiredMaterials = Number(spec.baseMaterialCost ?? 0);
+      const hasCapacity = true;
+      const enoughCredits = Boolean(cityAccount.rows[0]) && moneyToCents(cityAccount.rows[0].balance) >= moneyToCents(requiredCredits);
+      const enoughMaterials = Number(cityMaterials.rows[0]?.amount ?? 0) >= requiredMaterials;
+      if (!hasCapacity || !enoughCredits || !enoughMaterials) {
+        await tx.query("UPDATE proposals SET execution_status = 'queued' WHERE id = $1", [current.id]);
+        return { ok: true, executionStatus: 'queued', reason: !hasCapacity ? 'Insufficient civic space' : !enoughCredits ? 'Insufficient city Credits' : 'Insufficient city Materials', proposal: current };
+      }
+      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: Number(world.rows[0]?.game_day ?? 0), debitAccount: cityAccount.rows[0].account_id, creditAccount: 'account-market-clearing', amount: centsToMoney(moneyToCents(requiredCredits)), reasonType: 'civic_building_procurement', reasonId: current.id, ruleVersion: 'real-estate-v2', correlationId: `CIVIC-PROCURE-${current.id}` });
+      if (requiredMaterials > 0) await tx.query("UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'material'", [requiredMaterials, cityId]);
       const buildingId = `BLD-MUNI-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
       const day = Number(world.rows[0]?.game_day ?? 0);
 

@@ -1,5 +1,5 @@
 import type { Env } from './index.ts';
-import { withRepository } from './postgres.ts';
+import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
   listRolesPostgres,
@@ -90,7 +90,7 @@ export async function handleGovernanceRoutes(
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
     const targetCategory = body.target?.category?.trim() || null;
-    if (targetCategory && !['market', 'finance', 'services', 'technology'].includes(targetCategory)) {
+    if (targetCategory && !['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(targetCategory)) {
       return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
     }
     try {

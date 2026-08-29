@@ -18,7 +18,8 @@ export async function upgradeAssistant(repository: PostgresRepository, input: { 
     const assistant = await tx.query<{ id: string; tier: string }>('SELECT id, tier FROM ai_assistants WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.assistantId, input.ownerId]);
     if (!assistant.rows[0]) throw new Error('AI assistant not found');
     if (assistant.rows[0].tier === 'business') return { ok: true, alreadyUpgraded: true, assistant: assistant.rows[0] };
-    const cost = 2400;
+    const ruleRow = await tx.query<{ value: string }>("SELECT value FROM world_rules WHERE key = 'ai.upgrade_cost' LIMIT 1");
+    const cost = Number(ruleRow.rows[0]?.value ?? 2400);
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
     if (!account.rows[0] || Number(account.rows[0].balance) < cost) throw new Error('Insufficient Credits for Business AI upgrade');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -42,4 +43,16 @@ export async function upgradeAssistant(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Business AI activated', 'Your AI assistant now supports bounded business maintenance automation and recommendation policies.', input.assistantId]);
     return { ok: true, cost, correlationId, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
   });
+}
+
+export async function recordRecommendationFeedback(repository: PostgresRepository, input: {
+  humanId: string; recommendationType: 'decision_queue' | 'objective' | 'briefing'; recommendationId: string;
+  action: 'approved' | 'dismissed' | 'deferred' | 'viewed'; contextSnapshot?: unknown;
+}): Promise<Record<string, unknown>> {
+  const gameDay = await repository.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+  const result = await repository.query(
+    'INSERT INTO ai_recommendation_feedback (human_id, recommendation_type, recommendation_id, action, context_snapshot, game_day) VALUES ($1,$2,$3,$4,$5,$6) RETURNING id, created_at',
+    [input.humanId, input.recommendationType, input.recommendationId, input.action, input.contextSnapshot ?? null, Number(gameDay.rows[0]?.game_day ?? 0)],
+  );
+  return { ok: true, feedback: result.rows[0] };
 }

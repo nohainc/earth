@@ -35,7 +35,8 @@ test('authenticated PostgreSQL mutation creates outbox event, broadcasts post-co
     // 1. Perform authenticated mutation in PostgreSQL
     const registration = await registerIdentity(repository, {
       email,
-      displayName: 'Outbox Mutation Tester',
+      personName: 'Outbox',
+      houseSurname: 'Tester',
       password: 'correct-horse-battery-staple',
     });
     humanId = registration.human.id;

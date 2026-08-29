@@ -3,13 +3,14 @@ import 'package:earth_client/features/auth/auth_screen.dart';
 
 void main() {
   group('Authentication Validation and Security Checks', () {
-    test('validates display name and email during registration', () {
+    test('validates identity names and email during registration', () {
       expect(
         validateAuthInput(
           email: '',
           password: 'password123456',
           passwordConfirmation: 'password123456',
-          displayName: 'Amara',
+          personName: 'Amara',
+          houseSurname: 'Vance',
           registration: true,
         ),
         'Email is required',
@@ -20,7 +21,8 @@ void main() {
           email: 'amara@earthuc.com',
           password: 'short',
           passwordConfirmation: 'short',
-          displayName: 'Amara',
+          personName: 'Amara',
+          houseSurname: 'Vance',
           registration: true,
         ),
         'Password must be at least 12 characters',
@@ -31,7 +33,8 @@ void main() {
           email: 'amara@earthuc.com',
           password: 'password123456',
           passwordConfirmation: 'different123456',
-          displayName: 'Amara',
+          personName: 'Amara',
+          houseSurname: 'Vance',
           registration: true,
         ),
         'Passwords do not match',
@@ -42,10 +45,11 @@ void main() {
           email: 'amara@earthuc.com',
           password: 'password123456',
           passwordConfirmation: 'password123456',
-          displayName: '',
+          personName: '',
+          houseSurname: 'Vance',
           registration: true,
         ),
-        'Display name is required',
+        'Given name must be at least 2 characters',
       );
 
       expect(
@@ -53,7 +57,8 @@ void main() {
           email: 'amara@earthuc.com',
           password: 'password123456',
           passwordConfirmation: 'password123456',
-          displayName: 'Amara Kline',
+          personName: 'Amara',
+          houseSurname: 'Kline',
           registration: true,
         ),
         isNull,

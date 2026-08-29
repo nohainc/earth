@@ -8,6 +8,8 @@ import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
+import { settleLifeMaintenance } from './life-maintenance-postgres.ts';
+import { applyPreparedResourceProfiles, rebuildDirtyDailySettlementProfiles, recordDailySettlementProfileShadow } from './daily-settlement-profiles.ts';
 
 export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
 
@@ -28,9 +30,16 @@ function effectiveRate(cityRules: unknown, corporationRules: unknown, key: strin
   return earthRate;
 }
 
-async function settleBusinessDepreciation(tx: PostgresRepository, day: number): Promise<void> {
-  // Building upkeep and revenue are settled by the real-estate engine.
-  // Legacy machine depreciation has been retired.
+async function runLoggedEngine(tx: PostgresRepository, day: number, engine: string, work: () => Promise<unknown>): Promise<void> {
+  const started = Date.now();
+  try {
+    const result = await work();
+    const rowsProcessed = typeof result === 'number' ? result : 0;
+    await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, rows_processed, duration_ms, status) VALUES ($1,$2,$3,$4,$5)', [day, engine, rowsProcessed, Date.now() - started, 'ok']);
+  } catch (error) {
+    await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, duration_ms, status, error_message) VALUES ($1,$2,$3,$4,$5)', [day, engine, Date.now() - started, 'error', error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error']);
+    throw error;
+  }
 }
 
 async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Promise<void> {
@@ -610,9 +619,11 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
     const currentDay = Number(world.rows[0]?.game_day ?? 0);
     const currentMinute = Number(world.rows[0]?.game_minute ?? 0);
-    const nextMinute = currentMinute + minutesPerTick;
-    const newDay = nextMinute >= 1440;
-    const offsetInc = newDay ? 1 : 0;
+    const totalMinutes = currentMinute + minutesPerTick;
+    const day = currentDay + Math.floor(totalMinutes / 1440);
+    const minute = totalMinutes % 1440;
+    const newDay = day !== currentDay;
+    const offsetInc = day - currentDay;
     await tx.query("UPDATE world_state SET game_day = $1, game_minute = $2, simulated_day_offset = COALESCE(simulated_day_offset, 0) + $3 WHERE id = 'WORLD'", [day, minute, offsetInc]);
     const expiringRoles = await tx.query<{ id: string; human_id: string; institution_id: string; role_id: string }>("SELECT id, human_id, institution_id, role_id FROM role_assignments WHERE status = 'active' AND ends_game_day <= $1 FOR UPDATE", [day]);
     await tx.query("UPDATE role_assignments SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
@@ -624,26 +635,32 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
     await tx.query("UPDATE market_prices SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)), game_day = $1", [day]);
     if (newDay) {
+      await runLoggedEngine(tx, day, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, day));
+      await runLoggedEngine(tx, day, 'daily_settlement_profile_shadow', () => recordDailySettlementProfileShadow(tx, day));
+      const mode = await tx.query<{ daily_settlement_mode: string }>("SELECT daily_settlement_mode FROM world_state WHERE id = 'WORLD'");
+      if (mode.rows[0]?.daily_settlement_mode === 'profile_resources') {
+        await runLoggedEngine(tx, day, 'daily_settlement_profile_resources', () => applyPreparedResourceProfiles(tx, day));
+      }
       await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
       await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
       await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [day]);
       await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
       if (day % 365 === 0) await processMortality(tx, day);
-      await settleBusinessDepreciation(tx, day);
-      await settleWorkforcePayroll(tx, day);
-      await settleServiceBusinessRevenue(tx, day);
-      await settleInstitutionBusinessEffects(tx, day);
-      await settleBusinessTaxes(tx, day);
-      await settleBasicLevy(tx, day);
-      await settleBuildingUpkeepAndRevenue(tx, day);
-      await settleBuildingPatentLicenses(tx, day);
-      await settleCivicDividends(tx, day);
-      await processCityDynamics(tx, day);
-      await processPatentExpirations(tx, day);
-      await updateFinancialStates(tx, day);
-      await dissolveInstitutions(tx, day);
-      await snapshotRankings(tx, day);
+      await runLoggedEngine(tx, day, 'workforce_payroll', () => settleWorkforcePayroll(tx, day));
+      await runLoggedEngine(tx, day, 'service_business_revenue', () => settleServiceBusinessRevenue(tx, day));
+      await runLoggedEngine(tx, day, 'institution_business_effects', () => settleInstitutionBusinessEffects(tx, day));
+      await runLoggedEngine(tx, day, 'life_maintenance', () => settleLifeMaintenance(tx, day));
+      await runLoggedEngine(tx, day, 'business_taxes', () => settleBusinessTaxes(tx, day));
+      await runLoggedEngine(tx, day, 'basic_levy', () => settleBasicLevy(tx, day));
+      await runLoggedEngine(tx, day, 'building_settlement', () => settleBuildingUpkeepAndRevenue(tx, day));
+      await runLoggedEngine(tx, day, 'building_patent_licenses', () => settleBuildingPatentLicenses(tx, day));
+      await runLoggedEngine(tx, day, 'civic_dividends', () => settleCivicDividends(tx, day));
+      await runLoggedEngine(tx, day, 'city_dynamics', () => processCityDynamics(tx, day));
+      await runLoggedEngine(tx, day, 'patent_expirations', () => processPatentExpirations(tx, day));
+      await runLoggedEngine(tx, day, 'financial_states', () => updateFinancialStates(tx, day));
+      await runLoggedEngine(tx, day, 'institution_dissolution', () => dissolveInstitutions(tx, day));
+      await runLoggedEngine(tx, day, 'rankings_snapshot', () => snapshotRankings(tx, day));
     }
     await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");

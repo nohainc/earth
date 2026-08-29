@@ -4,155 +4,92 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/finance/personal_finance_panel.dart';
 
 void main() {
-  testWidgets(
-      'PersonalFinancePanel renders credit balance, income, expenses, and tax status',
+  testWidgets('Personal Finance shows real life maintenance and automatic tax',
       (tester) async {
     const state = EarthState({
-      'clock': {'day': 184, 'minute': 100},
-      'human': {
-        'id': 'H-0044',
-        'credits': 18420,
-        'standing': 742,
-        'legacy': 31
-      },
-      'world': {'health': 100},
-      'resources': {},
-      'business': {},
-      'technology': {'research': {}},
-      'institutions': {},
-      'life': {},
-      'governance': {},
-    });
-
-    final financeData = {
-      'account': {'balance': 18420, 'currency': 'CREDIT'},
-      'state': {
-        'income': 760,
-        'expenses': 240,
-        'tax_obligations': 48,
-        'liquidity_status': 'healthy',
-        'insolvency_status': 'solvent',
-      },
-      'protectedMinimum': {'credits': 100, 'basicServiceRobot': true},
-    };
-
-    bool taxActionTriggered = false;
-    bool insolvencyActionTriggered = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: PersonalFinancePanel(
-              state: state,
-              busy: false,
-              personalFinanceData: financeData,
-              action: (cb) async {
-                taxActionTriggered = true;
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-
-    expect(find.text('MONEY TODAY / PERSONAL FINANCE'), findsOneWidget);
-    expect(find.text('18420'), findsOneWidget);
-    expect(find.text('C'), findsWidgets);
-    expect(find.text('HEALTHY LIQUIDITY'), findsOneWidget);
-    expect(find.textContaining('STATUTORY PROTECTION SHIELD'), findsOneWidget);
-    expect(find.text('DAILY INFLOW'), findsOneWidget);
-    expect(find.text('BASELINE OUTFLOW'), findsOneWidget);
-    expect(find.text('NET DAILY ACCUMULATION'), findsOneWidget);
-    expect(find.text('ASSESSED TAX DUES'), findsOneWidget);
-    expect(find.text('+472 C'), findsOneWidget);
-    expect(find.text('SETTLE TAXES'), findsOneWidget);
-    expect(find.text('INSOLVENCY RESTRUCTURING'), findsOneWidget);
-
-    // Verify info icon is present and opens description dialog
-    expect(find.byIcon(Icons.info_outline), findsWidgets);
-    await tester.tap(find.byIcon(Icons.info_outline).first);
-    await tester.pumpAndSettle();
-    expect(find.text('CLOSE'), findsOneWidget);
-    await tester.tap(find.text('CLOSE'));
-    await tester.pumpAndSettle();
-
-    // Open settle taxes dialog
-    await tester.ensureVisible(find.text('SETTLE TAXES'));
-    await tester.tap(find.text('SETTLE TAXES'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Settle Tax Obligations'), findsOneWidget);
-    expect(find.text('CONFIRM SETTLEMENT'), findsOneWidget);
-
-    await tester.tap(find.text('CONFIRM SETTLEMENT'));
-    await tester.pumpAndSettle();
-
-    expect(taxActionTriggered, isTrue);
-
-    // Test insolvency restructuring dialog
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: SingleChildScrollView(
-            child: PersonalFinancePanel(
-              state: state,
-              busy: false,
-              personalFinanceData: financeData,
-              action: (cb) async {
-                insolvencyActionTriggered = true;
-              },
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.ensureVisible(find.text('INSOLVENCY RESTRUCTURING'));
-    await tester.tap(find.text('INSOLVENCY RESTRUCTURING'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Declare Personal Insolvency'), findsOneWidget);
-    expect(find.text('EXECUTE RESTRUCTURING'), findsOneWidget);
-
-    await tester.tap(find.text('EXECUTE RESTRUCTURING'));
-    await tester.pumpAndSettle();
-
-    expect(insolvencyActionTriggered, isTrue);
-  });
-
-  testWidgets('FinancialOutlookPanel connects money to goals and obligations',
-      (tester) async {
-    const state = EarthState({
-      'human': {'credits': 1200},
+      'human': {'id': 'H-0044', 'credits': 18420},
+      'buildings': [
+        {
+          'owner_id': 'H-0044',
+          'ownership_class': 'private',
+          'status': 'active',
+          'resource_output_type': 'energy',
+          'resource_output_amount': 15,
+          'daily_operating_credits': 0,
+          'operating_policy': 'balanced',
+        }
+      ],
     });
     final data = {
-      'state': {'income': 100, 'expenses': 40, 'tax_obligations': 10},
-      'goals': [
-        {'name': 'Emergency reserve'}
-      ],
-      'assets': [
-        {'name': 'Workshop shares'}
-      ],
-      'incomeSources': [
-        {'name': 'Business dividends'}
-      ],
-      'liabilities': [
-        {'name': 'Tax assessment'}
-      ],
+      'account': {'balance': 18420, 'currency': 'CREDIT'},
+      'protectedMinimum': {'credits': 100},
+      'lifeMaintenance': {
+        'unpaidTotal': 0,
+        'lastSettlement': {
+          'food_used': 1,
+          'energy_used': 1,
+          'compute_used': 0.25,
+          'credits_for_resources': 0,
+        },
+        'nextDailyCost': {
+          'food': 18,
+          'housing': 12,
+          'energy': 5,
+          'health': 3,
+          'connectivity': 2,
+          'total': 40,
+        },
+      },
+      'basicLevy': {
+        'rate': 0.02,
+        'source': 'Earth',
+        'estimatedDailyLevy': 2,
+      },
+      'taxes': {
+        'rules': [
+          {'category': 'basic_income', 'rate': 0.02},
+        ],
+      },
+      'assetIncome': {
+        'businessProfit': 120,
+        'civicDividends': 6,
+        'privateBuildings': [
+          {
+            'resource_output_type': 'energy',
+            'resource_output_amount': 15,
+            'daily_operating_credits': 0,
+            'operating_policy': 'balanced'
+          },
+        ],
+      },
     };
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
-          body: FinancialOutlookPanel(state: state, personalFinanceData: data)),
+        body: SingleChildScrollView(
+          child: PersonalFinancePanel(
+            state: state,
+            busy: false,
+            personalFinanceData: data,
+            action: (_) async {},
+          ),
+        ),
+      ),
     ));
 
-    expect(find.text('FINANCIAL OUTLOOK'), findsOneWidget);
-    expect(find.textContaining('Emergency reserve'), findsOneWidget);
-    expect(find.textContaining('Workshop shares'), findsOneWidget);
-    expect(find.textContaining('Business dividends'), findsOneWidget);
-    expect(find.textContaining('Tax assessment'), findsWidgets);
-    expect(find.textContaining('OUTLOOK:'), findsOneWidget);
-    expect(find.textContaining('+50 C'), findsOneWidget);
+    expect(find.text('PERSONAL FINANCE'), findsOneWidget);
+    expect(find.text('Available Credits'), findsNothing);
+    expect(find.text('DAILY INCOME'), findsOneWidget);
+    expect(find.text('Private buildings'), findsOneWidget);
+    expect(find.text('Investment dividend'), findsOneWidget);
+    expect(find.text('FROM PRIVATE BUILDINGS'), findsOneWidget);
+    expect(find.text('+15'), findsWidgets);
+    expect(find.text('LIFE MAINTENANCE'), findsOneWidget);
+    expect(find.text('-1'), findsWidgets);
+    expect(find.text('ESTIMATED TAX ON THIS INCOME'), findsOneWidget);
+    expect(find.text('Basic income tax'), findsOneWidget);
+    expect(find.text('YOUR DAILY RESULT'), findsOneWidget);
+    expect(find.text('SETTLE TAXES'), findsNothing);
+    expect(find.text('INSOLVENCY RESTRUCTURING'), findsNothing);
   });
 }

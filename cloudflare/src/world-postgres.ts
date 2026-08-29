@@ -26,7 +26,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   await reconcileWorldSimulation(repository, viewerId);
   const flows = await computeResourceFlows(repository, viewerId);
 
-  const [world, human, institutions, resources, business, technology, proposals, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts, technologyAdoptions] = await Promise.all([
+  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts, technologyAdoptions] = await Promise.all([
     repository.query('SELECT * FROM world_state WHERE id = $1', ['WORLD']),
     repository.query('SELECT * FROM humans WHERE id = $1', [viewerId]),
     repository.query('SELECT * FROM institutions'),
@@ -34,6 +34,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT businesses.*, COALESCE((SELECT SUM(shares) FROM business_shares WHERE business_id = businesses.id AND holder_id = $1), 0) AS owned_shares, COALESCE((SELECT SUM(shares) FROM business_shares WHERE business_id = businesses.id), 0) AS total_issued_shares, (SELECT holder_id FROM business_shares WHERE business_id = businesses.id ORDER BY shares DESC, holder_id LIMIT 1) AS controlling_human_id, COALESCE(business_constitutions.version, 1) AS constitution_version, COALESCE(business_constitutions.shareholder_vote_threshold, 0.5) AS shareholder_vote_threshold, COALESCE(business_constitutions.board_approval_threshold, 0.5) AS board_approval_threshold, COALESCE(business_constitutions.dilution_notice_days, 3) AS dilution_notice_days, COALESCE(business_management.manager_id, businesses.owner_id) AS manager_id, COALESCE(business_financials.revenue, 0) AS revenue, COALESCE(business_financials.operating_costs, 0) AS operating_costs, COALESCE(business_financials.profit, 0) AS profit FROM businesses LEFT JOIN business_constitutions ON business_constitutions.business_id = businesses.id LEFT JOIN business_management ON business_management.business_id = businesses.id LEFT JOIN business_financials ON business_financials.business_id = businesses.id WHERE businesses.owner_id = $1 OR business_management.manager_id = $1 OR EXISTS (SELECT 1 FROM business_shares viewer_shares WHERE viewer_shares.business_id = businesses.id AND viewer_shares.holder_id = $1) ORDER BY businesses.id", [viewerId]),
     repository.query('SELECT * FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewerId]),
     repository.query('SELECT * FROM proposals ORDER BY closes_at ASC LIMIT 20'),
+    repository.query("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC"),
     repository.query("SELECT balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewerId]),
     repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
     repository.query('SELECT * FROM succession_plans WHERE human_id = $1', [viewerId]),
@@ -49,13 +50,14 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT negotiated_contracts.*, contract_disputes.id AS dispute_id, contract_disputes.status AS dispute_status, contract_disputes.reason AS dispute_reason FROM negotiated_contracts LEFT JOIN contract_disputes ON contract_disputes.contract_id = negotiated_contracts.id AND contract_disputes.status = 'open' WHERE negotiated_contracts.proposer_id = $1 OR negotiated_contracts.counterparty_id = $1 ORDER BY negotiated_contracts.created_at DESC LIMIT 30", [viewerId]),
     repository.query("SELECT bta.business_id, bta.technology_id, bta.adopted_game_day, b.name AS business_name, t.name AS technology_name FROM business_technology_adoptions bta JOIN businesses b ON b.id = bta.business_id JOIN technologies t ON t.id = bta.technology_id WHERE b.owner_id = $1 OR EXISTS (SELECT 1 FROM business_management bm WHERE bm.business_id = b.id AND bm.manager_id = $1) OR EXISTS (SELECT 1 FROM business_shares bs WHERE bs.business_id = b.id AND bs.holder_id = $1) ORDER BY bta.adopted_game_day DESC", [viewerId]),
   ]);
-  const houseProgress = await repository.query<{ generation: number; house_name: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }>(`SELECT COALESCE(MAX(hlr.generation), 1)::integer AS generation, MAX(h.house_name) AS house_name,
+  const houseProgress = await repository.query<{ generation: number; house_name: string | null; epitaph: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }>(`SELECT COALESCE(MAX(hlr.generation), 1)::integer AS generation, MAX(h.house_name) AS house_name,
+      MAX(hlr.epitaph) FILTER (WHERE hlr.human_id = $1) AS epitaph,
       COUNT(DISTINCT hp.id)::integer AS perks_count, COUNT(DISTINCT hh.id)::integer AS heirlooms_count, COALESCE(MAX(h.legacy_points), 0)::integer AS legacy_points
     FROM houses h
     LEFT JOIN house_lineage_records hlr ON hlr.house_id = h.id
     LEFT JOIN house_perks hp ON hp.house_id = h.id
     LEFT JOIN house_heirlooms hh ON hh.house_id = h.id
-    WHERE h.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; house_name: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }[] }));
+    WHERE h.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; house_name: string | null; epitaph: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }[] }));
   const corporationSharedTechnology = { rows: [] as Array<Record<string, unknown>> };
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};
@@ -195,7 +197,23 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT institution_roles.id, institution_roles.name, institution_roles.institution_id, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id"),
     Promise.all([repository.query('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12'), repository.query('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20')]),
     repository.query("SELECT b.* FROM buildings b WHERE b.owner_id = $1 OR b.city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084') ORDER BY b.created_game_day DESC, b.id", [viewerId]).catch(() => ({ rows: [] })),
-    repository.query("SELECT s.*, b.name AS building_name, b.building_type, b.condition FROM building_investment_shares s JOIN buildings b ON s.building_id = b.id WHERE s.investor_id = $1", [viewerId]).catch(() => ({ rows: [] })),
+    repository.query(`
+      SELECT
+        b.id AS building_id,
+        b.name AS building_name,
+        b.building_type,
+        b.condition,
+        COALESCE(s.shares_owned, 0)::integer AS shares_owned,
+        COALESCE(s.total_shares_issued, 1000)::integer AS total_shares_issued,
+        COALESCE(s.invested_credits, 0) AS invested_credits,
+        COALESCE(s.accumulated_dividends_crd, 0) AS accumulated_dividends_crd,
+        COALESCE((SELECT SUM(all_shares.shares_owned) FROM building_investment_shares all_shares WHERE all_shares.building_id = b.id), 0)::integer AS shares_sold
+      FROM buildings b
+      LEFT JOIN building_investment_shares s
+        ON s.building_id = b.id AND s.investor_id = $1
+      WHERE b.ownership_class = 'public_investment'
+        AND b.status NOT IN ('closed', 'foreclosed')
+    `, [viewerId]).catch(() => ({ rows: [] })),
     repository.query("SELECT * FROM civic_dividend_payouts WHERE city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084') ORDER BY day DESC LIMIT 5").catch(() => ({ rows: [] })),
     repository.query("SELECT crp.* FROM corporate_research_pools crp WHERE crp.corporation_id = COALESCE((SELECT corporation_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CORP-001') ORDER BY crp.status, crp.created_at DESC", [viewerId]).catch(() => ({ rows: [] })),
     getCityDistrictZoning(repository, city?.id ?? 'CITY-0084').catch(() => ({
@@ -257,6 +275,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     market: prices.rows as Array<{ product: string; supply?: unknown; demand?: unknown; price?: unknown }>,
     gameDay: currentGameDay,
   });
+  const objectiveRuleRows = await repository.query<{ key: string; value: string }>("SELECT key, value FROM world_rules WHERE key LIKE 'objectives.%'").catch(() => ({ rows: [] }));
+  const objectiveRules = Object.fromEntries(objectiveRuleRows.rows.map((row) => [row.key, Number(row.value)]));
   const objectives = evaluatePlayerObjectives({
     human: { credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, voting_weight: 1, age_years: humanRow.age_years ?? 31 },
     business: { id: businessRow.id, business_count: activeBusinesses.length, valuation: portfolioValuation, treasury: Number(corporation?.treasury ?? 0), profit: portfolioProfit, net_income: portfolioProfit },
@@ -274,7 +294,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     },
     resources: resourceMap,
     netWorth: Number(account.rows[0]?.balance ?? 0) + 15000,
-  });
+  }, objectiveRules);
   const recommendations = [
     ...(city && Number(city.health_capacity ?? 0) / 100 < 0.5 ? [{ type: 'services', priority: 'high', subject: 'CITY-HEALTH', message: 'Health service is critical; propose or fund additional city health capacity.' }] : []),
   ];
@@ -329,8 +349,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   return {
     clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 60 },
     world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, economicStartIndex: startIndex, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
-    human: { id: humanRow.id, name: humanRow.display_name, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, health: 100, vitality: 100, energy: 100, stamina: 100, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
-    life: { generation: Number(houseProgress.rows[0]?.generation ?? 1), houseName: houseProgress.rows[0]?.house_name ?? null, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, health: 100, vitality: 100, energy: 100, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
+    human: { id: humanRow.id, name: humanRow.display_name, epitaph: houseProgress.rows[0]?.epitaph ?? null, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, health: 100, vitality: 100, energy: 100, stamina: 100, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
+    life: { generation: Number(houseProgress.rows[0]?.generation ?? 1), houseName: houseProgress.rows[0]?.house_name ?? null, epitaph: houseProgress.rows[0]?.epitaph ?? null, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, health: 100, vitality: 100, energy: 100, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
     membership: membership.rows[0] ?? null,
     institutions: {
       ouc: mapByKind(institutions.rows, 'OUC'),
@@ -352,7 +372,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     constitutionalRules: constitutionalRules.rows,
     buildingCatalog: Object.values(BUILDING_CATALOG),
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
-    governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })) },
+    governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })), rules: governanceRules.rows },
     technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), citizens: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })), humans: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[2].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0 },

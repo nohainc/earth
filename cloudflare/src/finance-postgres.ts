@@ -75,7 +75,7 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, state: prior.rows[0] };
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    const buildings = await tx.query<{ id: string }>("SELECT id FROM buildings WHERE owner_id = $1 AND ownership_type = 'private' FOR UPDATE", [humanId]);
+    const buildings = await tx.query<{ id: string }>("SELECT id FROM buildings WHERE owner_id = $1 AND ownership_class = 'private' FOR UPDATE", [humanId]);
     const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [humanId]);
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [humanId]);
     if (!account.rows[0]) throw new Error('Human Credit account is required for insolvency');
@@ -88,7 +88,7 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     if (protectedTopUpCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-ouc-treasury', creditAccount: account.rows[0].account_id, amount: centsToMoney(protectedTopUpCents), reasonType: 'insolvency_protection', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-PROTECTION-${humanId}-${day}` });
     if (treasuryAssetPaymentCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-ouc-treasury', creditAccount: account.rows[0].account_id, amount: centsToMoney(treasuryAssetPaymentCents), reasonType: 'asset_liquidation', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-ASSETS-${humanId}-${day}` });
     const liquidationValue = Number(centsToMoney(buildingValueCents + BigInt(businesses.rows.length) * 10000n));
-    await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_type = 'private'", [humanId]);
+    await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [humanId]);
     for (const business of businesses.rows) {
       await tx.query('DELETE FROM business_shares WHERE business_id = $1', [business.id]);
     }

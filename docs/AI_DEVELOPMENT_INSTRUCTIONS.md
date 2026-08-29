@@ -201,6 +201,11 @@ creating one-off menu text styles.
 
 ## 6. Database and migration rules
 
+- Treat `db/initial.sql` and `db/schema-manifest.json` as the current schema
+  baseline. Do not review or edit `db/migrations/001–074` unless historical
+  investigation is explicitly required.
+- Migration `075` begins the new profile-settlement era. Use the next available
+  higher version for every future schema migration.
 - Add every schema change as a forward-only, human-reviewed SQL migration.
 - Update `db/schema-manifest.json` when the schema contract changes.
 - Never use destructive automatic schema pushes in production.

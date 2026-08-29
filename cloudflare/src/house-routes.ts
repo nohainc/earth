@@ -1,6 +1,7 @@
 import type { Env } from './index.ts';
-import { withRepository } from './postgres.ts';
+import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
+import { currentHuman } from './auth-session.ts';
 import {
   getHouseOverview,
   unlockHousePerk,
@@ -9,22 +10,37 @@ import {
   updateHouseMotto,
 } from './house-postgres.ts';
 
+/**
+ * Routes for /api/house/* and /api/dynasty/* (legacy alias kept for compatibility).
+ * "House" and "dynasty" refer to the same generational lineage system.
+ */
 export async function handleHouseRoutes(
   request: Request,
   env: Env,
   url: URL,
-  viewer: { id: string; email?: string; name?: string },
 ): Promise<Response | null> {
+
+  const isHousePath = url.pathname.startsWith('/api/house') || url.pathname.startsWith('/api/dynasty');
+  if (!isHousePath) return null;
+
+  // GET /api/house — overview of lineage, perks, and heirlooms
   if ((url.pathname === '/api/house' || url.pathname === '/api/dynasty') && request.method === 'GET') {
-    const email = viewer.email || 'amara@earth.local';
-    const humanId = viewer.id || 'H-0044';
-    const humanName = viewer.name || 'Amara Vance';
+    const viewer = await currentHuman(request, env);
+    const email = viewer?.email || 'amara@earth.local';
+    const humanId = viewer?.id || 'H-0044';
+    const humanName = viewer?.name || 'Amara Vance';
     const result = await withRepository(env, (repository) => getHouseOverview(repository, email, humanId, humanName));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
-  if ((url.pathname === '/api/house/perks/unlock' || url.pathname === '/api/dynasty/perks/unlock') && request.method === 'POST') {
+  // POST /api/house/perks/unlock
+  if (
+    (url.pathname === '/api/house/perks/unlock' || url.pathname === '/api/dynasty/perks/unlock') &&
+    request.method === 'POST'
+  ) {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ perkKey?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const perkKey = parsed.value.perkKey?.trim() ?? '';
@@ -41,14 +57,26 @@ export async function handleHouseRoutes(
     }
   }
 
-  if ((url.pathname === '/api/house/heirlooms/equip' || url.pathname === '/api/dynasty/heirlooms/equip') && request.method === 'POST') {
+  // POST /api/house/heirlooms/equip
+  if (
+    (url.pathname === '/api/house/heirlooms/equip' || url.pathname === '/api/dynasty/heirlooms/equip') &&
+    request.method === 'POST'
+  ) {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ heirloomId?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const heirloomId = parsed.value.heirloomId?.trim() ?? '';
     if (!heirloomId) return Response.json({ ok: false, error: 'Heirloom ID is required' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        equipHouseHeirloom(repository, viewer.email || 'amara@earth.local', heirloomId, viewer.id, resolveIdempotencyKey(request, parsed.value.correlationId)),
+        equipHouseHeirloom(
+          repository,
+          viewer.email || 'amara@earth.local',
+          heirloomId,
+          viewer.id,
+          resolveIdempotencyKey(request, parsed.value.correlationId),
+        ),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -58,8 +86,20 @@ export async function handleHouseRoutes(
     }
   }
 
-  if ((url.pathname === '/api/house/heirlooms/forge' || url.pathname === '/api/dynasty/heirlooms/forge') && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ name?: string; heirloomType?: string; inscription?: string; statBuff?: string; correlationId?: string }>(request);
+  // POST /api/house/heirlooms/forge
+  if (
+    (url.pathname === '/api/house/heirlooms/forge' || url.pathname === '/api/dynasty/heirlooms/forge') &&
+    request.method === 'POST'
+  ) {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{
+      name?: string;
+      heirloomType?: string;
+      inscription?: string;
+      statBuff?: string;
+      correlationId?: string;
+    }>(request);
     if (!parsed.ok) return parsed.response;
     const name = parsed.value.name?.trim() ?? '';
     const heirloomType = parsed.value.heirloomType?.trim() ?? 'house_standard';
@@ -68,7 +108,15 @@ export async function handleHouseRoutes(
     if (!name) return Response.json({ ok: false, error: 'Heirloom name is required' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        forgeHouseHeirloom(repository, viewer.email || 'amara@earth.local', name, heirloomType, inscription, statBuff, resolveIdempotencyKey(request, parsed.value.correlationId)),
+        forgeHouseHeirloom(
+          repository,
+          viewer.email || 'amara@earth.local',
+          name,
+          heirloomType,
+          inscription,
+          statBuff,
+          resolveIdempotencyKey(request, parsed.value.correlationId),
+        ),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -78,15 +126,29 @@ export async function handleHouseRoutes(
     }
   }
 
-  if ((url.pathname === '/api/house/motto' || url.pathname === '/api/dynasty/motto') && request.method === 'POST') {
+  // POST /api/house/motto
+  if (
+    (url.pathname === '/api/house/motto' || url.pathname === '/api/dynasty/motto') &&
+    request.method === 'POST'
+  ) {
+    const viewer = await currentHuman(request, env);
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ motto?: string; houseName?: string; dynastyName?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const motto = parsed.value.motto?.trim() ?? '';
     const houseName = parsed.value.houseName?.trim() ?? parsed.value.dynastyName?.trim();
-    if (!motto) return Response.json({ ok: false, error: 'Motto is required' }, { status: 400 });
+    if (houseName !== undefined && houseName.length < 2) {
+      return Response.json({ ok: false, error: 'House name must be at least 2 characters' }, { status: 400 });
+    }
     try {
       const result = await withRepository(env, (repository) =>
-        updateHouseMotto(repository, viewer.email || 'amara@earth.local', motto, houseName, resolveIdempotencyKey(request, parsed.value.correlationId)),
+        updateHouseMotto(
+          repository,
+          viewer.email || 'amara@earth.local',
+          motto,
+          houseName,
+          resolveIdempotencyKey(request, parsed.value.correlationId),
+        ),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });

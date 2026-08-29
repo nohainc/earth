@@ -1,0 +1,10 @@
+export interface BriefingFact { id: string; title: string; detail: string; sourceFactSummary: string; confidenceLevel: 'high' | 'medium' | 'low'; }
+export interface DailyBriefing { headline: string; priorityAlerts: BriefingFact[]; objectiveProgress: BriefingFact[]; marketSignals: BriefingFact[]; whatChangedSinceYesterday: BriefingFact[]; }
+
+export function buildDailyBriefing(input: { worldSnapshot: { gameDay: number }; objectives?: Array<{ id: string; title: string; progressPercentage: number }>; decisionQueue?: Array<{ id: string; title: string; reason?: string; urgency?: string }>; previousGameDay?: number; marketMovements?: Array<{ commodity: string; deltaPct: number }> }): DailyBriefing {
+  const alerts = (input.decisionQueue ?? []).slice(0, 3).map((item) => ({ id: item.id, title: item.title, detail: item.reason ?? 'A player decision needs attention.', sourceFactSummary: `Decision queue urgency: ${item.urgency ?? 'normal'}`, confidenceLevel: 'high' as const }));
+  const progress = (input.objectives ?? []).slice(0, 3).map((item) => ({ id: item.id, title: item.title, detail: `${item.progressPercentage}% complete`, sourceFactSummary: 'Objective progress is calculated from the current world snapshot.', confidenceLevel: 'high' as const }));
+  const signals = (input.marketMovements ?? []).filter((item) => Math.abs(item.deltaPct) >= 3).slice(0, 3).map((item) => ({ id: `market-${item.commodity}`, title: `${item.commodity} ${item.deltaPct >= 0 ? 'rising' : 'falling'}`, detail: `${Math.abs(item.deltaPct).toFixed(2)}% since the prior reading.`, sourceFactSummary: 'Derived from market price movement.', confidenceLevel: 'medium' as const }));
+  const yesterday = input.previousGameDay ?? Math.max(0, input.worldSnapshot.gameDay - 1);
+  return { headline: alerts[0]?.title ?? `World day ${input.worldSnapshot.gameDay}: systems stable`, priorityAlerts: alerts, objectiveProgress: progress, marketSignals: signals, whatChangedSinceYesterday: [{ id: 'game-day', title: 'World clock advanced', detail: `Day ${yesterday} to ${input.worldSnapshot.gameDay}.`, sourceFactSummary: 'World state game day.', confidenceLevel: 'high' }] };
+}
