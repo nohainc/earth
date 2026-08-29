@@ -21,7 +21,7 @@ test('Configuration, Persistence Authority, and Secret Safety Validation', async
   assert.ok(wranglerRaw.includes('HYPERDRIVE'), 'wrangler.api.jsonc must configure HYPERDRIVE binding');
   assert.ok(wranglerRaw.includes('MARKET_COORDINATOR'), 'wrangler.api.jsonc must configure MARKET_COORDINATOR Durable Object');
   assert.ok(wranglerRaw.includes('EMAIL'), 'wrangler.api.jsonc must configure EMAIL binding');
-  assert.ok(wranglerRaw.includes('auth.earthuc.com'), 'Email domain must match approved sender');
+  assert.ok(wranglerRaw.includes('"EMAIL_FROM": "earth@nohainc.com"'), 'Email sender must use the approved nohainc.com address');
 
   // 3. Verify no secrets or credentials appear in the API config or public code
   assert.equal(wranglerRaw.includes('postgres://'), false, 'wrangler.api.jsonc must never contain hardcoded database URIs');
