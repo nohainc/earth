@@ -50,7 +50,9 @@ void main() {
     });
 
     await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(body: SingleChildScrollView(child: CorporationOverviewPanel(state: state))),
+      home: Scaffold(
+          body: SingleChildScrollView(
+              child: CorporationOverviewPanel(state: state))),
     ));
 
     expect(find.text('CORPORATION'), findsNothing);
@@ -61,7 +63,7 @@ void main() {
     expect(find.text('Shareholder Supermajority Protection'), findsOneWidget);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
     expect(find.text('38'), findsOneWidget);
-    expect(find.text('12500 C'), findsOneWidget);
+    expect(find.text('12500 C'), findsNWidgets(2));
   });
 
   testWidgets(
@@ -91,8 +93,18 @@ void main() {
           },
         ],
         'cities': [
-          {'id': 'CITY-1', 'name': 'New Carthage', 'corporation_id': 'CORP-001', 'residents': 150},
-          {'id': 'CITY-2', 'name': 'Sky Spire', 'corporation_id': 'CORP-002', 'residents': 300},
+          {
+            'id': 'CITY-1',
+            'name': 'New Carthage',
+            'corporation_id': 'CORP-001',
+            'residents': 150
+          },
+          {
+            'id': 'CITY-2',
+            'name': 'Sky Spire',
+            'corporation_id': 'CORP-002',
+            'residents': 300
+          },
         ],
       },
     });
@@ -271,7 +283,8 @@ void main() {
     expect(find.text('Essential Services Minimum Standard'), findsOneWidget);
   });
 
-  testWidgets('InstitutionsPanel renders planetary corporations with constitutional tax badges and charter dialog',
+  testWidgets(
+      'InstitutionsPanel renders planetary corporations with constitutional tax badges and charter dialog',
       (tester) async {
     const state = EarthState({
       'human': {'id': 'H-0044'},
@@ -355,7 +368,8 @@ void main() {
     expect(find.text('Corporate Tax Protection'), findsWidgets);
   });
 
-  testWidgets('CivicRankingsPanel renders corporations and cities with tabs, formula dialogs and index badges',
+  testWidgets(
+      'CivicRankingsPanel renders corporations and cities with tabs, formula dialogs and index badges',
       (tester) async {
     const state = EarthState({
       'human': {
@@ -470,7 +484,8 @@ void main() {
 
     expect(find.text('House of Vance'), findsOneWidget);
     expect(find.text('5.4k Leg · 980 Std · Gen 3'), findsOneWidget);
-    expect(find.text('Founder: Marcus Vance · Heir: Amara Vance'), findsOneWidget);
+    expect(
+        find.text('Founder: Marcus Vance · Heir: Amara Vance'), findsOneWidget);
 
     // Verify formula info dialog for Houses
     final infoIcons = find.byIcon(Icons.info_outline);
@@ -481,7 +496,8 @@ void main() {
 
     expect(find.text('HOUSES RANKING FORMULA'), findsOneWidget);
     expect(find.textContaining('1 : 5 : 25 weighting ratio'), findsOneWidget);
-    expect(find.textContaining('House Legacy (25x relative weight'), findsOneWidget);
+    expect(find.textContaining('House Legacy (25x relative weight'),
+        findsOneWidget);
     expect(find.text('GOT IT'), findsOneWidget);
 
     await tester.tap(find.text('GOT IT'));
@@ -529,7 +545,9 @@ void main() {
     expect(find.text('Carthage Dynamics'), findsOneWidget);
   });
 
-  testWidgets('CivicRankingsPanel paginates long lists and supports Jump to My Rank', (tester) async {
+  testWidgets(
+      'CivicRankingsPanel paginates long lists and supports Jump to My Rank',
+      (tester) async {
     final manyCitizens = List.generate(15, (index) {
       return {
         'id': 'H-${index + 1}',

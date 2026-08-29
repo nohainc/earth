@@ -127,7 +127,10 @@ void main() {
             'upgradeComponentsCost': 10,
             'dailyCreditRevenue': 1450,
             'dailyOperatingCredits': 220,
-            'unlockedPerks': ['Premium Tasting Menu', 'Corporate Catering Contract'],
+            'unlockedPerks': [
+              'Premium Tasting Menu',
+              'Corporate Catering Contract'
+            ],
             'requiredCityPopulation': 10,
             'description': 'Tier 2 lounge.',
           },
@@ -153,7 +156,9 @@ void main() {
     ],
   });
 
-  testWidgets('BuildingsHubScreen renders 3 tabs and switches between Estates, Planner, and Catalog', (tester) async {
+  testWidgets(
+      'BuildingsHubScreen presents ownership tabs and the matching catalog',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -175,19 +180,20 @@ void main() {
       ),
     );
 
-    expect(find.text('PRIVATE BUILDINGS'), findsOneWidget);
-    expect(find.text('CIVIC BUILDINGS'), findsOneWidget);
-    expect(find.text('CATALOG'), findsOneWidget);
+    expect(find.text('PRIVATE (1)'), findsOneWidget);
+    expect(find.text('CIVIC (1)'), findsOneWidget);
+    expect(find.text('PRIVATE CATALOG'), findsOneWidget);
+    expect(find.text('Solar Concentrator Array'), findsOneWidget);
 
-    // Switch to the top-level Catalog tab.
-    await tester.tap(find.text('CATALOG').last);
+    await tester.tap(find.text('CIVIC (1)'));
     await tester.pumpAndSettle();
 
-    expect(find.text('CATALOG'), findsOneWidget);
-    expect(find.text('Solar Concentrator Array'), findsOneWidget);
+    expect(find.text('CIVIC CATALOG'), findsOneWidget);
   });
 
-  testWidgets('showBuildingDetailUpgradeDialog renders multi-tier tree and progression nodes', (tester) async {
+  testWidgets(
+      'showBuildingDetailUpgradeDialog renders multi-tier tree and progression nodes',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -217,13 +223,16 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.textContaining('Multi-Tier Upgrade Tree'), findsOneWidget);
-    expect(find.textContaining('MULTI-TIER UPGRADE PROGRESSION'), findsOneWidget);
+    expect(
+        find.textContaining('MULTI-TIER UPGRADE PROGRESSION'), findsOneWidget);
     expect(find.text('TIER 1: Bistro & Molecular Diner'), findsOneWidget);
     expect(find.text('TIER 2: Gourmet Gastronomy Lounge'), findsOneWidget);
     expect(find.text('COMMENCE TIER 2 UPGRADE'), findsOneWidget);
   });
 
-  testWidgets('showPatentLicensingDialog opens with private, civic, and permanent options', (tester) async {
+  testWidgets(
+      'showPatentLicensingDialog opens with private, civic, and permanent options',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
@@ -264,12 +273,15 @@ void main() {
     expect(find.text('Photonic Neural Architecture'), findsOneWidget);
     expect(find.textContaining('Aetheria Systems'), findsOneWidget);
     expect(find.text('30-Day Private Building License'), findsOneWidget);
-    expect(find.text('30-Day Municipal City-Wide Civic License'), findsOneWidget);
+    expect(
+        find.text('30-Day Municipal City-Wide Civic License'), findsOneWidget);
     expect(find.text('Permanent Civic Sovereign License'), findsOneWidget);
     expect(find.text('PURCHASE & AUTHORIZE'), findsOneWidget);
   });
 
-  testWidgets('Real estate acquisition dialog opens and displays blueprint details', (tester) async {
+  testWidgets(
+      'Real estate acquisition dialog opens and displays blueprint details',
+      (tester) async {
     tester.view.physicalSize = const Size(1200, 900);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(() {
