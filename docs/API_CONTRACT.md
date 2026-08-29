@@ -41,7 +41,7 @@ SQL, credentials, and stack traces never cross the API boundary.
 EARTH natively supports the **Nano Markup** (`application/nanomarkup`) HTTP protocol:
 - **Request Bodies**: Clients send requests with `Content-Type: application/nanomarkup` containing canonical Nano Markup text mappings (`..\n    key value`).
 - **Response Bodies**: The Worker supports content negotiation; when requests include `Accept: application/nanomarkup` or `Content-Type: application/nanomarkup`, responses are returned with `Content-Type: application/nanomarkup; charset=utf-8` formatted as Nano Markup.
-- **Internal State & Events**: Event details (`world_events.details`), negotiated contract terms (`terms_json`), governance rule values (`value_json`), and municipal tax charters (`charter_rules`) are canonically encoded using **Nano Markup** (`nanomarkup` by `nohainc`).
+- **Internal State & Events**: Event details (`world_events.details`), negotiated contract terms (`terms_markup`), governance rule values (`value_json`), and municipal tax charters (`charter_rules`) are canonically encoded using **Nano Markup** (`nanomarkup` by `nohainc`).
 
 Clients utilize `NanoMarkupHelper` (Flutter) or the `nanomarkup` package (Node/TypeScript) with automatic fallback support for `application/json`.
 

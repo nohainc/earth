@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 78,
+  "migrationVersion": 79,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -383,7 +383,10 @@
       "id",
       "proposer_id",
       "counterparty_id",
-      "status"
+      "status",
+      "terms_markup",
+      "proposer_business_id",
+      "counterparty_business_id"
     ],
     "notifications": [
       "id",

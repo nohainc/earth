@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository';
 import { transferCredits } from './financial-postgres';
 import { centsToMoney, moneyToCents } from './money';
-import { toNanoMarkup } from './nano-markup.ts';
+import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 
 async function managedBusinessForContract(
   tx: PostgresRepository,
@@ -29,7 +29,7 @@ async function managedBusinessForContract(
 
 export async function acceptContract(repository: PostgresRepository, contractId: string, actorId: string): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const contract = await tx.query<{ id: string; kind: string; proposer_id: string; counterparty_id: string; amount: string; status: string; title: string; terms_json: Record<string, unknown> | null }>('SELECT id, kind, proposer_id, counterparty_id, amount, status, title, terms_json FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [contractId]);
+    const contract = await tx.query<{ id: string; kind: string; proposer_id: string; counterparty_id: string; amount: string; status: string; title: string; terms_markup: string | null; proposer_business_id: string | null; counterparty_business_id: string | null }>('SELECT id, kind, proposer_id, counterparty_id, amount, status, title, terms_markup, proposer_business_id, counterparty_business_id FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [contractId]);
     if (!contract.rows[0]) throw new Error('Contract not found');
     const row = contract.rows[0];
     if (row.counterparty_id !== actorId) throw new Error('Only the counterparty may accept this contract');
@@ -47,9 +47,9 @@ export async function acceptContract(repository: PostgresRepository, contractId:
     const correlationId = `CONTRACT-${row.id}`;
     if (!isService) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.rows[0].account_id, creditAccount: receiver.rows[0].account_id, amount, reasonType: 'contract_payment', reasonId: row.id, ruleVersion: 'contracts-v2', correlationId });
     await tx.query("UPDATE negotiated_contracts SET status = 'accepted', accepted_game_day = $1 WHERE id = $2 AND status = 'proposed'", [day, row.id]);
-    const terms = row.terms_json ?? {};
-    const proposerBusinessId = typeof terms.proposerBusinessId === 'string' ? terms.proposerBusinessId : null;
-    const counterpartyBusinessId = typeof terms.counterpartyBusinessId === 'string' ? terms.counterpartyBusinessId : null;
+    const terms = fromNanoMarkup<Record<string, unknown>>(row.terms_markup ?? '');
+    const proposerBusinessId = row.proposer_business_id ?? (typeof terms.proposerBusinessId === 'string' ? terms.proposerBusinessId : null);
+    const counterpartyBusinessId = row.counterparty_business_id ?? (typeof terms.counterpartyBusinessId === 'string' ? terms.counterpartyBusinessId : null);
     const proposerBusiness = await managedBusinessForContract(tx, row.proposer_id, proposerBusinessId);
     const counterpartyBusiness = await managedBusinessForContract(tx, row.counterparty_id, counterpartyBusinessId);
     if (proposerBusiness && !isService) {
@@ -72,7 +72,9 @@ export async function createContract(repository: PostgresRepository, input: { pr
     if (!counterparty.rows[0]) throw new Error('An active counterparty Human is required');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    await tx.query('INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_json, amount, starts_game_day, ends_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)', [contractId, input.kind, input.proposerId, input.counterpartyId, input.title, JSON.stringify(input.terms ?? {}), input.amount, day, day + input.durationDays, input.correlationId]);
+    const proposerBusinessId = typeof input.terms.proposerBusinessId === 'string' ? input.terms.proposerBusinessId : null;
+    const counterpartyBusinessId = typeof input.terms.counterpartyBusinessId === 'string' ? input.terms.counterpartyBusinessId : null;
+    await tx.query('INSERT INTO negotiated_contracts (id, kind, proposer_id, counterparty_id, title, terms_markup, proposer_business_id, counterparty_business_id, amount, starts_game_day, ends_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)', [contractId, input.kind, input.proposerId, input.counterpartyId, input.title, toNanoMarkup(input.terms ?? {}), proposerBusinessId, counterpartyBusinessId, input.amount, day, day + input.durationDays, input.correlationId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'contract.proposed', 'A negotiated contract was proposed', toNanoMarkup({ contractId, kind: input.kind, proposer: input.proposerId, counterparty: input.counterpartyId })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.counterpartyId, 'contract', 'Contract proposal received', input.title + ' was proposed for your acceptance.', contractId]);
     return { ok: true, contract: (await tx.query('SELECT * FROM negotiated_contracts WHERE id = $1', [contractId])).rows[0], correlationId: input.correlationId };
