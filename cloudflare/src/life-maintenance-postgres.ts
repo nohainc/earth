@@ -46,7 +46,13 @@ export function estimateLifeMaintenance(resident: Omit<Resident, 'id' | 'account
   return { food, housing, energy, health, connectivity, total: roundMoney(food + housing + energy + health + connectivity) };
 }
 
-export async function settleLifeMaintenance(tx: PostgresRepository, day: number): Promise<number> {
+/** Execute life maintenance in its own repository transaction. */
+export async function settleLifeMaintenance(repository: PostgresRepository, day: number): Promise<number> {
+  return repository.transaction((tx) => settleLifeMaintenanceInTransaction(tx, day));
+}
+
+/** Use this only when the caller already owns the surrounding transaction. */
+export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository, day: number): Promise<number> {
   const world = await tx.query<{ living_cost_index: string }>("SELECT living_cost_index FROM world_state WHERE id = 'WORLD'");
   const residents = await tx.query<Resident>(
     "SELECT h.id, h.age_years, a.account_id, a.balance, m.city_id, c.residents, c.housing_capacity, c.energy_capacity, c.connectivity_capacity, c.health_capacity FROM humans h JOIN account_balances a ON a.owner_id = h.id AND a.currency = 'CREDIT' LEFT JOIN memberships m ON m.human_id = h.id LEFT JOIN cities c ON c.id = m.city_id WHERE h.life_status = 'active' FOR UPDATE",

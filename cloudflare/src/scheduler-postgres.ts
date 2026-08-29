@@ -8,7 +8,7 @@ import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
-import { settleLifeMaintenance } from './life-maintenance-postgres.ts';
+import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
 import { applyPreparedResourceProfiles, rebuildDirtyDailySettlementProfiles, recordDailySettlementProfileShadow } from './daily-settlement-profiles.ts';
 
 export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
@@ -650,7 +650,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await runLoggedEngine(tx, day, 'workforce_payroll', () => settleWorkforcePayroll(tx, day));
       await runLoggedEngine(tx, day, 'service_business_revenue', () => settleServiceBusinessRevenue(tx, day));
       await runLoggedEngine(tx, day, 'institution_business_effects', () => settleInstitutionBusinessEffects(tx, day));
-      await runLoggedEngine(tx, day, 'life_maintenance', () => settleLifeMaintenance(tx, day));
+      await runLoggedEngine(tx, day, 'life_maintenance', () => settleLifeMaintenanceInTransaction(tx, day));
       await runLoggedEngine(tx, day, 'business_taxes', () => settleBusinessTaxes(tx, day));
       await runLoggedEngine(tx, day, 'basic_levy', () => settleBasicLevy(tx, day));
       await runLoggedEngine(tx, day, 'building_settlement', () => settleBuildingUpkeepAndRevenue(tx, day));
