@@ -15,7 +15,10 @@ Future<void> testExecutable(FutureOr<void> Function() testMain) async {
         : Uri.parse('$baseUri/dummy_test.dart');
     goldenFileComparator = TolerantGoldenComparator(
       testFileUri,
-      tolerance: 0.05, // 5% tolerance absorbs Linux/macOS font rasterization without false positives
+      // Flutter 3.44 on macOS and Flutter 3.47 on Linux differ slightly in
+      // text and shadow rasterization. Keep visual regressions meaningful
+      // while allowing that known cross-renderer variance.
+      tolerance: 0.06,
     );
   }
   await testMain();
