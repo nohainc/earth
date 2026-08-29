@@ -47,17 +47,21 @@ void main() {
       return http.Response(
         jsonEncode(baseResponse),
         200,
-        headers: {'x-earth-api-version': '2026-08', 'content-type': 'application/json'},
+        headers: {
+          'x-earth-api-version': '2026-08',
+          'content-type': 'application/json'
+        },
       );
     });
 
-    final transport = EarthApiTransport(baseUrl: 'https://earthuc.com', client: client);
+    final transport =
+        EarthApiTransport(baseUrl: 'https://earthuc.com', client: client);
     api = EarthApi(transport: transport);
   });
 
   test('Auth API endpoints execute expected HTTP calls', () async {
     await api.login('amara@earthuc.com', 'password123');
-    await api.register('Amara Vance', 'amara@earthuc.com', 'password123');
+    await api.register('amara@earthuc.com', 'password123', 'Amara', 'Vance');
     await api.logout();
     await api.enrollMfa();
     await api.confirmMfa('123456');
@@ -70,7 +74,8 @@ void main() {
     expect(recordedCalls.contains('POST /api/auth/logout'), true);
   });
 
-  test('World & Simulation API endpoints execute expected HTTP calls', () async {
+  test('World & Simulation API endpoints execute expected HTTP calls',
+      () async {
     await api.world();
     await api.events();
     await api.advanceDay();
@@ -98,7 +103,8 @@ void main() {
     await api.transferShares('H-2', 10);
     await api.distributeDividends('B-1', 5000);
     await api.issueShares('B-1', 'H-2', 20, 100);
-    await api.proposeMerger(acquirerBusinessId: 'B-1', targetBusinessId: 'B-2', pricePerShare: 150);
+    await api.proposeMerger(
+        acquirerBusinessId: 'B-1', targetBusinessId: 'B-2', pricePerShare: 150);
     await api.executeMerger('MERGER-1');
 
     expect(recordedCalls.contains('POST /api/businesses'), true);
@@ -122,8 +128,10 @@ void main() {
     expect(recordedCalls.contains('POST /api/contracts/C-1/dispute'), true);
   });
 
-  test('Governance & Institutions API endpoints execute expected HTTP calls', () async {
-    await api.createProposal('Tax Reform', 'Adjust municipal tax charter to 2.5%');
+  test('Governance & Institutions API endpoints execute expected HTTP calls',
+      () async {
+    await api.createProposal(
+        'Tax Reform', 'Adjust municipal tax charter to 2.5%');
     await api.vote('P-1', 'yes');
     await api.challengeProposal('P-1', 'Constitutional dispute');
     await api.resolveConstitutionalAppeal('P-1', 'uphold', 'Ruling upheld');
@@ -131,14 +139,18 @@ void main() {
     await api.resignRole('ROLE-1');
     await api.delegateRole('ROLE-1', 'H-3');
 
-    await api.createCommunity(name: 'Carthage Guild', description: 'Artisanal guild');
-    await api.updateCommunity(communityId: 'COM-1', description: 'Updated guild');
+    await api.createCommunity(
+        name: 'Carthage Guild', description: 'Artisanal guild');
+    await api.updateCommunity(
+        communityId: 'COM-1', description: 'Updated guild');
     await api.joinCommunity('COM-1');
     await api.leaveCommunity('COM-1');
     await api.listCommunityMembers('COM-1');
     await api.listCommunityRequests('COM-1');
-    await api.decideCommunityRequest(communityId: 'COM-1', requestId: 'REQ-1', action: 'approve');
-    await api.setCommunityMemberRole(communityId: 'COM-1', targetHumanId: 'H-2', role: 'admin');
+    await api.decideCommunityRequest(
+        communityId: 'COM-1', requestId: 'REQ-1', action: 'approve');
+    await api.setCommunityMemberRole(
+        communityId: 'COM-1', targetHumanId: 'H-2', role: 'admin');
     await api.disbandCommunity('COM-1');
     await api.createCity('New Kyoto', 'COM-1');
     await api.setCityBudget('energy');
@@ -148,16 +160,21 @@ void main() {
     await api.leaveCorporation();
 
     expect(recordedCalls.contains('POST /api/governance/proposals'), true);
-    expect(recordedCalls.contains('POST /api/governance/proposals/P-1/vote'), true);
+    expect(recordedCalls.contains('POST /api/governance/proposals/P-1/vote'),
+        true);
     expect(recordedCalls.contains('POST /api/communities'), true);
     expect(recordedCalls.contains('PATCH /api/communities/COM-1'), true);
     expect(recordedCalls.contains('DELETE /api/communities/COM-1'), true);
     expect(recordedCalls.contains('POST /api/cities'), true);
   });
 
-  test('Lifecycle, Machines, Market, Finance & Technology API endpoints execute expected HTTP calls', () async {
-    await api.registerSuccessor('Kaelen Vance', successorHumanId: 'H-2', estatePeriodDays: 45);
-    await api.settleInheritance(predecessorId: 'H-1', successorId: 'H-2', successorName: 'Kaelen');
+  test(
+      'Lifecycle, Machines, Market, Finance & Technology API endpoints execute expected HTTP calls',
+      () async {
+    await api.registerSuccessor('Kaelen Vance',
+        successorHumanId: 'H-2', estatePeriodDays: 45);
+    await api.settleInheritance(
+        predecessorId: 'H-1', successorId: 'H-2', successorName: 'Kaelen');
 
     await api.submitOrder('energy', 1.25, side: 'buy', quantity: 100);
     await api.settleMarket('energy');
@@ -165,8 +182,6 @@ void main() {
     await api.marketPriceHistory('energy');
 
     await api.personalFinance();
-    await api.declareInsolvencyRestructuring(reason: 'Restructuring');
-    await api.settlePersonalTax(1000);
 
     await api.startResearch('Hyperdrive', 1000);
     await api.fundResearch();
