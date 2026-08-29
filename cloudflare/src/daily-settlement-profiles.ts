@@ -74,8 +74,12 @@ export async function recordDailySettlementProfileShadow(repository: PostgresRep
      SELECT owner_id, $1, profile_version, last_settled_game_day,
        GREATEST(1, $1 - last_settled_game_day), 'shadow',
        jsonb_build_object(
-         'credits', credits_delta, 'energy', energy_delta, 'food', food_delta,
-         'materials', materials_delta, 'components', components_delta, 'compute', compute_delta)
+         'credits', credits_delta * GREATEST(1, $1 - last_settled_game_day),
+         'energy', energy_delta * GREATEST(1, $1 - last_settled_game_day),
+         'food', food_delta * GREATEST(1, $1 - last_settled_game_day),
+         'materials', materials_delta * GREATEST(1, $1 - last_settled_game_day),
+         'components', components_delta * GREATEST(1, $1 - last_settled_game_day),
+         'compute', compute_delta * GREATEST(1, $1 - last_settled_game_day))
      FROM daily_settlement_profiles
      WHERE status = 'clean'
      ON CONFLICT (owner_id, game_day) DO NOTHING
@@ -88,41 +92,11 @@ export async function recordDailySettlementProfileShadow(repository: PostgresRep
 /** Applies only normal, physical-resource deltas. Any owner that would cross
  * zero is deliberately left to the detailed legacy path for shortage handling. */
 export async function applyPreparedResourceProfiles(repository: PostgresRepository, gameDay: number): Promise<number> {
-  const profiles = await repository.query<{
-    owner_id: string; owner_kind: string; energy_delta: string; food_delta: string;
-    materials_delta: string; components_delta: string; compute_delta: string;
-  }>(
-    `SELECT owner_id, owner_kind, energy_delta, food_delta, materials_delta, components_delta, compute_delta
-     FROM daily_settlement_profiles
-     WHERE status = 'clean' AND last_settled_game_day < $1 AND owner_kind IN ('human', 'city')
-     ORDER BY owner_kind, owner_id FOR UPDATE`, [gameDay],
+  const result = await repository.query<{ applied_profiles: string }>(
+    'SELECT applied_profiles FROM apply_prepared_daily_resource_profiles($1)',
+    [gameDay],
   );
-  let applied = 0;
-  for (const profile of profiles.rows) {
-    const delta = {
-      energy: Number(profile.energy_delta), food: Number(profile.food_delta),
-      materials: Number(profile.materials_delta), components: Number(profile.components_delta),
-      compute: Number(profile.compute_delta),
-    };
-    const held = await repository.query<{ resource: string; amount: string }>(
-      "SELECT resource, amount FROM resource_balances WHERE owner_id = $1 AND resource IN ('energy','food','materials','components','compute') FOR UPDATE", [profile.owner_id],
-    );
-    const balance = new Map(held.rows.map((row) => [row.resource, Number(row.amount)]));
-    const canApply = Object.entries(delta).every(([resource, amount]) => amount >= 0 || (balance.get(resource) ?? 0) + amount >= 0);
-    if (!canApply) continue;
-    for (const [resource, amount] of Object.entries(delta)) {
-      if (amount === 0) continue;
-      await repository.query(
-        `INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3)
-         ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount`,
-        [profile.owner_id, resource, amount],
-      );
-    }
-    await repository.query('UPDATE daily_settlement_profiles SET last_settled_game_day = $2 WHERE owner_id = $1', [profile.owner_id, gameDay]);
-    await repository.query("UPDATE daily_settlement_profile_runs SET mode = 'applied' WHERE owner_id = $1 AND game_day = $2", [profile.owner_id, gameDay]);
-    applied += 1;
-  }
-  return applied;
+  return Number(result.rows[0]?.applied_profiles ?? 0);
 }
 
 export async function markDailySettlementProfileDirty(repository: PostgresRepository, ownerId: string): Promise<void> {

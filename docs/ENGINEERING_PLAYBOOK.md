@@ -249,6 +249,21 @@ error behavior, and a rollback/replay test.
   - 6 Real Days = 360 Simulation Game Days (1 Game Year).
   - 6.08 Real Days = 365 Simulation Game Days (1 Solar Game Year).
   - A character lifespan of ~60 active simulation years (Age 20 to 80) corresponds to **~365 Real Days (~1 Real Calendar Year)**.
+
+### Hybrid daily settlement
+
+Cloudflare Cron is the time coordinator and invokes the Worker every real
+minute. The Worker advances the game clock by 60 game minutes, runs complex
+rule orchestration, and opens the authoritative PostgreSQL transaction. At a
+game-day boundary, PostgreSQL function
+`apply_prepared_daily_resource_profiles(game_day)` applies clean human and city
+resource profiles set-wise. Source-table triggers only mark affected profiles
+dirty; they never run a world settlement themselves. The Worker rebuilds dirty
+profiles before the next daily application.
+
+For local development, start Wrangler with `--test-scheduled` through
+`scripts/run-local-ui-test.sh`, then invoke `scripts/run-local-game-tick.sh`.
+Do not use the Flutter client as a simulation authority.
 - **Biometric Health & Stochastic Mortality Engine**:
   - Health (0–100%) governs operational labor capacity, machine maintenance speed, and living medical expenses.
   - Mortality is not a simple countdown to 0% health. Citizens can live long lives with chronic or moderate health ratings (30–60%).

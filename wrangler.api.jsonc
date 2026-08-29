@@ -11,7 +11,7 @@
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
   "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],
-  "triggers": { "crons": ["*/5 * * * *"] },
+  "triggers": { "crons": ["* * * * *"] },
   "routes": [
     { "pattern": "earthuc.com/api/*", "zone_name": "earthuc.com" },
     { "pattern": "earthuc.com/edge/*", "zone_name": "earthuc.com" },
