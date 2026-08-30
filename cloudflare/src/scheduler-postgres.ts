@@ -639,7 +639,8 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await runLoggedEngine(tx, day, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, day));
       await runLoggedEngine(tx, day, 'daily_settlement_profile_shadow', () => recordDailySettlementProfileShadow(tx, day));
       const mode = await tx.query<{ daily_settlement_mode: string }>("SELECT daily_settlement_mode FROM world_state WHERE id = 'WORLD'");
-      if (mode.rows[0]?.daily_settlement_mode === 'profile_resources') {
+      const settlementMode = mode.rows[0]?.daily_settlement_mode ?? 'on_demand';
+      if (settlementMode === 'profile_resources') {
         await runLoggedEngine(tx, day, 'daily_settlement_profile_resources', () => applyPreparedResourceProfiles(tx, day));
       }
       await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
