@@ -70,9 +70,13 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onSecurity,
     this.onCommLink,
     this.onReconnect,
+    this.onDayRecalculateTrigger,
+    this.onDayPrefetch,
     this.onDayRollover,
   });
 
+  final VoidCallback? onDayRecalculateTrigger;
+  final VoidCallback? onDayPrefetch;
   final VoidCallback? onDayRollover;
 
   @override
@@ -84,6 +88,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   int _localElapsedSeconds = 0;
   int _baseElapsedRealSeconds = 0;
   int? _lastSeenDay;
+  int? _lastRecalculateDay;
+  int? _lastPrefetchDay;
 
   static final int epochStartMs =
       DateTime.utc(2026, 1, 1, 0, 0, 0).millisecondsSinceEpoch;
@@ -99,6 +105,23 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         });
         final totalRealSeconds = _baseElapsedRealSeconds + _localElapsedSeconds;
         final currentDay = (totalRealSeconds ~/ 1440) + 1;
+        final inDayMinute = totalRealSeconds % 1440;
+
+        // Stage 1: Recalculation Trigger at 23:50 (Minute 1430)
+        if (inDayMinute >= 1430 &&
+            inDayMinute < 1439 &&
+            _lastRecalculateDay != currentDay) {
+          _lastRecalculateDay = currentDay;
+          widget.onDayRecalculateTrigger?.call();
+        }
+
+        // Stage 2: Prefetch updated data at 23:59 (Minute 1439)
+        if (inDayMinute == 1439 && _lastPrefetchDay != currentDay) {
+          _lastPrefetchDay = currentDay;
+          widget.onDayPrefetch?.call();
+        }
+
+        // Stage 3: Rollover at 00:00 (Midnight / New Day)
         if (_lastSeenDay != null && currentDay > _lastSeenDay!) {
           _lastSeenDay = currentDay;
           widget.onDayRollover?.call();

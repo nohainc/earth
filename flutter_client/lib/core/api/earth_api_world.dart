@@ -11,6 +11,10 @@ extension EarthApiWorld on EarthApi {
     return world();
   }
 
+  Future<void> recalculateWorld() async {
+    await _request('/api/world/recalculate', method: 'POST');
+  }
+
   Future<List<dynamic>> events() async {
     final response =
         (await _request('/api/events?limit=20')) as Map<String, dynamic>;

@@ -111,4 +111,54 @@ void main() {
       expect(loggedOut, isTrue);
     }
   });
+
+  testWidgets('TopFixedHudPanel triggers 3-stage rollover lifecycle callbacks',
+      (tester) async {
+    bool recalculateTriggered = false;
+    bool prefetchTriggered = false;
+    bool rolloverTriggered = false;
+
+    // Set clock at 23:49:59 (total minute 1429) so 1 second advance hits 23:50:00 (minute 1430)
+    final epochStartMs =
+        DateTime.utc(2026, 1, 1, 0, 0, 0).millisecondsSinceEpoch;
+    final stateAt2349 = EarthState({
+      'clock': {
+        'day': 1,
+        'minute': 1429,
+        'serverCurrentTime': epochStartMs + (1429 * 1000),
+      },
+      'human': {'id': 'H-0044', 'name': 'Commander'},
+      'world': {'health': 100},
+      'resources': {},
+      'institutions': {'city': {'name': 'Neo Tokyo'}},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TopFixedHudPanel(
+            state: stateAt2349,
+            onDayRecalculateTrigger: () => recalculateTriggered = true,
+            onDayPrefetch: () => prefetchTriggered = true,
+            onDayRollover: () => rolloverTriggered = true,
+          ),
+        ),
+      ),
+    );
+
+    // Advance 1 real second -> hits 23:50:00 (minute 1430)
+    await tester.pump(const Duration(seconds: 1));
+    expect(recalculateTriggered, isTrue);
+    expect(prefetchTriggered, isFalse);
+    expect(rolloverTriggered, isFalse);
+
+    // Advance 9 real seconds -> hits 23:59:00 (minute 1439)
+    await tester.pump(const Duration(seconds: 9));
+    expect(prefetchTriggered, isTrue);
+    expect(rolloverTriggered, isFalse);
+
+    // Advance 1 real second -> hits 00:00:00 of Day 2 (minute 0)
+    await tester.pump(const Duration(seconds: 1));
+    expect(rolloverTriggered, isTrue);
+  });
 }

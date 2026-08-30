@@ -248,9 +248,42 @@ class _CommandCenterState extends State<CommandCenter> {
     _scheduleLiveReconnect(const Duration(seconds: 30));
   }
 
+  EarthState? _prefetchedDayState;
+
   void _stopPollingFallback() {
     pollingFallbackTimer?.cancel();
     pollingFallbackTimer = null;
+  }
+
+  Future<void> _onDayRecalculateTrigger() async {
+    try {
+      await api.recalculateWorld();
+    } catch (_) {
+      // Background calculation trigger network errors are handled gracefully.
+    }
+  }
+
+  Future<void> _onDayPrefetch() async {
+    try {
+      final next = await api.world();
+      if (mounted) {
+        _prefetchedDayState = next;
+      }
+    } catch (_) {
+      _prefetchedDayState = null;
+    }
+  }
+
+  void _onDayRollover() {
+    if (_prefetchedDayState != null && mounted) {
+      final next = _prefetchedDayState!;
+      _prefetchedDayState = null;
+      setState(() {
+        state = next;
+      });
+    } else {
+      _run(api.world);
+    }
   }
 
   Future<void> _syncWorldSilently() async {
@@ -584,7 +617,9 @@ class _CommandCenterState extends State<CommandCenter> {
                             context, 'messages',
                             closeDrawer: false),
                         onReconnect: _manualReconnect,
-                        onDayRollover: () => _run(api.world),
+                        onDayRecalculateTrigger: _onDayRecalculateTrigger,
+                        onDayPrefetch: _onDayPrefetch,
+                        onDayRollover: _onDayRollover,
                       ),
                       Expanded(
                         child: Row(
