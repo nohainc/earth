@@ -69,7 +69,7 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const token = extractToken(request);
     const currentHash = token ? await digest(token) : '';
-    const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = $1 ORDER BY created_at DESC', [human.id]));
+    const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = $1 AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC', [human.id]));
     if (!sessions) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return Response.json({ sessions: sessions.rows.map(({ token_hash: _tokenHash, ...session }) => ({ ...session, current: _tokenHash === currentHash })), persistence: 'planetscale-postgres' });
   }
