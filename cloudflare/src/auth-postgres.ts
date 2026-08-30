@@ -35,7 +35,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
     await tx.query('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,0,0)', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', humanId]);
     await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
-    await tx.query('INSERT INTO character_lineage (id,email,human_id,generation,birth_game_day,house_name) VALUES ($1,$2,$3,1,$4,$5)', [crypto.randomUUID(), input.email, humanId, worldDay, houseName]);
     await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, `${displayName} Works`]);
     await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, humanId, `${displayName} Works`]);
     await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
@@ -155,12 +154,10 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [newHumanId, input.email]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
 
-    // 5. Inscribe into character lineage
+    // 5. Inscribe into house lineage
     const houseName = input.houseName?.trim() || input.dynastyName?.trim() || existingHouse?.house_name || 'Founding House';
-    await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,house_name) VALUES ($1,$2,$3,$4,(SELECT COALESCE(MAX(generation), 0) + 1 FROM character_lineage WHERE email = $2),$5,$6)', [crypto.randomUUID(), input.email, newHumanId, prevHuman?.id ?? null, worldDay, houseName]);
 
-    // Keep the active Family & House model in sync with the legacy
-    // character lineage record so every new generation is visible in-game.
+    // Keep the active Family & House model updated so every new generation is visible in-game.
     let houseRow = (await tx.query<{ id: string }>('SELECT id FROM houses WHERE email = $1 FOR UPDATE', [input.email])).rows[0];
     if (!houseRow) {
       const houseId = `HOUSE-${newHumanId.slice(2)}`;
@@ -210,7 +207,6 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
       await tx.query('UPDATE house_lineage_records SET is_incumbent = false WHERE house_id = $1', [house.id]);
       const nextGeneration = (await tx.query<{ generation: number }>('SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM house_lineage_records WHERE house_id = $1', [house.id])).rows[0]?.generation ?? 1;
       await tx.query('INSERT INTO house_lineage_records (id,house_id,human_id,predecessor_human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) ON CONFLICT (id) DO UPDATE SET is_incumbent = true', [crypto.randomUUID(), house.id, successor.id, cred.human_id, nextGeneration, successor.display_name, 'Designated Heir', gameDay, 0]);
-      await tx.query('INSERT INTO character_lineage (id,email,human_id,predecessor_human_id,generation,birth_game_day,house_name) VALUES ($1,$2,$3,$4,$5,$6,$7)', [crypto.randomUUID(), input.email, successor.id, cred.human_id, nextGeneration, gameDay, house.house_name]);
     }
 
     // Equipped heirlooms are family assets: the designated successor carries

@@ -152,13 +152,14 @@ or `lifecycle/`.
 
 | Path | Responsibility |
 |---|---|
-| `db/initial.sql` | Self-contained canonical schema and baseline data evolution through migration 074 |
-| `db/migrations/075_*.sql` onward | Forward-only schema changes after the consolidated baseline |
+| `db/schema.sql` | Authoritative canonical schema (tables, constraints, indexes) from scratch |
+| `db/functions.sql` | Stored functions, procedures, and triggers (`earth_transfer_credits`, etc.) |
+| `db/migrations/*.sql` | Forward-only, numbered SQL migrations (001 through 080+) |
 | `db/schema-manifest.json` | Expected schema/table manifest |
 | `db/seed.sql` | Starter world plus namespaced local test fixtures |
 
 Migration files are append-only. Do not edit an applied migration; create a
-new numbered migration when the schema must change.
+new numbered migration and update `db/schema.sql` / `db/functions.sql` when the schema changes.
 
 ## Scripts and local development
 

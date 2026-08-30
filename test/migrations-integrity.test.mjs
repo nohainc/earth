@@ -3,21 +3,27 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 
-test('database migrations: verify the consolidated baseline and active migration sequence', () => {
+test('database migrations: verify sequential migration files, schema.sql, functions.sql, and schema manifest version', () => {
   const migrationsDir = path.resolve('db/migrations');
   const manifestPath = path.resolve('db/schema-manifest.json');
-  const initialPath = path.resolve('db/initial.sql');
+  const schemaPath = path.resolve('db/schema.sql');
+  const functionsPath = path.resolve('db/functions.sql');
 
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
-  assert.ok(files.length >= 1, 'Expected forward-only migrations after the baseline');
-  assert.equal(files[0], '075_daily_settlement_profiles.sql');
-  assert.ok(!files.some((file) => Number(file.slice(0, 3)) <= 74), 'Migrations 001-074 must be consolidated into db/initial.sql');
+  assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
+  assert.equal(files[0], '001_initial.sql');
+  assert.equal(files.at(-1), '083_cosmic_game_clock_function.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, Number(files.at(-1).slice(0, 3)), 'Manifest version must match latest migration version');
+  assert.equal(manifest.migrationVersion, 83, 'Manifest version must match latest migration version (83)');
 
-  const initial = fs.readFileSync(initialPath, 'utf8');
-  assert.ok(!initial.includes('\\ir '), 'Initial baseline must be self-contained');
-  assert.ok(initial.includes('(74,'), 'Initial baseline must mark migration 074 as applied');
+  const schema = fs.readFileSync(schemaPath, 'utf8');
+  assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS buildings'), 'Canonical schema.sql must define buildings');
+  assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS houses'), 'Canonical schema.sql must define houses');
+  assert.ok(!schema.includes('character_lineage'), 'Canonical schema.sql must not include dropped character_lineage');
+  assert.ok(!schema.includes('asset_ownership_events'), 'Canonical schema.sql must not include dropped asset_ownership_events');
   assert.ok(manifest.requiredTables.building_settlement_journals, 'Manifest must contain building_settlement_journals');
+
+  const functions = fs.readFileSync(functionsPath, 'utf8');
+  assert.ok(functions.includes('CREATE OR REPLACE FUNCTION earth_transfer_credits'), 'functions.sql must contain earth_transfer_credits');
 });

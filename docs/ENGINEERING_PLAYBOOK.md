@@ -171,11 +171,9 @@ vertical slice when possible.
 
 ### Database changes
 
-1. Read the self-contained `db/initial.sql` and `db/schema-manifest.json`; migrations
-   `001–074` are consolidated there and retained only in Git history. Add
-   the next available numbered SQL migration under `db/migrations/` (the
-   profile-settlement work begins at `075`).
-2. Update `db/schema-manifest.json` when schema or indexes change.
+1. Read `db/schema.sql` and `db/schema-manifest.json` for the canonical schema.
+   Add the next available numbered SQL migration under `db/migrations/` (e.g. `081_...`).
+2. Update `db/schema.sql` and `db/schema-manifest.json` when tables, columns, or indexes change.
 3. Run `npm run db:migrate:postgres` and `npm run db:verify:manifest`.
 4. Confirm `/api/health` reports PostgreSQL authority, schema readiness, data
    readiness, non-negative balances, bounded machine conditions, and shadow

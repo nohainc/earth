@@ -20,7 +20,7 @@ export DATABASE_URL
 trap 'unset DATABASE_URL' EXIT
 
 print 'Applying forward-only production migrations...'
-(cd "${ROOT_DIR}" && npm run db:migrate:postgres)
+(cd "${ROOT_DIR}" && npm run db:migrate:postgres -- "$@")
 
 print 'Verifying the production schema manifest...'
 (cd "${ROOT_DIR}" && npm run db:verify:manifest)

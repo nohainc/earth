@@ -226,14 +226,6 @@ values
   ('TEST-LIFE-014-DEATH', 'TEST-H-014', 'death', 351, 'Priya Nandakumar', 137000)
 on conflict (id) do nothing;
 
-insert into character_lineage (id, email, human_id, predecessor_human_id, generation, birth_game_day, death_game_day, final_legacy, house_name)
-values
-  ('TEST-LINEAGE-011', 'ada.mercer@earth.local', 'TEST-H-011', null, 1, 12, 310, 410, 'House Mercer'),
-  ('TEST-LINEAGE-013', 'ada.mercer@earth.local', 'TEST-H-013', 'TEST-H-011', 2, 105, 366, 340, 'House Mercer'),
-  ('TEST-LINEAGE-012', 'bastien.okoro@earth.local', 'TEST-H-012', null, 1, 34, 298, 295, 'House Okoro'),
-  ('TEST-LINEAGE-014', 'bastien.okoro@earth.local', 'TEST-H-014', 'TEST-H-012', 2, 126, 351, 260, 'House Okoro')
-on conflict (id) do nothing;
-
 insert into house_lineage_records (
   id, house_id, human_id, predecessor_human_id, generation, name, title,
   birth_game_day, death_game_day, is_incumbent, cause_of_death, epitaph,

@@ -33,15 +33,16 @@ On macOS without Docker, use the Homebrew PostgreSQL service:
 brew install postgresql@16
 brew services start postgresql@16
 createdb earth
-psql -d earth -f db/initial.sql
-DATABASE_URL=postgres://$USER@localhost:5432/earth npm run db:migrate:postgres
+psql -d earth -f db/schema.sql
+psql -d earth -f db/functions.sql
 psql -d earth -f db/seed.sql
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
 ```
 
-`db/initial.sql` is a self-contained baseline through migration 074. It marks
-that archived history as applied, so the migration command above applies only
-migrations 075 and later.
+`db/schema.sql` (tables, constraints, indexes) and `db/functions.sql` (stored
+procedures and triggers) create the clean, complete current state of the database
+from scratch in a single step. For existing environments,
+`npm run db:migrate:postgres` runs forward-only migrations from `db/migrations/`.
 
 For an existing local database, apply the migrations and load the canonical
 starter world explicitly:

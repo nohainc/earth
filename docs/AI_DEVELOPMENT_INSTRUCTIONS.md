@@ -201,13 +201,12 @@ creating one-off menu text styles.
 
 ## 6. Database and migration rules
 
-- Treat the self-contained `db/initial.sql` and `db/schema-manifest.json` as
-  the current schema baseline. Migrations `001–074` are consolidated into the
-  baseline and available only through Git history; do not recreate them.
-- Migration `075` begins the new profile-settlement era. Use the next available
-  higher version for every future schema migration.
-- Add every schema change as a forward-only, human-reviewed SQL migration.
-- Update `db/schema-manifest.json` when the schema contract changes.
+- Treat `db/schema.sql` and `db/schema-manifest.json` as the authoritative current
+  canonical schema. `db/schema.sql` describes the clean, full database state from
+  scratch and must be updated alongside any new schema migration.
+- Add every schema change as a forward-only, human-reviewed SQL migration under
+  `db/migrations/` using the next available version number (e.g. `081_...`).
+- Update `db/schema.sql` and `db/schema-manifest.json` when the schema contract changes.
 - Never use destructive automatic schema pushes in production.
 - Add indexes for foreign keys, active-state lookups, and timestamp filters.
 - Put invariants in PostgreSQL constraints where practical.

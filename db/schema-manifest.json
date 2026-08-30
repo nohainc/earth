@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 79,
+  "migrationVersion": 83,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -18,15 +18,6 @@
       "recommendation_id",
       "action",
       "created_at"
-    ],
-    "asset_ownership_events": [
-      "id",
-      "asset_id",
-      "to_owner_id"
-    ],
-    "assets": [
-      "id",
-      "current_owner_id"
     ],
     "auth_action_tokens": [
       "id",
@@ -160,14 +151,6 @@
       "id",
       "owner_id",
       "status"
-    ],
-    "character_lineage": [
-      "id",
-      "email",
-      "human_id",
-      "generation",
-      "birth_game_day",
-      "house_name"
     ],
     "cities": [
       "id",
@@ -485,17 +468,6 @@
       "cost_credits",
       "status"
     ],
-    "technology_events": [
-      "id",
-      "technology_id",
-      "event_type",
-      "actor_id",
-      "game_day"
-    ],
-    "technology_prerequisites": [
-      "technology_id",
-      "required_technology_id"
-    ],
     "scheduler_tick_logs": [
       "id",
       "game_day",
@@ -645,7 +617,6 @@
     "civic_dividends_city_day_idx",
     "ledger_game_day_idx",
     "market_orders_book_idx",
-    "ownership_history_idx",
     "auth_sessions_token_idx",
     "auth_login_block_idx",
     "auth_action_tokens_lookup_idx",
@@ -655,7 +626,6 @@
     "proposals_game_deadline_idx",
     "bankruptcy_events_institution_correlation_idx",
     "world_events_correlation_idx",
-    "character_lineage_email_idx",
     "deceased_profiles_rank_idx",
     "deceased_profiles_house_idx",
     "comm_messages_channel_idx",
@@ -674,13 +644,21 @@
     "idx_commodity_futures_buyer",
     "idx_market_ohlc_commodity_day",
     "idx_net_worth_human_day",
-    "technology_events_tech_idx",
-    "technology_events_actor_idx",
     "business_technology_adoptions_technology_idx",
     "idx_ai_rec_feedback_human",
     "idx_scheduler_tick_logs_day",
     "personal_life_maintenance_human_day_idx",
     "daily_settlement_profiles_due_idx",
-    "daily_settlement_profile_runs_day_idx"
+    "daily_settlement_profile_runs_day_idx",
+    "idx_market_trades_order",
+    "idx_building_invest_building",
+    "idx_contract_disputes_parties",
+    "idx_corp_research_corp_tech",
+    "idx_futures_settlement",
+    "idx_business_shares_biz",
+    "idx_proposals_institution_status",
+    "idx_gov_rules_inst_cat",
+    "idx_notifications_unread",
+    "idx_dispatch_recipient_status"
   ]
 }
