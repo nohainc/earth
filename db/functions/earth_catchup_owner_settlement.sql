@@ -3,7 +3,7 @@
 -- Authoritative server-side timeline catch-up: brings an owner's balances up to date
 -- across all historical rate change intervals between last settled game day
 -- and target game day in one atomic transaction, writing durable timestamped
--- audit records to resource_ledger_entries.
+-- audit records to resource_ledger_entries and financial ledger_entries.
 CREATE OR REPLACE FUNCTION earth_catchup_owner_settlement(
   p_owner_id TEXT,
   p_target_day BIGINT DEFAULT NULL
@@ -29,6 +29,8 @@ DECLARE
   v_compute_change NUMERIC(20,6) := 0;
   v_credits_change NUMERIC(20,6) := 0;
   v_new_bal NUMERIC(20,6);
+  v_account_id TEXT;
+  v_new_credit_bal NUMERIC(20,2);
   v_interval_count INTEGER := 0;
 BEGIN
   -- Determine target game day if omitted based on current cosmic game clock
@@ -58,7 +60,6 @@ BEGIN
 
   IF v_elapsed > 0 AND v_profile.status = 'clean' THEN
 
-    -- Check if there are rate change intervals between last_settled and target_day
     SELECT COUNT(*) INTO v_interval_count
     FROM resource_rate_history h
     WHERE h.owner_id = p_owner_id
@@ -66,8 +67,6 @@ BEGIN
       AND h.game_day < v_target_day;
 
     IF v_interval_count > 0 THEN
-      -- Timeline-weighted interval integration
-      -- Calculate deltas across discrete rate periods
       WITH distinct_points AS (
         SELECT DISTINCT h.game_day
         FROM resource_rate_history h
@@ -123,7 +122,6 @@ BEGIN
       FROM interval_rates;
 
     ELSE
-      -- Standard uniform rate calculation
       v_energy_change := v_profile.energy_delta * v_elapsed;
       v_food_change := v_profile.food_delta * v_elapsed;
       v_mat_change := v_profile.materials_delta * v_elapsed;
@@ -205,6 +203,38 @@ BEGIN
       ) VALUES (
         gen_random_uuid(), v_target_day, 0, p_owner_id, 'compute', v_compute_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-compute-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
       ) ON CONFLICT (correlation_id) DO NOTHING;
+    END IF;
+
+    -- Apply Credits Delta
+    IF v_credits_change <> 0 THEN
+      SELECT account_id INTO v_account_id
+      FROM account_balances
+      WHERE owner_id = p_owner_id AND currency = 'CREDIT'
+      FOR UPDATE;
+
+      IF v_account_id IS NOT NULL THEN
+        UPDATE account_balances
+        SET balance = balance + ROUND(v_credits_change, 2)
+        WHERE account_id = v_account_id
+        RETURNING balance INTO v_new_credit_bal;
+
+        IF NOT EXISTS (SELECT 1 FROM ledger_entries WHERE correlation_id = 'settle-credits-' || p_owner_id || '-' || v_target_day::TEXT) THEN
+          INSERT INTO ledger_entries (
+            id, game_day, debit_account, credit_account, amount, reason_type, reason_id, rule_version, correlation_id, created_at
+          ) VALUES (
+            gen_random_uuid(),
+            v_target_day,
+            CASE WHEN v_credits_change > 0 THEN 'account-ouc-treasury' ELSE v_account_id END,
+            CASE WHEN v_credits_change > 0 THEN v_account_id ELSE 'account-ouc-treasury' END,
+            ABS(ROUND(v_credits_change, 2)),
+            'daily_building_income',
+            v_profile.profile_version::TEXT,
+            'settlement-v2',
+            'settle-credits-' || p_owner_id || '-' || v_target_day::TEXT,
+            NOW()
+          );
+        END IF;
+      END IF;
     END IF;
 
     -- Record profile run audit record

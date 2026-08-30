@@ -237,6 +237,8 @@ DECLARE
   v_compute_change NUMERIC(20,6) := 0;
   v_credits_change NUMERIC(20,6) := 0;
   v_new_bal NUMERIC(20,6);
+  v_account_id TEXT;
+  v_new_credit_bal NUMERIC(20,2);
   v_interval_count INTEGER := 0;
 BEGIN
   IF p_target_day IS NULL THEN
@@ -407,6 +409,38 @@ BEGIN
       ) VALUES (
         gen_random_uuid(), v_target_day, 0, p_owner_id, 'compute', v_compute_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-compute-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
       ) ON CONFLICT (correlation_id) DO NOTHING;
+    END IF;
+
+    -- Apply Credits Delta
+    IF v_credits_change <> 0 THEN
+      SELECT account_id INTO v_account_id
+      FROM account_balances
+      WHERE owner_id = p_owner_id AND currency = 'CREDIT'
+      FOR UPDATE;
+
+      IF v_account_id IS NOT NULL THEN
+        UPDATE account_balances
+        SET balance = balance + ROUND(v_credits_change, 2)
+        WHERE account_id = v_account_id
+        RETURNING balance INTO v_new_credit_bal;
+
+        IF NOT EXISTS (SELECT 1 FROM ledger_entries WHERE correlation_id = 'settle-credits-' || p_owner_id || '-' || v_target_day::TEXT) THEN
+          INSERT INTO ledger_entries (
+            id, game_day, debit_account, credit_account, amount, reason_type, reason_id, rule_version, correlation_id, created_at
+          ) VALUES (
+            gen_random_uuid(),
+            v_target_day,
+            CASE WHEN v_credits_change > 0 THEN 'account-ouc-treasury' ELSE v_account_id END,
+            CASE WHEN v_credits_change > 0 THEN v_account_id ELSE 'account-ouc-treasury' END,
+            ABS(ROUND(v_credits_change, 2)),
+            'daily_building_income',
+            v_profile.profile_version::TEXT,
+            'settlement-v2',
+            'settle-credits-' || p_owner_id || '-' || v_target_day::TEXT,
+            NOW()
+          );
+        END IF;
+      END IF;
     END IF;
 
     INSERT INTO daily_settlement_profile_runs (
