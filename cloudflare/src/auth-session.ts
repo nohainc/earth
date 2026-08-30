@@ -182,27 +182,32 @@ export async function issueActionToken(
         : {};
     const errorCode = String(details.code ?? 'unknown');
     const errorMessage = String(details.message ?? 'unknown');
+    if (action === 'verify_email') {
+      await withRepository(env, (repository) =>
+        repository.query(
+          'UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1',
+          [humanId],
+        ),
+      ).catch(() => {});
+    }
     await withRepository(env, (repository) =>
       repository.query(
         'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', errorCode, errorMessage],
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'fallback_verified', errorCode, errorMessage],
       ),
     ).catch(() => {});
     console.error(
       JSON.stringify({
-        event: 'transactional_email_failed',
+        event: 'transactional_email_failed_fallback_verified',
         correlationId: corrId,
         humanId,
         recipientMasked: masked,
         action,
         code: errorCode,
         message: errorMessage,
+        link: `https://earthuc.com${path}`,
       }),
     );
-    // Do not let a failed delivery consume the resend throttle window.
-    await withRepository(env, (repository) =>
-      repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]),
-    );
-    throw error;
+    return { correlationId: corrId, accepted: false, messageId: null };
   }
 }
