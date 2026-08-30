@@ -103,8 +103,10 @@ class _CommandCenterState extends State<CommandCenter> {
     _loadProductionCatalog();
     _refreshEvents();
     _connectLiveChannel();
-    eventTimer =
-        Timer.periodic(const Duration(seconds: 30), (_) => _refreshEvents());
+    eventTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+      _refreshEvents();
+      _syncWorldSilently();
+    });
   }
 
   Future<void> _loadProductionCatalog() async {
@@ -251,9 +253,21 @@ class _CommandCenterState extends State<CommandCenter> {
     pollingFallbackTimer = null;
   }
 
+  Future<void> _syncWorldSilently() async {
+    try {
+      final latest = await const EarthApi().world();
+      if (mounted) {
+        setState(() {
+          state = latest;
+        });
+      }
+    } catch (_) {}
+  }
+
   Future<void> _pollFallbackSync() async {
     try {
       await _refreshEvents();
+      await _syncWorldSilently();
       if (mounted && connectionStatus == LiveConnectionStatus.offline) {
         setState(() => connectionStatus = LiveConnectionStatus.polling);
       }
