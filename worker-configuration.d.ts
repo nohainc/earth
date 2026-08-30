@@ -7,6 +7,8 @@ interface __BaseEnv_Env {
 	ENVIRONMENT: "production";
 	PERSISTENCE_AUTHORITY: "postgres";
 	EMAIL_FROM: "earth@nohainc.com";
+	SMTP_USER?: string;
+	GMAIL_APP_PASSWORD?: string;
 	DATABASE_URL: string;
 	HYPERDRIVE_CONNECTION_STRING: string;
 	CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE: string;

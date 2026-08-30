@@ -93,6 +93,8 @@ export function maskEmail(email: string): string {
   return `${maskedName}@${domain}`;
 }
 
+import { sendSmtpEmail } from './email-smtp.ts';
+
 export async function issueActionToken(
   env: Env,
   humanId: string,
@@ -118,43 +120,45 @@ export async function issueActionToken(
     action === 'verify_email'
       ? `/app?verify_token=${encodeURIComponent(token)}`
       : `/app?reset_token=${encodeURIComponent(token)}`;
-  if (!env.EMAIL || !env.EMAIL_FROM) {
-    await withRepository(env, (repository) =>
-      repository.query(
-        'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', 'UNCONFIGURED', 'Transactional email is not configured'],
-      ),
-    ).catch(() => {});
-    console.error(
-      JSON.stringify({
-        event: 'transactional_email_failed',
-        correlationId: corrId,
-        humanId,
-        recipientMasked: masked,
-        action,
-        code: 'UNCONFIGURED',
-        message: 'Transactional email is not configured',
-      }),
-    );
-    throw new Error('Transactional email is not configured');
-  }
   const subject =
     action === 'verify_email'
       ? 'Verify your EARTH identity'
       : 'Reset your EARTH password';
   const text = `${subject}\n\nOpen this link to continue: https://earthuc.com${path}\n\nThis link expires soon and can only be used once.`;
+  const html = `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>`;
+  const smtpUser = (env as unknown as Record<string, string | undefined>).SMTP_USER || 'vitalii@nohainc.com';
+  const gmailAppPassword = (env as unknown as Record<string, string | undefined>).GMAIL_APP_PASSWORD;
+  const fromEmail = env.EMAIL_FROM || 'earth@nohainc.com';
+
   try {
-    const delivery = await env.EMAIL.send({
-      to: email,
-      from: { email: env.EMAIL_FROM, name: 'EARTH Identity' },
-      subject,
-      text,
-      html: `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>`,
-    });
+    let deliveryMessageId: string | null = null;
+    if (gmailAppPassword && smtpUser) {
+      const delivery = await sendSmtpEmail({
+        to: email,
+        from: fromEmail,
+        subject,
+        text,
+        html,
+        smtpUser,
+        gmailAppPassword,
+      });
+      deliveryMessageId = delivery.messageId;
+    } else if (env.EMAIL) {
+      const delivery = await env.EMAIL.send({
+        to: email,
+        from: { email: env.EMAIL_FROM, name: 'EARTH Identity' },
+        subject,
+        text,
+        html,
+      });
+      deliveryMessageId = delivery?.messageId ?? null;
+    } else {
+      throw new Error('Transactional email is not configured');
+    }
     await withRepository(env, (repository) =>
       repository.query(
         'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, provider_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'accepted', delivery?.messageId ?? null],
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'accepted', deliveryMessageId],
       ),
     ).catch(() => {});
     console.info(
@@ -164,10 +168,10 @@ export async function issueActionToken(
         humanId,
         recipientMasked: masked,
         action,
-        messageId: delivery?.messageId ?? null,
+        messageId: deliveryMessageId,
       }),
     );
-    return { correlationId: corrId, accepted: true, messageId: delivery?.messageId ?? null };
+    return { correlationId: corrId, accepted: true, messageId: deliveryMessageId };
   } catch (error) {
     const details =
       error && typeof error === 'object'
