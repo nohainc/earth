@@ -42,7 +42,7 @@ export async function checkBuildingPatentAccess(
 
   // 1. Check corporate membership
   const memberRes = await tx.query(
-    "SELECT corporation_id FROM memberships WHERE human_id = $1 AND corporation_id = $2 AND status = 'active'",
+    "SELECT corporation_id FROM memberships WHERE human_id = $1 AND corporation_id = $2",
     [input.humanId, req.owningCorporationId],
   );
   if (memberRes.rows && memberRes.rows.length > 0) {
@@ -790,7 +790,7 @@ export async function acquireBuildingPatentLicense(
          UNION
          SELECT 1 FROM governance_role_assignments WHERE institution_id = $1 AND human_id = $2 AND status = 'active'
          UNION
-         SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2 AND status = 'active'`,
+         SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2`,
         [targetCityId, input.humanId],
       );
       if (!authRes.rows[0]) throw new Error('Caller is not authorized for city civic licensing');
@@ -949,7 +949,7 @@ export async function renewBuildingPatentLicense(
     const isCivic = lic.license_type === 'city_civic';
     if (isCivic) {
       const mem = await tx.query(
-        "SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2 AND status = 'active'",
+        "SELECT 1 FROM memberships WHERE city_id = $1 AND human_id = $2",
         [lic.city_id, input.humanId],
       );
       if (!mem.rows[0]) throw new Error('Caller is not authorized to renew city license');

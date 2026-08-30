@@ -37,7 +37,8 @@ async function runLoggedEngine(tx: PostgresRepository, day: number, engine: stri
     const rowsProcessed = typeof result === 'number' ? result : 0;
     await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, rows_processed, duration_ms, status) VALUES ($1,$2,$3,$4,$5)', [day, engine, rowsProcessed, Date.now() - started, 'ok']);
   } catch (error) {
-    await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, duration_ms, status, error_message) VALUES ($1,$2,$3,$4,$5)', [day, engine, Date.now() - started, 'error', error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error']);
+    console.error(`[runLoggedEngine Error in ${engine}]:`, error);
+    await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, duration_ms, status, error_message) VALUES ($1,$2,$3,$4,$5)', [day, engine, Date.now() - started, 'error', error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error']).catch(() => undefined);
     throw error;
   }
 }

@@ -24,7 +24,7 @@ export async function settleCivicDividends(tx: PostgresRepository, day: number):
 
     // Find eligible residents (registered in city)
     const residents = await tx.query<{ human_id: string }>(
-      "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
+      "SELECT m.human_id FROM memberships m JOIN humans h ON h.id = m.human_id WHERE m.city_id = $1 AND h.life_status = 'active'",
       [cityId],
     );
     if (residents.rows.length === 0) continue;

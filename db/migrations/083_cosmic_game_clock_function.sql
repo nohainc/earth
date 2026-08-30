@@ -518,8 +518,10 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
-  account_count INTEGER;
+  v_account_count INTEGER;
+  v_debit_balance NUMERIC(20,2);
 BEGIN
   IF p_debit_account IS NULL OR p_credit_account IS NULL OR p_debit_account = p_credit_account THEN
     RAISE EXCEPTION 'Credit transfer requires two different accounts';
@@ -550,23 +552,25 @@ BEGIN
     RETURN;
   END IF;
 
-  SELECT COUNT(*)
-  INTO account_count
+  -- Lock both accounts
+  PERFORM 1
   FROM account_balances
   WHERE account_id IN (p_debit_account, p_credit_account)
   FOR UPDATE;
 
-  IF account_count < 2 THEN
-    RAISE EXCEPTION 'One or both accounts missing: debit=%, credit=%', p_debit_account, p_credit_account;
+  GET DIAGNOSTICS v_account_count = ROW_COUNT;
+
+  IF v_account_count <> 2 THEN
+    RAISE EXCEPTION 'Both debit and credit accounts must exist';
   END IF;
 
-  IF NOT EXISTS (
-    SELECT 1
-    FROM account_balances
-    WHERE account_id = p_debit_account
-      AND balance >= p_amount
-  ) THEN
-    RAISE EXCEPTION 'Insufficient funds in debit account %', p_debit_account;
+  SELECT balance
+  INTO v_debit_balance
+  FROM account_balances
+  WHERE account_id = p_debit_account;
+
+  IF v_debit_balance < p_amount THEN
+    RAISE EXCEPTION 'Insufficient funds in debit account';
   END IF;
 
   UPDATE account_balances
@@ -583,28 +587,28 @@ BEGIN
     debit_account,
     credit_account,
     amount,
-    currency,
     reason_type,
     reason_id,
     rule_version,
-    correlation_id
+    correlation_id,
+    created_at
   ) VALUES (
-    p_ledger_id,
+    COALESCE(p_ledger_id, gen_random_uuid()),
     p_game_day,
     p_debit_account,
     p_credit_account,
     p_amount,
-    'CREDIT',
     p_reason_type,
     p_reason_id,
-    COALESCE(p_rule_version, 'v0.1'),
-    p_correlation_id
+    p_rule_version,
+    p_correlation_id,
+    NOW()
   );
 
   RETURN QUERY
   SELECT
-    'applied'::TEXT,
-    p_ledger_id,
+    'success'::TEXT,
+    COALESCE(p_ledger_id, gen_random_uuid()),
     p_amount,
     FALSE;
 END;

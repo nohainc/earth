@@ -297,7 +297,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
             // Economic Buyers: Registered active residents in this city
             const residents = await tx.query<{ human_id: string }>(
-              "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
+              "SELECT m.human_id FROM memberships m JOIN humans h ON h.id = m.human_id WHERE m.city_id = $1 AND h.life_status = 'active'",
               [bld.city_id],
             );
 
@@ -366,7 +366,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             // Civic municipal facility: Genuine resident utility consumers pay utility bills
             // Debited from resident personal accounts into clearing account -> credited to city treasury
             const residents = await tx.query<{ human_id: string }>(
-              "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
+              "SELECT m.human_id FROM memberships m JOIN humans h ON h.id = m.human_id WHERE m.city_id = $1 AND h.life_status = 'active'",
               [bld.city_id],
             );
 
@@ -456,7 +456,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
         // Customer demand from residents in the city
         const residents = await tx.query<{ human_id: string }>(
-          "SELECT human_id FROM memberships WHERE city_id = $1 AND status = 'active'",
+          "SELECT m.human_id FROM memberships m JOIN humans h ON h.id = m.human_id WHERE m.city_id = $1 AND h.life_status = 'active'",
           [bld.city_id],
         );
 
