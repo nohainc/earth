@@ -1,11 +1,21 @@
--- Stored Function: earth_record_rate_change
+-- Migration 086: Add Tax & Net Breakdown to Resource Rate History and Settlement Profiles
 --
--- Authoritative server-side procedure to compute and record timestamped
--- rate change snapshots for all 6 resources whenever an owner's building
--- portfolio, policy, or active state changes.
+-- Extends resource_rate_history and daily_settlement_profiles with explicit
+-- tax_amount, gross_credits_inflow, operating_credits_outflow, and tax_credits_outflow
+-- tracking, ensuring authoritative calculation uses true net profit (gross - operating - taxes).
+
+ALTER TABLE resource_rate_history
+  ADD COLUMN IF NOT EXISTS tax_amount NUMERIC(20,6) NOT NULL DEFAULT 0;
+
+ALTER TABLE daily_settlement_profiles
+  ADD COLUMN IF NOT EXISTS gross_credits_inflow NUMERIC(20,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS operating_credits_outflow NUMERIC(20,2) NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS tax_credits_outflow NUMERIC(20,2) NOT NULL DEFAULT 0;
+
 DROP FUNCTION IF EXISTS earth_record_rate_change(TEXT, TEXT, TEXT, BIGINT, INTEGER);
 DROP FUNCTION IF EXISTS earth_record_rate_change;
 
+-- Update stored procedure: earth_record_rate_change
 CREATE OR REPLACE FUNCTION earth_record_rate_change(
   p_owner_id TEXT,
   p_trigger_event TEXT,
@@ -225,5 +235,16 @@ BEGIN
     h.net_daily_rate
   FROM resource_rate_history h
   WHERE h.owner_id = p_owner_id AND h.created_at = v_now;
+END;
+$$;
+
+-- Backfill existing profiles with the updated function
+DO $$
+DECLARE
+  v_rec RECORD;
+BEGIN
+  FOR v_rec IN SELECT DISTINCT owner_id FROM daily_settlement_profiles LOOP
+    PERFORM earth_record_rate_change(v_rec.owner_id, 'tax_breakdown_migration', NULL, NULL, 0);
+  END LOOP;
 END;
 $$;

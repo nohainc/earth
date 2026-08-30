@@ -806,6 +806,9 @@ $$;
 -- Authoritative server-side procedure to compute and record timestamped
 -- rate change snapshots for all 6 resources whenever an owner's building
 -- portfolio, policy, or active state changes.
+DROP FUNCTION IF EXISTS earth_record_rate_change(TEXT, TEXT, TEXT, BIGINT, INTEGER);
+DROP FUNCTION IF EXISTS earth_record_rate_change;
+
 CREATE OR REPLACE FUNCTION earth_record_rate_change(
   p_owner_id TEXT,
   p_trigger_event TEXT,
@@ -823,6 +826,7 @@ RETURNS TABLE (
   resource TEXT,
   gross_inflow NUMERIC(20,6),
   gross_outflow NUMERIC(20,6),
+  tax_amount NUMERIC(20,6),
   net_daily_rate NUMERIC(20,6)
 )
 LANGUAGE plpgsql
@@ -850,6 +854,11 @@ DECLARE
   v_out_components NUMERIC(20,6) := 0;
   v_out_compute NUMERIC(20,6) := 0;
 
+  -- Taxes
+  v_tax_credits NUMERIC(20,6) := 0;
+  v_basic_levy_rate NUMERIC(20,6) := 0.06;
+  v_business_tax_rate NUMERIC(20,6) := 0.05;
+
   v_b RECORD;
   v_eff NUMERIC;
   v_cond_cost NUMERIC;
@@ -875,6 +884,15 @@ BEGIN
   WHERE p.owner_id = p_owner_id;
 
   v_owner_kind := COALESCE(v_owner_kind, 'human');
+
+  -- Fetch active tax rates from tax_rules
+  SELECT COALESCE(rate, 0.06) INTO v_basic_levy_rate
+  FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true;
+  v_basic_levy_rate := COALESCE(v_basic_levy_rate, 0.06);
+
+  SELECT COALESCE(rate, 0.05) INTO v_business_tax_rate
+  FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true;
+  v_business_tax_rate := COALESCE(v_business_tax_rate, 0.05);
 
   -- Aggregate active buildings
   FOR v_b IN
@@ -938,30 +956,45 @@ BEGIN
     v_out_compute := v_out_compute + ROUND(v_b.upkeep_compute * v_cond_cost, 6);
   END LOOP;
 
-  -- Insert snapshot rows for all 6 resources
+  -- Taxes calculation for credits (basic civic levy + business revenue tax)
+  IF v_owner_kind = 'human' THEN
+    v_tax_credits := ROUND((100.0 * v_basic_levy_rate) + (v_in_credits * v_business_tax_rate), 6);
+  ELSIF v_owner_kind = 'corporation' THEN
+    v_tax_credits := ROUND(v_in_credits * v_business_tax_rate, 6);
+  ELSE
+    v_tax_credits := 0;
+  END IF;
+
+  -- Insert snapshot rows for all 6 resources with full tax & net breakdown
   INSERT INTO resource_rate_history (
     id, owner_id, game_day, game_minute, created_at,
     trigger_event, trigger_entity_id, resource,
-    gross_inflow, gross_outflow, net_daily_rate
+    gross_inflow, gross_outflow, tax_amount, net_daily_rate
   ) VALUES
-    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'credits', v_in_credits, v_out_credits, (v_in_credits - v_out_credits)),
-    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'energy', v_in_energy, v_out_energy, (v_in_energy - v_out_energy)),
-    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'food', v_in_food, v_out_food, (v_in_food - v_out_food)),
-    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'material', v_in_material, v_out_material, (v_in_material - v_out_material)),
-    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'components', v_in_components, v_out_components, (v_in_components - v_out_components)),
-    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'compute', v_in_compute, v_out_compute, (v_in_compute - v_out_compute));
+    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'credits', v_in_credits, v_out_credits, v_tax_credits, (v_in_credits - v_out_credits - v_tax_credits)),
+    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'energy', v_in_energy, v_out_energy, 0, (v_in_energy - v_out_energy)),
+    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'food', v_in_food, v_out_food, 0, (v_in_food - v_out_food)),
+    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'material', v_in_material, v_out_material, 0, (v_in_material - v_out_material)),
+    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'components', v_in_components, v_out_components, 0, (v_in_components - v_out_components)),
+    (gen_random_uuid(), p_owner_id, v_game_day, v_game_minute, v_now, p_trigger_event, p_trigger_entity_id, 'compute', v_in_compute, v_out_compute, 0, (v_in_compute - v_out_compute));
 
-  -- Also update daily_settlement_profiles with the new clean rates
+  -- Also update daily_settlement_profiles with the new clean net rates and subtotal columns
   INSERT INTO daily_settlement_profiles (
     owner_id, owner_kind, status, profile_version,
     effective_game_day, last_settled_game_day,
+    gross_credits_inflow, operating_credits_outflow, tax_credits_outflow,
     credits_delta, energy_delta, food_delta, materials_delta, components_delta, compute_delta,
     updated_at
   ) VALUES (
     p_owner_id, v_owner_kind, 'clean', 1,
     v_game_day, v_game_day,
-    (v_in_credits - v_out_credits), (v_in_energy - v_out_energy), (v_in_food - v_out_food),
-    (v_in_material - v_out_material), (v_in_components - v_out_components), (v_in_compute - v_out_compute),
+    ROUND(v_in_credits, 2), ROUND(v_out_credits, 2), ROUND(v_tax_credits, 2),
+    ROUND(v_in_credits - v_out_credits - v_tax_credits, 2),
+    ROUND(v_in_energy - v_out_energy, 2),
+    ROUND(v_in_food - v_out_food, 2),
+    ROUND(v_in_material - v_out_material, 2),
+    ROUND(v_in_components - v_out_components, 2),
+    ROUND(v_in_compute - v_out_compute, 2),
     v_now
   )
   ON CONFLICT (owner_id) DO UPDATE
@@ -969,12 +1002,15 @@ BEGIN
     status = 'clean',
     profile_version = daily_settlement_profiles.profile_version + 1,
     effective_game_day = v_game_day,
-    credits_delta = (v_in_credits - v_out_credits),
-    energy_delta = (v_in_energy - v_out_energy),
-    food_delta = (v_in_food - v_out_food),
-    materials_delta = (v_in_material - v_out_material),
-    components_delta = (v_in_components - v_out_components),
-    compute_delta = (v_in_compute - v_out_compute),
+    gross_credits_inflow = ROUND(v_in_credits, 2),
+    operating_credits_outflow = ROUND(v_out_credits, 2),
+    tax_credits_outflow = ROUND(v_tax_credits, 2),
+    credits_delta = ROUND(v_in_credits - v_out_credits - v_tax_credits, 2),
+    energy_delta = ROUND(v_in_energy - v_out_energy, 2),
+    food_delta = ROUND(v_in_food - v_out_food, 2),
+    materials_delta = ROUND(v_in_material - v_out_material, 2),
+    components_delta = ROUND(v_in_components - v_out_components, 2),
+    compute_delta = ROUND(v_in_compute - v_out_compute, 2),
     updated_at = v_now;
 
   RETURN QUERY
@@ -988,6 +1024,7 @@ BEGIN
     h.resource,
     h.gross_inflow,
     h.gross_outflow,
+    h.tax_amount,
     h.net_daily_rate
   FROM resource_rate_history h
   WHERE h.owner_id = p_owner_id AND h.created_at = v_now;

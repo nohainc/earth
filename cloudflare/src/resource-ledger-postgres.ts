@@ -28,6 +28,7 @@ export type ResourceRateHistoryRow = {
   resource: ExtendedResourceKind;
   gross_inflow: string | number;
   gross_outflow: string | number;
+  tax_amount: string | number;
   net_daily_rate: string | number;
 };
 

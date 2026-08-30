@@ -379,6 +379,7 @@ CREATE TABLE IF NOT EXISTS resource_rate_history (
   resource TEXT NOT NULL CHECK (resource IN ('credits','energy','food','material','components','compute')),
   gross_inflow NUMERIC(20,6) NOT NULL DEFAULT 0,
   gross_outflow NUMERIC(20,6) NOT NULL DEFAULT 0,
+  tax_amount NUMERIC(20,6) NOT NULL DEFAULT 0,
   net_daily_rate NUMERIC(20,6) NOT NULL DEFAULT 0
 );
 CREATE INDEX IF NOT EXISTS idx_rate_history_owner_day ON resource_rate_history(owner_id, game_day, created_at);
