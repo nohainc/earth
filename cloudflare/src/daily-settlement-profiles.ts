@@ -77,11 +77,20 @@ export async function recordDailySettlementProfileShadow(repository: PostgresRep
 /** Applies only normal, physical-resource deltas. Any owner that would cross
  * zero is deliberately left to the detailed legacy path for shortage handling. */
 export async function applyPreparedResourceProfiles(repository: PostgresRepository, gameDay: number): Promise<number> {
-  const result = await repository.query<{ applied_profiles: string }>(
-    'SELECT applied_profiles FROM apply_prepared_daily_resource_profiles($1)',
+  const dueOwners = await repository.query<{ owner_id: string }>(
+    `SELECT owner_id FROM daily_settlement_profiles
+     WHERE status = 'clean' AND last_settled_game_day < $1 AND owner_kind IN ('human', 'city')`,
     [gameDay],
   );
-  return Number(result.rows[0]?.applied_profiles ?? 0);
+  let appliedCount = 0;
+  for (const row of dueOwners.rows) {
+    const res = await repository.query<{ settled: boolean }>(
+      'SELECT * FROM earth_catchup_owner_settlement($1, $2)',
+      [row.owner_id, gameDay],
+    );
+    if (res.rows[0]?.settled) appliedCount++;
+  }
+  return appliedCount;
 }
 
 export async function markDailySettlementProfileDirty(repository: PostgresRepository, ownerId: string): Promise<void> {

@@ -158,53 +158,58 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     let operatingPaid = true;
 
     if (opCostCrd > 0) {
-      const opCostCents = BigInt(Math.round(opCostCrd * 100));
-      if (oClass === 'civic' || bld.owner_id.startsWith('CITY-')) {
-        const cityAccount = await tx.query<{ account_id: string; balance: string }>(
-          "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
-          [`account-city-${bld.city_id}`],
-        );
-        if (!cityAccount.rows[0] || moneyToCents(cityAccount.rows[0].balance) < opCostCents) {
-          operatingPaid = false;
-        } else {
-          await transferCredits(tx, {
-            ledgerId: crypto.randomUUID(),
-            gameDay: day,
-            debitAccount: cityAccount.rows[0].account_id,
-            creditAccount: opsAccount,
-            amount: centsToMoney(opCostCents),
-            reasonType: 'building_operating_cost',
-            reasonId: bld.id,
-            ruleVersion: 'real-estate-v2',
-            correlationId: `BLD-OP-${bld.id}-${day}`,
-          });
-          actualOperatingCostsCrd = opCostCrd;
-        }
+      if (profileResourcesApplied) {
+        // Already authoritatively netted in daily_settlement_profiles (credits_delta)
+        actualOperatingCostsCrd = opCostCrd;
       } else {
-        const ownerAccount = await tx.query<{ account_id: string; balance: string }>(
-          "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' AND account_id != $2 FOR UPDATE",
-          [bld.owner_id, opsAccount],
-        );
-        if (!ownerAccount.rows[0] || moneyToCents(ownerAccount.rows[0].balance) < opCostCents) {
-          operatingPaid = false;
+        const opCostCents = BigInt(Math.round(opCostCrd * 100));
+        if (oClass === 'civic' || bld.owner_id.startsWith('CITY-')) {
+          const cityAccount = await tx.query<{ account_id: string; balance: string }>(
+            "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
+            [`account-city-${bld.city_id}`],
+          );
+          if (!cityAccount.rows[0] || moneyToCents(cityAccount.rows[0].balance) < opCostCents) {
+            operatingPaid = false;
+          } else {
+            await transferCredits(tx, {
+              ledgerId: crypto.randomUUID(),
+              gameDay: day,
+              debitAccount: cityAccount.rows[0].account_id,
+              creditAccount: opsAccount,
+              amount: centsToMoney(opCostCents),
+              reasonType: 'building_operating_cost',
+              reasonId: bld.id,
+              ruleVersion: 'real-estate-v2',
+              correlationId: `BLD-OP-${bld.id}-${day}`,
+            });
+            actualOperatingCostsCrd = opCostCrd;
+          }
         } else {
-          await transferCredits(tx, {
-            ledgerId: crypto.randomUUID(),
-            gameDay: day,
-            debitAccount: ownerAccount.rows[0].account_id,
-            creditAccount: opsAccount,
-            amount: centsToMoney(opCostCents),
-            reasonType: 'building_operating_cost',
-            reasonId: bld.id,
-            ruleVersion: 'real-estate-v2',
-            correlationId: `BLD-OP-${bld.id}-${day}`,
-          });
-          actualOperatingCostsCrd = opCostCrd;
-          if (bld.business_id) {
-            await tx.query(
-              'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2 WHERE business_id = $3',
-              [opCostCrd, day, bld.business_id],
-            );
+          const ownerAccount = await tx.query<{ account_id: string; balance: string }>(
+            "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' AND account_id != $2 FOR UPDATE",
+            [bld.owner_id, opsAccount],
+          );
+          if (!ownerAccount.rows[0] || moneyToCents(ownerAccount.rows[0].balance) < opCostCents) {
+            operatingPaid = false;
+          } else {
+            await transferCredits(tx, {
+              ledgerId: crypto.randomUUID(),
+              gameDay: day,
+              debitAccount: ownerAccount.rows[0].account_id,
+              creditAccount: opsAccount,
+              amount: centsToMoney(opCostCents),
+              reasonType: 'building_operating_cost',
+              reasonId: bld.id,
+              ruleVersion: 'real-estate-v2',
+              correlationId: `BLD-OP-${bld.id}-${day}`,
+            });
+            actualOperatingCostsCrd = opCostCrd;
+            if (bld.business_id) {
+              await tx.query(
+                'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2 WHERE business_id = $3',
+                [opCostCrd, day, bld.business_id],
+              );
+            }
           }
         }
       }
@@ -286,7 +291,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
         const isCreditOutput = bld.resource_output_type === 'credits';
         const outAmt = Number(bld.resource_output_amount || 0) * effectiveYield;
 
-        if (isCreditOutput && outAmt > 0) {
+        if (isCreditOutput && outAmt > 0 && !profileResourcesApplied) {
           const revCents = BigInt(Math.round(outAmt * 100));
 
           if (oClass === 'private') {
@@ -463,8 +468,9 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
         let totalFundedCents = 0n;
 
         if (residents.rows.length > 0) {
-          const spendPerResidentCents = revCents / BigInt(residents.rows.length);
-          const remainderCents = revCents % BigInt(residents.rows.length);
+          const rawSpend = revCents / BigInt(residents.rows.length);
+          // Max realistic transit ticket fee per resident is 5.00 CRD (500 cents)
+          const spendPerResidentCents = rawSpend > 500n ? 500n : rawSpend;
 
           for (let i = 0; i < residents.rows.length; i++) {
             const res = residents.rows[i];
@@ -474,9 +480,8 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
             );
             if (!resAccount.rows[0]) continue;
 
-            const resDueCents = spendPerResidentCents + (i === 0 ? remainderCents : 0n);
             const resBalanceCents = moneyToCents(resAccount.rows[0].balance);
-            const payableCents = resBalanceCents >= resDueCents ? resDueCents : resBalanceCents;
+            const payableCents = resBalanceCents >= spendPerResidentCents ? spendPerResidentCents : resBalanceCents;
 
             if (payableCents > 0n) {
               await transferCredits(tx, {
