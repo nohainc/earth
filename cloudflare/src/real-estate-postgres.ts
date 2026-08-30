@@ -275,6 +275,14 @@ export async function purchasePrivatePlotAndConstruct(
       ],
     );
 
+    // Record timestamped rate change snapshot
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4)', [
+      input.ownerId,
+      'building_construction',
+      buildingId,
+      day,
+    ]);
+
     const created = await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId]);
     return {
       ok: true,
@@ -385,6 +393,14 @@ export async function upgradeBuilding(
       [nextTier, newOutputAmount, newOpCredits, bld.id],
     );
 
+    // Record timestamped rate change snapshot
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4)', [
+      input.humanId,
+      'building_upgrade',
+      bld.id,
+      day,
+    ]);
+
     const updated = await tx.query('SELECT * FROM buildings WHERE id = $1', [bld.id]);
     return { ok: true, building: updated.rows[0], correlationId: input.correlationId };
   });
@@ -410,6 +426,13 @@ export async function setBuildingOperatingPolicy(
       'UPDATE buildings SET operating_policy = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [input.policy, input.buildingId],
     );
+
+    // Record timestamped rate change snapshot
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3)', [
+      input.humanId,
+      'policy_change',
+      input.buildingId,
+    ]);
 
     return { ok: true, buildingId: input.buildingId, policy: input.policy };
   });
@@ -615,6 +638,13 @@ export async function demolishBuilding(
     }
 
     await tx.query("UPDATE buildings SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [
+      input.buildingId,
+    ]);
+
+    // Record timestamped rate change snapshot
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3)', [
+      input.humanId,
+      'building_demolition',
       input.buildingId,
     ]);
 

@@ -361,13 +361,29 @@ CREATE TABLE IF NOT EXISTS resource_ledger_entries (
   balance_after NUMERIC(20,6) NOT NULL CHECK (balance_after >= 0),
   reason_type TEXT NOT NULL,
   reason_id TEXT,
-  correlation_id TEXT,
+  correlation_id TEXT UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_resource_ledger_owner_day ON resource_ledger_entries(owner_id, game_day DESC, created_at DESC);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_ledger_correlation ON resource_ledger_entries(correlation_id) WHERE correlation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_resource_ledger_reason ON resource_ledger_entries(reason_type, reason_id);
 CREATE INDEX IF NOT EXISTS idx_resource_ledger_resource_day ON resource_ledger_entries(resource, game_day DESC);
+
+CREATE TABLE IF NOT EXISTS resource_rate_history (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id TEXT NOT NULL,
+  game_day BIGINT NOT NULL,
+  game_minute INTEGER NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  trigger_event TEXT NOT NULL,
+  trigger_entity_id TEXT,
+  resource TEXT NOT NULL CHECK (resource IN ('credits','energy','food','material','components','compute')),
+  gross_inflow NUMERIC(20,6) NOT NULL DEFAULT 0,
+  gross_outflow NUMERIC(20,6) NOT NULL DEFAULT 0,
+  net_daily_rate NUMERIC(20,6) NOT NULL DEFAULT 0
+);
+CREATE INDEX IF NOT EXISTS idx_rate_history_owner_day ON resource_rate_history(owner_id, game_day, created_at);
+CREATE INDEX IF NOT EXISTS idx_rate_history_owner_resource_day ON resource_rate_history(owner_id, resource, game_day DESC);
+CREATE INDEX IF NOT EXISTS idx_rate_history_created ON resource_rate_history(created_at DESC);
 
 CREATE TABLE IF NOT EXISTS market_prices (
   product TEXT PRIMARY KEY,

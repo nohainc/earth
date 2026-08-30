@@ -34,7 +34,7 @@ import { handleAiRoutes } from './ai-routes.ts';
 import { handleHouseRoutes } from './house-routes.ts';
 import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
-import { getResourceLedgerHistory, getResourceDailyBreakdown, type ResourceKind } from './resource-ledger-postgres.ts';
+import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -405,6 +405,21 @@ const worker = {
         return Response.json({ ok: true, ownerId, breakdown: breakdown ?? {} });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch resource breakdown' }, { status: 500 });
+      }
+    }
+    if (url.pathname === '/api/resources/rates/history' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const ownerId = url.searchParams.get('ownerId') || viewer?.id || 'H-0044';
+      const resource = (url.searchParams.get('resource') as ExtendedResourceKind) || undefined;
+      const limit = Number(url.searchParams.get('limit') || 50);
+      const offset = Number(url.searchParams.get('offset') || 0);
+      try {
+        const rateHistory = await withRepository(env, (repo) =>
+          getResourceRateHistory(repo, ownerId, { resource, limit, offset }),
+        );
+        return Response.json({ ok: true, ownerId, rateHistory: rateHistory ?? [] });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch resource rate history' }, { status: 500 });
       }
     }
     if (url.pathname === '/api/health' || url.pathname === '/health' || url.pathname === '/api/ready' || url.pathname === '/ready') return healthResponse(request, env);
