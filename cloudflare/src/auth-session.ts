@@ -146,7 +146,7 @@ export async function issueActionToken(
   try {
     const delivery = await env.EMAIL.send({
       to: email,
-      from: env.EMAIL_FROM,
+      from: { email: env.EMAIL_FROM, name: 'EARTH Identity' },
       subject,
       text,
       html: `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>`,

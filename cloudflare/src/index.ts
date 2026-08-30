@@ -309,7 +309,8 @@ const worker = {
     if (url.pathname === '/api/real-estate/license/acquire' || url.pathname === '/api/real-estate/license/renew' || url.pathname.endsWith('/patent') || url.pathname.endsWith('/license')) {
       return Response.json({ ok: false, error: 'Patents and technology licensing have been retired' }, { status: 404 });
     }
-    if ((url.pathname === '/api/day/advance' || url.pathname === '/api/world/recalculate') && request.method === 'POST') return advanceWorldFromPostgres(request, env);
+    if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
+    if (url.pathname === '/api/world/recalculate' && request.method === 'POST') return advanceWorldFromPostgres(request, env);
     if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);
     if (url.pathname === '/api/services/status' && request.method === 'GET') return servicesStatusFromPostgres(request, env);
     // ── Read-model routes → read-model-routes.ts ────────────────────────────
