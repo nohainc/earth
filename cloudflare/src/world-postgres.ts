@@ -11,6 +11,7 @@ import { computeResourceFlows } from './engines/resource-flow-engine.ts';
 import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { getCityDistrictZoning } from './real-estate-postgres.ts';
+import { catchupOwnerSettlement } from './daily-settlement-profiles.ts';
 
 type Row = Record<string, any>;
 
@@ -24,6 +25,7 @@ function ratio(value: unknown, divisor: unknown, cap = 1): number {
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId: string): Promise<Record<string, unknown>> {
   await reconcileWorldSimulation(repository, viewerId);
+  await catchupOwnerSettlement(repository, viewerId).catch(() => null);
   const flows = await computeResourceFlows(repository, viewerId);
 
   const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts, technologyAdoptions] = await Promise.all([
