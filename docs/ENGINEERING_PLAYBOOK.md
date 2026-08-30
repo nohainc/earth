@@ -171,8 +171,8 @@ vertical slice when possible.
 
 ### Database changes
 
-1. Read `db/initial.sql` and `db/schema-manifest.json`; do not review historical
-   migrations `001–074` unless an investigation specifically needs them. Add
+1. Read the self-contained `db/initial.sql` and `db/schema-manifest.json`; migrations
+   `001–074` are consolidated there and retained only in Git history. Add
    the next available numbered SQL migration under `db/migrations/` (the
    profile-settlement work begins at `075`).
 2. Update `db/schema-manifest.json` when schema or indexes change.

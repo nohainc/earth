@@ -152,13 +152,8 @@ or `lifecycle/`.
 
 | Path | Responsibility |
 |---|---|
-| `db/migrations/001_initial.sql` | Core schema |
-| `db/migrations/002_earth_feature_schema.sql` | Main feature schema additions |
-| `db/migrations/023_pantheon_cemetery_and_rebirth.sql` | Archive, cemetery, and rebirth schema |
-| `db/migrations/028_dynasty_lineage_and_heirlooms.sql` | Dynasties, lineage, perks, and heirlooms |
-| `db/migrations/042_link_cities_to_corporations.sql` | City/corporation relationships |
-| `db/migrations/049_community_management_and_roles.sql` | Community roles and membership requests |
-| `db/migrations/050_real_estate_and_municipal_labor.sql` onward | Real estate, buildings, accounting, rankings, and later hardening |
+| `db/initial.sql` | Self-contained canonical schema and baseline data evolution through migration 074 |
+| `db/migrations/075_*.sql` onward | Forward-only schema changes after the consolidated baseline |
 | `db/schema-manifest.json` | Expected schema/table manifest |
 | `db/seed.sql` | Starter world plus namespaced local test fixtures |
 
