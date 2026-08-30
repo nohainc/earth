@@ -244,15 +244,17 @@ export async function deleteAccount(
   input: { humanId: string; email: string },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    // 1. Mark human as deleted
-    await tx.query("UPDATE humans SET life_status = 'deleted', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [input.humanId]);
+    // 1. Mark human as deceased
+    await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [input.humanId]);
     // 2. Delete credentials
     await tx.query('DELETE FROM auth_credentials WHERE human_id = $1', [input.humanId]);
     // 3. Delete action tokens
     await tx.query('DELETE FROM auth_action_tokens WHERE human_id = $1', [input.humanId]);
     // 4. Delete active sessions
     await tx.query('DELETE FROM auth_sessions WHERE human_id = $1', [input.humanId]);
-    // 5. Enqueue outbox notification
+    // 5. Clear login attempts
+    await tx.query('DELETE FROM auth_login_attempts WHERE email = $1', [input.email]);
+    // 6. Enqueue outbox notification
     await enqueueOutbox(tx, {
       eventKey: `account-deleted:${input.humanId}`,
       topic: 'world_activity',
