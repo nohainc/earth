@@ -13,7 +13,7 @@ if [[ "$HTTP_STATUS" != 2* ]]; then
     print -u2 "Worker response:"
     cat "$RESPONSE_FILE" >&2
   fi
-  print -u2 "Confirm that Wrangler was started with --test-scheduled and that migration 078 is applied to this local database."
+  print -u2 "Confirm that Wrangler was started with --test-scheduled and that migrations (through 083) are applied to this local database."
   exit 1
 fi
 
