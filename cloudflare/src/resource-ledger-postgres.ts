@@ -69,42 +69,44 @@ export async function mutateResourceBalance(
   repository: PostgresRepository,
   input: MutateResourceInput,
 ): Promise<MutateResourceResult> {
-  const result = await repository.query<{
-    status: string;
-    ledger_id: string;
-    owner_id: string;
-    resource: string;
-    delta: string | number;
-    balance_after: string | number;
-    already_processed: boolean;
-  }>(
-    'SELECT * FROM earth_mutate_resource_balance($1, $2, $3, $4, $5, $6, $7, $8)',
-    [
-      input.gameDay ?? null,
-      input.ownerId,
-      input.resource,
-      input.delta,
-      input.reasonType,
-      input.reasonId ?? null,
-      input.correlationId ?? null,
-      input.gameMinute ?? 0,
-    ],
-  );
+  return repository.transaction(async (tx) => {
+    const result = await tx.query<{
+      status: string;
+      ledger_id: string;
+      owner_id: string;
+      resource: string;
+      delta: string | number;
+      balance_after: string | number;
+      already_processed: boolean;
+    }>(
+      'SELECT * FROM earth_mutate_resource_balance($1, $2, $3, $4, $5, $6, $7, $8)',
+      [
+        input.gameDay ?? null,
+        input.ownerId,
+        input.resource,
+        input.delta,
+        input.reasonType,
+        input.reasonId ?? null,
+        input.correlationId ?? null,
+        input.gameMinute ?? 0,
+      ],
+    );
 
-  const row = result.rows[0];
-  if (!row) {
-    throw new Error('Resource mutation failed: no response from database function');
-  }
+    const row = result.rows[0];
+    if (!row) {
+      throw new Error('Resource mutation failed: no response from database function');
+    }
 
-  return {
-    status: row.status as 'success' | 'already_processed',
-    ledgerId: row.ledger_id,
-    ownerId: row.owner_id,
-    resource: row.resource,
-    delta: Number(row.delta),
-    balanceAfter: Number(row.balance_after),
-    alreadyProcessed: Boolean(row.already_processed),
-  };
+    return {
+      status: row.status as 'success' | 'already_processed',
+      ledgerId: row.ledger_id,
+      ownerId: row.owner_id,
+      resource: row.resource,
+      delta: Number(row.delta),
+      balanceAfter: Number(row.balance_after),
+      alreadyProcessed: Boolean(row.already_processed),
+    };
+  });
 }
 
 /**
@@ -118,11 +120,13 @@ export async function recordRateChange(
   gameDay?: number | null,
   gameMinute?: number | null,
 ): Promise<ResourceRateHistoryRow[]> {
-  const res = await repository.query<ResourceRateHistoryRow>(
-    'SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)',
-    [ownerId, triggerEvent, triggerEntityId ?? null, gameDay ?? null, gameMinute ?? null],
-  );
-  return res.rows;
+  return repository.transaction(async (tx) => {
+    const res = await tx.query<ResourceRateHistoryRow>(
+      'SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)',
+      [ownerId, triggerEvent, triggerEntityId ?? null, gameDay ?? null, gameMinute ?? null],
+    );
+    return res.rows;
+  });
 }
 
 /**
