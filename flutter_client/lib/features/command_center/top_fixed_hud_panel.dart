@@ -755,8 +755,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         EarthAudioEngine.instance.playClick();
         if (value == 'life') {
           widget.onNavigate?.call('life');
-        } else if (value == 'security') {
-          widget.onSecurity?.call();
+        } else if (value == 'account') {
+          widget.onNavigate?.call('account');
         } else if (value == 'theme') {
           showThemeCustomizerDialog(context);
         } else if (value == 'audio') {
@@ -806,12 +806,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         const PopupMenuDivider(),
         _menuItem(
           context,
-          'security',
-          Icons.shield_outlined,
-          'Security & MFA',
-        ),
-        _menuItem(
-          context,
           'theme',
           Icons.palette_outlined,
           'Theme Suite',
@@ -831,6 +825,12 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           'Onboarding',
         ),
         const PopupMenuDivider(),
+        _menuItem(
+          context,
+          'account',
+          Icons.manage_accounts_outlined,
+          'Account',
+        ),
         _menuItem(
           context,
           'logout',

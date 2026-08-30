@@ -128,6 +128,14 @@ extension EarthApiAuth on EarthApi {
     return response;
   }
 
+  Future<void> deleteAccount() async {
+    try {
+      await _request('/api/auth/account', method: 'DELETE');
+    } finally {
+      await AuthStorage.clearToken();
+    }
+  }
+
   Future<void> logout() async {
     try {
       await _request('/api/auth/logout', method: 'POST');

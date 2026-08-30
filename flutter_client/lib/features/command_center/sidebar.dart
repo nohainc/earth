@@ -69,7 +69,7 @@ class _SidebarState extends State<Sidebar> {
         'civic',
         'public-finance'
       ],
-      ['life', 'house', 'dynasty', 'finance'],
+      ['life', 'house', 'dynasty', 'finance', 'account'],
       [
         'corporations',
         'communities',
@@ -242,6 +242,12 @@ class _SidebarState extends State<Sidebar> {
             'finance',
             'Finance',
             Icons.account_balance_wallet_outlined,
+            null,
+          ),
+          (
+            'account',
+            'Account',
+            Icons.manage_accounts_outlined,
             null,
           ),
         ]

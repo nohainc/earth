@@ -14,6 +14,7 @@ import '../operations/ai_panel.dart';
 import '../operations/business_panel.dart';
 import '../operations/technology_panel.dart';
 import '../operations/buildings_hub_screen.dart';
+import '../account/account_screen.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
@@ -32,6 +33,7 @@ import 'quick_actions_panel.dart';
 import 'command_executive_quadrant.dart';
 
 String dashboardSectionTitle(String section) => switch (section) {
+      'account' => 'ACCOUNT SETTINGS',
       'command' => 'COMMAND CENTER',
       'market' => 'MARKET',
       'derivatives' => 'FUTURES & DERIVATIVES',
@@ -93,6 +95,7 @@ class Dashboard extends StatelessWidget {
   final VoidCallback? onRefreshEvents;
   final Future<void> Function(String)? onMarkNotificationRead;
   final Future<void> Function()? onMarkAllNotificationsRead;
+  final VoidCallback? onLogout;
 
   const Dashboard({
     super.key,
@@ -123,6 +126,7 @@ class Dashboard extends StatelessWidget {
     this.onRefreshEvents,
     this.onMarkNotificationRead,
     this.onMarkAllNotificationsRead,
+    this.onLogout,
   });
 
   @override
@@ -353,6 +357,15 @@ class Dashboard extends StatelessWidget {
 
   List<Widget> _selectedPanels() {
     switch (selectedSection) {
+      case 'account':
+        return [
+          AccountScreen(
+            state: state,
+            api: const EarthApi(),
+            onLogout: onLogout,
+            onNavigate: onNavigate,
+          ),
+        ];
       case 'market':
         return [
           MarketWorkspace(

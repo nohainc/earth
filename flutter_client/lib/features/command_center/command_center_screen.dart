@@ -691,6 +691,7 @@ class _CommandCenterState extends State<CommandCenter> {
                                         await api.markAllNotificationsRead();
                                         await _refreshEvents();
                                       },
+                                      onLogout: widget.onLogout,
                                     ),
                                   ),
                                 ],

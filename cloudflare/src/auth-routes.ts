@@ -2,12 +2,21 @@ import { bytesToBase32, validTotp, digest } from './auth-crypto';
 import { cookieValue, extractToken, currentHuman, sessionCookie } from './auth-session';
 import { parseJsonBody } from './request-validation';
 import { withRepository } from './repository';
-import { rebornIdentity, claimHeirIdentity, updateDisplayName } from './auth-postgres';
+import { rebornIdentity, claimHeirIdentity, updateDisplayName, deleteAccount } from './auth-postgres';
 
 export async function authenticatedAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
     const human = await currentHuman(request, env);
-    return Response.json({ authenticated: Boolean(human), human, persistence: 'planetscale-postgres' });
+    if (!human) return Response.json({ authenticated: false, human: null, persistence: 'planetscale-postgres' });
+    const cred = (await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean }>('SELECT mfa_enabled FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
+    return Response.json({
+      authenticated: true,
+      human: {
+        ...human,
+        mfa_enabled: Boolean(cred?.mfa_enabled),
+      },
+      persistence: 'planetscale-postgres',
+    });
   }
   if (url.pathname === '/api/auth/profile' && request.method === 'PATCH') {
     const human = await currentHuman(request, env);
@@ -99,8 +108,6 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     }
   }
   if (url.pathname === '/api/auth/claim-heir' && request.method === 'POST') {
-    // The predecessor is normally in Estate or Deceased state when the heir
-    // is claimed, so this route must accept those authenticated identities.
     const human = await currentHuman(request, env, true);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     try {
@@ -109,6 +116,18 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
       return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie(String(result.token), Number(result.maxAge)) } });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Succession claim failed';
+      return Response.json({ ok: false, error: message }, { status: 400 });
+    }
+  }
+  if (url.pathname === '/api/auth/account' && request.method === 'DELETE') {
+    const human = await currentHuman(request, env);
+    if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    try {
+      const result = await withRepository(env, (repository) => deleteAccount(repository, { humanId: human.id, email: human.email }));
+      if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
+      return new Response(JSON.stringify(result), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Account deletion failed';
       return Response.json({ ok: false, error: message }, { status: 400 });
     }
   }
