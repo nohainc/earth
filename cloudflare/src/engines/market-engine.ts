@@ -22,7 +22,7 @@ export async function settleContinuousMarket(
     // Apply continuous price drift toward supply/demand equilibrium
     await repo.query(
       `UPDATE market_prices
-       SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)),
+       SET price = GREATEST(1, LEAST(1000000, ROUND((price * (1.0 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))),
            game_day = $1
        WHERE product = $2`,
       [gameDay, product],

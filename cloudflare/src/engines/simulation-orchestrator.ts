@@ -43,8 +43,9 @@ export async function reconcileWorldSimulation(
       : currentRealMs - 5000;
 
     const rawElapsedMs = Math.max(0, currentRealMs - lastSimulatedMs);
-    // Cap single catch-up jump to 24 real-world hours to avoid unbounded transaction overhead
-    const elapsedRealMs = Math.min(86400000, rawElapsedMs);
+    // Cap single request catch-up jump to 60 real seconds (60 game minutes = 0.0416 game days)
+    // to avoid unbounded transaction overhead and numeric calculation overflows
+    const elapsedRealMs = Math.min(60000, rawElapsedMs);
     const elapsedSeconds = Math.floor(elapsedRealMs / 1000);
 
     // Compute continuous game time
@@ -56,7 +57,7 @@ export async function reconcileWorldSimulation(
 
     const currDay = Math.floor(time.gameDay > 0 ? time.gameDay : prevDay);
     const currMinute = Math.floor(time.gameMinute);
-    const elapsedDays = Math.max(0, elapsedSeconds / 1440);
+    const elapsedDays = Math.min(1.0, Math.max(0, elapsedSeconds / 1440));
 
     let productionEvents = 0;
     let ordersSettled = 0;

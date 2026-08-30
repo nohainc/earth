@@ -43,24 +43,27 @@ export async function settleContinuousFinancials(
     const credits = Math.round(qty * Number(c.unit_price ?? 0) * 100) / 100;
     if (qty <= 0 || credits <= 0) continue;
 
+    const formattedQty = qty.toFixed(2);
+    const formattedCredits = credits.toFixed(2);
+
     // Transfer resource from seller to buyer
     await repo.query(
       'UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3 AND amount >= $1',
-      [qty, c.seller_id, c.resource_type],
+      [formattedQty, c.seller_id, c.resource_type],
     );
     await repo.query(
       'INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT(owner_id,resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount',
-      [c.buyer_id, c.resource_type, qty],
+      [c.buyer_id, c.resource_type, formattedQty],
     );
 
     // Transfer credits from buyer to seller
     await repo.query(
       "UPDATE account_balances SET balance = balance - $1 WHERE owner_id = $2 AND currency = 'CREDIT'",
-      [credits, c.buyer_id],
+      [formattedCredits, c.buyer_id],
     );
     await repo.query(
       "UPDATE account_balances SET balance = balance + $1 WHERE owner_id = $2 AND currency = 'CREDIT'",
-      [credits, c.seller_id],
+      [formattedCredits, c.seller_id],
     );
 
     supplyContractsSettled += 1;

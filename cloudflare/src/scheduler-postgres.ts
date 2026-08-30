@@ -633,7 +633,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     }
     await tx.query("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
     await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
-    await tx.query("UPDATE market_prices SET price = GREATEST(1, ROUND(price * (1 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1, supply + demand))))::numeric, 2)), game_day = $1", [day]);
+    await tx.query("UPDATE market_prices SET price = GREATEST(1, LEAST(1000000, ROUND((price * (1.0 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))), game_day = $1", [day]);
     if (newDay) {
       await runLoggedEngine(tx, day, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, day));
       await runLoggedEngine(tx, day, 'daily_settlement_profile_shadow', () => recordDailySettlementProfileShadow(tx, day));
