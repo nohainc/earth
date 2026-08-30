@@ -53,15 +53,15 @@ BEGIN
   IF NOT FOUND THEN
     -- Initialize clean profile if absent
     INSERT INTO daily_settlement_profiles (
-      id, owner_id, owner_kind, status, profile_version,
+      owner_id, owner_kind, status, profile_version,
       effective_game_day, last_settled_game_day,
       energy_delta, food_delta, materials_delta, components_delta, compute_delta,
-      created_at, updated_at
+      updated_at
     ) VALUES (
-      gen_random_uuid(), p_owner_id, 'human', 'clean', 1,
+      p_owner_id, 'human', 'clean', 1,
       v_target_day, v_target_day,
       0, 0, 0, 0, 0,
-      NOW(), NOW()
+      NOW()
     )
     RETURNING * INTO v_profile;
   END IF;
@@ -118,11 +118,15 @@ BEGIN
 
     -- Record profile run audit record
     INSERT INTO daily_settlement_profile_runs (
-      id, profile_id, game_day, burns_applied, accounts_settled, created_at
+      owner_id, game_day, profile_version, last_settled_game_day,
+      elapsed_days, mode, expected_delta, created_at
     ) VALUES (
-      gen_random_uuid(),
-      v_profile.id,
+      p_owner_id,
       v_target_day,
+      v_profile.profile_version,
+      v_last_settled,
+      v_elapsed,
+      'applied',
       jsonb_build_object(
         'energy', v_energy_change,
         'food', v_food_change,
@@ -131,10 +135,10 @@ BEGIN
         'compute', v_compute_change,
         'elapsed_days', v_elapsed
       ),
-      1,
       NOW()
     )
-    ON CONFLICT (game_day) DO NOTHING;
+    ON CONFLICT (owner_id, game_day) DO UPDATE
+      SET mode = 'applied', expected_delta = EXCLUDED.expected_delta;
 
     -- Advance last settled day
     UPDATE daily_settlement_profiles
@@ -371,15 +375,15 @@ BEGIN
   IF NOT FOUND THEN
     -- If no profile exists, initialize a default clean profile for this owner
     INSERT INTO daily_settlement_profiles (
-      id, owner_id, owner_kind, status, profile_version,
+      owner_id, owner_kind, status, profile_version,
       effective_game_day, last_settled_game_day,
       energy_delta, food_delta, materials_delta, components_delta, compute_delta,
-      created_at, updated_at
+      updated_at
     ) VALUES (
-      gen_random_uuid(), p_owner_id, 'human', 'clean', 1,
+      p_owner_id, 'human', 'clean', 1,
       v_game_day, v_game_day,
       0, 0, 0, 0, 0,
-      NOW(), NOW()
+      NOW()
     )
     ON CONFLICT (owner_id) DO NOTHING;
 
@@ -391,6 +395,11 @@ BEGIN
     SELECT
       b.resource_output_type,
       b.resource_output_amount,
+      b.upkeep_energy,
+      b.upkeep_food,
+      b.upkeep_materials,
+      b.upkeep_components,
+      b.upkeep_compute,
       b.operating_policy,
       b.condition
     FROM buildings b
@@ -436,13 +445,20 @@ BEGIN
       v_energy_delta := v_energy_delta + v_out_amount;
     ELSIF v_b.resource_output_type = 'food' THEN
       v_food_delta := v_food_delta + v_out_amount;
-    ELSIF v_b.resource_output_type = 'material' THEN
+    ELSIF v_b.resource_output_type IN ('material', 'materials') THEN
       v_materials_delta := v_materials_delta + v_out_amount;
     ELSIF v_b.resource_output_type = 'components' THEN
       v_components_delta := v_components_delta + v_out_amount;
     ELSIF v_b.resource_output_type = 'compute' THEN
       v_compute_delta := v_compute_delta + v_out_amount;
     END IF;
+
+    -- Upkeep subtraction
+    v_energy_delta := v_energy_delta - (COALESCE(v_b.upkeep_energy, 0) * v_cost_mult * v_cond_cost);
+    v_food_delta := v_food_delta - (COALESCE(v_b.upkeep_food, 0) * v_cost_mult * v_cond_cost);
+    v_materials_delta := v_materials_delta - (COALESCE(v_b.upkeep_materials, 0) * v_cost_mult * v_cond_cost);
+    v_components_delta := v_components_delta - (COALESCE(v_b.upkeep_components, 0) * v_cost_mult * v_cond_cost);
+    v_compute_delta := v_compute_delta - (COALESCE(v_b.upkeep_compute, 0) * v_cost_mult * v_cond_cost);
   END LOOP;
 
   -- Update daily_settlement_profiles
@@ -451,18 +467,18 @@ BEGIN
     status = 'clean',
     profile_version = profile_version + 1,
     effective_game_day = v_game_day,
-    energy_delta = v_energy_delta,
-    food_delta = v_food_delta,
-    materials_delta = v_materials_delta,
-    components_delta = v_components_delta,
-    compute_delta = v_compute_delta,
+    energy_delta = ROUND(v_energy_delta, 2),
+    food_delta = ROUND(v_food_delta, 2),
+    materials_delta = ROUND(v_materials_delta, 2),
+    components_delta = ROUND(v_components_delta, 2),
+    compute_delta = ROUND(v_compute_delta, 2),
     updated_at = NOW()
   WHERE daily_settlement_profiles.owner_id = p_owner_id;
 
   RETURN QUERY
   SELECT
     p.owner_id,
-    p.profile_version,
+    p.profile_version::INTEGER,
     p.status,
     p.energy_delta,
     p.food_delta,

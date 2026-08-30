@@ -422,26 +422,37 @@ CREATE INDEX IF NOT EXISTS idx_futures_expiry ON commodity_futures_contracts(sta
 CREATE INDEX IF NOT EXISTS idx_futures_settlement ON commodity_futures_contracts(commodity, status, expiry_game_day);
 
 CREATE TABLE IF NOT EXISTS daily_settlement_profiles (
-  id UUID PRIMARY KEY,
-  version INTEGER NOT NULL DEFAULT 1,
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  material_burn NUMERIC(20,6) NOT NULL DEFAULT 0.05 CHECK (material_burn >= 0),
-  components_burn NUMERIC(20,6) NOT NULL DEFAULT 0.05 CHECK (components_burn >= 0),
-  energy_burn NUMERIC(20,6) NOT NULL DEFAULT 0.08 CHECK (energy_burn >= 0),
-  compute_burn NUMERIC(20,6) NOT NULL DEFAULT 0.04 CHECK (compute_burn >= 0),
-  food_burn NUMERIC(20,6) NOT NULL DEFAULT 0.06 CHECK (food_burn >= 0),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  owner_id TEXT PRIMARY KEY,
+  owner_kind TEXT NOT NULL CHECK (owner_kind IN ('human', 'city', 'corporation', 'earth')),
+  profile_version BIGINT NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'dirty' CHECK (status IN ('clean', 'dirty')),
+  effective_game_day BIGINT NOT NULL DEFAULT 0,
+  last_settled_game_day BIGINT NOT NULL DEFAULT 0,
+  credits_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  energy_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  food_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  materials_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  components_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  compute_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  input_fingerprint TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS daily_settlement_profiles_due_idx
+  ON daily_settlement_profiles (status, last_settled_game_day, owner_kind);
 
 CREATE TABLE IF NOT EXISTS daily_settlement_profile_runs (
-  id UUID PRIMARY KEY,
-  profile_id UUID NOT NULL REFERENCES daily_settlement_profiles(id),
-  game_day BIGINT NOT NULL UNIQUE,
-  burns_applied JSONB NOT NULL DEFAULT '{}',
-  accounts_settled INTEGER NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  owner_id TEXT NOT NULL,
+  game_day BIGINT NOT NULL,
+  profile_version BIGINT NOT NULL,
+  last_settled_game_day BIGINT NOT NULL,
+  elapsed_days BIGINT NOT NULL,
+  mode TEXT NOT NULL CHECK (mode IN ('shadow', 'applied')),
+  expected_delta JSONB NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (owner_id, game_day)
 );
+CREATE INDEX IF NOT EXISTS daily_settlement_profile_runs_day_idx
+  ON daily_settlement_profile_runs (game_day DESC, mode);
 
 -- -----------------------------------------------------------------------------
 -- 6. Buildings & Real Estate Production

@@ -42,15 +42,15 @@ BEGIN
   IF NOT FOUND THEN
     -- Initialize clean profile if absent
     INSERT INTO daily_settlement_profiles (
-      id, owner_id, owner_kind, status, profile_version,
+      owner_id, owner_kind, status, profile_version,
       effective_game_day, last_settled_game_day,
       energy_delta, food_delta, materials_delta, components_delta, compute_delta,
-      created_at, updated_at
+      updated_at
     ) VALUES (
-      gen_random_uuid(), p_owner_id, 'human', 'clean', 1,
+      p_owner_id, 'human', 'clean', 1,
       v_target_day, v_target_day,
       0, 0, 0, 0, 0,
-      NOW(), NOW()
+      NOW()
     )
     RETURNING * INTO v_profile;
   END IF;
@@ -107,11 +107,15 @@ BEGIN
 
     -- Record profile run audit record
     INSERT INTO daily_settlement_profile_runs (
-      id, profile_id, game_day, burns_applied, accounts_settled, created_at
+      owner_id, game_day, profile_version, last_settled_game_day,
+      elapsed_days, mode, expected_delta, created_at
     ) VALUES (
-      gen_random_uuid(),
-      v_profile.id,
+      p_owner_id,
       v_target_day,
+      v_profile.profile_version,
+      v_last_settled,
+      v_elapsed,
+      'applied',
       jsonb_build_object(
         'energy', v_energy_change,
         'food', v_food_change,
@@ -120,10 +124,10 @@ BEGIN
         'compute', v_compute_change,
         'elapsed_days', v_elapsed
       ),
-      1,
       NOW()
     )
-    ON CONFLICT (game_day) DO NOTHING;
+    ON CONFLICT (owner_id, game_day) DO UPDATE
+      SET mode = 'applied', expected_delta = EXCLUDED.expected_delta;
 
     -- Advance last settled day
     UPDATE daily_settlement_profiles

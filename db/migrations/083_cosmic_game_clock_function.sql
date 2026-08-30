@@ -3,51 +3,15 @@
 -- Authoritative calculation of cosmic game time from genesis_at (24 real mins = 1 game day)
 -- and updates to settlement catch-up and profile recalculation.
 
--- -----------------------------------------------------------------------------
--- Source: db/functions/earth_get_current_game_time.sql
--- -----------------------------------------------------------------------------
-
-CREATE OR REPLACE FUNCTION earth_get_current_game_time()
-RETURNS TABLE (
-  game_day BIGINT,
-  game_minute INTEGER,
-  genesis_at TIMESTAMPTZ,
-  elapsed_real_seconds NUMERIC
-)
-LANGUAGE plpgsql
-AS $$
-DECLARE
-  v_genesis TIMESTAMPTZ;
-  v_offset BIGINT;
-  v_elapsed_sec NUMERIC;
-  v_day BIGINT;
-  v_minute INTEGER;
-BEGIN
-  SELECT
-    COALESCE(w.genesis_at, '2026-01-01T00:00:00Z'::TIMESTAMPTZ),
-    COALESCE(w.simulated_day_offset, 0)
-  INTO v_genesis, v_offset
-  FROM world_state w
-  WHERE w.id = 'WORLD';
-
-  IF NOT FOUND THEN
-    v_genesis := '2026-01-01T00:00:00Z'::TIMESTAMPTZ;
-    v_offset := 0;
-  END IF;
-
-  v_elapsed_sec := GREATEST(0, EXTRACT(EPOCH FROM (NOW() - v_genesis)));
-  -- 1 real second = 1 game minute; 1,440 real seconds (24 real minutes) = 1 game day
-  v_day := 1 + FLOOR(v_elapsed_sec / 1440.0)::BIGINT + v_offset;
-  v_minute := MOD(FLOOR(v_elapsed_sec)::BIGINT, 1440)::INTEGER;
-
-  RETURN QUERY SELECT v_day, v_minute, v_genesis, v_elapsed_sec;
-END;
-$$;
 
 -- -----------------------------------------------------------------------------
--- Update: db/functions/earth_catchup_owner_settlement.sql
+-- Source: db/functions/earth_catchup_owner_settlement.sql
 -- -----------------------------------------------------------------------------
 
+-- Stored Function: earth_catchup_owner_settlement
+--
+-- Authoritative server-side catch-up: brings an owner's balances up to date
+-- from their last settled game day to the target game day in one atomic transaction.
 CREATE OR REPLACE FUNCTION earth_catchup_owner_settlement(
   p_owner_id TEXT,
   p_target_day BIGINT DEFAULT NULL
@@ -88,15 +52,15 @@ BEGIN
   IF NOT FOUND THEN
     -- Initialize clean profile if absent
     INSERT INTO daily_settlement_profiles (
-      id, owner_id, owner_kind, status, profile_version,
+      owner_id, owner_kind, status, profile_version,
       effective_game_day, last_settled_game_day,
       energy_delta, food_delta, materials_delta, components_delta, compute_delta,
-      created_at, updated_at
+      updated_at
     ) VALUES (
-      gen_random_uuid(), p_owner_id, 'human', 'clean', 1,
+      p_owner_id, 'human', 'clean', 1,
       v_target_day, v_target_day,
       0, 0, 0, 0, 0,
-      NOW(), NOW()
+      NOW()
     )
     RETURNING * INTO v_profile;
   END IF;
@@ -153,11 +117,15 @@ BEGIN
 
     -- Record profile run audit record
     INSERT INTO daily_settlement_profile_runs (
-      id, profile_id, game_day, burns_applied, accounts_settled, created_at
+      owner_id, game_day, profile_version, last_settled_game_day,
+      elapsed_days, mode, expected_delta, created_at
     ) VALUES (
-      gen_random_uuid(),
-      v_profile.id,
+      p_owner_id,
       v_target_day,
+      v_profile.profile_version,
+      v_last_settled,
+      v_elapsed,
+      'applied',
       jsonb_build_object(
         'energy', v_energy_change,
         'food', v_food_change,
@@ -166,10 +134,10 @@ BEGIN
         'compute', v_compute_change,
         'elapsed_days', v_elapsed
       ),
-      1,
       NOW()
     )
-    ON CONFLICT (game_day) DO NOTHING;
+    ON CONFLICT (owner_id, game_day) DO UPDATE
+      SET mode = 'applied', expected_delta = EXCLUDED.expected_delta;
 
     -- Advance last settled day
     UPDATE daily_settlement_profiles
@@ -186,9 +154,178 @@ END;
 $$;
 
 -- -----------------------------------------------------------------------------
--- Update: db/functions/earth_rebuild_settlement_profile.sql
+-- Source: db/functions/earth_create_market_order.sql
 -- -----------------------------------------------------------------------------
 
+-- Stored Function: earth_create_market_order
+--
+-- Authoritative server-side market order creation: catches up the player,
+-- verifies and escrows funds/commodities atomically in PostgreSQL.
+CREATE OR REPLACE FUNCTION earth_create_market_order(
+  p_order_id UUID,
+  p_human_id TEXT,
+  p_product TEXT,
+  p_side TEXT,
+  p_quantity NUMERIC(20,6),
+  p_limit_price NUMERIC(20,2),
+  p_correlation_id TEXT DEFAULT NULL
+)
+RETURNS TABLE (
+  order_id UUID,
+  human_id TEXT,
+  product TEXT,
+  side TEXT,
+  quantity NUMERIC(20,6),
+  limit_price NUMERIC(20,2),
+  reserved_credits NUMERIC(20,2),
+  status TEXT,
+  already_processed BOOLEAN
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_total_cost NUMERIC(20,2);
+  v_credit_balance NUMERIC(20,2);
+  v_resource_balance NUMERIC(20,6);
+  v_existing RECORD;
+BEGIN
+  -- 1. Idempotency check via correlation ID
+  IF p_correlation_id IS NOT NULL THEN
+    SELECT * INTO v_existing
+    FROM market_orders m
+    WHERE m.human_id = p_human_id AND m.correlation_id = p_correlation_id
+    LIMIT 1;
+
+    IF FOUND THEN
+      RETURN QUERY SELECT
+        v_existing.id,
+        v_existing.human_id,
+        v_existing.product,
+        v_existing.side,
+        v_existing.quantity,
+        v_existing.limit_price,
+        v_existing.reserved_credits,
+        v_existing.status,
+        TRUE;
+      RETURN;
+    END IF;
+  END IF;
+
+  -- 2. Catch up owner to current game day before trade action
+  PERFORM earth_catchup_owner_settlement(p_human_id);
+
+  -- 3. Side validation & Escrow
+  IF p_side = 'buy' THEN
+    v_total_cost := p_quantity * p_limit_price;
+
+    SELECT balance INTO v_credit_balance
+    FROM account_balances
+    WHERE owner_id = p_human_id AND currency = 'CREDIT'
+    FOR UPDATE;
+
+    IF v_credit_balance IS NULL OR v_credit_balance < v_total_cost THEN
+      RAISE EXCEPTION 'Insufficient credits for market buy order: balance=%, required=%', COALESCE(v_credit_balance, 0), v_total_cost;
+    END IF;
+
+    -- Escrow credits from liquid balance
+    UPDATE account_balances
+    SET balance = balance - v_total_cost
+    WHERE owner_id = p_human_id AND currency = 'CREDIT';
+
+  ELSIF p_side = 'sell' THEN
+    v_total_cost := 0;
+
+    SELECT amount INTO v_resource_balance
+    FROM resource_balances
+    WHERE owner_id = p_human_id AND resource = p_product
+    FOR UPDATE;
+
+    IF v_resource_balance IS NULL OR v_resource_balance < p_quantity THEN
+      RAISE EXCEPTION 'Insufficient % for market sell order: balance=%, required=%', p_product, COALESCE(v_resource_balance, 0), p_quantity;
+    END IF;
+
+    -- Escrow resources from inventory
+    UPDATE resource_balances
+    SET amount = amount - p_quantity
+    WHERE owner_id = p_human_id AND resource = p_product;
+
+  ELSE
+    RAISE EXCEPTION 'Invalid order side: %', p_side;
+  END IF;
+
+  -- 4. Place order into book
+  INSERT INTO market_orders (
+    id, human_id, product, quantity, limit_price, filled_quantity, status, side, correlation_id, reserved_credits, created_at
+  ) VALUES (
+    p_order_id, p_human_id, p_product, p_quantity, p_limit_price, 0, 'open', p_side, p_correlation_id, v_total_cost, NOW()
+  );
+
+  RETURN QUERY SELECT
+    p_order_id,
+    p_human_id,
+    p_product,
+    p_side,
+    p_quantity,
+    p_limit_price,
+    v_total_cost,
+    'open'::TEXT,
+    FALSE;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Source: db/functions/earth_get_current_game_time.sql
+-- -----------------------------------------------------------------------------
+
+-- Stored Function: earth_get_current_game_time
+--
+-- Calculates the authoritative game day and minute based on real elapsed time
+-- since genesis_at (24 real minutes = 1,440 real seconds = 1 game day/month cycle).
+CREATE OR REPLACE FUNCTION earth_get_current_game_time()
+RETURNS TABLE (
+  game_day BIGINT,
+  game_minute INTEGER,
+  genesis_at TIMESTAMPTZ,
+  elapsed_real_seconds NUMERIC
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  v_genesis TIMESTAMPTZ;
+  v_offset BIGINT;
+  v_elapsed_sec NUMERIC;
+  v_day BIGINT;
+  v_minute INTEGER;
+BEGIN
+  SELECT
+    COALESCE(w.genesis_at, '2026-01-01T00:00:00Z'::TIMESTAMPTZ),
+    COALESCE(w.simulated_day_offset, 0)
+  INTO v_genesis, v_offset
+  FROM world_state w
+  WHERE w.id = 'WORLD';
+
+  IF NOT FOUND THEN
+    v_genesis := '2026-01-01T00:00:00Z'::TIMESTAMPTZ;
+    v_offset := 0;
+  END IF;
+
+  v_elapsed_sec := GREATEST(0, EXTRACT(EPOCH FROM (NOW() - v_genesis)));
+  -- 1 real second = 1 game minute; 1,440 real seconds (24 real minutes) = 1 game day
+  v_day := 1 + FLOOR(v_elapsed_sec / 1440.0)::BIGINT + v_offset;
+  v_minute := MOD(FLOOR(v_elapsed_sec)::BIGINT, 1440)::INTEGER;
+
+  RETURN QUERY SELECT v_day, v_minute, v_genesis, v_elapsed_sec;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Source: db/functions/earth_rebuild_settlement_profile.sql
+-- -----------------------------------------------------------------------------
+
+-- Stored Function: earth_rebuild_settlement_profile
+--
+-- Authoritative server-side profile builder: aggregates active building outputs
+-- and upkeeps into clean daily deltas in daily_settlement_profiles.
 CREATE OR REPLACE FUNCTION earth_rebuild_settlement_profile(
   p_owner_id TEXT,
   p_game_day BIGINT DEFAULT NULL
@@ -237,15 +374,15 @@ BEGIN
   IF NOT FOUND THEN
     -- If no profile exists, initialize a default clean profile for this owner
     INSERT INTO daily_settlement_profiles (
-      id, owner_id, owner_kind, status, profile_version,
+      owner_id, owner_kind, status, profile_version,
       effective_game_day, last_settled_game_day,
       energy_delta, food_delta, materials_delta, components_delta, compute_delta,
-      created_at, updated_at
+      updated_at
     ) VALUES (
-      gen_random_uuid(), p_owner_id, 'human', 'clean', 1,
+      p_owner_id, 'human', 'clean', 1,
       v_game_day, v_game_day,
       0, 0, 0, 0, 0,
-      NOW(), NOW()
+      NOW()
     )
     ON CONFLICT (owner_id) DO NOTHING;
 
@@ -257,6 +394,11 @@ BEGIN
     SELECT
       b.resource_output_type,
       b.resource_output_amount,
+      b.upkeep_energy,
+      b.upkeep_food,
+      b.upkeep_materials,
+      b.upkeep_components,
+      b.upkeep_compute,
       b.operating_policy,
       b.condition
     FROM buildings b
@@ -302,13 +444,20 @@ BEGIN
       v_energy_delta := v_energy_delta + v_out_amount;
     ELSIF v_b.resource_output_type = 'food' THEN
       v_food_delta := v_food_delta + v_out_amount;
-    ELSIF v_b.resource_output_type = 'material' THEN
+    ELSIF v_b.resource_output_type IN ('material', 'materials') THEN
       v_materials_delta := v_materials_delta + v_out_amount;
     ELSIF v_b.resource_output_type = 'components' THEN
       v_components_delta := v_components_delta + v_out_amount;
     ELSIF v_b.resource_output_type = 'compute' THEN
       v_compute_delta := v_compute_delta + v_out_amount;
     END IF;
+
+    -- Upkeep subtraction
+    v_energy_delta := v_energy_delta - (COALESCE(v_b.upkeep_energy, 0) * v_cost_mult * v_cond_cost);
+    v_food_delta := v_food_delta - (COALESCE(v_b.upkeep_food, 0) * v_cost_mult * v_cond_cost);
+    v_materials_delta := v_materials_delta - (COALESCE(v_b.upkeep_materials, 0) * v_cost_mult * v_cond_cost);
+    v_components_delta := v_components_delta - (COALESCE(v_b.upkeep_components, 0) * v_cost_mult * v_cond_cost);
+    v_compute_delta := v_compute_delta - (COALESCE(v_b.upkeep_compute, 0) * v_cost_mult * v_cond_cost);
   END LOOP;
 
   -- Update daily_settlement_profiles
@@ -317,18 +466,18 @@ BEGIN
     status = 'clean',
     profile_version = profile_version + 1,
     effective_game_day = v_game_day,
-    energy_delta = v_energy_delta,
-    food_delta = v_food_delta,
-    materials_delta = v_materials_delta,
-    components_delta = v_components_delta,
-    compute_delta = v_compute_delta,
+    energy_delta = ROUND(v_energy_delta, 2),
+    food_delta = ROUND(v_food_delta, 2),
+    materials_delta = ROUND(v_materials_delta, 2),
+    components_delta = ROUND(v_components_delta, 2),
+    compute_delta = ROUND(v_compute_delta, 2),
     updated_at = NOW()
   WHERE daily_settlement_profiles.owner_id = p_owner_id;
 
   RETURN QUERY
   SELECT
     p.owner_id,
-    p.profile_version,
+    p.profile_version::INTEGER,
     p.status,
     p.energy_delta,
     p.food_delta,
@@ -337,5 +486,124 @@ BEGIN
     p.compute_delta
   FROM daily_settlement_profiles p
   WHERE p.owner_id = p_owner_id;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Source: db/functions/earth_transfer_credits.sql
+-- -----------------------------------------------------------------------------
+
+-- Stored Function: earth_transfer_credits
+--
+-- Narrow financial primitive: keeps balance mutations and their ledger audit
+-- entry atomic in a single PostgreSQL transaction.
+CREATE OR REPLACE FUNCTION earth_transfer_credits(
+  p_ledger_id UUID,
+  p_game_day BIGINT,
+  p_debit_account TEXT,
+  p_credit_account TEXT,
+  p_amount NUMERIC(20,2),
+  p_reason_type TEXT,
+  p_reason_id TEXT,
+  p_rule_version TEXT,
+  p_correlation_id TEXT
+)
+RETURNS TABLE (
+  status TEXT,
+  ledger_id UUID,
+  amount NUMERIC(20,2),
+  already_processed BOOLEAN
+)
+LANGUAGE plpgsql
+AS $$
+DECLARE
+  account_count INTEGER;
+BEGIN
+  IF p_debit_account IS NULL OR p_credit_account IS NULL OR p_debit_account = p_credit_account THEN
+    RAISE EXCEPTION 'Credit transfer requires two different accounts';
+  END IF;
+
+  IF p_amount IS NULL OR p_amount <= 0 THEN
+    RAISE EXCEPTION 'Credit transfer amount must be positive';
+  END IF;
+
+  IF p_reason_type IS NULL OR LENGTH(TRIM(p_reason_type)) = 0 THEN
+    RAISE EXCEPTION 'Credit transfer reason type is required';
+  END IF;
+
+  IF p_correlation_id IS NULL OR LENGTH(TRIM(p_correlation_id)) = 0 THEN
+    RAISE EXCEPTION 'Credit transfer correlation ID is required';
+  END IF;
+
+  IF EXISTS (SELECT 1 FROM ledger_entries WHERE correlation_id = p_correlation_id) THEN
+    RETURN QUERY
+    SELECT
+      'already_processed'::TEXT,
+      l.id,
+      l.amount,
+      TRUE
+    FROM ledger_entries l
+    WHERE l.correlation_id = p_correlation_id
+    LIMIT 1;
+    RETURN;
+  END IF;
+
+  SELECT COUNT(*)
+  INTO account_count
+  FROM account_balances
+  WHERE account_id IN (p_debit_account, p_credit_account)
+  FOR UPDATE;
+
+  IF account_count < 2 THEN
+    RAISE EXCEPTION 'One or both accounts missing: debit=%, credit=%', p_debit_account, p_credit_account;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1
+    FROM account_balances
+    WHERE account_id = p_debit_account
+      AND balance >= p_amount
+  ) THEN
+    RAISE EXCEPTION 'Insufficient funds in debit account %', p_debit_account;
+  END IF;
+
+  UPDATE account_balances
+  SET balance = balance - p_amount
+  WHERE account_id = p_debit_account;
+
+  UPDATE account_balances
+  SET balance = balance + p_amount
+  WHERE account_id = p_credit_account;
+
+  INSERT INTO ledger_entries (
+    id,
+    game_day,
+    debit_account,
+    credit_account,
+    amount,
+    currency,
+    reason_type,
+    reason_id,
+    rule_version,
+    correlation_id
+  ) VALUES (
+    p_ledger_id,
+    p_game_day,
+    p_debit_account,
+    p_credit_account,
+    p_amount,
+    'CREDIT',
+    p_reason_type,
+    p_reason_id,
+    COALESCE(p_rule_version, 'v0.1'),
+    p_correlation_id
+  );
+
+  RETURN QUERY
+  SELECT
+    'applied'::TEXT,
+    p_ledger_id,
+    p_amount,
+    FALSE;
 END;
 $$;

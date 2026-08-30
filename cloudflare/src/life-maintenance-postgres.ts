@@ -94,7 +94,7 @@ export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository,
     }
     const status = unpaidCents === 0n ? 'settled' : paidCents === 0n ? 'deferred' : 'partially_settled';
     await tx.query(
-      'INSERT INTO personal_life_maintenance (human_id,game_day,food,housing,energy,health,connectivity,total,paid,unpaid,city_id,status,food_used,energy_used,compute_used,credits_for_resources,life_condition_before,life_condition_after,shortfall_notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20)',
+      'INSERT INTO personal_life_maintenance (human_id,game_day,food,housing,energy,health,connectivity,total,paid,unpaid,city_id,status,food_used,energy_used,compute_used,credits_for_resources,life_condition_before,life_condition_after,shortfall_notes) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19)',
       [resident.id, day, cost.food, cost.housing, cost.energy, cost.health, cost.connectivity, emergencyCost, centsToMoney(paidCents), centsToMoney(unpaidCents), resident.city_id, status, used.food, used.energy, used.compute, centsToMoney(paidCents), 100, Math.max(0, 100 - Math.ceil(missing * 15)), missing > 0 ? 'Essential resources could not be fully covered.' : ''],
     );
     await tx.query('INSERT INTO human_life_conditions (human_id,score,updated_game_day,last_reason) VALUES ($1,$2,$3,$4) ON CONFLICT (human_id) DO UPDATE SET score = $2, updated_game_day = $3, last_reason = $4', [resident.id, Math.max(0, 100 - Math.ceil(missing * 15)), day, missing > 0 ? 'resource shortfall' : 'needs covered']);
