@@ -159,7 +159,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
     if (opCostCrd > 0) {
       const opCostCents = BigInt(Math.round(opCostCrd * 100));
-      if (oClass === 'civic') {
+      if (oClass === 'civic' || bld.owner_id.startsWith('CITY-')) {
         const cityAccount = await tx.query<{ account_id: string; balance: string }>(
           "SELECT account_id, balance FROM account_balances WHERE account_id = $1 FOR UPDATE",
           [`account-city-${bld.city_id}`],
@@ -182,8 +182,8 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
         }
       } else {
         const ownerAccount = await tx.query<{ account_id: string; balance: string }>(
-          "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
-          [bld.owner_id],
+          "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' AND account_id != $2 FOR UPDATE",
+          [bld.owner_id, opsAccount],
         );
         if (!ownerAccount.rows[0] || moneyToCents(ownerAccount.rows[0].balance) < opCostCents) {
           operatingPaid = false;
