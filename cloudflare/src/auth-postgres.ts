@@ -33,6 +33,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO auth_credentials (human_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5)', [humanId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,$3,'CREDIT')", [accountId, humanId, starter.credits]);
     for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
+    await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email WHERE email = $1", [input.email]);
     await tx.query('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,0,0)', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', humanId]);
     await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
     await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, `${displayName} Works`]);
@@ -254,7 +255,9 @@ export async function deleteAccount(
     await tx.query('DELETE FROM auth_sessions WHERE human_id = $1', [input.humanId]);
     // 5. Clear login attempts
     await tx.query('DELETE FROM auth_login_attempts WHERE email = $1', [input.email]);
-    // 6. Enqueue outbox notification
+    // 6. Release house email so the email can be re-registered
+    await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email WHERE email = $1", [input.email]);
+    // 7. Enqueue outbox notification
     await enqueueOutbox(tx, {
       eventKey: `account-deleted:${input.humanId}`,
       topic: 'world_activity',
