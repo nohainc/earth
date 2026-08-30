@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 83,
+  "migrationVersion": 87,
   "requiredTables": {
     "account_balances": [
       "account_id",
@@ -427,6 +427,25 @@
       "resource",
       "amount"
     ],
+    "resource_ledger_entries": [
+      "id",
+      "owner_id",
+      "game_day",
+      "resource",
+      "delta",
+      "balance_after",
+      "reason_type"
+    ],
+    "resource_rate_history": [
+      "id",
+      "owner_id",
+      "game_day",
+      "resource",
+      "gross_inflow",
+      "gross_outflow",
+      "tax_amount",
+      "net_daily_rate"
+    ],
     "human_life_conditions": [
       "human_id",
       "score",
@@ -609,9 +628,23 @@
     [
       "human_life_conditions",
       "human_id"
+    ],
+    [
+      "resource_ledger_entries",
+      "id"
+    ],
+    [
+      "resource_rate_history",
+      "id"
     ]
   ],
   "requiredIndexes": [
+    "idx_resource_ledger_owner_day",
+    "idx_resource_ledger_reason",
+    "idx_resource_ledger_resource_day",
+    "idx_rate_history_owner_day",
+    "idx_rate_history_owner_resource_day",
+    "idx_rate_history_created",
     "building_shares_building_idx",
     "building_shares_investor_idx",
     "civic_dividends_city_day_idx",
