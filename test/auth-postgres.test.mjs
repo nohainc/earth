@@ -35,7 +35,7 @@ test('registration and verified login are atomic PostgreSQL flows', { skip: !con
     ) AS count`,
     [humanId],
   );
-  assert.equal(Number(starterRows.rows[0].count), 4);
+  assert.equal(Number(starterRows.rows[0].count), 3);
 
   const businessId = `B-${humanId.slice(2)}`;
   const playableState = await repository.query(

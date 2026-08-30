@@ -119,31 +119,24 @@ export async function issueActionToken(
       ? `/app?verify_token=${encodeURIComponent(token)}`
       : `/app?reset_token=${encodeURIComponent(token)}`;
   if (!env.EMAIL || !env.EMAIL_FROM) {
-    if (action === 'verify_email') {
-      await withRepository(env, (repository) =>
-        repository.query(
-          'UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1',
-          [humanId],
-        ),
-      ).catch(() => {});
-    }
     await withRepository(env, (repository) =>
       repository.query(
         'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'accepted', 'DEV_AUTO_VERIFIED', 'Transactional email provider unconfigured; action auto-processed in development mode'],
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', 'UNCONFIGURED', 'Transactional email is not configured'],
       ),
     ).catch(() => {});
-    console.info(
+    console.error(
       JSON.stringify({
-        event: 'transactional_email_dev_fallback',
+        event: 'transactional_email_failed',
         correlationId: corrId,
         humanId,
         recipientMasked: masked,
         action,
-        link: `https://earthuc.com${path}`,
+        code: 'UNCONFIGURED',
+        message: 'Transactional email is not configured',
       }),
     );
-    return { correlationId: corrId, accepted: true, messageId: 'dev-auto-verified' };
+    throw new Error('Transactional email is not configured');
   }
   const subject =
     action === 'verify_email'
@@ -153,7 +146,7 @@ export async function issueActionToken(
   try {
     const delivery = await env.EMAIL.send({
       to: email,
-      from: { email: env.EMAIL_FROM, name: 'EARTH Identity' },
+      from: env.EMAIL_FROM,
       subject,
       text,
       html: `<p>${subject}</p><p><a href="https://earthuc.com${path}">Continue securely</a></p><p>This link expires soon and can only be used once.</p>`,
@@ -182,32 +175,27 @@ export async function issueActionToken(
         : {};
     const errorCode = String(details.code ?? 'unknown');
     const errorMessage = String(details.message ?? 'unknown');
-    if (action === 'verify_email') {
-      await withRepository(env, (repository) =>
-        repository.query(
-          'UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1',
-          [humanId],
-        ),
-      ).catch(() => {});
-    }
     await withRepository(env, (repository) =>
       repository.query(
         'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'fallback_verified', errorCode, errorMessage],
+        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', errorCode, errorMessage],
       ),
     ).catch(() => {});
     console.error(
       JSON.stringify({
-        event: 'transactional_email_failed_fallback_verified',
+        event: 'transactional_email_failed',
         correlationId: corrId,
         humanId,
         recipientMasked: masked,
         action,
         code: errorCode,
         message: errorMessage,
-        link: `https://earthuc.com${path}`,
       }),
     );
-    return { correlationId: corrId, accepted: false, messageId: null };
+    // Do not let a failed delivery consume the resend throttle window.
+    await withRepository(env, (repository) =>
+      repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]),
+    );
+    throw error;
   }
 }

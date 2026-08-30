@@ -152,19 +152,14 @@ class _AuthScreenState extends State<AuthScreen> {
             password.text, personName.text.trim(), houseSurname.text.trim(),
             passwordConfirmation: passwordConfirmation.text);
         if (mounted) {
-          final isPending = result['verificationPending'] == true;
+          _startCooldown(60);
           setState(() {
             registerMode = false;
-            verificationPending = isPending;
+            verificationPending = true;
             error = result['message']?.toString() ??
-                (isPending
-                    ? 'Identity created. Check your email to verify it, then sign in.'
-                    : 'Identity created successfully! You can sign in now.');
+                'Identity created. Check your email to verify it, then sign in.';
             noticeIsSuccess = true;
           });
-          if (isPending) {
-            _startCooldown(60);
-          }
         }
       } else {
         final validation = validateAuthInput(
@@ -215,21 +210,12 @@ class _AuthScreenState extends State<AuthScreen> {
     try {
       final result = await widget.api.resendVerification(email.text.trim());
       if (mounted) {
-        if (result['verified'] == true) {
-          setState(() {
-            verificationPending = false;
-            error = result['message']?.toString() ??
-                'Email is already verified. You can sign in directly.';
-            noticeIsSuccess = true;
-          });
-        } else {
-          _startCooldown(result['cooldownSeconds'] as int? ?? 60);
-          setState(() {
-            error = result['message']?.toString() ??
-                'If the identity exists, a new verification email was sent.';
-            noticeIsSuccess = true;
-          });
-        }
+        _startCooldown(result['cooldownSeconds'] as int? ?? 60);
+        setState(() {
+          error = result['message']?.toString() ??
+              'If the identity exists, a new verification email was sent.';
+          noticeIsSuccess = true;
+        });
       }
     } catch (exception) {
       if (mounted) {
