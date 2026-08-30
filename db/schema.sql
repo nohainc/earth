@@ -351,6 +351,24 @@ CREATE TABLE IF NOT EXISTS resource_balances (
   PRIMARY KEY (owner_id, resource)
 );
 
+CREATE TABLE IF NOT EXISTS resource_ledger_entries (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_day BIGINT NOT NULL,
+  game_minute INTEGER NOT NULL DEFAULT 0,
+  owner_id TEXT NOT NULL,
+  resource TEXT NOT NULL CHECK (resource IN ('material','components','energy','compute','food')),
+  delta NUMERIC(20,6) NOT NULL,
+  balance_after NUMERIC(20,6) NOT NULL CHECK (balance_after >= 0),
+  reason_type TEXT NOT NULL,
+  reason_id TEXT,
+  correlation_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_resource_ledger_owner_day ON resource_ledger_entries(owner_id, game_day DESC, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_resource_ledger_correlation ON resource_ledger_entries(correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_resource_ledger_reason ON resource_ledger_entries(reason_type, reason_id);
+CREATE INDEX IF NOT EXISTS idx_resource_ledger_resource_day ON resource_ledger_entries(resource, game_day DESC);
+
 CREATE TABLE IF NOT EXISTS market_prices (
   product TEXT PRIMARY KEY,
   price NUMERIC(20,6) NOT NULL CHECK (price > 0),

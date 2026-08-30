@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
+import { mutateResourceBalance } from './resource-ledger-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 import {
   BUILDING_CATALOG,
@@ -204,15 +205,6 @@ export async function purchasePrivatePlotAndConstruct(
 
     // Check Materials
     const materialCost = spec.baseMaterialCost;
-    const materialBal = await tx.query<{ amount: string }>(
-      "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'material' FOR UPDATE",
-      [input.ownerId],
-    );
-    const currentMaterials = Number(materialBal.rows[0]?.amount ?? 0);
-    if (currentMaterials < materialCost) {
-      throw new Error(`Insufficient Materials for construction (Requires ${materialCost} Materials)`);
-    }
-
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 1);
     const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
@@ -231,11 +223,18 @@ export async function purchasePrivatePlotAndConstruct(
       correlationId: input.correlationId,
     });
 
-    // Deduct Materials
-    await tx.query(
-      "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'material'",
-      [materialCost, input.ownerId],
-    );
+    // Deduct Materials with guaranteed ledger audit
+    if (materialCost > 0) {
+      await mutateResourceBalance(tx, {
+        ownerId: input.ownerId,
+        resource: 'material',
+        delta: -materialCost,
+        reasonType: 'building_construction',
+        reasonId: buildingId,
+        correlationId: `${input.correlationId}:material`,
+        gameDay: day,
+      });
+    }
 
     // Calculate construction timeline
     const constructionDays = Math.max(1, spec.slotFootprint);
@@ -345,23 +344,20 @@ export async function upgradeBuilding(
       throw new Error(`Upgrade requires ${upgradeCreditCost} Credits`);
     }
 
-    if (upgradeCompCost > 0) {
-      const compBal = await tx.query<{ amount: string }>(
-        "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE",
-        [input.humanId],
-      );
-      if (Number(compBal.rows[0]?.amount ?? 0) < upgradeCompCost) {
-        throw new Error(`Upgrade requires ${upgradeCompCost} Components`);
-      }
-
-      await tx.query(
-        "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components'",
-        [upgradeCompCost, input.humanId],
-      );
-    }
-
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 1);
+
+    if (upgradeCompCost > 0) {
+      await mutateResourceBalance(tx, {
+        ownerId: input.humanId,
+        resource: 'components',
+        delta: -upgradeCompCost,
+        reasonType: 'building_upgrade',
+        reasonId: input.buildingId,
+        correlationId: `${input.correlationId}:components`,
+        gameDay: day,
+      });
+    }
 
     await transferCredits(tx, {
       ledgerId: crypto.randomUUID(),
@@ -465,18 +461,14 @@ export async function repairBuilding(
     const missingCondition = 100 - currentCondition;
     const requiredComponents = Math.max(1, Math.ceil((missingCondition / 10) * bld.rows[0].tier));
 
-    const compBal = await tx.query<{ amount: string }>(
-      "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'components' FOR UPDATE",
-      [input.humanId],
-    );
-    if (Number(compBal.rows[0]?.amount ?? 0) < requiredComponents) {
-      throw new Error(`Repair requires ${requiredComponents} Components to restore to 100%`);
-    }
-
-    await tx.query(
-      "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'components'",
-      [requiredComponents, input.humanId],
-    );
+    await mutateResourceBalance(tx, {
+      ownerId: input.humanId,
+      resource: 'components',
+      delta: -requiredComponents,
+      reasonType: 'building_maintenance',
+      reasonId: input.buildingId,
+      correlationId: `repair-${input.buildingId}-${Date.now()}`,
+    });
 
     await tx.query(
       "UPDATE buildings SET condition = 100.0, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
@@ -610,11 +602,17 @@ export async function demolishBuilding(
     const spec = BUILDING_CATALOG[bld.rows[0].building_type];
     const recycledMaterials = Math.floor((spec?.baseMaterialCost ?? 100) * 0.30);
 
-    // Recycle materials back to owner
-    await tx.query(
-      "UPDATE resource_balances SET amount = amount + $1 WHERE owner_id = $2 AND resource = 'material'",
-      [recycledMaterials, input.humanId],
-    );
+    // Recycle materials back to owner with guaranteed ledger audit
+    if (recycledMaterials > 0) {
+      await mutateResourceBalance(tx, {
+        ownerId: input.humanId,
+        resource: 'material',
+        delta: recycledMaterials,
+        reasonType: 'building_demolition_salvage',
+        reasonId: input.buildingId,
+        correlationId: `demolish-${input.buildingId}-${Date.now()}`,
+      });
+    }
 
     await tx.query("UPDATE buildings SET status = 'closed', updated_at = CURRENT_TIMESTAMP WHERE id = $1", [
       input.buildingId,
@@ -716,17 +714,14 @@ export async function contributeCorporateResearch(
     }
 
     if (input.compute > 0) {
-      const compBal = await tx.query<{ amount: string }>(
-        "SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = 'compute' FOR UPDATE",
-        [input.humanId],
-      );
-      if (Number(compBal.rows[0]?.amount ?? 0) < input.compute) {
-        throw new Error('Insufficient Compute for R&D contribution');
-      }
-      await tx.query(
-        "UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = 'compute'",
-        [input.compute, input.humanId],
-      );
+      await mutateResourceBalance(tx, {
+        ownerId: input.humanId,
+        resource: 'compute',
+        delta: -input.compute,
+        reasonType: 'corporate_research_funding',
+        reasonId: pool.id,
+        correlationId: `rd-compute-${pool.id}-${input.humanId}-${Date.now()}`,
+      });
     }
 
     const newCredits = Number(pool.contributed_credits) + Math.max(0, input.credits);

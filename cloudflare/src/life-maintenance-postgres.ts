@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
+import { mutateResourceBalance, type ResourceKind } from './resource-ledger-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 
 type Resident = {
@@ -77,7 +78,17 @@ export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository,
       const held = Math.max(0, balanceByResource.get(resource) ?? 0);
       const consumed = Math.min(held, required);
       used[resource] = consumed;
-      if (consumed > 0) await tx.query('UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3', [consumed, resident.id, resource]);
+      if (consumed > 0) {
+        await mutateResourceBalance(tx, {
+          ownerId: resident.id,
+          resource: resource as ResourceKind,
+          delta: -consumed,
+          reasonType: 'life_maintenance',
+          reasonId: `day-${day}`,
+          correlationId: `life-maint-${resource}-${resident.id}-${day}`,
+          gameDay: day,
+        });
+      }
       const shortage = required - consumed;
       const purchase = shortage * Math.max(0, priceByResource.get(resource) ?? 0);
       emergencyCost += purchase;

@@ -28,7 +28,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   await catchupOwnerSettlement(repository, viewerId).catch(() => null);
   const flows = await computeResourceFlows(repository, viewerId);
 
-  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, succession, membership, prices, ledger, cityMetrics, corporationMetrics, personalFinance, contracts, technologyAdoptions] = await Promise.all([
+  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, succession, membership, prices, ledger, resourceLedger, cityMetrics, corporationMetrics, personalFinance, contracts, technologyAdoptions] = await Promise.all([
     repository.query('SELECT * FROM world_state WHERE id = $1', ['WORLD']),
     repository.query('SELECT * FROM humans WHERE id = $1', [viewerId]),
     repository.query('SELECT * FROM institutions'),
@@ -43,6 +43,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query('SELECT * FROM memberships WHERE human_id = $1', [viewerId]),
     repository.query('SELECT * FROM market_prices ORDER BY product'),
     repository.query('SELECT * FROM ledger_entries ORDER BY created_at DESC LIMIT 25'),
+    repository.query('SELECT * FROM resource_ledger_entries WHERE owner_id = $1 ORDER BY game_day DESC, created_at DESC LIMIT 25', [viewerId]).catch(() => ({ rows: [] })),
     repository.query("SELECT c.*, i.name FROM cities c JOIN memberships m ON m.city_id = c.id JOIN institutions i ON i.id = c.institution_id WHERE m.human_id = $1 LIMIT 1", [viewerId]),
     // Resolve the active corporation strictly from this user's membership.
     // Falling back to CORP-001 made Helios appear as the active corporation
@@ -375,7 +376,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     buildingCatalog: Object.values(BUILDING_CATALOG),
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })), rules: governanceRules.rows },
-    technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows,
+    technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), citizens: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })), humans: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, contracts: contracts.rows, roles: roles.rows, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[2].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },

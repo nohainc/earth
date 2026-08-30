@@ -34,6 +34,7 @@ import { handleAiRoutes } from './ai-routes.ts';
 import { handleHouseRoutes } from './house-routes.ts';
 import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
+import { getResourceLedgerHistory, getResourceDailyBreakdown, type ResourceKind } from './resource-ledger-postgres.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -376,6 +377,34 @@ const worker = {
       } catch (error) {
         console.error(JSON.stringify({ event: 'world_snapshot_failed', code: 'WORLD_SNAPSHOT_UNAVAILABLE', message: error instanceof Error ? error.message : 'unknown' }));
         return Response.json({ ok: false, code: 'WORLD_SNAPSHOT_UNAVAILABLE', error: 'World snapshot is temporarily unavailable', persistence: 'planetscale-postgres' }, { status: 503 });
+      }
+    }
+    if (url.pathname === '/api/resources/history' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const ownerId = url.searchParams.get('ownerId') || viewer?.id || 'H-0044';
+      const resource = (url.searchParams.get('resource') as ResourceKind) || undefined;
+      const limit = Number(url.searchParams.get('limit') || 50);
+      const offset = Number(url.searchParams.get('offset') || 0);
+      try {
+        const history = await withRepository(env, (repo) =>
+          getResourceLedgerHistory(repo, ownerId, { resource, limit, offset }),
+        );
+        return Response.json({ ok: true, ownerId, history: history ?? [] });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch resource history' }, { status: 500 });
+      }
+    }
+    if (url.pathname === '/api/resources/breakdown' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      const ownerId = url.searchParams.get('ownerId') || viewer?.id || 'H-0044';
+      const days = Number(url.searchParams.get('days') || 14);
+      try {
+        const breakdown = await withRepository(env, (repo) =>
+          getResourceDailyBreakdown(repo, ownerId, days),
+        );
+        return Response.json({ ok: true, ownerId, breakdown: breakdown ?? {} });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Failed to fetch resource breakdown' }, { status: 500 });
       }
     }
     if (url.pathname === '/api/health' || url.pathname === '/health' || url.pathname === '/api/ready' || url.pathname === '/ready') return healthResponse(request, env);

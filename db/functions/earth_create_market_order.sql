@@ -1,7 +1,8 @@
 -- Stored Function: earth_create_market_order
 --
 -- Authoritative server-side market order creation: catches up the player,
--- verifies and escrows funds/commodities atomically in PostgreSQL.
+-- verifies and escrows funds/commodities atomically in PostgreSQL,
+-- with full audit entries in resource_ledger_entries.
 CREATE OR REPLACE FUNCTION earth_create_market_order(
   p_order_id UUID,
   p_human_id TEXT,
@@ -24,11 +25,15 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
   v_total_cost NUMERIC(20,2);
   v_credit_balance NUMERIC(20,2);
   v_resource_balance NUMERIC(20,6);
+  v_new_resource_bal NUMERIC(20,6);
   v_existing RECORD;
+  v_game_day BIGINT;
+  v_game_minute INTEGER;
 BEGIN
   -- 1. Idempotency check via correlation ID
   IF p_correlation_id IS NOT NULL THEN
@@ -54,6 +59,10 @@ BEGIN
 
   -- 2. Catch up owner to current game day before trade action
   PERFORM earth_catchup_owner_settlement(p_human_id);
+
+  SELECT t.game_day, t.game_minute INTO v_game_day, v_game_minute FROM earth_get_current_game_time() t;
+  v_game_day := COALESCE(v_game_day, 1);
+  v_game_minute := COALESCE(v_game_minute, 0);
 
   -- 3. Side validation & Escrow
   IF p_side = 'buy' THEN
@@ -85,10 +94,19 @@ BEGIN
       RAISE EXCEPTION 'Insufficient % for market sell order: balance=%, required=%', p_product, COALESCE(v_resource_balance, 0), p_quantity;
     END IF;
 
+    v_new_resource_bal := v_resource_balance - p_quantity;
+
     -- Escrow resources from inventory
     UPDATE resource_balances
-    SET amount = amount - p_quantity
+    SET amount = v_new_resource_bal
     WHERE owner_id = p_human_id AND resource = p_product;
+
+    -- Log resource deduction in ledger
+    INSERT INTO resource_ledger_entries (
+      id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+    ) VALUES (
+      gen_random_uuid(), v_game_day, v_game_minute, p_human_id, p_product, -p_quantity, v_new_resource_bal, 'market_sell_escrow', p_order_id::TEXT, p_correlation_id, NOW()
+    ) ON CONFLICT (correlation_id) DO NOTHING;
 
   ELSE
     RAISE EXCEPTION 'Invalid order side: %', p_side;
@@ -98,7 +116,17 @@ BEGIN
   INSERT INTO market_orders (
     id, human_id, product, quantity, limit_price, filled_quantity, status, side, correlation_id, reserved_credits, created_at
   ) VALUES (
-    p_order_id, p_human_id, p_product, p_quantity, p_limit_price, 0, 'open', p_side, p_correlation_id, v_total_cost, NOW()
+    p_order_id,
+    p_human_id,
+    p_product,
+    p_quantity,
+    p_limit_price,
+    0,
+    'open',
+    p_side,
+    p_correlation_id,
+    v_total_cost,
+    NOW()
   );
 
   RETURN QUERY SELECT

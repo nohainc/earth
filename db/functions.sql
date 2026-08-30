@@ -12,7 +12,8 @@
 -- Stored Function: earth_catchup_owner_settlement
 --
 -- Authoritative server-side catch-up: brings an owner's balances up to date
--- from their last settled game day to the target game day in one atomic transaction.
+-- from their last settled game day to the target game day in one atomic transaction,
+-- writing durable audit records to resource_ledger_entries.
 CREATE OR REPLACE FUNCTION earth_catchup_owner_settlement(
   p_owner_id TEXT,
   p_target_day BIGINT DEFAULT NULL
@@ -36,8 +37,9 @@ DECLARE
   v_mat_change NUMERIC(20,6);
   v_comp_change NUMERIC(20,6);
   v_compute_change NUMERIC(20,6);
+  v_new_bal NUMERIC(20,6);
 BEGIN
-  -- Determine target game day if omitted based on genesis_at epoch (24 real mins = 1 game day)
+  -- Determine target game day if omitted based on current world state
   IF p_target_day IS NULL THEN
     SELECT t.game_day INTO v_target_day FROM earth_get_current_game_time() t;
     v_target_day := COALESCE(v_target_day, 1);
@@ -51,20 +53,12 @@ BEGIN
   WHERE daily_settlement_profiles.owner_id = p_owner_id
   FOR UPDATE;
 
-  IF NOT FOUND THEN
-    -- Initialize clean profile if absent
-    INSERT INTO daily_settlement_profiles (
-      owner_id, owner_kind, status, profile_version,
-      effective_game_day, last_settled_game_day,
-      energy_delta, food_delta, materials_delta, components_delta, compute_delta,
-      updated_at
-    ) VALUES (
-      p_owner_id, 'human', 'clean', 1,
-      v_target_day, v_target_day,
-      0, 0, 0, 0, 0,
-      NOW()
-    )
-    RETURNING * INTO v_profile;
+  IF NOT FOUND OR v_profile.status = 'dirty' THEN
+    PERFORM earth_rebuild_settlement_profile(p_owner_id);
+    SELECT * INTO v_profile
+    FROM daily_settlement_profiles
+    WHERE daily_settlement_profiles.owner_id = p_owner_id
+    FOR UPDATE;
   END IF;
 
   v_last_settled := COALESCE(v_profile.last_settled_game_day, v_target_day);
@@ -82,7 +76,14 @@ BEGIN
       INSERT INTO resource_balances (owner_id, resource, amount)
       VALUES (p_owner_id, 'energy', GREATEST(0, v_energy_change))
       ON CONFLICT (owner_id, resource) DO UPDATE
-      SET amount = GREATEST(0, resource_balances.amount + v_energy_change);
+      SET amount = GREATEST(0, resource_balances.amount + v_energy_change)
+      RETURNING amount INTO v_new_bal;
+
+      INSERT INTO resource_ledger_entries (
+        id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+      ) VALUES (
+        gen_random_uuid(), v_target_day, 0, p_owner_id, 'energy', v_energy_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-energy-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
+      ) ON CONFLICT (correlation_id) DO NOTHING;
     END IF;
 
     -- Apply Food Delta
@@ -90,7 +91,14 @@ BEGIN
       INSERT INTO resource_balances (owner_id, resource, amount)
       VALUES (p_owner_id, 'food', GREATEST(0, v_food_change))
       ON CONFLICT (owner_id, resource) DO UPDATE
-      SET amount = GREATEST(0, resource_balances.amount + v_food_change);
+      SET amount = GREATEST(0, resource_balances.amount + v_food_change)
+      RETURNING amount INTO v_new_bal;
+
+      INSERT INTO resource_ledger_entries (
+        id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+      ) VALUES (
+        gen_random_uuid(), v_target_day, 0, p_owner_id, 'food', v_food_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-food-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
+      ) ON CONFLICT (correlation_id) DO NOTHING;
     END IF;
 
     -- Apply Material Delta
@@ -98,7 +106,14 @@ BEGIN
       INSERT INTO resource_balances (owner_id, resource, amount)
       VALUES (p_owner_id, 'material', GREATEST(0, v_mat_change))
       ON CONFLICT (owner_id, resource) DO UPDATE
-      SET amount = GREATEST(0, resource_balances.amount + v_mat_change);
+      SET amount = GREATEST(0, resource_balances.amount + v_mat_change)
+      RETURNING amount INTO v_new_bal;
+
+      INSERT INTO resource_ledger_entries (
+        id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+      ) VALUES (
+        gen_random_uuid(), v_target_day, 0, p_owner_id, 'material', v_mat_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-mat-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
+      ) ON CONFLICT (correlation_id) DO NOTHING;
     END IF;
 
     -- Apply Components Delta
@@ -106,7 +121,14 @@ BEGIN
       INSERT INTO resource_balances (owner_id, resource, amount)
       VALUES (p_owner_id, 'components', GREATEST(0, v_comp_change))
       ON CONFLICT (owner_id, resource) DO UPDATE
-      SET amount = GREATEST(0, resource_balances.amount + v_comp_change);
+      SET amount = GREATEST(0, resource_balances.amount + v_comp_change)
+      RETURNING amount INTO v_new_bal;
+
+      INSERT INTO resource_ledger_entries (
+        id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+      ) VALUES (
+        gen_random_uuid(), v_target_day, 0, p_owner_id, 'components', v_comp_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-comp-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
+      ) ON CONFLICT (correlation_id) DO NOTHING;
     END IF;
 
     -- Apply Compute Delta
@@ -114,7 +136,14 @@ BEGIN
       INSERT INTO resource_balances (owner_id, resource, amount)
       VALUES (p_owner_id, 'compute', GREATEST(0, v_compute_change))
       ON CONFLICT (owner_id, resource) DO UPDATE
-      SET amount = GREATEST(0, resource_balances.amount + v_compute_change);
+      SET amount = GREATEST(0, resource_balances.amount + v_compute_change)
+      RETURNING amount INTO v_new_bal;
+
+      INSERT INTO resource_ledger_entries (
+        id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+      ) VALUES (
+        gen_random_uuid(), v_target_day, 0, p_owner_id, 'compute', v_compute_change, v_new_bal, 'daily_settlement', v_profile.profile_version::TEXT, 'settle-compute-' || p_owner_id || '-' || v_target_day::TEXT, NOW()
+      ) ON CONFLICT (correlation_id) DO NOTHING;
     END IF;
 
     -- Record profile run audit record
@@ -141,7 +170,6 @@ BEGIN
     ON CONFLICT (owner_id, game_day) DO UPDATE
       SET mode = 'applied', expected_delta = EXCLUDED.expected_delta;
 
-    -- Advance last settled day
     UPDATE daily_settlement_profiles
     SET
       last_settled_game_day = v_target_day,
@@ -162,7 +190,8 @@ $$;
 -- Stored Function: earth_create_market_order
 --
 -- Authoritative server-side market order creation: catches up the player,
--- verifies and escrows funds/commodities atomically in PostgreSQL.
+-- verifies and escrows funds/commodities atomically in PostgreSQL,
+-- with full audit entries in resource_ledger_entries.
 CREATE OR REPLACE FUNCTION earth_create_market_order(
   p_order_id UUID,
   p_human_id TEXT,
@@ -185,11 +214,15 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
   v_total_cost NUMERIC(20,2);
   v_credit_balance NUMERIC(20,2);
   v_resource_balance NUMERIC(20,6);
+  v_new_resource_bal NUMERIC(20,6);
   v_existing RECORD;
+  v_game_day BIGINT;
+  v_game_minute INTEGER;
 BEGIN
   -- 1. Idempotency check via correlation ID
   IF p_correlation_id IS NOT NULL THEN
@@ -215,6 +248,10 @@ BEGIN
 
   -- 2. Catch up owner to current game day before trade action
   PERFORM earth_catchup_owner_settlement(p_human_id);
+
+  SELECT t.game_day, t.game_minute INTO v_game_day, v_game_minute FROM earth_get_current_game_time() t;
+  v_game_day := COALESCE(v_game_day, 1);
+  v_game_minute := COALESCE(v_game_minute, 0);
 
   -- 3. Side validation & Escrow
   IF p_side = 'buy' THEN
@@ -246,10 +283,19 @@ BEGIN
       RAISE EXCEPTION 'Insufficient % for market sell order: balance=%, required=%', p_product, COALESCE(v_resource_balance, 0), p_quantity;
     END IF;
 
+    v_new_resource_bal := v_resource_balance - p_quantity;
+
     -- Escrow resources from inventory
     UPDATE resource_balances
-    SET amount = amount - p_quantity
+    SET amount = v_new_resource_bal
     WHERE owner_id = p_human_id AND resource = p_product;
+
+    -- Log resource deduction in ledger
+    INSERT INTO resource_ledger_entries (
+      id, game_day, game_minute, owner_id, resource, delta, balance_after, reason_type, reason_id, correlation_id, created_at
+    ) VALUES (
+      gen_random_uuid(), v_game_day, v_game_minute, p_human_id, p_product, -p_quantity, v_new_resource_bal, 'market_sell_escrow', p_order_id::TEXT, p_correlation_id, NOW()
+    ) ON CONFLICT (correlation_id) DO NOTHING;
 
   ELSE
     RAISE EXCEPTION 'Invalid order side: %', p_side;
@@ -259,7 +305,17 @@ BEGIN
   INSERT INTO market_orders (
     id, human_id, product, quantity, limit_price, filled_quantity, status, side, correlation_id, reserved_credits, created_at
   ) VALUES (
-    p_order_id, p_human_id, p_product, p_quantity, p_limit_price, 0, 'open', p_side, p_correlation_id, v_total_cost, NOW()
+    p_order_id,
+    p_human_id,
+    p_product,
+    p_quantity,
+    p_limit_price,
+    0,
+    'open',
+    p_side,
+    p_correlation_id,
+    v_total_cost,
+    NOW()
   );
 
   RETURN QUERY SELECT
@@ -317,6 +373,151 @@ BEGIN
   v_minute := MOD(FLOOR(v_elapsed_sec)::BIGINT, 1440)::INTEGER;
 
   RETURN QUERY SELECT v_day, v_minute, v_genesis, v_elapsed_sec;
+END;
+$$;
+
+-- -----------------------------------------------------------------------------
+-- Source: db/functions/earth_mutate_resource_balance.sql
+-- -----------------------------------------------------------------------------
+
+-- Stored Function: earth_mutate_resource_balance
+--
+-- Authoritative atomic mutation of resource balances with mandatory
+-- append-only audit logging in resource_ledger_entries.
+CREATE OR REPLACE FUNCTION earth_mutate_resource_balance(
+  p_game_day BIGINT,
+  p_owner_id TEXT,
+  p_resource TEXT,
+  p_delta NUMERIC(20,6),
+  p_reason_type TEXT,
+  p_reason_id TEXT DEFAULT NULL,
+  p_correlation_id TEXT DEFAULT NULL,
+  p_game_minute INTEGER DEFAULT 0
+)
+RETURNS TABLE (
+  status TEXT,
+  ledger_id UUID,
+  owner_id TEXT,
+  resource TEXT,
+  delta NUMERIC(20,6),
+  balance_after NUMERIC(20,6),
+  already_processed BOOLEAN
+)
+LANGUAGE plpgsql
+AS $$
+#variable_conflict use_column
+DECLARE
+  v_current_balance NUMERIC(20,6) := 0.0;
+  v_new_balance NUMERIC(20,6) := 0.0;
+  v_ledger_id UUID := gen_random_uuid();
+  v_game_day BIGINT;
+  v_game_minute INTEGER;
+BEGIN
+  -- Input Validation
+  IF p_owner_id IS NULL OR LENGTH(TRIM(p_owner_id)) = 0 THEN
+    RAISE EXCEPTION 'Resource mutation requires a valid owner_id';
+  END IF;
+
+  IF p_resource NOT IN ('material','components','energy','compute','food') THEN
+    RAISE EXCEPTION 'Invalid resource kind: %', p_resource;
+  END IF;
+
+  IF p_delta IS NULL OR p_delta = 0 THEN
+    RAISE EXCEPTION 'Resource mutation delta cannot be null or zero';
+  END IF;
+
+  IF p_reason_type IS NULL OR LENGTH(TRIM(p_reason_type)) = 0 THEN
+    RAISE EXCEPTION 'Resource mutation reason_type is required';
+  END IF;
+
+  -- Determine current game time if day is omitted
+  IF p_game_day IS NULL THEN
+    SELECT t.game_day, t.game_minute INTO v_game_day, v_game_minute FROM earth_get_current_game_time() t;
+    v_game_day := COALESCE(v_game_day, 1);
+    v_game_minute := COALESCE(v_game_minute, 0);
+  ELSE
+    v_game_day := p_game_day;
+    v_game_minute := COALESCE(p_game_minute, 0);
+  END IF;
+
+  -- Idempotency Check
+  IF p_correlation_id IS NOT NULL AND LENGTH(TRIM(p_correlation_id)) > 0 THEN
+    IF EXISTS (SELECT 1 FROM resource_ledger_entries WHERE correlation_id = p_correlation_id) THEN
+      RETURN QUERY
+      SELECT
+        'already_processed'::TEXT,
+        r.id,
+        r.owner_id,
+        r.resource,
+        r.delta,
+        r.balance_after,
+        TRUE
+      FROM resource_ledger_entries r
+      WHERE r.correlation_id = p_correlation_id
+      LIMIT 1;
+      RETURN;
+    END IF;
+  END IF;
+
+  -- Lock resource balance row (or insert default 0)
+  INSERT INTO resource_balances (owner_id, resource, amount)
+  VALUES (p_owner_id, p_resource, 0.0)
+  ON CONFLICT (owner_id, resource) DO NOTHING;
+
+  SELECT amount INTO v_current_balance
+  FROM resource_balances
+  WHERE resource_balances.owner_id = p_owner_id AND resource_balances.resource = p_resource
+  FOR UPDATE;
+
+  v_new_balance := ROUND(v_current_balance + p_delta, 6);
+
+  -- Overdraft protection
+  IF v_new_balance < 0 THEN
+    RAISE EXCEPTION 'Insufficient resource % balance for owner %. Available: %, Requested: %',
+      p_resource, p_owner_id, v_current_balance, (-p_delta);
+  END IF;
+
+  -- Update live balance
+  UPDATE resource_balances
+  SET amount = v_new_balance
+  WHERE resource_balances.owner_id = p_owner_id AND resource_balances.resource = p_resource;
+
+  -- Write append-only ledger entry
+  INSERT INTO resource_ledger_entries (
+    id,
+    game_day,
+    game_minute,
+    owner_id,
+    resource,
+    delta,
+    balance_after,
+    reason_type,
+    reason_id,
+    correlation_id,
+    created_at
+  ) VALUES (
+    v_ledger_id,
+    v_game_day,
+    v_game_minute,
+    p_owner_id,
+    p_resource,
+    p_delta,
+    v_new_balance,
+    p_reason_type,
+    p_reason_id,
+    p_correlation_id,
+    NOW()
+  );
+
+  RETURN QUERY
+  SELECT
+    'success'::TEXT,
+    v_ledger_id,
+    p_owner_id,
+    p_resource,
+    p_delta,
+    v_new_balance,
+    FALSE;
 END;
 $$;
 

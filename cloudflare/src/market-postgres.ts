@@ -1,5 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
+import { mutateResourceBalance, type ResourceKind } from './resource-ledger-postgres.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { centsToMoney, marketValueToCents, moneyToCents, rateAmountToCents } from './money.ts';
 import { marketFeeRate } from './market-rules.ts';
@@ -83,7 +84,15 @@ export async function settleMarket(repository: PostgresRepository, product: stri
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrowAccount, creditAccount: sellerAccount.account_id, amount: total, reasonType: 'market_trade', reasonId: String(buyOrder.id), ruleVersion: 'market-v4', correlationId: tradeId });
     if (feeCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrowAccount, creditAccount: 'account-ouc-treasury', amount: fee, reasonType: 'market_fee', reasonId: String(buyOrder.id), ruleVersion: 'market-v4', correlationId: tradeId });
     if (refund !== '0.00') await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrowAccount, creditAccount: buyerAccount.account_id, amount: refund, reasonType: 'market_order_refund', reasonId: String(buyOrder.id), ruleVersion: 'market-v4', correlationId: tradeId });
-    await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT(owner_id,resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [buyOrder.human_id, product, fill]);
+    await mutateResourceBalance(tx, {
+      ownerId: String(buyOrder.human_id),
+      resource: product as ResourceKind,
+      delta: Number(fill),
+      reasonType: 'market_buy_fill',
+      reasonId: tradeId,
+      correlationId: `trade-fill-${tradeId}`,
+      gameDay,
+    });
     await tx.query("UPDATE market_orders SET filled_quantity = $1, reserved_credits = GREATEST(0, reserved_credits - $2), status = $3 WHERE id = $4", [buyFilled, used, buyFilled >= Number(buyOrder.quantity) ? 'filled' : 'partial', buyOrder.id]);
     await tx.query("UPDATE market_orders SET filled_quantity = $1, status = $2 WHERE id = $3", [sellFilled, sellFilled >= Number(sellOrder.quantity) ? 'filled' : 'partial', sellOrder.id]);
     await tx.query('UPDATE market_prices SET supply = supply - $1, demand = GREATEST(0, demand - $1), game_day = $2 WHERE product = $3', [fill, gameDay, product]);
@@ -117,7 +126,14 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
     const current = order.rows[0];
     const remaining = Number(current.quantity) - Number(current.filled_quantity);
     if (String(current.side) === 'sell') {
-      await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3) ON CONFLICT(owner_id,resource) DO UPDATE SET amount = resource_balances.amount + excluded.amount', [input.humanId, current.product, remaining]);
+      await mutateResourceBalance(tx, {
+        ownerId: input.humanId,
+        resource: current.product as ResourceKind,
+        delta: remaining,
+        reasonType: 'market_order_cancel_refund',
+        reasonId: input.orderId,
+        correlationId: `CANCEL-RES-${input.orderId}`,
+      });
       await tx.query('UPDATE market_prices SET supply = GREATEST(0, supply - $1) WHERE product = $2', [remaining, current.product]);
     } else {
       const escrowAccount = `market-order-${current.id}`;
