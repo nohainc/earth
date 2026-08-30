@@ -46,7 +46,13 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
     const email = parsed.value.email?.trim().toLowerCase();
     if (email) {
       const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
-      if (credential && !credential.email_verified_at) {
+      if (credential) {
+        if (credential.email_verified_at) {
+          return Response.json(
+            { ok: true, message: 'Email is already verified. You can sign in.', verified: true },
+            { headers: { 'x-correlation-id': correlationId } },
+          );
+        }
         const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
         if (!recentlySent) {
           try { await issueActionToken(env, credential.human_id, 'verify_email', credential.email, correlationId); } catch { return Response.json({ ok: false, error: 'The verification email could not be sent. Please try again shortly.' }, { status: 503, headers: { 'x-correlation-id': correlationId } }); }
