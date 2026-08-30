@@ -70,7 +70,10 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onSecurity,
     this.onCommLink,
     this.onReconnect,
+    this.onDayRollover,
   });
+
+  final VoidCallback? onDayRollover;
 
   @override
   State<TopFixedHudPanel> createState() => _TopFixedHudPanelState();
@@ -80,6 +83,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   Timer? _ticker;
   int _localElapsedSeconds = 0;
   int _baseElapsedRealSeconds = 0;
+  int? _lastSeenDay;
 
   static final int epochStartMs =
       DateTime.utc(2026, 1, 1, 0, 0, 0).millisecondsSinceEpoch;
@@ -93,6 +97,14 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         setState(() {
           _localElapsedSeconds++;
         });
+        final totalRealSeconds = _baseElapsedRealSeconds + _localElapsedSeconds;
+        final currentDay = (totalRealSeconds ~/ 1440) + 1;
+        if (_lastSeenDay != null && currentDay > _lastSeenDay!) {
+          _lastSeenDay = currentDay;
+          widget.onDayRollover?.call();
+        } else if (_lastSeenDay == null) {
+          _lastSeenDay = currentDay;
+        }
       }
     });
   }

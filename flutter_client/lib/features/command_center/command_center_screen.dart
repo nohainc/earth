@@ -584,6 +584,7 @@ class _CommandCenterState extends State<CommandCenter> {
                             context, 'messages',
                             closeDrawer: false),
                         onReconnect: _manualReconnect,
+                        onDayRollover: () => _run(api.world),
                       ),
                       Expanded(
                         child: Row(

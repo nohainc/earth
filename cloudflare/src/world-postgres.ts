@@ -24,7 +24,6 @@ function ratio(value: unknown, divisor: unknown, cap = 1): number {
 }
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId: string): Promise<Record<string, unknown>> {
-  await reconcileWorldSimulation(repository, viewerId);
   await catchupOwnerSettlement(repository, viewerId).catch(() => null);
   const flows = await computeResourceFlows(repository, viewerId);
 
