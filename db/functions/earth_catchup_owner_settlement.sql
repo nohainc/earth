@@ -14,6 +14,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
   v_target_day BIGINT;
   v_last_settled BIGINT;

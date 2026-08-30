@@ -24,6 +24,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
   v_target_day BIGINT;
   v_last_settled BIGINT;
@@ -342,6 +343,7 @@ RETURNS TABLE (
 )
 LANGUAGE plpgsql
 AS $$
+#variable_conflict use_column
 DECLARE
   v_owner_kind TEXT;
   v_game_day BIGINT;
@@ -464,7 +466,7 @@ BEGIN
   UPDATE daily_settlement_profiles
   SET
     status = 'clean',
-    profile_version = profile_version + 1,
+    profile_version = daily_settlement_profiles.profile_version + 1,
     effective_game_day = v_game_day,
     energy_delta = ROUND(v_energy_delta, 2),
     food_delta = ROUND(v_food_delta, 2),
