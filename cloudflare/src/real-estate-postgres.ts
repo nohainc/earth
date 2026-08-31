@@ -186,7 +186,7 @@ export async function purchasePrivatePlotAndConstruct(
     const citizenCityId = membership.rows[0]?.city_id ?? input.cityId;
 
     // Check District Zoning Capacity
-    const zoning = await getCityDistrictZoning(repository, citizenCityId);
+    const zoning = await getCityDistrictZoning(tx, citizenCityId);
     if (zoning.availablePrivateSlots < spec.slotFootprint) {
       throw new Error(
         `City district capacity exceeded. This building requires ${spec.slotFootprint} slots, but only ${zoning.availablePrivateSlots} private slots are available in ${zoning.cityName}.`,
@@ -276,11 +276,12 @@ export async function purchasePrivatePlotAndConstruct(
     );
 
     // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4)', [
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
       input.ownerId,
       'building_construction',
       buildingId,
       day,
+      0,
     ]);
 
     const created = await tx.query('SELECT * FROM buildings WHERE id = $1', [buildingId]);
@@ -394,11 +395,12 @@ export async function upgradeBuilding(
     );
 
     // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4)', [
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
       input.humanId,
       'building_upgrade',
       bld.id,
       day,
+      0,
     ]);
 
     const updated = await tx.query('SELECT * FROM buildings WHERE id = $1', [bld.id]);
@@ -428,10 +430,12 @@ export async function setBuildingOperatingPolicy(
     );
 
     // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3)', [
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
       input.humanId,
       'policy_change',
       input.buildingId,
+      null,
+      null,
     ]);
 
     return { ok: true, buildingId: input.buildingId, policy: input.policy };
@@ -642,10 +646,12 @@ export async function demolishBuilding(
     ]);
 
     // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3)', [
+    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
       input.humanId,
       'building_demolition',
       input.buildingId,
+      null,
+      null,
     ]);
 
     return { ok: true, buildingId: input.buildingId, recycledMaterials, freedSlots: bld.rows[0].slot_footprint };
