@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -30,6 +33,40 @@ class EarthApiTransport {
       }
     }
     return '';
+  }
+
+  Future<void> reportClientError({
+    required String message,
+    String? stack,
+    String? endpoint,
+    String? errorCode,
+    int? statusCode,
+    Map<String, dynamic>? context,
+  }) async {
+    if (endpoint == '/api/telemetry/error') return;
+    try {
+      final uri = Uri.parse('$baseUrl/api/telemetry/error');
+      final headers = <String, String>{
+        'content-type': 'application/json',
+        'accept': 'application/json',
+      };
+      final token = await AuthStorage.getToken();
+      if (token != null && token.isNotEmpty) {
+        headers['authorization'] = 'Bearer $token';
+      }
+      final payload = jsonEncode({
+        'message': message,
+        if (stack != null) 'stack': stack,
+        if (endpoint != null) 'endpoint': endpoint,
+        if (errorCode != null) 'errorCode': errorCode,
+        if (statusCode != null) 'statusCode': statusCode,
+        if (context != null) 'context': context,
+        'source': 'client_flutter',
+      });
+      await client.post(uri, headers: headers, body: payload);
+    } catch (_) {
+      // Best-effort reporting
+    }
   }
 
   Future<dynamic> request(String path,
@@ -77,9 +114,21 @@ class EarthApiTransport {
     if (response.statusCode >= 400) {
       final requestId = response.headers['x-request-id'];
       final payload = decoded is Map ? decoded : const <String, dynamic>{};
+      final errorMsg = '${payload['error'] ?? 'Request failed'}';
+      final errorCode = '${payload['code'] ?? 'REQUEST_FAILED'}';
+      unawaited(reportClientError(
+        message: errorMsg,
+        endpoint: path,
+        errorCode: errorCode,
+        statusCode: response.statusCode,
+        context: {
+          'method': method,
+          if (correlationId != null) 'correlationId': correlationId,
+        },
+      ));
       throw EarthApiException(
-        '${payload['error'] ?? 'Request failed'}',
-        code: '${payload['code'] ?? 'REQUEST_FAILED'}',
+        errorMsg,
+        code: errorCode,
         correlationId: '${payload['correlationId'] ?? requestId ?? ''}',
         statusCode: response.statusCode,
       );

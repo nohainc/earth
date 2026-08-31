@@ -146,5 +146,5 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
 }
 
 export function isPublicAuthMutation(pathname: string): boolean {
-  return pathname === '/api/auth/register' || pathname === '/api/auth/login' || pathname === '/api/auth/logout' || pathname === '/api/auth/verify-email/resend' || pathname === '/api/auth/password-reset/request' || pathname === '/api/auth/password-reset/complete';
+  return pathname === '/api/auth/register' || pathname === '/api/auth/login' || pathname === '/api/auth/logout' || pathname === '/api/auth/verify-email/resend' || pathname === '/api/auth/password-reset/request' || pathname === '/api/auth/password-reset/complete' || pathname === '/api/telemetry/error';
 }

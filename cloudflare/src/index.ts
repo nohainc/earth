@@ -35,6 +35,7 @@ import { handleHouseRoutes } from './house-routes.ts';
 import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
 import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
+import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -291,7 +292,41 @@ const worker = {
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
-    const response = await this.handleRequest(request, env);
+    let response: Response;
+    try {
+      response = await this.handleRequest(request, env);
+      if (response.status >= 500) {
+        const viewer = await currentHuman(request, env).catch(() => null);
+        const url = new URL(request.url);
+        await withRepository(env, (repo) =>
+          logAppError(repo, {
+            humanId: viewer?.id ?? null,
+            source: 'backend_api',
+            endpoint: url.pathname,
+            statusCode: response.status,
+            errorMessage: `API responded with HTTP ${response.status}`,
+          }),
+        ).catch(() => undefined);
+      }
+    } catch (err) {
+      const viewer = await currentHuman(request, env).catch(() => null);
+      const url = new URL(request.url);
+      const errorMessage = err instanceof Error ? err.message : String(err);
+      const stackTrace = err instanceof Error ? err.stack : undefined;
+      await withRepository(env, (repo) =>
+        logAppError(repo, {
+          humanId: viewer?.id ?? null,
+          source: 'backend_api',
+          endpoint: url.pathname,
+          statusCode: 500,
+          errorMessage,
+          stackTrace,
+        }),
+      ).catch(() => undefined);
+      console.error(JSON.stringify({ event: 'unhandled_api_error', endpoint: url.pathname, message: errorMessage, stack: stackTrace }));
+      response = Response.json({ ok: false, error: errorMessage || 'Internal Server Error', code: 'SERVICE_UNAVAILABLE' }, { status: 500 });
+    }
+
     const newHeaders = new Headers(response.headers);
     for (const [key, value] of Object.entries(corsHeaders)) {
       newHeaders.set(key, value);
@@ -306,6 +341,54 @@ const worker = {
 
   async handleRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+    if (url.pathname === '/api/telemetry/error' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env).catch(() => null);
+      const parsed = await parseJsonBody<{
+        message?: string;
+        stack?: string;
+        endpoint?: string;
+        errorCode?: string;
+        statusCode?: number;
+        context?: Record<string, unknown>;
+        source?: string;
+      }>(request);
+      if (!parsed.ok) return parsed.response;
+      const body = parsed.value;
+      const errorMessage = body.message?.trim() || 'Client error';
+      try {
+        const logged = await withRepository(env, (repo) =>
+          logAppError(repo, {
+            humanId: viewer?.id ?? null,
+            source: (body.source as any) || 'client_flutter',
+            endpoint: body.endpoint ?? null,
+            statusCode: body.statusCode ?? null,
+            errorCode: body.errorCode ?? null,
+            errorMessage,
+            stackTrace: body.stack ?? null,
+            contextData: body.context ?? {},
+          }),
+        );
+        return Response.json({ ok: true, id: logged?.id });
+      } catch (err) {
+        return Response.json({ ok: false, error: 'Failed to record error log' }, { status: 500 });
+      }
+    }
+    if (url.pathname === '/api/telemetry/errors' && request.method === 'GET') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const limit = Number(url.searchParams.get('limit') || 50);
+      const offset = Number(url.searchParams.get('offset') || 0);
+      const source = url.searchParams.get('source') || undefined;
+      const humanId = url.searchParams.get('all') === 'true' ? undefined : (url.searchParams.get('humanId') || viewer.id);
+      try {
+        const errors = await withRepository(env, (repo) =>
+          listRecentAppErrors(repo, { limit, offset, source, humanId }),
+        );
+        return Response.json({ ok: true, errors: errors ?? [] });
+      } catch (err) {
+        return Response.json({ ok: false, error: 'Failed to fetch error logs' }, { status: 500 });
+      }
+    }
     if (url.pathname === '/api/real-estate/license/acquire' || url.pathname === '/api/real-estate/license/renew' || url.pathname.endsWith('/patent') || url.pathname.endsWith('/license')) {
       return Response.json({ ok: false, error: 'Patents and technology licensing have been retired' }, { status: 404 });
     }

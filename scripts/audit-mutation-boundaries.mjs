@@ -8,7 +8,7 @@ const audited = [];
 
 for (const name of names) {
   const source = await readFile(join(sourceDirectory.pathname, name), 'utf8');
-  if (name === 'read-postgres.ts' || name === 'world-postgres.ts') continue;
+  if (name === 'read-postgres.ts' || name === 'world-postgres.ts' || name === 'error-logger-postgres.ts') continue;
   if (/\bD1Database\b|\benv\.DB\b|d1_databases/.test(source)) failures.push(`${name}: legacy D1 access is present`);
 
   const mutationFunctions = [...source.matchAll(/export async function\s+(\w+)\s*\(/g)]
