@@ -195,5 +195,6 @@ test("Live PostgreSQL Integration & E2E Suite", async (t) => {
       });
       await repo.query("DELETE FROM buildings WHERE id = $1", [createdBuildingId]);
     }
+    await repo.query("DELETE FROM app_error_logs WHERE error_code = 'DIAGNOSTIC_TEST'");
   });
 });
