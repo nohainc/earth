@@ -1,6 +1,6 @@
-import type { PostgresRepository } from './repository';
-import { transferCredits } from './financial-postgres';
-import { centsToMoney, moneyToCents, taxToCents } from './money';
+import type { PostgresRepository } from './repository.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { centsToMoney, moneyToCents, taxToCents } from './money.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
 export async function publicSpending(

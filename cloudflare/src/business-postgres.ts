@@ -143,7 +143,9 @@ export async function distributeDividends(repository: PostgresRepository, input:
       if (!holderAccount.rows[0]) continue;
       const payoutAmount = centsToMoney(holderCents);
       const subCorrelation = `${input.correlationId}-${row.holder_id}`;
-      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: sourceAccount.rows[0].account_id, creditAccount: holderAccount.rows[0].account_id, amount: payoutAmount, reasonType: 'dividend_payout', reasonId: input.businessId, ruleVersion: 'dividends-v1', correlationId: subCorrelation });
+      if (sourceAccount.rows[0].account_id !== holderAccount.rows[0].account_id) {
+        await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: sourceAccount.rows[0].account_id, creditAccount: holderAccount.rows[0].account_id, amount: payoutAmount, reasonType: 'dividend_payout', reasonId: input.businessId, ruleVersion: 'dividends-v1', correlationId: subCorrelation });
+      }
       payouts.push({ holderId: row.holder_id, amount: Number(payoutAmount), shares: Number(row.shares) });
       await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [crypto.randomUUID(), row.holder_id, 'business', 'Dividend payout received', `You received ${payoutAmount} Credits in dividend distribution from ${input.businessId}.`, input.businessId]);
     }

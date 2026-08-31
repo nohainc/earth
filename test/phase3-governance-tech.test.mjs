@@ -40,7 +40,7 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };
     }
-    if (sql.includes("UPDATE proposals SET execution_status = 'challenged'")) {
+    if (sql.includes("UPDATE proposals SET execution_status = 'not_ready'")) {
       updatedStatus = 'challenged';
       return { rows: [], rowCount: 1 };
     }

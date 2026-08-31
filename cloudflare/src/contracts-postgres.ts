@@ -1,6 +1,6 @@
-import type { PostgresRepository } from './repository';
-import { transferCredits } from './financial-postgres';
-import { centsToMoney, moneyToCents } from './money';
+import type { PostgresRepository } from './repository.ts';
+import { transferCredits } from './financial-postgres.ts';
+import { centsToMoney, moneyToCents } from './money.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 
 async function managedBusinessForContract(
@@ -97,7 +97,7 @@ export async function openDispute(repository: PostgresRepository, input: { contr
     const contract = await tx.query<{ id: string; proposer_id: string; counterparty_id: string; title: string; status: string }>('SELECT id, proposer_id, counterparty_id, title, status FROM negotiated_contracts WHERE id = $1 FOR UPDATE', [input.contractId]);
     if (!contract.rows[0]) throw new Error('Contract not found');
     if (input.claimantId !== contract.rows[0].proposer_id && input.claimantId !== contract.rows[0].counterparty_id) throw new Error('Only a contract party may open a dispute');
-    if (!['accepted', 'completed'].includes(contract.rows[0].status)) throw new Error('Only an accepted or completed contract can be disputed');
+    if (!['accepted', 'active', 'completed'].includes(contract.rows[0].status)) throw new Error('Only an accepted, active, or completed contract can be disputed');
     const existing = await tx.query("SELECT * FROM contract_disputes WHERE contract_id = $1 AND status = 'open'", [input.contractId]);
     if (existing.rows[0]) return { ok: true, alreadyOpen: true, dispute: existing.rows[0] };
     const disputeId = 'DISPUTE-' + crypto.randomUUID().slice(0, 8).toUpperCase();

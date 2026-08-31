@@ -215,7 +215,7 @@ export async function proposeSupplyContract(
         `Tender: ${title}`,
         `We have submitted a binding supply contract proposal for ${input.dailyQuantity} units of ${input.resourceType.toUpperCase()} per game day at ${input.unitPrice} CR/unit for ${input.totalDays} game days. Total Escrow: ${totalAmount} CR.`,
         day,
-        toNanoMarkup({
+        JSON.stringify({
           contractId,
           resourceType: input.resourceType,
           dailyQuantity: input.dailyQuantity,
@@ -324,7 +324,7 @@ export async function acceptSupplyContract(
     await tx.query(
       `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
        VALUES ($1, $2, 'contract', 'Supply Contract Active', $3, $4),
-              ($5, $6, 'contract', 'Supply Contract Active', $7, $4)`,
+              ($5, $6, 'contract', 'Supply Contract Active', $7, $8)`,
       [
         crypto.randomUUID(),
         row.proposer_id,
