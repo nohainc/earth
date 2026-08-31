@@ -44,10 +44,29 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const rule = input.ruleVersionId
       ? await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE id = $1 AND institution_id = $2 AND status = 'active'", [input.ruleVersionId, input.institutionId])
       : await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>("SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE institution_id = $1 AND status = 'active' ORDER BY version DESC LIMIT 1", [input.institutionId]);
-    if (!rule.rows[0]) throw new Error('An active governance rule version is required');
-    const quorum = Number(rule.rows[0].quorum_threshold);
-    const approvalThreshold = Number(rule.rows[0].approval_threshold);
-    const implementationDelay = Number(rule.rows[0].implementation_delay_days);
+    let ruleRow = rule.rows[0];
+    if (!ruleRow) {
+      const inst = await tx.query<{ name: string }>("SELECT name FROM institutions WHERE id = $1", [input.institutionId]);
+      const instName = inst.rows[0]?.name ?? input.institutionId;
+      const baselineId = `GOV-${input.institutionId}-BASELINE-v1`;
+      await tx.query(
+        `INSERT INTO governance_rules (
+          id, institution_id, name, category, quorum_threshold, approval_threshold,
+          voting_period_days, implementation_delay_days, version, status, created_by
+        ) VALUES ($1, $2, $3, 'governance', 0.25, 0.50, 30, 1, 1, 'active', $4)
+        ON CONFLICT (id) DO UPDATE SET status = 'active'`,
+        [baselineId, input.institutionId, `${instName} Governance Baseline`, input.humanId],
+      );
+      const inserted = await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>(
+        "SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE id = $1",
+        [baselineId],
+      );
+      ruleRow = inserted.rows[0];
+    }
+    if (!ruleRow) throw new Error('An active governance rule version is required');
+    const quorum = Number(ruleRow.quorum_threshold);
+    const approvalThreshold = Number(ruleRow.approval_threshold);
+    const implementationDelay = Number(ruleRow.implementation_delay_days);
     if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
@@ -58,7 +77,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const closesGameMinute = closesAbsoluteMinute % 1440;
     const implementationGameDay = Math.floor(implementationAbsoluteMinute / 1440);
     const implementationGameMinute = implementationAbsoluteMinute % 1440;
-    await tx.query("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, closes_game_day, closes_game_minute, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, implementation_game_day, implementation_game_minute, target_category, target_value_json, correlation_id) VALUES ($1,$2,$3,$4,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + ($5 * INTERVAL '1 hour'),$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + (($5 + $11 * 24) * INTERVAL '1 hour'),$12,$13,$14,$15,$16)", [proposalId, input.institutionId, input.title, input.body, input.durationHours, closesGameDay, closesGameMinute, rule.rows[0].id, quorum, approvalThreshold, implementationDelay, implementationGameDay, implementationGameMinute, input.targetCategory, input.targetValue ? toNanoMarkup(input.targetValue) : null, input.correlationId]);
+    await tx.query("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, closes_game_day, closes_game_minute, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, implementation_game_day, implementation_game_minute, target_category, target_value_json, correlation_id) VALUES ($1,$2,$3,$4,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + ($5 * INTERVAL '1 hour'),$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + (($5 + $11 * 24) * INTERVAL '1 hour'),$12,$13,$14,$15,$16)", [proposalId, input.institutionId, input.title, input.body, input.durationHours, closesGameDay, closesGameMinute, ruleRow.id, quorum, approvalThreshold, implementationDelay, implementationGameDay, implementationGameMinute, input.targetCategory, input.targetValue ? toNanoMarkup(input.targetValue) : null, input.correlationId]);
     return { ok: true, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [proposalId])).rows[0], createdBy: input.humanId, correlationId: input.correlationId };
   });
 }
