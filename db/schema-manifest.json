@@ -1,7 +1,15 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 87,
+  "migrationVersion": 88,
   "requiredTables": {
+    "app_error_logs": [
+      "id",
+      "created_at",
+      "human_id",
+      "source",
+      "endpoint",
+      "error_message"
+    ],
     "account_balances": [
       "account_id",
       "owner_id",
