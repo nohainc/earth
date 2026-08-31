@@ -88,11 +88,27 @@ class EarthAlertBanner extends StatelessWidget {
             ),
           ),
           if (onClose != null)
-            IconButton(
-              icon: Icon(Icons.close, size: 14, color: context.mutedColor),
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
+            TextButton(
               onPressed: onClose,
+              style: TextButton.styleFrom(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                minimumSize: Size.zero,
+                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'OK',
+                    style: context.widgetFooterStyle.copyWith(
+                      color: color,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.close, size: 14, color: color),
+                ],
+              ),
             ),
         ],
       ),

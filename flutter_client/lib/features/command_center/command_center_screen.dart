@@ -8,6 +8,7 @@ import '../../core/models/earth_state.dart';
 import '../../shared/design_system/earth_theme_context.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
+import '../../shared/design_system/earth_empty_state.dart';
 import '../auth/security_dialog.dart';
 import '../onboarding/onboarding_guidance_bar.dart';
 import '../../core/onboarding_controller.dart';
@@ -658,18 +659,11 @@ class _CommandCenterState extends State<CommandCenter> {
                                     Padding(
                                       padding:
                                           const EdgeInsets.only(bottom: 16),
-                                      child: MaterialBanner(
-                                        content: Text(error!),
-                                        leading:
-                                            const Icon(Icons.warning_amber),
-                                        actions: [
-                                          TextButton(
-                                            onPressed: busy
-                                                ? null
-                                                : () => _run(api.world),
-                                            child: const Text('RETRY'),
-                                          ),
-                                        ],
+                                      child: EarthAlertBanner(
+                                        message: error!,
+                                        isError: true,
+                                        onClose: () =>
+                                            setState(() => error = null),
                                       ),
                                     ),
                                   if (selectedSection == 'command')
