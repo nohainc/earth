@@ -143,12 +143,12 @@ class PersonalFinancePanel extends StatelessWidget {
       ? Map<String, dynamic>.from(value)
       : const <String, dynamic>{};
   static Map<String, double> _profileChange(Map<String, dynamic> profile) => {
-        'credits': asDoubleOr(profile['credits_delta'], 0),
-        'energy': asDoubleOr(profile['energy_delta'], 0),
-        'food': asDoubleOr(profile['food_delta'], 0),
-        'materials': asDoubleOr(profile['materials_delta'], 0),
-        'components': asDoubleOr(profile['components_delta'], 0),
-        'compute': asDoubleOr(profile['compute_delta'], 0),
+        'credits': asDoubleOr(profile['credits_delta'] ?? profile['credits'], 0),
+        'energy': asDoubleOr(profile['energy_delta'] ?? profile['energy'], 0),
+        'food': asDoubleOr(profile['food_delta'] ?? profile['food'], 0),
+        'materials': asDoubleOr(profile['materials_delta'] ?? profile['materials'], 0),
+        'components': asDoubleOr(profile['components_delta'] ?? profile['components'], 0),
+        'compute': asDoubleOr(profile['compute_delta'] ?? profile['compute'], 0),
       };
   static String _number(double value) => value.abs() >= 100
       ? value.abs().toStringAsFixed(0)
@@ -278,13 +278,22 @@ class PersonalFinancePanel extends StatelessWidget {
   static Map<String, double> _maintenanceResourceChange(
           Map<String, dynamic> settlement) =>
       {
-        'credits': -asDoubleOr(settlement['credits_for_resources'], 0),
-        'energy':
-            -asDoubleOr(settlement['energy_used'], settlement.isEmpty ? 1 : 0),
-        'food':
-            -asDoubleOr(settlement['food_used'], settlement.isEmpty ? 1 : 0),
+        'credits': -asDoubleOr(
+            settlement['credits_for_resources'] ??
+                (settlement['credits'] != null ? -settlement['credits'] : null),
+            0),
+        'energy': -asDoubleOr(
+            settlement['energy_used'] ??
+                (settlement['energy'] != null ? -settlement['energy'] : null),
+            settlement.isEmpty ? 1 : 0),
+        'food': -asDoubleOr(
+            settlement['food_used'] ??
+                (settlement['food'] != null ? -settlement['food'] : null),
+            settlement.isEmpty ? 1 : 0),
         'compute': -asDoubleOr(
-            settlement['compute_used'], settlement.isEmpty ? .25 : 0),
+            settlement['compute_used'] ??
+                (settlement['compute'] != null ? -settlement['compute'] : null),
+            settlement.isEmpty ? .25 : 0),
       };
 
   static double _investmentDividend(
