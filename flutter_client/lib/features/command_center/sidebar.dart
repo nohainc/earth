@@ -387,45 +387,50 @@ class _SidebarState extends State<Sidebar> {
       padding: EdgeInsets.only(top: isFirst ? 0 : 8, bottom: 2),
       child: Material(
         color: Colors.transparent,
-        child: InkWell(
-          onTap: onTap,
-          borderRadius: BorderRadius.circular(8),
-          hoverColor: context.surfaceColor.withValues(alpha: 0.6),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-            child: Row(
-              children: [
-                Icon(
-                  icon,
-                  size: 14,
-                  color: isExpanded
-                      ? context.primaryColor
-                      : context.mutedColor.withValues(alpha: 0.8),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    title,
-                    style: TextStyle(
-                      fontSize: 10.5,
-                      fontWeight: FontWeight.w800,
-                      letterSpacing: 1.5,
-                      color: isExpanded
-                          ? context.primaryColor
-                          : context.mutedColor,
+        child: Semantics(
+          button: true,
+          label: title,
+          container: true,
+          child: InkWell(
+            onTap: onTap,
+            borderRadius: BorderRadius.circular(8),
+            hoverColor: context.surfaceColor.withValues(alpha: 0.6),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+              child: Row(
+                children: [
+                  Icon(
+                    icon,
+                    size: 14,
+                    color: isExpanded
+                        ? context.primaryColor
+                        : context.mutedColor.withValues(alpha: 0.8),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: TextStyle(
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w800,
+                        letterSpacing: 1.5,
+                        color: isExpanded
+                            ? context.primaryColor
+                            : context.mutedColor,
+                      ),
                     ),
                   ),
-                ),
-                AnimatedRotation(
-                  turns: isExpanded ? 0.5 : 0.0,
-                  duration: const Duration(milliseconds: 180),
-                  child: Icon(
-                    Icons.keyboard_arrow_down_rounded,
-                    size: 16,
-                    color: context.mutedColor.withValues(alpha: 0.7),
+                  AnimatedRotation(
+                    turns: isExpanded ? 0.5 : 0.0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(
+                      Icons.keyboard_arrow_down_rounded,
+                      size: 16,
+                      color: context.mutedColor.withValues(alpha: 0.7),
+                    ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ),
@@ -447,115 +452,110 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.only(bottom: 2),
       child: SizedBox(
         width: double.infinity,
-        child: Tooltip(
-          message: 'nav-$sectionKey',
-          child: TextButton(
-            onPressed: onSelect,
-          style: TextButton.styleFrom(
-            splashFactory: NoSplash.splashFactory,
-            enableFeedback: false,
-            foregroundColor: context.primaryColor,
-            backgroundColor: isSelected
-                ? context.primaryColor.withValues(alpha: 0.14)
-                : Colors.transparent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
-              side: isSelected
-                  ? BorderSide(
-                      color: context.primaryColor.withValues(alpha: 0.32),
-                      width: 0.8,
-                    )
-                  : BorderSide.none,
-            ),
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-            alignment: Alignment.centerLeft,
-          ),
-          child: Row(
-            children: [
-              // Fixed-width Indicator Slot (preserves exact horizontal alignment across all items)
-              SizedBox(
-                width: 10,
-                child: isSelected
-                    ? Align(
-                        alignment: Alignment.centerLeft,
-                        child: Container(
-                          width: 3.2,
-                          height: 16,
-                          decoration: BoxDecoration(
-                            color: context.primaryColor,
-                            borderRadius: BorderRadius.circular(2),
-                            boxShadow: [
-                              BoxShadow(
-                                color: context.primaryColor
-                                    .withValues(alpha: 0.65),
-                                blurRadius: 6,
-                                spreadRadius: 0.5,
-                              ),
-                            ],
-                          ),
-                        ),
-                      )
-                    : null,
-              ),
-              const SizedBox(width: 6),
-
-              // Item Icon
-              Icon(
-                icon,
-                size: 16,
-                color: isSelected
-                    ? context.primaryColor
-                    : context.mutedColor.withValues(alpha: 0.85),
-              ),
-              const SizedBox(width: 10),
-
-              // Item Label
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
-                    color: isSelected ? context.inkColor : context.mutedColor,
-                    letterSpacing: isSelected ? 0.2 : 0.0,
-                  ),
+        child: Semantics(
+          container: true,
+          button: true,
+          label: label,
+          selected: isSelected,
+          child: Tooltip(
+            message: 'nav-$sectionKey',
+            child: TextButton(
+              onPressed: onSelect,
+              style: TextButton.styleFrom(
+                splashFactory: NoSplash.splashFactory,
+                enableFeedback: false,
+                foregroundColor: context.primaryColor,
+                backgroundColor: isSelected
+                    ? context.primaryColor.withValues(alpha: 0.14)
+                    : Colors.transparent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
+                  side: isSelected
+                      ? BorderSide(
+                          color: context.primaryColor.withValues(alpha: 0.32),
+                          width: 0.8,
+                        )
+                      : BorderSide.none,
                 ),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+                alignment: Alignment.centerLeft,
               ),
-
-              // Unread / Action Badge
-              if (badge != null) ...[
-                const SizedBox(width: 6),
-                Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: context.primaryColor,
-                    borderRadius: BorderRadius.circular(10),
-                    boxShadow: [
-                      BoxShadow(
-                        color: context.primaryColor.withValues(alpha: 0.4),
-                        blurRadius: 4,
-                      ),
-                    ],
+              child: Row(
+                children: [
+                  // Fixed-width Indicator Slot (preserves exact horizontal alignment across all items)
+                  SizedBox(
+                    width: 10,
+                    child: isSelected
+                        ? Align(
+                            alignment: Alignment.centerLeft,
+                            child: Container(
+                              width: 3.2,
+                              height: 16,
+                              decoration: BoxDecoration(
+                                color: context.primaryColor,
+                                borderRadius: BorderRadius.circular(2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: context.primaryColor
+                                        .withValues(alpha: 0.65),
+                                    blurRadius: 6,
+                                    spreadRadius: 0.5,
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : null,
                   ),
-                  child: Text(
-                    badge,
-                    style: TextStyle(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w800,
-                      color: context.canvasColor,
-                      letterSpacing: 0.4,
+                  const SizedBox(width: 6),
+
+                  // Item Icon
+                  Icon(
+                    icon,
+                    size: 16,
+                    color: isSelected
+                        ? context.primaryColor
+                        : context.mutedColor.withValues(alpha: 0.85),
+                  ),
+                  const SizedBox(width: 10),
+
+                  // Item Label
+                  Expanded(
+                    child: Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                        color: isSelected ? context.inkColor : context.mutedColor,
+                        letterSpacing: isSelected ? 0.2 : 0.0,
+                      ),
                     ),
                   ),
-                ),
-              ],
-            ],
+                  if (badge != null)
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 6, vertical: 2),
+                      decoration: BoxDecoration(
+                        color: context.primaryColor.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        badge,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: context.primaryColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
           ),
         ),
       ),
-    ),
-  );
-}
+    );
+  }
 }

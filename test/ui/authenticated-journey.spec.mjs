@@ -215,11 +215,10 @@ async function openMarket(page) {
 }
 
 async function openCommandCenter(page) {
-  await openSection(page, 'Command Center', 'NOW').catch(() => openSection(page, 'NOW', 'NOW'));
-  const commandIndicator = page.getByRole('button', { name: /SURPLUS|DEFICIT/i })
-    .or(page.getByRole('group', { name: /MARKET UNIFORM|BUSINESS|MUNICIPAL RESIDENCY|FINANCE & CONTRACTS/i }))
-    .or(page.getByText(/TODAY'S MANAGEMENT FOCUS|CURRENT OPERATIONS|OBJECTIVES/i));
-  await expect(commandIndicator.first()).toBeVisible({ timeout: 30_000 });
+  await openSection(page, 'Command Center', 'NOW');
+  const commandIndicator = page.getByText(/CITIZEN COCKPIT|TODAY'S MANAGEMENT FOCUS|CURRENT OPERATIONS|OBJECTIVES/i)
+    .or(page.getByRole('button', { name: /SURPLUS|DEFICIT/i }));
+  await expect(commandIndicator.first()).toBeVisible({ timeout: 15_000 });
 }
 
 async function openBriefing(page) {
