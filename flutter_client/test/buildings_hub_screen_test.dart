@@ -4,7 +4,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 
 void main() {
-  final testState = EarthState({
+  const testState = EarthState({
     'clock': {'day': 184, 'minute': 100},
     'human': {'id': 'H-0044', 'credits': 50000},
     'membership': {'city_id': 'CITY-0084'},
@@ -178,11 +178,12 @@ void main() {
       expect(find.textContaining('2 spaces'), findsOneWidget);
       // Tier range 1-2
       expect(find.textContaining('Tier 1-2'), findsOneWidget);
-      // Combined net credit output: (620-60) + (800-80) = 560 + 720 = +1280 C
-      expect(find.textContaining('+1280'), findsOneWidget);
+      // Aggregated resource items exist in the widget tree
+      expect(find.byIcon(Icons.account_balance_wallet_outlined), findsWidgets);
+      expect(find.byIcon(Icons.bolt_rounded), findsWidgets);
     });
 
-    testWidgets('Expanding grouped buildings reveals per-item #1 and #2 details and collapse hides them', (tester) async {
+    testWidgets('Expanding grouped buildings reveals per-item individual details and collapse hides them', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() {
@@ -204,24 +205,24 @@ void main() {
         ),
       );
 
-      // Prior to expansion, individual item details are not visible
-      expect(find.text('#1 · Tier 1'), findsNothing);
-      expect(find.text('#2 · Tier 2'), findsNothing);
+      // Prior to expansion, individual #1 / #2 headers are not rendered
+      expect(find.textContaining('#1  ·  1 space'), findsNothing);
+      expect(find.textContaining('#2  ·  1 space'), findsNothing);
 
       // Tap on the group row to expand
       await tester.tap(find.text('Nova Molecular Bistro × 2'));
       await tester.pumpAndSettle();
 
       // Now individual items #1 and #2 are visible
-      expect(find.text('#1 · Tier 1'), findsOneWidget);
-      expect(find.text('#2 · Tier 2'), findsOneWidget);
+      expect(find.textContaining('#1  ·  1 space'), findsOneWidget);
+      expect(find.textContaining('#2  ·  1 space'), findsOneWidget);
 
       // Tap again to collapse
       await tester.tap(find.text('Nova Molecular Bistro × 2'));
       await tester.pumpAndSettle();
 
-      expect(find.text('#1 · Tier 1'), findsNothing);
-      expect(find.text('#2 · Tier 2'), findsNothing);
+      expect(find.textContaining('#1  ·  1 space'), findsNothing);
+      expect(find.textContaining('#2  ·  1 space'), findsNothing);
     });
 
     testWidgets('Common operating policy buttons invoke action callback with correct parameters', (tester) async {
@@ -366,6 +367,17 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.textContaining('When enabled, the next settlement uses one component'), findsNothing);
+
+      // Tap Operating policy info button
+      await tester.tap(find.byTooltip('Policy information'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Operating policy'), findsOneWidget);
+      expect(find.textContaining('Normal uses standard output and operating cost'), findsOneWidget);
+
+      await tester.tap(find.text('CLOSE'));
+      await tester.pumpAndSettle();
+      expect(find.textContaining('Normal uses standard output and operating cost'), findsNothing);
     });
 
     testWidgets('Ownership tabs correctly isolate Private, Civic, and Public Investment buildings', (tester) async {

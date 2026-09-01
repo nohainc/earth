@@ -36,4 +36,51 @@ void main() {
     await tester.pumpAndSettle();
     expect(actions, 1);
   });
+
+  testWidgets('CorporationOverviewPanel renders Corporate Budget, treasury, tax rules, and mobile viewports', (tester) async {
+    tester.view.physicalSize = const Size(375, 812);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    const corpState = EarthState({
+      'human': {'id': 'H-0044'},
+      'membership': {
+        'corporation_id': 'CORP-001',
+        'city_id': 'CITY-0084',
+      },
+      'institutions': {
+        'corporation': {
+          'id': 'CORP-001',
+          'name': 'Solaris Conglomerate',
+          'members': 42,
+          'treasury': 8500000.0,
+          'capital_city_name': 'New Carthage',
+          'rules': {
+            'incomeTaxBps': 250,
+            'salesTaxBps': 150,
+            'corporateTaxBps': 300,
+          },
+        },
+      },
+      'roles': [],
+      'technology': {'corporationSharedPatents': []},
+    });
+
+    await tester.pumpWidget(MaterialApp(home: Scaffold(body: SingleChildScrollView(
+      child: CorporationOverviewPanel(
+        state: corpState,
+        busy: false,
+        action: (_) async {},
+      ),
+    ))));
+    await tester.pumpAndSettle();
+
+    // Verify Corporate Header & Budget
+    expect(find.text('Solaris Conglomerate'), findsOneWidget);
+    expect(find.text('CORPORATE BUDGET'), findsWidgets);
+    expect(find.textContaining('8500000 C'), findsWidgets);
+  });
 }
