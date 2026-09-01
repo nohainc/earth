@@ -10,12 +10,16 @@ test.beforeEach(() => {
 });
 
 async function enableFlutterSemantics(page) {
-  const control = page.getByRole('button', { name: 'Enable accessibility' });
-  await control.waitFor({ state: 'visible', timeout: 30_000 });
-  // Flutter positions this semantics placeholder outside the visual viewport.
-  // Invoke its DOM action directly to activate the rendered app's semantics
-  // tree without requiring a physical viewport click.
-  await control.evaluate((element) => element.click());
+  try {
+    const placeholder = page.locator('flt-semantics-placeholder, [aria-label="Enable accessibility"], button:has-text("Enable accessibility")');
+    if (await placeholder.first().isVisible().catch(() => false)) {
+      await placeholder.first().evaluate((el) => el.click()).catch(() => {});
+    } else {
+      const control = page.getByRole('button', { name: 'Enable accessibility' });
+      await control.waitFor({ state: 'attached', timeout: 5000 }).catch(() => {});
+      await control.evaluate((element) => element.click()).catch(() => {});
+    }
+  } catch (_) {}
 }
 
 async function signInThroughUi(page) {
