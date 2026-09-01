@@ -1,11 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/earth_theme_context.dart';
-import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
 

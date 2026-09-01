@@ -330,9 +330,10 @@ class PersonalFinancePanel extends StatelessWidget {
 
   static Widget _resourceLine(Map<String, double> changes,
       {bool emphasize = false}) {
-    if (changes.isEmpty)
+    if (changes.isEmpty) {
       return const Text('No daily resource change',
           style: TextStyle(color: mutedColor, fontSize: 11));
+    }
     final icons = {
       'credits': Icons.account_balance_wallet_outlined,
       'energy': Icons.bolt_rounded,

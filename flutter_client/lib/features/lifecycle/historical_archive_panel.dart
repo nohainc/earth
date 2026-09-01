@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import '../../shared/design_system/design_system.dart';
-import '../../shared/widgets/earth_primitives.dart';
 import '../house/house_lineage_dialog.dart';
 
 class HistoricalArchivePanel extends StatefulWidget {
@@ -649,7 +648,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
                           children: [
                             if (founder != null && founder.isNotEmpty && founder != '—')
                               _badge(context, Icons.history, 'Founder: $founder'),
-                            if (!isExtinct && heir != null && heir.isNotEmpty && heir != '—')
+                            if (!isExtinct && heir.isNotEmpty && heir != '—')
                               _badge(context, Icons.person_pin, 'Heir: $heir')
                             else if (isExtinct)
                               _badge(context, Icons.hourglass_disabled, 'Lineage: Extinct'),
@@ -856,7 +855,7 @@ class _HistoricalHousesPanelState extends State<HistoricalHousesPanel> {
                             children: [
                               if (founder != null && founder.isNotEmpty && founder != '—')
                                 _badge(context, Icons.history, 'Founder: $founder'),
-                              if (!isExtinct && heir != null && heir.isNotEmpty && heir != '—')
+                              if (!isExtinct && heir.isNotEmpty && heir != '—')
                                 _badge(context, Icons.person_pin, 'Heir: $heir')
                               else if (isExtinct)
                                 _badge(context, Icons.hourglass_disabled, 'Lineage: Extinct'),

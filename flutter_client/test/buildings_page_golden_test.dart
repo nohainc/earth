@@ -5,7 +5,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/operations/buildings_hub_screen.dart';
 
 void main() {
-  final state = EarthState({
+  final state = const EarthState({
     'clock': {'day': 184, 'minute': 100},
     'human': {'id': 'H-0044', 'credits': 50000},
     'membership': {'city_id': 'CITY-0084'},

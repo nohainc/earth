@@ -28,9 +28,9 @@ class BuildingsHubScreen extends StatefulWidget {
 class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   int _mainTab = 0; // 0 = PRIVATE, 1 = CIVIC (single-column mode only)
   int _narrowSubTab = 0; // 0 = BUILT/ACTIVE, 1 = CATALOG
-  String _selectedCategory = 'all';
+  final String _selectedCategory = 'all';
   String _catalogFilter = 'all';
-  String _sortMode = 'default';
+  final String _sortMode = 'default';
   String _plannerSelectedBlueprint = 'restaurant';
   Set<String>? _expandedBuildingGroups;
 
@@ -112,7 +112,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               label: 'SUBMIT PROPOSAL',
               onPressed: () async {
                 if (title.text.trim().length < 8 ||
-                    body.text.trim().length < 20) return;
+                    body.text.trim().length < 20) {
+                  return;
+                }
                 try {
                   await widget.action(() => const EarthApi().createProposal(
                         title.text.trim(),
@@ -859,10 +861,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             }
             if (_selectedCategory == 'commercial') return cat == 'commercial';
             if (_selectedCategory == 'energy') return cat == 'energy';
-            if (_selectedCategory == 'manufacturing')
+            if (_selectedCategory == 'manufacturing') {
               return cat == 'manufacturing' || cat == 'industrial';
-            if (_selectedCategory == 'compute')
+            }
+            if (_selectedCategory == 'compute') {
               return cat == 'compute' || cat == 'high_tech';
+            }
             if (_selectedCategory == 'food') return cat == 'food';
             if (_selectedCategory == 'medical') return cat == 'medical';
             if (_selectedCategory == 'orbital') return cat == 'orbital';
@@ -1039,7 +1043,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     Align(
                       alignment: Alignment.centerLeft,
                       child: Text(
-                        '${totalSpace} space${totalSpace == 1 ? '' : 's'}  ·  ${tierLabel.replaceFirst('TIER', 'Tier')}  ·  ${hasConstruction ? 'Construction in progress' : 'Operational'} ${avgProgress.toStringAsFixed(0)}% complete',
+                        '$totalSpace space${totalSpace == 1 ? '' : 's'}  ·  ${tierLabel.replaceFirst('TIER', 'Tier')}  ·  ${hasConstruction ? 'Construction in progress' : 'Operational'} ${avgProgress.toStringAsFixed(0)}% complete',
                         style: context.widgetFooterStyle
                             .copyWith(color: context.mutedColor, fontSize: 12),
                       ),
@@ -1821,8 +1825,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             final inputs = <(IconData, String)>[];
             void addInput(String key, String label, IconData icon) {
               final amount = asDoubleOr(item[key], 0);
-              if (amount > 0)
+              if (amount > 0) {
                 inputs.add((icon, '${amount.toStringAsFixed(1)} $label'));
+              }
             }
 
             addInput('dailyEnergyUpkeep', 'ENERGY', Icons.bolt_rounded);
@@ -1901,7 +1906,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         children: [
                           Text('COST', style: context.captionStyle),
                           const SizedBox(width: 5),
-                          Icon(Icons.account_balance_wallet_outlined,
+                          const Icon(Icons.account_balance_wallet_outlined,
                               size: 14, color: EarthResourceColors.credits),
                           Text(formatWholeNumber(creditCost),
                               style: context.widgetFooterStyle),
@@ -1970,7 +1975,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           children: [
                             Text('OPERATING COST', style: context.captionStyle),
                             const SizedBox(width: 5),
-                            Icon(Icons.account_balance_wallet_outlined,
+                            const Icon(Icons.account_balance_wallet_outlined,
                                 size: 14, color: EarthResourceColors.credits),
                             Text(
                                 '-${formatWholeNumber(operatingCredits)} CRD / DAY',
@@ -2716,8 +2721,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               (autoRepair && repairResource == 'components' ? 1 : 0),
           'compute': -asDoubleOr(building['upkeep_compute'], 0),
         };
-    if (resourceChanges == null && !isCreditOutput)
+    if (resourceChanges == null && !isCreditOutput) {
       values[outputType] = (values[outputType] ?? 0) + effectiveOutputAmount;
+    }
     final icons = <String, IconData>{
       'credits': Icons.account_balance_wallet_outlined,
       'energy': Icons.bolt_rounded,
@@ -2885,14 +2891,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             ),
             SizedBox(height: context.spacingControl),
           ] else ...[
-            EarthSection(
+            const EarthSection(
               title: 'PUBLIC INVESTMENT OFFERINGS',
               showSurface: false,
-              infoBulletPoints: const [
+              infoBulletPoints: [
                 'Public-investment blueprints become investable only after an active offering is opened.',
                 'When an offering is active, its share price, available shares, and INVEST IN SHARES action appear here.',
               ],
-              child: const EarthEmptyState(
+              child: EarthEmptyState(
                 message:
                     'No public-investment offerings are active right now. Check the Public Investment catalog for available project blueprints.',
                 icon: Icons.pie_chart_outline,

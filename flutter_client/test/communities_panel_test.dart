@@ -136,7 +136,7 @@ void main() {
     bool cancelCalled = false;
     bool applicationSubmitted = false;
 
-    final state = EarthState({
+    final state = const EarthState({
       'clock': {'day': 184, 'minute': 100},
       'human': {'id': 'H-0044', 'name': 'Amara Vance', 'credits': 5000},
       'world': {'health': 100},
@@ -189,9 +189,7 @@ void main() {
               busy: false,
               action: (cb) async {
                 final res = await cb();
-                if (res != null) {
-                  // action completed
-                }
+                // action completed
               },
             ),
           ),

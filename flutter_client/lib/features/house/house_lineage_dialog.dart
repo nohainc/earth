@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
-import '../../shared/design_system/design_system.dart';
 import 'house_tree_dialog.dart';
 
 void showHouseLineageDialog(
@@ -351,11 +350,11 @@ class HouseLineageDialog extends StatelessWidget {
                     const SizedBox(height: 20),
 
                     // House Succession Lineage Section
-                    Row(
+                    const Row(
                       children: [
-                        const Icon(Icons.account_tree_outlined, size: 16, color: cyanAccentColor),
-                        const SizedBox(width: 8),
-                        const Text(
+                        Icon(Icons.account_tree_outlined, size: 16, color: cyanAccentColor),
+                        SizedBox(width: 8),
+                        Text(
                           'HOUSE SUCCESSION & LINEAGE TREE',
                           style: TextStyle(
                             fontSize: 12,

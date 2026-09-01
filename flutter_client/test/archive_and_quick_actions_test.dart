@@ -36,7 +36,7 @@ void main() {
               }
             ],
           },
-          events: const [],
+          events: [],
         ),
       ),
     ));

@@ -61,7 +61,7 @@ void main() {
       tester.view.devicePixelRatio = 1.0;
       addTearDown(() => tester.view.resetPhysicalSize());
 
-      final state = EarthState(
+      final state = const EarthState(
         {
           'rankings': {
             'corporations': [],

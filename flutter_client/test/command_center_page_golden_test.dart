@@ -19,7 +19,7 @@ void main() {
       'market': {'products': {}, 'orders': []},
       'machines': [], 'contracts': [], 'opportunities': [],
     });
-    await tester.pumpWidget(MaterialApp(theme: createEarthTheme(), home: Scaffold(body: SingleChildScrollView(child: ExecutiveCommandSummary(state: state)))));
+    await tester.pumpWidget(MaterialApp(theme: createEarthTheme(), home: const Scaffold(body: SingleChildScrollView(child: ExecutiveCommandSummary(state: state)))));
     await tester.pumpAndSettle();
     await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/qa/command_center_1440.png'));
   });

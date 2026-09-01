@@ -125,8 +125,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         if (_lastSeenDay != null && currentDay > _lastSeenDay!) {
           _lastSeenDay = currentDay;
           widget.onDayRollover?.call();
-        } else if (_lastSeenDay == null) {
-          _lastSeenDay = currentDay;
+        } else {
+          _lastSeenDay ??= currentDay;
         }
       }
     });

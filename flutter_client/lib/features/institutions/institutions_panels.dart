@@ -1876,10 +1876,12 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
     int computeScore(Map<String, dynamic> row) {
       if (row['final_score'] != null) return asIntOr(row['final_score'], 0);
       if (row['finalScore'] != null) return asIntOr(row['finalScore'], 0);
-      if (row['compositeIndex'] != null)
+      if (row['compositeIndex'] != null) {
         return asIntOr(row['compositeIndex'], 0);
-      if (row['score'] != null && asIntOr(row['score'], 0) <= 100)
+      }
+      if (row['score'] != null && asIntOr(row['score'], 0) <= 100) {
         return asIntOr(row['score'], 0);
+      }
 
       if (isCitizen) {
         final legacy = asIntOr(row['legacy'], 0);
@@ -1917,8 +1919,9 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
             .clamp(0, 100);
       } else if (isHouse) {
         if (row['house_score'] != null) return asIntOr(row['house_score'], 0);
-        if (row['dynasty_score'] != null)
+        if (row['dynasty_score'] != null) {
           return asIntOr(row['dynasty_score'], 0);
+        }
         if (row['score'] != null) return asIntOr(row['score'], 0);
         final totalLegacy = (row['total_legacy'] ??
                 row['house_legacy'] ??
@@ -2242,9 +2245,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                         corpNames != null &&
                         corpNames.containsKey(rawCorp))
                     ? corpNames[rawCorp]
-                    : (rawCorp != null
-                        ? rawCorp
-                        : (entityId != null && cityToCorpMap != null
+                    : (rawCorp ?? (entityId != null && cityToCorpMap != null
                             ? cityToCorpMap[entityId]
                             : null));
                 secondarySubtitle = (corpName != null && corpName.isNotEmpty)
@@ -2257,10 +2258,12 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
               final heir =
                   row['active_heir']?.toString() ?? row['heir']?.toString();
               final affParts = <String>[];
-              if (founder != null && founder.isNotEmpty && founder != '—')
+              if (founder != null && founder.isNotEmpty && founder != '—') {
                 affParts.add('Founder: $founder');
-              if (heir != null && heir.isNotEmpty && heir != '—')
+              }
+              if (heir != null && heir.isNotEmpty && heir != '—') {
                 affParts.add('Heir: $heir');
+              }
               secondarySubtitle =
                   affParts.isNotEmpty ? affParts.join(' · ') : null;
             } else {
@@ -2585,7 +2588,7 @@ class _CorporationHubPanelState extends State<CorporationHubPanel> {
         );
 
         final proposalsAndRoles = [
-          if (isMember && currentCorpId != null) ...[
+          if (isMember) ...[
             const SizedBox(height: 34),
             ProposalPanel(
               state: widget.state,
@@ -3403,8 +3406,9 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                           value: '${formatWholeNumber(cityTreasury)} C',
                           accentColor: context.warningColor),
                     ];
-                    if (constraints.maxWidth < 450)
+                    if (constraints.maxWidth < 450) {
                       return Column(children: attributes);
+                    }
                     return Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -4390,7 +4394,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
         title: 'COMMUNITY',
         showSurface: false,
         icon: Icons.groups_outlined,
-        child: EarthEmptyState(
+        child: const EarthEmptyState(
           message: 'You are not currently an owner or member of any community.',
           icon: Icons.groups_outlined,
         ),

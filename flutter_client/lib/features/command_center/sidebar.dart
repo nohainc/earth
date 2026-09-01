@@ -249,7 +249,7 @@ class _SidebarState extends State<Sidebar> {
           ),
           (
             'house',
-            houseName?.isNotEmpty == true ? houseName! : 'House',
+            houseName.isNotEmpty == true ? houseName : 'House',
             Icons.shield_outlined,
             null,
           ),

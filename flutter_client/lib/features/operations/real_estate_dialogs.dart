@@ -149,7 +149,7 @@ Future<void> showBuildingAcquisitionDialog(
                   Text('ARCHITECTURAL BLUEPRINT', style: context.captionStyle),
                   const SizedBox(height: 6),
                   DropdownButtonFormField<String>(
-                    value: selectedType,
+                    initialValue: selectedType,
                     dropdownColor: context.panelColor,
                     style: context.bodyStyle.copyWith(color: context.inkColor),
                     decoration: InputDecoration(
