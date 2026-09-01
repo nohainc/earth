@@ -177,11 +177,14 @@ class EarthSearchInput extends StatelessWidget {
         borderRadius: BorderRadius.circular(context.radiusControl),
         border: Border.all(color: context.subtleBorderColor),
       ),
-      child: TextField(
-        controller: controller,
-        onChanged: onChanged,
-        style: context.bodyStyle.copyWith(color: context.inkColor),
-        decoration: InputDecoration(
+      child: Semantics(
+        textField: true,
+        label: hintText,
+        child: TextField(
+          controller: controller,
+          onChanged: onChanged,
+          style: context.bodyStyle.copyWith(color: context.inkColor),
+          decoration: InputDecoration(
           hintText: hintText,
           hintStyle: context.widgetFooterStyle,
           prefixIcon: Icon(Icons.search, size: 16, color: context.mutedColor),
@@ -199,6 +202,7 @@ class EarthSearchInput extends StatelessWidget {
               : null,
           border: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+          ),
         ),
       ),
     );

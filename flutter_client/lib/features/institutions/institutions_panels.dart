@@ -938,15 +938,20 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: _corporations.map((row) {
               final id = row['id']?.toString() ?? '';
+              final corporationName = row['name']?.toString() ?? id;
               final isAffiliated = id == currentCorpId;
               final isSelected = widget.showSelection && _selected?['id'] == id;
               final isExpanded = _expandedId == id;
 
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(context.radiusCard),
-                  onTap: () {
+                child: Semantics(
+                  button: true,
+                  expanded: isExpanded,
+                  label: 'Show corporation $corporationName details',
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(context.radiusCard),
+                    onTap: () {
                     setState(() {
                       _selected = row;
                       if (widget.isExpandable) {
@@ -955,12 +960,13 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                     });
                     widget.onSelectCorporation?.call(row);
                   },
-                  child: _buildCorporationNodeCard(
-                    context,
-                    row,
-                    isExpanded,
-                    isSelected,
-                    isAffiliated,
+                    child: _buildCorporationNodeCard(
+                      context,
+                      row,
+                      isExpanded,
+                      isSelected,
+                      isAffiliated,
+                    ),
                   ),
                 ),
               );
@@ -1351,10 +1357,14 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: 'Show $title rankings',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
         padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
         decoration: BoxDecoration(
           color: isSelected
@@ -1387,6 +1397,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
               ),
             ),
           ],
+        ),
         ),
       ),
     );
@@ -1735,7 +1746,10 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                 const SizedBox(width: 6),
                 Tooltip(
                   message: formulaInfo,
-                  child: InkWell(
+                  child: Semantics(
+                    button: true,
+                    label: 'Show $title ranking formula',
+                    child: InkWell(
                     onTap: () {
                       showDialog<void>(
                         context: context,
@@ -1792,6 +1806,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                         size: context.iconSize,
                         color: context.mutedColor,
                       ),
+                    ),
                     ),
                   ),
                 ),
@@ -1996,7 +2011,10 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
               const SizedBox(width: 6),
               Tooltip(
                 message: formulaInfo,
-                child: InkWell(
+                child: Semantics(
+                  button: true,
+                  label: 'Show $title ranking formula',
+                  child: InkWell(
                   onTap: () {
                     showDialog<void>(
                       context: context,
@@ -2054,6 +2072,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                       color: context.mutedColor,
                     ),
                   ),
+                ),
                 ),
               ),
             ],
@@ -2473,8 +2492,11 @@ class _PageNumberInputState extends State<_PageNumberInput> {
         border: Border.all(color: Colors.white24, width: 0.8),
       ),
       alignment: Alignment.center,
-      child: TextField(
-        controller: _controller,
+      child: Semantics(
+        textField: true,
+        label: 'Page number',
+        child: TextField(
+          controller: _controller,
         focusNode: _focusNode,
         keyboardType: TextInputType.number,
         textAlign: TextAlign.center,
@@ -2488,7 +2510,8 @@ class _PageNumberInputState extends State<_PageNumberInput> {
           contentPadding: EdgeInsets.zero,
           border: InputBorder.none,
         ),
-        onSubmitted: (_) => _submit(),
+          onSubmitted: (_) => _submit(),
+        ),
       ),
     );
   }
@@ -3905,13 +3928,17 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                           ),
                           child: Column(
                             children: [
-                              InkWell(
-                                borderRadius:
-                                    BorderRadius.circular(context.radiusCard),
-                                onTap: () => setState(() =>
+                              Semantics(
+                                button: true,
+                                expanded: isExpanded,
+                                label: 'Show community $name details',
+                                child: InkWell(
+                                  borderRadius:
+                                      BorderRadius.circular(context.radiusCard),
+                                  onTap: () => setState(() =>
                                     _expandedCommunityId =
                                         isExpanded ? null : id),
-                                child: Padding(
+                                  child: Padding(
                                   padding: EdgeInsets.all(context.cardPadding),
                                   child: Row(
                                     children: [
@@ -3959,6 +3986,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                               : Icons.keyboard_arrow_down,
                                           color: context.mutedColor),
                                     ],
+                                  ),
                                   ),
                                 ),
                               ),
@@ -4140,10 +4168,14 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
     required bool isSelected,
     required VoidCallback onTap,
   }) {
-    return InkWell(
-      onTap: onTap,
-      borderRadius: BorderRadius.circular(6),
-      child: Container(
+    return Semantics(
+      button: true,
+      selected: isSelected,
+      label: 'Show $label communities',
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(6),
+        child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
           color: isSelected
@@ -4161,6 +4193,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
           style: context.controlStyle.copyWith(
             color: isSelected ? context.primaryColor : context.mutedColor,
           ),
+        ),
         ),
       ),
     );

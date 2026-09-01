@@ -111,14 +111,23 @@ class _SidebarState extends State<Sidebar> {
             widget.state.human['display_name'] ??
             'Life')
         .toString();
-    final userName = fullUserName.split(RegExp(r'\s+')).first;
-    final houseName = (widget.state.life['houseName'] ??
+    final nameTokens = fullUserName.trim().split(RegExp(r'\s+'));
+    final userName = nameTokens.first;
+    final userSurname = nameTokens.length > 1 ? nameTokens.last : '';
+    
+    final rawHouseName = (widget.state.life['houseName'] ??
             widget.state.life['dynastyName'] ??
             widget.state.human['house_name'] ??
             widget.state.human['houseName'] ??
             widget.state.human['dynasty_name'])
         ?.toString()
-        .replaceFirst(RegExp(r'^house\s+', caseSensitive: false), '');
+        .trim();
+
+    final houseName = rawHouseName != null && rawHouseName.isNotEmpty
+        ? rawHouseName
+            .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
+            .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha')
+        : (userSurname.isNotEmpty ? userSurname : 'House');
 
     final unreadNotifs = widget.unreadNotifications > 0
         ? widget.unreadNotifications
@@ -438,8 +447,10 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.only(bottom: 2),
       child: SizedBox(
         width: double.infinity,
-        child: TextButton(
-          onPressed: onSelect,
+        child: Tooltip(
+          message: 'nav-$sectionKey',
+          child: TextButton(
+            onPressed: onSelect,
           style: TextButton.styleFrom(
             splashFactory: NoSplash.splashFactory,
             enableFeedback: false,
@@ -544,6 +555,7 @@ class _SidebarState extends State<Sidebar> {
           ),
         ),
       ),
-    );
-  }
+    ),
+  );
+}
 }

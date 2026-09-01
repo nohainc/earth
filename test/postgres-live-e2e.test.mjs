@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import 'dotenv/config';
 import { Client } from "pg";
 import { PostgresRepository } from "../cloudflare/src/repository.ts";
 import { loginIdentity } from "../cloudflare/src/auth-postgres.ts";
@@ -10,10 +11,11 @@ import { logAppError, listRecentAppErrors } from "../cloudflare/src/error-logger
 import { createProposal } from "../cloudflare/src/governance-postgres.ts";
 
 const DATABASE_URL = process.env.DATABASE_URL || "postgres://earth:earth_dev_only@localhost:5432/earth";
-const TEST_EMAIL = "vitalii.noga@gmail.com";
-const TEST_PASSWORD = "P@ssw0rdP@ssw0rd";
+const TEST_EMAIL = process.env.EARTH_TEST_EMAIL || "vitalii.noga@gmail.com";
+const TEST_PASSWORD = process.env.EARTH_TEST_PASSWORD;
 
 test("Live PostgreSQL Integration & E2E Suite", async (t) => {
+  assert.ok(TEST_PASSWORD, 'EARTH_TEST_PASSWORD must be configured in .env or the CI secret store');
   const client = new Client({ connectionString: DATABASE_URL });
   await client.connect();
   const repo = new PostgresRepository(client);

@@ -323,7 +323,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
 
     final houseName = (_house['house_name'] ?? _house['dynasty_name'] ?? 'House')
         .toString()
-        .replaceFirst(RegExp(r'^house\s+', caseSensitive: false), '');
+        .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
+        .replaceFirst(RegExp(r'^of\s+', caseSensitive: false), '')
+        .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha');
     final legacyPoints = _parseInt(_house['legacy_points'], fallback: 0);
 
     Widget topicsList = LayoutBuilder(

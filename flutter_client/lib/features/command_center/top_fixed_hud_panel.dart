@@ -351,13 +351,16 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
               // 4. HAMBURGER MENU FOR MOBILE / COLLAPSED SIDEBAR
               if (widget.showDrawerButton) ...[
                 const SizedBox(width: 4),
-                InkWell(
-                  onTap: widget.onOpenDrawer,
-                  borderRadius: BorderRadius.circular(8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(Icons.menu_rounded,
-                        size: 21, color: context.inkColor),
+                Tooltip(
+                  message: 'Open navigation menu',
+                  child: InkWell(
+                    onTap: widget.onOpenDrawer,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.menu_rounded,
+                          size: 21, color: context.inkColor),
+                    ),
                   ),
                 ),
               ],
@@ -763,6 +766,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     required bool isMobile,
   }) {
     return PopupMenuButton<String>(
+      tooltip: 'Account Menu',
       position: PopupMenuPosition.under,
       offset: const Offset(0, 8),
       constraints: const BoxConstraints(minWidth: 230, maxWidth: 270),

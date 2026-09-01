@@ -167,94 +167,104 @@ Future<void> showCommunityComposer(
                   Row(
                     children: [
                       Expanded(
-                        child: InkWell(
-                          onTap: () => setDialogState(() => admissionPolicy = 'open'),
-                          borderRadius: BorderRadius.circular(context.radiusControl),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(context.radiusControl),
-                              border: Border.all(
-                                color: admissionPolicy == 'open'
-                                    ? context.primaryColor
-                                    : context.subtleBorderColor,
-                                width: admissionPolicy == 'open' ? 2 : 1,
-                              ),
-                              color: admissionPolicy == 'open'
-                                  ? context.primaryColor.withValues(alpha: 0.1)
-                                  : Colors.transparent,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.lock_open_rounded,
-                                        size: 14,
-                                        color: admissionPolicy == 'open'
-                                            ? context.primaryColor
-                                            : context.mutedColor),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text('OPEN ACCESS',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: context.widgetTitleStyle.copyWith(
-                                              color: context.primaryColor)),
-                                    ),
-                                  ],
+                        child: Semantics(
+                          button: true,
+                          selected: admissionPolicy == 'open',
+                          label: 'OPEN ACCESS policy',
+                          child: InkWell(
+                            onTap: () => setDialogState(() => admissionPolicy = 'open'),
+                            borderRadius: BorderRadius.circular(context.radiusControl),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(context.radiusControl),
+                                border: Border.all(
+                                  color: admissionPolicy == 'open'
+                                      ? context.primaryColor
+                                      : context.subtleBorderColor,
+                                  width: admissionPolicy == 'open' ? 2 : 1,
                                 ),
-                                const SizedBox(height: 3),
-                                Text('Instant Join',
-                                    style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
-                              ],
+                                color: admissionPolicy == 'open'
+                                    ? context.primaryColor.withValues(alpha: 0.1)
+                                    : Colors.transparent,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.lock_open_rounded,
+                                          size: 14,
+                                          color: admissionPolicy == 'open'
+                                              ? context.primaryColor
+                                              : context.mutedColor),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text('OPEN ACCESS',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: context.widgetTitleStyle.copyWith(
+                                                color: context.primaryColor)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text('Instant Join',
+                                      style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
-                        child: InkWell(
-                          onTap: () => setDialogState(() => admissionPolicy = 'approval'),
-                          borderRadius: BorderRadius.circular(context.radiusControl),
-                          child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(context.radiusControl),
-                              border: Border.all(
-                                color: admissionPolicy == 'approval'
-                                    ? context.primaryColor
-                                    : context.subtleBorderColor,
-                                width: admissionPolicy == 'approval' ? 2 : 1,
-                              ),
-                              color: admissionPolicy == 'approval'
-                                  ? context.primaryColor.withValues(alpha: 0.1)
-                                  : Colors.transparent,
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Icon(Icons.verified_user_outlined,
-                                        size: 14,
-                                        color: admissionPolicy == 'approval'
-                                            ? context.primaryColor
-                                            : context.mutedColor),
-                                    const SizedBox(width: 4),
-                                    Flexible(
-                                      child: Text('APPROVAL REQUIRED',
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: context.widgetTitleStyle.copyWith(
-                                              color: context.primaryColor)),
-                                    ),
-                                  ],
+                        child: Semantics(
+                          button: true,
+                          selected: admissionPolicy == 'approval',
+                          label: 'APPROVAL REQUIRED policy',
+                          child: InkWell(
+                            onTap: () => setDialogState(() => admissionPolicy = 'approval'),
+                            borderRadius: BorderRadius.circular(context.radiusControl),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(context.radiusControl),
+                                border: Border.all(
+                                  color: admissionPolicy == 'approval'
+                                      ? context.primaryColor
+                                      : context.subtleBorderColor,
+                                  width: admissionPolicy == 'approval' ? 2 : 1,
                                 ),
-                                const SizedBox(height: 3),
-                                Text('Review Applicants',
-                                    style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
-                              ],
+                                color: admissionPolicy == 'approval'
+                                    ? context.primaryColor.withValues(alpha: 0.1)
+                                    : Colors.transparent,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(Icons.verified_user_outlined,
+                                          size: 14,
+                                          color: admissionPolicy == 'approval'
+                                              ? context.primaryColor
+                                              : context.mutedColor),
+                                      const SizedBox(width: 4),
+                                      Flexible(
+                                        child: Text('APPROVAL REQUIRED',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: context.widgetTitleStyle.copyWith(
+                                                color: context.primaryColor)),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 3),
+                                  Text('Review Applicants',
+                                      style: context.widgetFooterStyle.copyWith(color: context.mutedColor)),
+                                ],
+                              ),
                             ),
                           ),
                         ),

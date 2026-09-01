@@ -119,10 +119,14 @@ class EarthSection extends StatelessWidget {
                         SizedBox(width: context.spacingInline),
                       ],
                       Flexible(
-                        child: Text(
-                          title,
-                          style: context.topicTitleStyle,
-                          overflow: TextOverflow.ellipsis,
+                        child: Semantics(
+                          header: true,
+                          label: title,
+                          child: Text(
+                            title,
+                            style: context.topicTitleStyle,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
                       ),
                       if (hasInfo) ...[
