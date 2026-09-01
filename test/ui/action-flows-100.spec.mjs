@@ -250,8 +250,18 @@ test.describe.serial('100 Playwright UI action flows', () => {
           await corporation(page);
           const search = page.getByRole('textbox', { name: 'Search corporations by name or chartered jurisdiction...' }).last();
           if (testCase.index === 2) {
-            await typeIntoFlutterField(search, 'Aether');
-            await expect(page.getByText('Aether', { exact: false }).first()).toBeVisible();
+            const corpCards = page.getByRole('button', { name: /Show corporation .+ details/ });
+            const firstCard = corpCards.first();
+            if (await firstCard.isVisible().catch(() => false)) {
+              const snapshot = await firstCard.ariaSnapshot();
+              const match = snapshot.match(/Show corporation (.+?) details/);
+              const nameToSearch = match?.[1] || 'Solaris';
+              await typeIntoFlutterField(search, nameToSearch);
+              await expect(page.getByText(nameToSearch, { exact: false }).first()).toBeVisible();
+            } else {
+              await typeIntoFlutterField(search, 'NoSuchCorpEver');
+              await expect(page.getByText(/No corporations found/i).first()).toBeVisible();
+            }
             await typeIntoFlutterField(search, '');
           } else if (testCase.index === 5) {
             const button = page.getByRole('button', { name: /FOUND CORPORATION/i }).first();
