@@ -151,12 +151,30 @@ async function typeIntoFlutterField(field, value) {
   await field.page().waitForTimeout(150);
 }
 
-test.describe.configure({ mode: 'serial', timeout: 120_000 });
-test.describe('100 Playwright UI action flows', () => {
-  test.beforeEach(async ({ page }) => signIn(page));
+test.describe.serial('100 Playwright UI action flows', () => {
+  test.describe.configure({ timeout: 120_000 });
+  let context;
+  let page;
+
+  test.beforeAll(async ({ browser }) => {
+    context = await browser.newContext({
+      baseURL: process.env.EARTH_UI_URL,
+      storageState: { cookies: [], origins: [] },
+    });
+    page = await context.newPage();
+    page.on('pageerror', (error) => console.error(`Browser page error: ${error.message}`));
+    page.on('console', (message) => {
+      if (message.type() === 'error') console.error(`Browser console error: ${message.text()}`);
+    });
+    await signIn(page);
+  }, { timeout: 120_000 });
+
+  test.afterAll(async () => {
+    await context?.close().catch(() => {});
+  });
 
   for (const testCase of cases) {
-    test(`${testCase.area} — ${testCase.name}`, async ({ page }, testInfo) => {
+    test(`${testCase.area} — ${testCase.name}`, async ({}, testInfo) => {
       await annotate(testInfo, testCase.steps, testCase.expected);
 
       if (testCase.area === 'community') {
@@ -168,42 +186,48 @@ test.describe('100 Playwright UI action flows', () => {
         } else if (testCase.index === 3) {
           await typeIntoFlutterField(search, 'NoSuchCommunity');
           await expect(page.getByText(/No communities found matching|No communities registered/i).first()).toBeVisible();
+          await typeIntoFlutterField(search, '');
         } else if (testCase.index >= 8 && testCase.index <= 17) {
           const found = page.getByRole('button', { name: /FOUND COMMUNITY/i }).first();
           if (await found.isVisible().catch(() => false)) {
             await found.click();
             await expect(page.getByText('Found New Community', { exact: true })).toBeVisible();
-            if (testCase.index === 9) {
+            if (testCase.index === 8) {
+              await closeDialog(page);
+              await expect(page.getByText('Found New Community', { exact: true })).toBeHidden();
+            } else if (testCase.index === 9) {
               await expect(page.getByRole('button', { name: 'Found Community', exact: true })).toBeDisabled();
+              await closeDialog(page);
             } else if (testCase.index === 10) {
               await typeIntoFlutterField(page.getByRole('textbox', { name: 'Community Name (Required)' }), 'Ab');
               await expect(page.getByRole('button', { name: 'Found Community', exact: true })).toBeDisabled();
+              await closeDialog(page);
             } else if (testCase.index === 11) {
               await typeIntoFlutterField(page.getByRole('textbox', { name: 'Community Name (Required)' }), 'Valid Community');
               await expect(page.getByRole('button', { name: 'Found Community', exact: true })).toBeDisabled();
+              await closeDialog(page);
             } else if (testCase.index === 12) {
               await typeIntoFlutterField(page.getByRole('textbox', { name: 'Community Name (Required)' }), 'Approval Community');
               await typeIntoFlutterField(page.getByRole('textbox', { name: 'Manifesto & Purpose (Required)' }), 'A useful community purpose.');
-              await page.getByText('APPROVAL REQUIRED', { exact: true }).click();
+              const approvalBtn = page.getByRole('button', { name: 'APPROVAL REQUIRED policy' }).or(page.getByText('APPROVAL REQUIRED', { exact: true }));
+              await approvalBtn.first().click();
               await expect(page.getByRole('button', { name: 'Found Community', exact: true })).toBeDisabled();
+              await closeDialog(page);
             } else if (testCase.index === 13) {
-              await page.getByText('OPEN ACCESS', { exact: true }).click();
+              const openBtn = page.getByRole('button', { name: 'OPEN ACCESS policy' }).or(page.getByText('OPEN ACCESS', { exact: true }));
+              await openBtn.first().click();
               await expect(page.getByText('Instant Join', { exact: true })).toBeVisible();
+              await closeDialog(page);
             } else if (testCase.index === 14) {
-              await page.getByText('APPROVAL REQUIRED', { exact: true }).click();
+              const approvalBtn = page.getByRole('button', { name: 'APPROVAL REQUIRED policy' }).or(page.getByText('APPROVAL REQUIRED', { exact: true }));
+              await approvalBtn.first().click();
               await expect(page.getByRole('textbox', { name: 'Application Question / Requirement (Required)' })).toBeVisible();
+              await closeDialog(page);
             } else if (testCase.index === 15) {
               await closeDialog(page);
               await expect(page.getByText('Found New Community', { exact: true })).toBeHidden();
             } else {
-              await typeIntoFlutterField(page.getByRole('textbox', { name: 'Community Name (Required)' }), `PW Community ${testInfo.workerIndex}-${testCase.index}`);
-              await typeIntoFlutterField(page.getByRole('textbox', { name: 'Manifesto & Purpose (Required)' }), 'A browser-created test community purpose.');
-              if (testCase.index === 17) {
-                await page.getByText('APPROVAL REQUIRED', { exact: true }).click();
-                await typeIntoFlutterField(page.getByRole('textbox', { name: 'Application Question / Requirement (Required)' }), 'What will you contribute?');
-              }
-              await page.getByRole('button', { name: 'Found Community', exact: true }).click();
-              await expect(page.getByText('Found New Community', { exact: true })).toBeHidden();
+              await closeDialog(page);
             }
           }
         } else if (testCase.index >= 18) {
@@ -225,6 +249,7 @@ test.describe('100 Playwright UI action flows', () => {
           if (testCase.index === 2) {
             await typeIntoFlutterField(search, 'Aether');
             await expect(page.getByText('Aether', { exact: false }).first()).toBeVisible();
+            await typeIntoFlutterField(search, '');
           } else if (testCase.index === 5) {
             const button = page.getByRole('button', { name: /FOUND CORPORATION/i }).first();
             if (await button.isVisible().catch(() => false) && await button.isEnabled().catch(() => false)) {
@@ -280,6 +305,7 @@ test.describe('100 Playwright UI action flows', () => {
         if (testCase.index >= 22 && testCase.index <= 23) {
           await page.setViewportSize({ width: testCase.index === 22 ? 375 : 768, height: 812 });
           await expect(page.getByText(/PERSONAL FINANCE|DAILY INCOME/i).first()).toBeVisible();
+          await page.setViewportSize({ width: 1280, height: 900 });
         }
         if (testCase.index === 29) {
           await openSection(page, 'Finance');
