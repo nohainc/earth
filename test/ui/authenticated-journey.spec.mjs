@@ -49,6 +49,7 @@ const SECTION_GROUPS = {
   'Contracts': 'ECONOMY',
   'Public Governance': 'CIVIC',
   'City': 'CIVIC',
+  'Life': 'LIFE',
   'Finance': 'LIFE',
   'Account': 'LIFE',
   'House': 'LIFE',
@@ -107,50 +108,7 @@ async function openSection(page, sectionName, groupName) {
 }
 
 async function openUserLife(page) {
-  // If in compact/mobile drawer mode, open drawer first
-  const drawerToggle = page.getByRole('button', { name: 'Open navigation menu' });
-  if (await drawerToggle.isVisible().catch(() => false)) {
-    await drawerToggle.click();
-    await page.waitForTimeout(300);
-  }
-
-  // Ensure LIFE group accordion is open
-  const lifeButtons = page.getByRole('button', { name: 'LIFE', exact: true });
-  const lifeCount = await lifeButtons.count();
-  const lifeHeader = lifeCount > 1 ? lifeButtons.last() : lifeButtons.first();
-
-  const financeBtn = page.getByRole('button', { name: 'Finance', exact: true });
-  if (!await financeBtn.isVisible().catch(() => false)) {
-    if (await lifeHeader.isVisible().catch(() => false)) {
-      await lifeHeader.scrollIntoViewIfNeeded().catch(() => {});
-      await lifeHeader.click();
-      await page.waitForTimeout(300);
-    }
-  }
-
-  // Under LIFE, the items are: [UserName (e.g. 'Vitalii' or 'Amara' or 'Life'), House, Finance, Account]
-  const editNameBtn = page.getByRole('button', { name: 'Edit name', exact: true });
-  if (!await editNameBtn.isVisible().catch(() => false)) {
-    // Locate the user item by finding the button immediately before House or by finding 'Vitalii' / 'Life'
-    const userBtn = page.getByRole('button', { name: /^(Vitalii|Amara|Life)$/i })
-      .or(page.getByRole('button', { name: 'Vitalii', exact: true }))
-      .or(page.getByRole('button', { name: 'Life', exact: true }));
-    
-    if (await userBtn.first().isVisible().catch(() => false)) {
-      await userBtn.first().click();
-    } else {
-      // Fallback: click first button after LIFE group header
-      const buttons = await page.getByRole('button').all();
-      for (let i = 0; i < buttons.length; i++) {
-        const text = (await buttons[i].textContent().catch(() => '')).trim();
-        if (text === 'LIFE' && i + 1 < buttons.length) {
-          await buttons[i + 1].click();
-          break;
-        }
-      }
-    }
-  }
-
+  await openSection(page, 'Life', 'LIFE');
   await expect(page.getByRole('button', { name: 'Edit name', exact: true })).toBeVisible({ timeout: 30_000 });
 }
 

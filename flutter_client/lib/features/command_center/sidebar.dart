@@ -36,6 +36,12 @@ class _SidebarState extends State<Sidebar> {
   int _expandedGroup = 0;
 
   @override
+  void initState() {
+    super.initState();
+    _expandedGroup = _groupForSection(widget.selectedSection);
+  }
+
+  @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     _expandedGroup = _groupForSection(widget.selectedSection);
@@ -237,7 +243,7 @@ class _SidebarState extends State<Sidebar> {
         [
           (
             'life',
-            userName.isNotEmpty ? userName : 'Life',
+            'Life',
             Icons.person_outline_rounded,
             null,
           ),
