@@ -422,6 +422,20 @@ void main() {
       expect(find.text('INVEST (1)'), findsOneWidget);
       expect(find.text('Hyperloop Terminal Express × 1'), findsOneWidget);
       expect(find.text('INVESTMENT CATALOG'), findsOneWidget);
+
+      // Verify portfolio summary header metrics
+      expect(find.text('SHARES HELD'), findsOneWidget);
+      expect(find.text('10'), findsOneWidget);
+      expect(find.text('INVESTED'), findsOneWidget);
+      expect(find.text('5000 C'), findsOneWidget);
+
+      // Expand public investment group to verify individual details
+      await tester.tap(find.text('Hyperloop Terminal Express × 1'));
+      await tester.pumpAndSettle();
+
+      expect(find.textContaining('Available shares: 90 / 100'), findsOneWidget);
+      expect(find.textContaining('You hold: 10'), findsOneWidget);
+      expect(find.text('INVEST IN SHARES'), findsOneWidget);
     });
 
     testWidgets('Narrow viewport (375px mobile) switches to single-column layout with sub-tabs', (tester) async {
