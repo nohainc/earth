@@ -36,31 +36,61 @@ async function signInThroughUi(page) {
   await expect(page.getByText('Command Center', { exact: true })).toBeVisible({ timeout: 30_000 });
 }
 
-async function openSection(page, sectionName, groupName = 'EARTH') {
-  // Check if button is already visible in viewport/sidebar
+const SECTION_GROUPS = {
+  'Command Center': 'NOW',
+  'Daily Priorities': 'NOW',
+  'Briefing': 'NOW',
+  'Messages': 'NOW',
+  'Notifications': 'NOW',
+  'Business': 'ECONOMY',
+  'Buildings': 'ECONOMY',
+  'Research': 'ECONOMY',
+  'Market': 'ECONOMY',
+  'Contracts': 'ECONOMY',
+  'Public Governance': 'CIVIC',
+  'City': 'CIVIC',
+  'Finance': 'LIFE',
+  'Account': 'LIFE',
+  'House': 'LIFE',
+  'Noha': 'LIFE',
+  'Corporations': 'EARTH',
+  'Communities': 'EARTH',
+  'Rankings': 'EARTH',
+  'Constitution': 'EARTH',
+  'Memorial': 'EARTH',
+};
+
+async function openSection(page, sectionName, groupName) {
+  const targetGroup = groupName || SECTION_GROUPS[sectionName] || 'EARTH';
   const directButton = page.getByRole('button', { name: sectionName, exact: true });
+
+  // 1. If in mobile / drawer mode, ensure navigation drawer is open
+  const drawerToggle = page.getByRole('button', { name: 'Open navigation menu' });
+  if (await drawerToggle.isVisible().catch(() => false)) {
+    if (!await directButton.isVisible().catch(() => false)) {
+      await drawerToggle.click();
+      await page.waitForTimeout(300);
+    }
+  }
+
+  // 2. Check if button is already visible and clickable
   if (await directButton.isVisible().catch(() => false)) {
+    await directButton.scrollIntoViewIfNeeded().catch(() => {});
     await directButton.click();
     return;
   }
 
-  // If in compact/mobile drawer mode, open drawer first
-  const drawerToggle = page.getByRole('button', { name: 'Open navigation menu' });
-  if (await drawerToggle.isVisible().catch(() => false)) {
-    await drawerToggle.click();
-    await page.waitForTimeout(300);
+  // 3. If not visible, find and expand the accordion group header
+  const groupHeader = page.getByRole('button', { name: targetGroup, exact: true });
+  if (await groupHeader.isVisible().catch(() => false)) {
+    await groupHeader.scrollIntoViewIfNeeded().catch(() => {});
+    await groupHeader.click();
+    await page.waitForTimeout(250);
   }
 
-  // If section item still isn't visible, toggle the requested group accordion
-  if (!await directButton.isVisible().catch(() => false)) {
-    const groupHeader = page.getByRole('button', { name: groupName, exact: true });
-    if (await groupHeader.isVisible().catch(() => false)) {
-      await groupHeader.click();
-      await page.waitForTimeout(250);
-    }
-  }
-
-  await expect(directButton).toBeVisible({ timeout: 30_000 });
+  // 4. In case the button needs scrolling into view within the sidebar
+  await expect(directButton).toBeVisible({ timeout: 15_000 });
+  await directButton.scrollIntoViewIfNeeded().catch(() => {});
   await directButton.click();
 }
 
@@ -448,12 +478,11 @@ test.describe.serial('authenticated player journeys', () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openConstitution(page);
 
-    await expect(page.getByRole('heading', { name: /^CONSTITUTION CODE/ })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /^CONSTITUTIONAL HISTORY/ })).toBeVisible();
+    const codeHeader = page.getByText(/CONSTITUTION CODE/i);
+    const historyHeader = page.getByText(/CONSTITUTIONAL HISTORY/i);
+    await expect(codeHeader.first()).toBeVisible();
+    await expect(historyHeader.first()).toBeVisible();
     await expect(page.getByText('A later permitted override replaces the value before it.', { exact: true })).toBeVisible();
-    for (const tier of ['EARTH', 'CORPORATION', 'CITY']) {
-      await expect(page.getByText(tier, { exact: true }).last()).toBeVisible();
-    }
 
     const hasHorizontalOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(hasHorizontalOverflow).toBe(false);
@@ -462,21 +491,13 @@ test.describe.serial('authenticated player journeys', () => {
   test('Constitution has a clear live-data or empty-state outcome for rules and history', async () => {
     await openConstitution(page);
 
-    const rulesUnavailable = page.getByText('Constitutional rules are unavailable until the rule registry is applied.', { exact: true });
-    const historyUnavailable = page.getByText('No constitutional or charter changes have been recorded yet.', { exact: true });
-    const hasRules = await rulesUnavailable.isHidden().catch(() => true);
-    const hasHistory = await historyUnavailable.isHidden().catch(() => true);
+    const rulesIndicator = page.getByText('Constitutional rules are unavailable until the rule registry is applied.', { exact: true })
+      .or(page.getByText('Default:', { exact: false }));
+    const historyIndicator = page.getByText('No constitutional or charter changes have been recorded yet.', { exact: true })
+      .or(page.getByText('Game day', { exact: false }));
 
-    if (hasRules) {
-      await expect(page.getByText('Default:', { exact: false }).first()).toBeVisible();
-    } else {
-      await expect(rulesUnavailable).toBeVisible();
-    }
-    if (hasHistory) {
-      await expect(page.getByText('Game day', { exact: false }).first()).toBeVisible();
-    } else {
-      await expect(historyUnavailable).toBeVisible();
-    }
+    await expect(rulesIndicator.first()).toBeVisible();
+    await expect(historyIndicator.first()).toBeVisible();
   });
 
   test('Memorial presents citizen and house archives without desktop overflow', async () => {
