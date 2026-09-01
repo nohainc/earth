@@ -337,33 +337,28 @@ class _SidebarState extends State<Sidebar> {
                     ),
 
                     // EXPANDABLE ITEMS LIST
-                    AnimatedSize(
-                      duration: const Duration(milliseconds: 180),
-                      curve: Curves.easeOutCubic,
-                      child: _expandedGroup == groupIdx
-                          ? Padding(
-                              padding: const EdgeInsets.only(top: 4, bottom: 8),
-                              child: Column(
-                                children: [
-                                  for (final item in groups[groupIdx].$3)
-                                    _buildNavItem(
-                                      context,
-                                      sectionKey: item.$1,
-                                      label: item.$2,
-                                      icon: item.$3,
-                                      badge: item.$4,
-                                      isSelected:
-                                          item.$1 == widget.selectedSection,
-                                      onSelect: () {
-                                        EarthAudioEngine.instance.playClick();
-                                        widget.onNavigate(item.$1);
-                                      },
-                                    ),
-                                ],
+                    if (_expandedGroup == groupIdx)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 4, bottom: 8),
+                        child: Column(
+                          children: [
+                            for (final item in groups[groupIdx].$3)
+                              _buildNavItem(
+                                context,
+                                sectionKey: item.$1,
+                                label: item.$2,
+                                icon: item.$3,
+                                badge: item.$4,
+                                isSelected:
+                                    item.$1 == widget.selectedSection,
+                                onSelect: () {
+                                  EarthAudioEngine.instance.playClick();
+                                  widget.onNavigate(item.$1);
+                                },
                               ),
-                            )
-                          : const SizedBox.shrink(),
-                    ),
+                          ],
+                        ),
+                      ),
                   ],
                 ],
               ),

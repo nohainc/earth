@@ -87,10 +87,18 @@ async function openSection(page, sectionName, groupName) {
   if (await groupHeader.first().isVisible().catch(() => false)) {
     await groupHeader.first().scrollIntoViewIfNeeded().catch(() => {});
     await groupHeader.first().click();
-    await page.waitForTimeout(250);
+    await page.waitForTimeout(300);
   }
 
-  // 4. In case the button needs scrolling into view within the sidebar
+  // 4. Wait for the child button to appear and click it
+  if (!await directButton.first().isVisible().catch(() => false)) {
+    // Retry clicking the group header if it was previously closed
+    if (await groupHeader.first().isVisible().catch(() => false)) {
+      await groupHeader.first().click();
+      await page.waitForTimeout(300);
+    }
+  }
+
   await expect(directButton.first()).toBeVisible({ timeout: 15_000 });
   await directButton.first().scrollIntoViewIfNeeded().catch(() => {});
   await directButton.first().click();
