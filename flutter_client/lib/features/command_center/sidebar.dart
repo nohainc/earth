@@ -385,60 +385,60 @@ class _SidebarState extends State<Sidebar> {
   }) {
     return Padding(
       padding: EdgeInsets.only(top: isFirst ? 0 : 8, bottom: 2),
-      child: Material(
-        color: Colors.transparent,
-        child: Semantics(
-          button: true,
-          label: title,
-          container: true,
-          child: InkWell(
-            onTap: onTap,
-            borderRadius: BorderRadius.circular(8),
-            hoverColor: context.surfaceColor.withValues(alpha: 0.6),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-              child: Row(
-                children: [
-                  Icon(
-                    icon,
-                    size: 14,
+      child: SizedBox(
+        width: double.infinity,
+        child: TextButton(
+          onPressed: onTap,
+          style: TextButton.styleFrom(
+            splashFactory: NoSplash.splashFactory,
+            enableFeedback: false,
+            foregroundColor: isExpanded ? context.primaryColor : context.mutedColor,
+            backgroundColor: Colors.transparent,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(8),
+            ),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+            alignment: Alignment.centerLeft,
+          ),
+          child: Row(
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isExpanded
+                    ? context.primaryColor
+                    : context.mutedColor.withValues(alpha: 0.8),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.5,
                     color: isExpanded
                         ? context.primaryColor
-                        : context.mutedColor.withValues(alpha: 0.8),
+                        : context.mutedColor,
                   ),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      title,
-                      style: TextStyle(
-                        fontSize: 10.5,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.5,
-                        color: isExpanded
-                            ? context.primaryColor
-                            : context.mutedColor,
-                      ),
-                    ),
-                  ),
-                  AnimatedRotation(
-                    turns: isExpanded ? 0.5 : 0.0,
-                    duration: const Duration(milliseconds: 180),
-                    child: Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      size: 16,
-                      color: context.mutedColor.withValues(alpha: 0.7),
-                    ),
-                  ),
-                ],
+                ),
               ),
-            ),
+              AnimatedRotation(
+                turns: isExpanded ? 0.5 : 0.0,
+                duration: const Duration(milliseconds: 180),
+                child: Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  size: 16,
+                  color: context.mutedColor.withValues(alpha: 0.7),
+                ),
+              ),
+            ],
           ),
         ),
       ),
     );
   }
 
-  // --- NAVIGATION ITEM WIDGET ---
   Widget _buildNavItem(
     BuildContext context, {
     required String sectionKey,
@@ -452,34 +452,29 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.only(bottom: 2),
       child: SizedBox(
         width: double.infinity,
-        child: Semantics(
-          container: true,
-          button: true,
-          label: label,
-          selected: isSelected,
-          child: Tooltip(
-            message: 'nav-$sectionKey',
-            child: TextButton(
-              onPressed: onSelect,
-              style: TextButton.styleFrom(
-                splashFactory: NoSplash.splashFactory,
-                enableFeedback: false,
-                foregroundColor: context.primaryColor,
-                backgroundColor: isSelected
-                    ? context.primaryColor.withValues(alpha: 0.14)
-                    : Colors.transparent,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(8),
-                  side: isSelected
-                      ? BorderSide(
-                          color: context.primaryColor.withValues(alpha: 0.32),
-                          width: 0.8,
-                        )
-                      : BorderSide.none,
-                ),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-                alignment: Alignment.centerLeft,
+        child: Tooltip(
+          message: 'nav-$sectionKey',
+          child: TextButton(
+            onPressed: onSelect,
+            style: TextButton.styleFrom(
+              splashFactory: NoSplash.splashFactory,
+              enableFeedback: false,
+              foregroundColor: context.primaryColor,
+              backgroundColor: isSelected
+                  ? context.primaryColor.withValues(alpha: 0.14)
+                  : Colors.transparent,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+                side: isSelected
+                    ? BorderSide(
+                        color: context.primaryColor.withValues(alpha: 0.32),
+                        width: 0.8,
+                      )
+                    : BorderSide.none,
               ),
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+              alignment: Alignment.centerLeft,
+            ),
               child: Row(
                 children: [
                   // Fixed-width Indicator Slot (preserves exact horizontal alignment across all items)

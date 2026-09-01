@@ -62,36 +62,38 @@ const SECTION_GROUPS = {
 
 async function openSection(page, sectionName, groupName) {
   const targetGroup = groupName || SECTION_GROUPS[sectionName] || 'EARTH';
-  const directButton = page.getByRole('button', { name: sectionName, exact: true });
+  const directButton = page.getByRole('button', { name: sectionName, exact: true })
+    .or(page.getByText(sectionName, { exact: true }));
 
   // 1. If in mobile / drawer mode, ensure navigation drawer is open
   const drawerToggle = page.getByRole('button', { name: 'Open navigation menu' });
   if (await drawerToggle.isVisible().catch(() => false)) {
-    if (!await directButton.isVisible().catch(() => false)) {
+    if (!await directButton.first().isVisible().catch(() => false)) {
       await drawerToggle.click();
       await page.waitForTimeout(300);
     }
   }
 
   // 2. Check if button is already visible and clickable
-  if (await directButton.isVisible().catch(() => false)) {
-    await directButton.scrollIntoViewIfNeeded().catch(() => {});
-    await directButton.click();
+  if (await directButton.first().isVisible().catch(() => false)) {
+    await directButton.first().scrollIntoViewIfNeeded().catch(() => {});
+    await directButton.first().click();
     return;
   }
 
   // 3. If not visible, find and expand the accordion group header
-  const groupHeader = page.getByRole('button', { name: targetGroup, exact: true });
-  if (await groupHeader.isVisible().catch(() => false)) {
-    await groupHeader.scrollIntoViewIfNeeded().catch(() => {});
-    await groupHeader.click();
+  const groupHeader = page.getByRole('button', { name: targetGroup, exact: true })
+    .or(page.getByText(targetGroup, { exact: true }));
+  if (await groupHeader.first().isVisible().catch(() => false)) {
+    await groupHeader.first().scrollIntoViewIfNeeded().catch(() => {});
+    await groupHeader.first().click();
     await page.waitForTimeout(250);
   }
 
   // 4. In case the button needs scrolling into view within the sidebar
-  await expect(directButton).toBeVisible({ timeout: 15_000 });
-  await directButton.scrollIntoViewIfNeeded().catch(() => {});
-  await directButton.click();
+  await expect(directButton.first()).toBeVisible({ timeout: 15_000 });
+  await directButton.first().scrollIntoViewIfNeeded().catch(() => {});
+  await directButton.first().click();
 }
 
 async function openUserLife(page) {
