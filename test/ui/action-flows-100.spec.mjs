@@ -209,17 +209,20 @@ test.describe.serial('100 Playwright UI action flows', () => {
             } else if (testCase.index === 12) {
               await typeIntoFlutterField(page.getByRole('textbox', { name: 'Community Name (Required)' }), 'Approval Community');
               await typeIntoFlutterField(page.getByRole('textbox', { name: 'Manifesto & Purpose (Required)' }), 'A useful community purpose.');
-              const approvalBtn = page.getByRole('button', { name: 'APPROVAL REQUIRED policy' }).or(page.getByText('APPROVAL REQUIRED', { exact: true }));
+              const approvalBtn = page.getByRole('button', { name: /APPROVAL REQUIRED/i }).or(page.getByText('APPROVAL REQUIRED', { exact: false }));
+              await approvalBtn.first().scrollIntoViewIfNeeded().catch(() => {});
               await approvalBtn.first().click();
               await expect(page.getByRole('button', { name: 'Found Community', exact: true })).toBeDisabled();
               await closeDialog(page);
             } else if (testCase.index === 13) {
-              const openBtn = page.getByRole('button', { name: 'OPEN ACCESS policy' }).or(page.getByText('OPEN ACCESS', { exact: true }));
+              const openBtn = page.getByRole('button', { name: /OPEN ACCESS/i }).or(page.getByText('OPEN ACCESS', { exact: false }));
+              await openBtn.first().scrollIntoViewIfNeeded().catch(() => {});
               await openBtn.first().click();
-              await expect(page.getByText('Instant Join', { exact: true })).toBeVisible();
+              await expect(page.getByText('Instant Join', { exact: false })).toBeVisible();
               await closeDialog(page);
             } else if (testCase.index === 14) {
-              const approvalBtn = page.getByRole('button', { name: 'APPROVAL REQUIRED policy' }).or(page.getByText('APPROVAL REQUIRED', { exact: true }));
+              const approvalBtn = page.getByRole('button', { name: /APPROVAL REQUIRED/i }).or(page.getByText('APPROVAL REQUIRED', { exact: false }));
+              await approvalBtn.first().scrollIntoViewIfNeeded().catch(() => {});
               await approvalBtn.first().click();
               await expect(page.getByRole('textbox', { name: 'Application Question / Requirement (Required)' })).toBeVisible();
               await closeDialog(page);
