@@ -209,7 +209,7 @@ async function openCommandCenter(page) {
 }
 
 async function openBriefing(page) {
-  await openSection(page, 'Briefing', 'NOW').catch(() => openSection(page, 'Daily Priorities', 'NOW'));
+  await openSection(page, 'Daily Priorities', 'NOW');
   const briefingHeader = page.getByText(/SINCE YOUR LAST VISIT|WHAT REQUIRES ATTENTION|NET WORTH/i);
   await expect(briefingHeader.first()).toBeVisible({ timeout: 30_000 });
 }
