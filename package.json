@@ -20,6 +20,7 @@
     "test:integration": "./scripts/run-integration-tests.sh",
     "test:ui": "bash ./scripts/run-ui-tests.sh",
     "test:ui:headed": "EARTH_UI_HEADED=true bash ./scripts/run-ui-tests.sh",
+    "test:all": "node scripts/run-all-tests.mjs",
     "test:coverage": "c8 --reporter=text --reporter=lcov node --experimental-strip-types --test test/objectives.test.mjs test/governance-rules.test.mjs test/economic-simulation-invariants.test.mjs",
     "test:coverage:check": "c8 check-coverage --lines 80 --functions 80 --branches 70",
     "test:e2e": "node --test test/browser.e2e.test.mjs",
