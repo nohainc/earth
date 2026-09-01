@@ -62,8 +62,7 @@ const SECTION_GROUPS = {
 
 async function openSection(page, sectionName, groupName) {
   const targetGroup = groupName || SECTION_GROUPS[sectionName] || 'EARTH';
-  const directButton = page.getByRole('button', { name: sectionName, exact: true })
-    .or(page.getByText(sectionName, { exact: true }));
+  const directButton = page.getByRole('button', { name: sectionName, exact: true });
 
   // 1. If in mobile / drawer mode, ensure navigation drawer is open
   const drawerToggle = page.getByRole('button', { name: 'Open navigation menu' });
@@ -81,20 +80,23 @@ async function openSection(page, sectionName, groupName) {
     return;
   }
 
-  // 3. If not visible, find and expand the accordion group header
-  const groupHeader = page.getByRole('button', { name: targetGroup, exact: true })
-    .or(page.getByText(targetGroup, { exact: true }));
-  if (await groupHeader.first().isVisible().catch(() => false)) {
-    await groupHeader.first().scrollIntoViewIfNeeded().catch(() => {});
-    await groupHeader.first().click();
+  // 3. Find and click the accordion group header in the sidebar
+  // Group headers have titles: NOW, ECONOMY, CIVIC, LIFE, EARTH
+  const groupButtons = page.getByRole('button', { name: targetGroup, exact: true });
+  const count = await groupButtons.count();
+  // If multiple buttons match (e.g. top HUD "EARTH" vs sidebar "EARTH"), select the sidebar one (last)
+  const groupHeader = count > 1 ? groupButtons.last() : groupButtons.first();
+
+  if (await groupHeader.isVisible().catch(() => false)) {
+    await groupHeader.scrollIntoViewIfNeeded().catch(() => {});
+    await groupHeader.click();
     await page.waitForTimeout(300);
   }
 
-  // 4. Wait for the child button to appear and click it
+  // 4. If direct button still not visible, re-click groupHeader
   if (!await directButton.first().isVisible().catch(() => false)) {
-    // Retry clicking the group header if it was previously closed
-    if (await groupHeader.first().isVisible().catch(() => false)) {
-      await groupHeader.first().click();
+    if (await groupHeader.isVisible().catch(() => false)) {
+      await groupHeader.evaluate((el) => el.click()).catch(() => {});
       await page.waitForTimeout(300);
     }
   }

@@ -447,8 +447,10 @@ class _SidebarState extends State<Sidebar> {
       padding: const EdgeInsets.only(bottom: 2),
       child: SizedBox(
         width: double.infinity,
-        child: Tooltip(
-          message: 'nav-$sectionKey',
+        child: Semantics(
+          button: true,
+          label: label,
+          selected: isSelected,
           child: TextButton(
             onPressed: onSelect,
             style: TextButton.styleFrom(
