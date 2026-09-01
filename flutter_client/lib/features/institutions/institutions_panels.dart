@@ -134,11 +134,11 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       }
     });
     try {
-      final rows =
-          await const EarthApi().listCorporations(search: _search.text);
+      final query = _search.text.trim();
+      final rows = await const EarthApi().listCorporations(search: query);
       if (!mounted || generation != _searchGeneration) return;
       setState(() {
-        _corporations = rows.isNotEmpty ? rows : fallback;
+        _corporations = (rows.isEmpty && query.isEmpty) ? fallback : rows;
         if (widget.selectedCorporationId != null) {
           _selected = _corporations.firstWhere(
             (r) => r['id']?.toString() == widget.selectedCorporationId,
@@ -161,7 +161,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     } catch (_) {
       if (mounted && generation == _searchGeneration) {
         setState(() {
-          if (_corporations.isEmpty && fallback.isNotEmpty) {
+          if (_corporations.isEmpty && _search.text.trim().isEmpty && fallback.isNotEmpty) {
             _corporations = fallback;
             _selected = _corporations.first;
             widget.onSelectCorporation?.call(_selected!);
