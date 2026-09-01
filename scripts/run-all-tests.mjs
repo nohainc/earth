@@ -7,52 +7,92 @@ import { fileURLToPath } from 'node:url';
 const projectRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const flutterDir = join(projectRoot, 'flutter_client');
 
+const stepResults = [];
+
 async function runStep(name, command, args, cwd = projectRoot) {
   console.log(`\n============================================================`);
   console.log(`[TEST PIPELINE] Step: ${name}`);
   console.log(`Command: ${command} ${args.join(' ')} (in ${cwd})`);
   console.log(`============================================================\n`);
 
-  const code = await new Promise((resolve, reject) => {
-    const child = spawn(command, args, {
-      cwd,
-      env: process.env,
-      stdio: 'inherit',
+  const stepStart = Date.now();
+  let status = 'PASSED';
+  let exitCode = 0;
+
+  try {
+    exitCode = await new Promise((resolve, reject) => {
+      const child = spawn(command, args, {
+        cwd,
+        env: process.env,
+        stdio: 'inherit',
+      });
+      child.once('error', reject);
+      child.once('exit', (code) => resolve(code ?? 1));
     });
-    child.once('error', reject);
-    child.once('exit', (exitCode) => resolve(exitCode ?? 1));
+  } catch (err) {
+    status = 'ERROR';
+    exitCode = 1;
+  }
+
+  const durationSec = ((Date.now() - stepStart) / 1000).toFixed(1);
+
+  if (exitCode !== 0) {
+    status = 'FAILED';
+  }
+
+  stepResults.push({
+    step: name,
+    command: `${command} ${args.join(' ')}`,
+    duration: `${durationSec}s`,
+    status,
   });
 
-  if (code !== 0) {
-    console.error(`\n❌ [TEST PIPELINE] Step "${name}" failed with exit code ${code}.`);
-    process.exit(code);
+  if (exitCode !== 0) {
+    console.error(`\n❌ [TEST PIPELINE] Step "${name}" failed with exit code ${exitCode}.`);
+    printSummary(false);
+    process.exit(exitCode);
   }
-  console.log(`\n✅ [TEST PIPELINE] Step "${name}" passed successfully.`);
+
+  console.log(`\n✅ [TEST PIPELINE] Step "${name}" passed in ${durationSec}s.`);
+}
+
+function printSummary(allPassed = true) {
+  console.log(`\n\n============================================================`);
+  console.log(`📊 EARTH TEST PIPELINE SUMMARY REPORT`);
+  console.log(`============================================================`);
+  console.table(stepResults);
+
+  const totalTime = stepResults
+    .reduce((sum, item) => sum + parseFloat(item.duration), 0)
+    .toFixed(1);
+
+  if (allPassed) {
+    console.log(`🎉 ALL ${stepResults.length} TEST TIERS COMPLETED SUCCESSFULLY in ${totalTime}s!`);
+  } else {
+    console.log(`⚠️ PIPELINE FAILED after ${totalTime}s.`);
+  }
+  console.log(`============================================================\n`);
 }
 
 async function main() {
-  const startTime = Date.now();
   console.log(`🚀 Starting Complete Earth Test Suite Pipeline\n`);
 
   // Step 1: Flutter Static Analysis
   await runStep('1. Flutter Static Analysis', 'flutter', ['analyze'], flutterDir);
 
   // Step 2: Flutter Unit, Widget & Golden Test Suite
-  await runStep('2. Flutter Test Suite', 'flutter', ['test'], flutterDir);
+  await runStep('2. Flutter Test Suite (84+ files, 245+ tests, goldens)', 'flutter', ['test'], flutterDir);
 
   // Step 3: Flutter Web Build Verification
   await runStep('3. Flutter Web Release Build', 'flutter', ['build', 'web', '--release'], flutterDir);
 
   // Step 4: Backend & Database Integrity Suite
-  await runStep('4. Backend & Database Tests', 'npm', ['test'], projectRoot);
+  await runStep('4. Backend & Database Integrity Suite', 'npm', ['test'], projectRoot);
 
   // Step 5: Playwright Authenticated Browser Journeys
-  await runStep('5. Playwright UI Journeys', 'node', ['scripts/run-ui-tests.mjs'], projectRoot);
+  await runStep('5. Playwright E2E UI Journeys (61 journeys)', 'node', ['scripts/run-ui-tests.mjs'], projectRoot);
 
-  const durationSec = ((Date.now() - startTime) / 1000).toFixed(1);
-  console.log(`\n============================================================`);
-  console.log(`🎉 ALL TEST TIERS COMPLETED SUCCESSFULLY in ${durationSec}s!`);
-  console.log(`============================================================\n`);
+  printSummary(true);
 }
 
 main().catch((err) => {
