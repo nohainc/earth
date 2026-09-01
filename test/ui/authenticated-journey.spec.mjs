@@ -1386,16 +1386,38 @@ test.describe.serial('authenticated player journeys', () => {
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.waitForTimeout(300);
 
-    await expect(page.getByRole('button', { name: /PRIVATE \(/i })).toBeVisible();
+    const privateTabTablet = page.getByRole('button', { name: /PRIVATE \(/i });
+    const civicTabTablet = page.getByRole('button', { name: /CIVIC \(/i });
+    const investTabTablet = page.getByRole('button', { name: /INVEST \(/i });
+
+    await expect(privateTabTablet).toBeVisible();
+    await expect(civicTabTablet).toBeVisible();
+    await expect(investTabTablet).toBeVisible();
+
+    // Verify building operational controls remain visible at 768px
+    await expect(page.getByRole('button', { name: /Bistro & Molecular Restaurant|Auto-repair|Policy/i }).first()).toBeVisible();
 
     let hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(hasOverflow).toBe(false);
 
-    // 2. Mobile Viewport
+    // 2. Mobile Viewport (375px)
     await page.setViewportSize({ width: 375, height: 667 });
     await page.waitForTimeout(300);
 
-    await expect(page.getByRole('button', { name: /PRIVATE \(/i })).toBeVisible();
+    // Verify ownership tabs and mobile sub-tabs (BUILT / CATALOG)
+    const privateTabMobile = page.getByRole('button', { name: /PRIVATE \(/i });
+    await expect(privateTabMobile).toBeVisible();
+
+    const builtSubTab = page.getByRole('button', { name: 'BUILT', exact: true }).or(page.getByText('BUILT', { exact: true }));
+    const catalogSubTab = page.getByRole('button', { name: 'CATALOG', exact: true }).or(page.getByText('CATALOG', { exact: true }));
+    
+    if (await builtSubTab.first().isVisible().catch(() => false)) {
+      await expect(builtSubTab.first()).toBeVisible();
+      await expect(catalogSubTab.first()).toBeVisible();
+    }
+
+    // Verify building card remains visible and reachable without layout clipping
+    await expect(page.getByRole('button', { name: /Bistro & Molecular Restaurant|Auto-repair|Policy/i }).first()).toBeVisible();
 
     hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(hasOverflow).toBe(false);
