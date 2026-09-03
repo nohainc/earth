@@ -16,14 +16,22 @@ void main() {
       'institutions': {'city': {}, 'corporation': {}},
       'life': {},
       'governance': {
+        'rules': [
+          {
+            'institution_id': 'OUC-001',
+            'quorum_threshold': 0.3,
+            'approval_threshold': 0.5,
+            'voting_period_days': 3,
+            'implementation_delay_days': 2,
+            'status': 'active',
+          }
+        ],
         'proposals': [
           {
             'id': 'PROP-101',
             'title': 'Infrastructure levy adjustment',
-            'status': 'active',
+            'status': 'open',
             'outcome': 'pending',
-            'quorum': 0.3,
-            'approval_threshold': 0.5,
             'votes': {'support': 12, 'oppose': 3, 'uncast': 5},
           }
         ]
@@ -48,7 +56,7 @@ void main() {
 
     expect(find.text('UC PROPOSAL PROP-101'), findsOneWidget);
     expect(find.text('Infrastructure levy adjustment'), findsOneWidget);
-    expect(find.text('Quorum 30% · approval 50%'), findsOneWidget);
+    expect(find.textContaining('30% quorum · 50% approval'), findsOneWidget);
     expect(find.text('Support 12  ·  Oppose 3  ·  Uncast 5'), findsOneWidget);
     expect(find.text('support'), findsOneWidget);
     expect(find.text('oppose'), findsOneWidget);

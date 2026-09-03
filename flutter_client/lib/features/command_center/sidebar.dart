@@ -57,7 +57,7 @@ class _SidebarState extends State<Sidebar> {
 
   int _groupForSection(String section) {
     if (section.startsWith('my-community')) return 2;
-    if (section == 'corporations') return 2;
+    if (section == 'corporations') return 4;
     const groups = [
       ['command', 'briefing', 'messages', 'notifications'],
       [
@@ -108,8 +108,8 @@ class _SidebarState extends State<Sidebar> {
         ? corporation['name']?.toString() ?? 'Corporations'
         : 'Corporations';
     final cityName = isCorporationMember && city is Map
-        ? city['name']?.toString() ?? 'My City'
-        : 'Cities';
+        ? city['name']?.toString() ?? 'City & Services'
+        : 'City & Services';
 
     final myCommunities = widget.state.myCommunities;
 
@@ -208,26 +208,20 @@ class _SidebarState extends State<Sidebar> {
         'CIVIC',
         Icons.account_balance_rounded,
         [
-          if (isCorporationMember)
+          if (isCorporationMember) ...[
             (
               'corporation',
               corporationName,
               Icons.account_balance_outlined,
               null,
-            )
-          else
+            ),
             (
-              'corporations',
-              'Corporations',
-              Icons.domain_outlined,
+              'city',
+              cityName,
+              Icons.location_city_outlined,
               null,
             ),
-          (
-            'city',
-            cityName,
-            Icons.location_city_outlined,
-            null,
-          ),
+          ],
           for (final comm in myCommunities)
             (
               'my-community:${comm['id']}',
@@ -249,7 +243,7 @@ class _SidebarState extends State<Sidebar> {
         [
           (
             'life',
-            userName.isNotEmpty == true ? userName : 'Life',
+            'Life',
             Icons.person_outline_rounded,
             null,
           ),
@@ -277,6 +271,12 @@ class _SidebarState extends State<Sidebar> {
         'EARTH',
         Icons.public_rounded,
         [
+          (
+            'corporations',
+            'Corporations',
+            Icons.domain_outlined,
+            null,
+          ),
           (
             'communities',
             'Communities',

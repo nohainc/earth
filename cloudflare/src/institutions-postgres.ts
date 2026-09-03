@@ -51,7 +51,8 @@ export async function createCity(repository: PostgresRepository, input: { founde
     const founder = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND life_status = 'active' AND account_status = 'active'", [input.founderId]);
     if (!founder.rows[0]) throw new Error('Founder not found or inactive');
     const founderMembership = await tx.query<{ corporation_id: string | null; city_id: string | null }>('SELECT corporation_id, city_id FROM memberships WHERE human_id = $1', [input.founderId]);
-    if (founderMembership.rows[0]?.city_id) throw new Error('Founder already belongs to a City');
+    const corporationId = founderMembership.rows[0]?.corporation_id ?? null;
+    if (!corporationId) throw new Error('Only Corporation members can form a City');
     const communityId = input.communityId?.trim() || null;
     if (communityId) {
       const communityMember = await tx.query('SELECT human_id FROM community_members WHERE community_id = $1 AND human_id = $2', [communityId, input.founderId]);
@@ -62,9 +63,10 @@ export async function createCity(repository: PostgresRepository, input: { founde
     const gameDay = await day(tx);
     const members = communityId
       ? await tx.query<{ human_id: string }>("SELECT cm.human_id FROM community_members cm JOIN humans h ON h.id = cm.human_id LEFT JOIN memberships m ON m.human_id = cm.human_id WHERE cm.community_id = $1 AND h.life_status = 'active' AND m.city_id IS NULL", [communityId])
-      : { rows: [{ human_id: input.founderId }] };
+      : founderMembership.rows[0]?.city_id
+          ? { rows: [] }
+          : { rows: [{ human_id: input.founderId }] };
     const residents = members.rows.length;
-    const corporationId = founderMembership.rows[0]?.corporation_id ?? null;
     // City creation fires daily-settlement profile provisioning. Register the
     // city owner before inserting the institution/city rows.
     await tx.query("INSERT INTO owner_registry (id, owner_type, source_id) VALUES ($1, 'city', $1)", [cityId]);

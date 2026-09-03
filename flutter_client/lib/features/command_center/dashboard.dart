@@ -560,9 +560,11 @@ class Dashboard extends StatelessWidget {
       case 'city':
         if (state.membership?['city_id']?.toString().isNotEmpty != true) {
           return [
-            CityFormationAccessPanel(
-              busy: busy,
-              action: action,
+            const AffiliationRequiredPanel(
+              title: 'CITY ACCESS',
+              icon: Icons.location_city_outlined,
+              message:
+                  'Independent users cannot form cities directly. Join a corporation to access city formation and create an additional city in its network.',
             ),
           ];
         }

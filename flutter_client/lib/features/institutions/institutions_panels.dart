@@ -3065,6 +3065,18 @@ class CorporationOverviewPanel extends StatelessWidget {
               children: [
                 if (isAffiliated) ...[
                   EarthButton(
+                    label: 'FORM CITY',
+                    icon: Icons.add_business_outlined,
+                    variant: EarthButtonVariant.primary,
+                    onPressed: busy
+                        ? null
+                        : () => showFormationComposer(
+                              context,
+                              action ?? ((_) async {}),
+                              city: true,
+                            ),
+                  ),
+                  EarthButton(
                     label: 'CORPORATION RULES',
                     icon: Icons.gavel_outlined,
                     variant: EarthButtonVariant.secondary,

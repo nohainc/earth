@@ -24,7 +24,7 @@ void main() {
       'gameMinute': 720,
       'realSecondsRemaining': 90000,
     };
-    expect(formatProposalDeadline(deadlineDays).contains('Closes game day 185 at 12:00'), true);
+    expect(formatProposalDeadline(deadlineDays).contains('Closes YEAR 1   DAY 185   12:00'), true);
     expect(formatProposalDeadline(deadlineDays).contains('1d 1h'), true);
 
     final deadlineHours = {
@@ -32,7 +32,7 @@ void main() {
       'game_minute': 60,
       'real_seconds_remaining': 7200,
     };
-    expect(formatProposalDeadline(deadlineHours).contains('Closes game day 186 at 01:00'), true);
+    expect(formatProposalDeadline(deadlineHours).contains('Closes YEAR 1   DAY 186   01:00'), true);
     expect(formatProposalDeadline(deadlineHours).contains('2h 0m'), true);
 
     final deadlineMinutes = {

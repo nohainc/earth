@@ -59,6 +59,7 @@ void main() {
         'activePatents': 0,
         'activeLicenses': 0,
       },
+      'membership': {'corporation_id': 'CORP-001'},
       'institutions': {},
       'life': {},
       'governance': {},
