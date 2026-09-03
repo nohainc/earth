@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { projectGameDeadline } from './game-clock.ts';
+import { projectGameDeadline, getAuthoritativeGameTime } from './game-clock.ts';
 import { rankOpportunities } from './opportunities.ts';
 import { marketFeeRate } from './market-rules.ts';
 import { generateDecisionQueue } from './decision-queue.ts';
@@ -63,10 +63,33 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const corporationSharedTechnology = { rows: [] as Array<Record<string, unknown>> };
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};
-  const currentGameDay = Number(worldRow.game_day ?? 184);
-  const currentGameMinute = Number(worldRow.game_minute ?? 0);
+  const authoritativeTime = getAuthoritativeGameTime({
+    genesisAt: worldRow.genesis_at,
+    simulatedDayOffset: worldRow.simulated_day_offset,
+  });
+  const currentGameDay = authoritativeTime.gameDay;
+  const currentGameMinute = authoritativeTime.gameMinute;
+  const currentTotalMinute = authoritativeTime.totalGameMinutes;
   const city = cityMetrics.rows[0] as Row | undefined;
   const corporation = corporationMetrics.rows[0] as Row | undefined;
+  const corporationBuildingResearch = corporation?.id
+    ? await Promise.all([
+        repository.query(`SELECT p.*, c.name AS catalog_name
+          FROM corporation_building_research_projects p
+          JOIN building_catalog c ON c.id = p.catalog_id
+          WHERE p.corporation_id = $1
+          ORDER BY p.created_at DESC`, [corporation.id]).catch(() => ({ rows: [] })),
+        repository.query(`SELECT u.*, c.name AS catalog_name, c.building_type, c.tier
+          FROM corporation_building_unlocks u
+          JOIN building_catalog c ON c.id = u.catalog_id
+          WHERE u.corporation_id = $1 AND u.status = 'unlocked'
+          ORDER BY c.building_type, c.tier`, [corporation.id]).catch(() => ({ rows: [] })),
+      ]).then(([projects, unlocks]) => ({
+        corporationId: corporation.id,
+        projects: projects.rows,
+        unlocks: unlocks.rows,
+      }))
+    : { corporationId: null, projects: [], unlocks: [] };
   const voteCounts = (ballots.rows as Row[]).reduce<Record<string, Record<string, number>>>((all, row) => {
     const id = String(row.proposal_id);
     all[id] ??= {};
@@ -79,7 +102,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
   const startIndex = economicStartIndex(referencePrice || 50);
   const feeRate = Number(await marketFeeRate(repository, viewerId));
-  const [rankings, book, trades, ownOrders, aiAssistants, communities, finance, liquidity, audit, financialStates, roles, history, buildings, investmentShares, civicDividends, corporateResearch, districtZoning] = await Promise.all([
+  const [rankings, book, trades, ownOrders, aiAssistants, communities, finance, liquidity, audit, financialStates, roles, history, buildings, investmentShares, civicDividends, corporateResearch, districtZoning, buildingCatalog] = await Promise.all([
     Promise.all([
       repository.query(`
         SELECT entity_id AS id, entity_name AS name, rank, rank_delta, final_score, metrics_line, sub_indexes, raw_metrics, affiliation,
@@ -169,7 +192,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = $1 AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50", [viewerId]),
     repository.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE owner_id = $1 ORDER BY id', [viewerId]),
     repository.query(`
-      SELECT 
+      SELECT
         c.id, 
         c.name, 
         COALESCE(c.description, '') AS description, 
@@ -198,7 +221,38 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query('SELECT institution_id, institution_kind, status, since_game_day, recovery_game_day FROM financial_states ORDER BY institution_kind, institution_id'),
     repository.query("SELECT institution_roles.id, institution_roles.name, institution_roles.institution_id, role_assignments.human_id, role_assignments.started_game_day, role_assignments.ends_game_day, role_assignments.status AS assignment_status FROM institution_roles LEFT JOIN role_assignments ON role_assignments.role_id = institution_roles.id AND role_assignments.status = 'active' WHERE institution_roles.status = 'active' ORDER BY institution_roles.institution_id, institution_roles.id"),
     Promise.all([repository.query('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12'), repository.query('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20')]),
-    repository.query("SELECT b.* FROM buildings b WHERE b.owner_id = $1 OR b.city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084') ORDER BY b.created_game_day DESC, b.id", [viewerId]).catch(() => ({ rows: [] })),
+    repository.query(`
+      SELECT
+        b.*,
+        COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) AS catalog_id,
+        COALESCE(bc.name, b.name) AS name,
+        COALESCE(bc.category, 'commercial') AS category,
+        COALESCE(bc.slot_footprint, b.slot_footprint, 1) AS slot_footprint,
+        COALESCE(bc.output_credits, CASE WHEN b.resource_output_type = 'credits' OR b.resource_output_type IS NULL THEN b.resource_output_amount ELSE 0 END, 0) AS output_credits,
+        COALESCE(bc.output_energy, CASE WHEN b.resource_output_type = 'energy' THEN b.resource_output_amount ELSE 0 END, 0) AS output_energy,
+        COALESCE(bc.output_food, CASE WHEN b.resource_output_type = 'food' THEN b.resource_output_amount ELSE 0 END, 0) AS output_food,
+        COALESCE(bc.output_materials, CASE WHEN b.resource_output_type IN ('material', 'materials') THEN b.resource_output_amount ELSE 0 END, 0) AS output_materials,
+        COALESCE(bc.output_components, CASE WHEN b.resource_output_type = 'components' THEN b.resource_output_amount ELSE 0 END, 0) AS output_components,
+        COALESCE(bc.output_compute, CASE WHEN b.resource_output_type = 'compute' THEN b.resource_output_amount ELSE 0 END, 0) AS output_compute,
+        COALESCE(bc.upkeep_credits, 0) AS upkeep_credits,
+        COALESCE(bc.upkeep_energy, b.upkeep_energy, 0) AS upkeep_energy,
+        COALESCE(bc.upkeep_food, b.upkeep_food, 0) AS upkeep_food,
+        COALESCE(bc.upkeep_materials, b.upkeep_materials, 0) AS upkeep_materials,
+        COALESCE(bc.upkeep_components, b.upkeep_components, 0) AS upkeep_components,
+        COALESCE(bc.upkeep_compute, b.upkeep_compute, 0) AS upkeep_compute,
+        COALESCE(bc.operating_credits, b.daily_operating_credits, 0) AS operating_credits,
+        COALESCE(bc.operating_energy, 0) AS operating_energy,
+        COALESCE(bc.operating_food, 0) AS operating_food,
+        COALESCE(bc.operating_materials, 0) AS operating_materials,
+        COALESCE(bc.operating_components, 0) AS operating_components,
+        COALESCE(bc.operating_compute, 0) AS operating_compute,
+        COALESCE(bc.unlocked_perks, '{}') AS unlocked_perks,
+        COALESCE(bc.description, '') AS catalog_description
+      FROM buildings b
+      LEFT JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
+      WHERE b.owner_id = $1 OR b.city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084')
+      ORDER BY b.created_game_day DESC, b.id
+    `, [viewerId]).catch(() => ({ rows: [] })),
     repository.query(`
       SELECT
         b.id AS building_id,
@@ -218,34 +272,50 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     `, [viewerId]).catch(() => ({ rows: [] })),
     repository.query("SELECT * FROM civic_dividend_payouts WHERE city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084') ORDER BY day DESC LIMIT 5").catch(() => ({ rows: [] })),
     repository.query("SELECT crp.* FROM corporate_research_pools crp WHERE crp.corporation_id = COALESCE((SELECT corporation_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CORP-001') ORDER BY crp.status, crp.created_at DESC", [viewerId]).catch(() => ({ rows: [] })),
-    getCityDistrictZoning(repository, city?.id ?? 'CITY-0084').catch(() => ({
+    getCityDistrictZoning(repository, city?.id ?? 'CITY-0084', viewerId).catch(() => ({
       cityId: 'CITY-0084',
       cityName: 'New Carthage',
       population: 12,
-      totalSlots: 10,
-      civicReservedSlots: 3,
-      usedPrivateSlots: 0,
+      districtModulesCount: 1,
+      maxCitizens: 10,
+      totalSlots: 120,
+      civicReservedSlots: 20,
+      usedPrivateSlots: 5,
       usedCivicSlots: 6,
-      availablePrivateSlots: 7,
-      availableCivicSlots: 4,
+      availablePrivateSlots: 95,
+      availableCivicSlots: 14,
       buildingsCount: 3,
+      personalEstateTier: 1,
+      personalMaxSlots: 10,
+      personalUsedSlots: 1,
+      personalAvailableSlots: 9,
     })),
+    repository.query('SELECT * FROM building_catalog WHERE is_active = true ORDER BY category, building_type, tier').catch(() => ({ rows: [] })),
   ]);
   const buildingsRows = buildings?.rows ?? [];
   const investmentSharesRows = investmentShares?.rows ?? [];
+  const buildingCatalogRows = (buildingCatalog?.rows && buildingCatalog.rows.length > 0)
+    ? buildingCatalog.rows
+    : Object.values(BUILDING_CATALOG);
   const civicDividendsRows = civicDividends?.rows ?? [];
   const corporateResearchRows = corporateResearch?.rows ?? [];
   const districtZoningData = districtZoning ?? {
     cityId: city?.id ?? 'CITY-0084',
     cityName: 'New Carthage',
     population: 12,
-    totalSlots: 10,
-    civicReservedSlots: 3,
-    usedPrivateSlots: 0,
+    districtModulesCount: 1,
+    maxCitizens: 10,
+    totalSlots: 120,
+    civicReservedSlots: 20,
+    usedPrivateSlots: 5,
     usedCivicSlots: 6,
-    availablePrivateSlots: 7,
-    availableCivicSlots: 4,
+    availablePrivateSlots: 95,
+    availableCivicSlots: 14,
     buildingsCount: 3,
+    personalEstateTier: 1,
+    personalMaxSlots: 10,
+    personalUsedSlots: 1,
+    personalAvailableSlots: 9,
   };
   const serviceRatios = city ? { housing: ratio(city.housing_capacity, city.residents), energy: ratio(city.energy_capacity, city.residents), connectivity: ratio(city.connectivity_capacity, city.residents), health: ratio(city.health_capacity, 100) } : { housing: 0.75, energy: 0.75, connectivity: 0.75, health: 0.5 };
   const serviceStatus = { housing: serviceRatios.housing >= 1 ? 'normal' : serviceRatios.housing >= 0.75 ? 'basic' : 'critical', utilities: serviceRatios.energy >= 1 ? 'normal' : serviceRatios.energy >= 0.75 ? 'basic' : 'critical', connectivity: serviceRatios.connectivity >= 1 ? 'normal' : serviceRatios.connectivity >= 0.75 ? 'basic' : 'critical', health: serviceRatios.health >= 0.8 ? 'normal' : serviceRatios.health >= 0.5 ? 'basic' : 'critical' };
@@ -309,7 +379,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
       deadlineGameMinute: Number(proposal.closes_game_minute),
       closesAt: proposal.closes_at,
       nowMs: Date.now(),
-      realSecondsPerGameMinute: 60,
+      realSecondsPerGameMinute: 1,
     }),
   }));
   const constitutionalRules = await repository.query(
@@ -349,7 +419,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     ORDER BY constitutional_rules.part_number, constitutional_rules.article_number, constitutional_rules.rule_number`,
   ).catch(() => ({ rows: [] }));
   return {
-    clock: { day: currentGameDay, minute: currentGameMinute, realSecondsPerGameMinute: 60 },
+    clock: {
+      totalGameMinutes: currentTotalMinute,
+      day: currentGameDay,
+      minute: currentGameMinute,
+      realSecondsPerGameMinute: 1,
+      serverCurrentTime: Date.now(),
+    },
     world: { health: worldRow.health ?? 68, batch: worldRow.market_batch_seconds ?? 498, livingCostIndex: worldRow.living_cost_index ?? 1, economicStartIndex: startIndex, essentialServicesIndex: worldRow.essential_services_index ?? 0.68, serviceRatios, serviceStatus, cityQualification, corporationQualification },
     human: { id: humanRow.id, name: humanRow.display_name, epitaph: houseProgress.rows[0]?.epitaph ?? null, credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, ageYears: humanRow.age_years ?? 31, health: 100, vitality: 100, energy: 100, stamina: 100, politicalEligibilityGameDay: humanRow.political_eligibility_game_day ?? 0, politicalMaturity: Number(worldRow.game_day ?? 0) >= Number(humanRow.political_eligibility_game_day ?? 0) },
     life: { generation: Number(houseProgress.rows[0]?.generation ?? 1), houseName: houseProgress.rows[0]?.house_name ?? null, epitaph: houseProgress.rows[0]?.epitaph ?? null, status: humanRow.life_status ?? 'active', ageYears: humanRow.age_years ?? 31, health: 100, vitality: 100, energy: 100, successor: succession.rows[0] ?? null, estatePeriodDays: succession.rows[0]?.estate_period_days ?? 30 },
@@ -371,8 +447,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     investmentShares: investmentSharesRows,
     civicDividends: civicDividendsRows,
     corporateResearch: corporateResearchRows,
+    corporationBuildingResearch,
     constitutionalRules: constitutionalRules.rows,
-    buildingCatalog: Object.values(BUILDING_CATALOG),
+    buildingCatalog: buildingCatalogRows,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })), rules: governanceRules.rows },
     technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,

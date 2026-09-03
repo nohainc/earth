@@ -181,11 +181,11 @@ void main() {
     );
 
     expect(find.text('PRIVATE (1)'), findsOneWidget);
-    expect(find.text('CIVIC (1)'), findsOneWidget);
+    expect(find.text('CIVIC (2)'), findsOneWidget);
     expect(find.text('PRIVATE CATALOG'), findsOneWidget);
     expect(find.text('Solar Concentrator Array'), findsOneWidget);
 
-    await tester.tap(find.text('CIVIC (1)'));
+    await tester.tap(find.text('CIVIC (2)'));
     await tester.pumpAndSettle();
 
     expect(find.text('CIVIC CATALOG'), findsOneWidget);

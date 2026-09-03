@@ -29,7 +29,29 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const iterations = 100000;
     const passwordHash = await derivePassword(input.password, salt, iterations);
+    // The humans INSERT fires daily profile provisioning. Register the
+    // canonical owner before that trigger creates the settlement profile.
+    await tx.query("INSERT INTO owner_registry (id, owner_type, source_id) VALUES ($1, 'human', $1)", [humanId]);
     await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,political_eligibility_game_day) VALUES ($1,$2,$3,31,0,0,$4)', [humanId, accountId, displayName, worldDay + 30]);
+    await tx.query(
+      `INSERT INTO buildings (
+         id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
+         slot_footprint, ownership_class, operating_policy, auto_repair_enabled,
+         upkeep_energy, upkeep_food, upkeep_materials, upkeep_components,
+         upkeep_compute, daily_operating_credits, resource_output_type,
+         resource_output_amount, construction_started_game_day,
+         construction_complete_game_day, construction_progress, status, created_game_day
+       )
+       SELECT 'BLD-ESTATE-' || $1, NULL, $1, c.id, c.building_type, c.name,
+              c.tier, 100, c.slot_footprint, c.ownership_class, 'balanced', true,
+              c.upkeep_energy, c.upkeep_food, c.upkeep_materials,
+              c.upkeep_components, c.upkeep_compute, c.operating_credits,
+              NULL, 0, $2, $2, 100, 'active', $2
+       FROM building_catalog c
+       WHERE c.id = 'private-estate-plot-t1'
+       ON CONFLICT (id) DO NOTHING`,
+      [humanId, worldDay],
+    );
     await tx.query('INSERT INTO auth_credentials (human_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5)', [humanId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,$3,'CREDIT')", [accountId, humanId, starter.credits]);
     for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
@@ -76,7 +98,7 @@ export async function updateDisplayName(repository: PostgresRepository, input: {
 export async function loginIdentity(repository: PostgresRepository, input: { email: string; password: string; otp: string; validTotp: (secret: string, code: string) => Promise<boolean> }): Promise<Record<string, unknown>> {
   const attempt = (await repository.query<{ window_started_at: string; attempt_count: number; blocked_until: string | null }>('SELECT window_started_at, attempt_count, blocked_until FROM auth_login_attempts WHERE email = $1', [input.email])).rows[0];
   if (attempt?.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) throw new Error('Too many login attempts. Try again later.');
-  const credential = (await repository.query<{ human_id: string; password_hash: string; password_salt: string; password_iterations: number; email_verified_at: string | null; mfa_enabled: boolean; mfa_secret: string | null; life_status: string }>("SELECT auth_credentials.*, humans.life_status FROM auth_credentials JOIN humans ON humans.id = auth_credentials.human_id WHERE auth_credentials.email = $1", [input.email])).rows[0];
+  const credential = (await repository.query<{ human_id: string; password_hash: string; password_salt: string; password_iterations: number; email_verified_at: string | null; mfa_enabled: boolean; mfa_secret: string | null; life_status: string }>("SELECT auth_credentials.*, humans.life_status FROM auth_credentials JOIN humans ON humans.id = auth_credentials.human_id WHERE auth_credentials.email = $1 AND humans.account_status = 'active'", [input.email])).rows[0];
   if (!credential) throw new Error('Invalid email or password');
   if (!credential.email_verified_at) throw new Error('Verify your email before signing in');
   const matches = Boolean(input.password.length && await derivePassword(input.password, base64ToBytes(credential.password_salt), Number(credential.password_iterations)) === credential.password_hash);
@@ -122,7 +144,29 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
 
     // 1. Create new Human with starter capital minus 500 Credit Naturalization Fee (net 9,500 Credits)
     const netStartingCredits = Math.max(1000, Number(starter.credits) - 500);
+    // The humans INSERT fires daily profile provisioning, so the canonical
+    // owner must exist before the trigger creates that profile.
+    await tx.query("INSERT INTO owner_registry (id, owner_type, source_id) VALUES ($1, 'human', $1)", [newHumanId]);
     await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,life_status) VALUES ($1,$2,$3,20,500,$4,\'active\')', [newHumanId, newAccountId, input.displayName, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
+    await tx.query(
+      `INSERT INTO buildings (
+         id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
+         slot_footprint, ownership_class, operating_policy, auto_repair_enabled,
+         upkeep_energy, upkeep_food, upkeep_materials, upkeep_components,
+         upkeep_compute, daily_operating_credits, resource_output_type,
+         resource_output_amount, construction_started_game_day,
+         construction_complete_game_day, construction_progress, status, created_game_day
+       )
+       SELECT 'BLD-ESTATE-' || $1, NULL, $1, c.id, c.building_type, c.name,
+              c.tier, 100, c.slot_footprint, c.ownership_class, 'balanced', true,
+              c.upkeep_energy, c.upkeep_food, c.upkeep_materials,
+              c.upkeep_components, c.upkeep_compute, c.operating_credits,
+              NULL, 0, $2, $2, 100, 'active', $2
+       FROM building_catalog c
+       WHERE c.id = 'private-estate-plot-t1'
+       ON CONFLICT (id) DO NOTHING`,
+      [newHumanId, worldDay],
+    );
     await tx.query('INSERT INTO account_balances (account_id,owner_id,currency,balance) VALUES ($1,$2,\'CREDIT\',$3)', [newAccountId, newHumanId, netStartingCredits]);
 
     // 2. Distribute Naturalization Fee (250 C to UC Treasury, 250 C to City Treasury)

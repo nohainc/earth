@@ -57,21 +57,28 @@ String formatSecurityDate(dynamic value) {
       .first;
 }
 
-String formatProposalDeadline(Map<String, dynamic> deadline) {
+String formatProposalDeadline(Map<String, dynamic> deadline, {DateTime? now}) {
   final day = deadline['gameDay'] ?? deadline['game_day'] ?? '—';
   final minute = asInt(deadline['gameMinute'] ?? deadline['game_minute']);
-  final remaining = asInt(
+  final closesAt = DateTime.tryParse(deadline['closesAt']?.toString() ??
+      deadline['closes_at']?.toString() ??
+      '');
+  final snapshotRemaining = asInt(
       deadline['realSecondsRemaining'] ?? deadline['real_seconds_remaining']);
-  final clock = minute == null
-      ? '—'
-      : '${(minute ~/ 60).toString().padLeft(2, '0')}:${(minute % 60).toString().padLeft(2, '0')}';
-  final seconds = remaining ?? 0;
+  final calculatedRemaining = closesAt == null
+      ? null
+      : closesAt.difference(now ?? DateTime.now()).inSeconds.ceil();
+  final seconds =
+      (calculatedRemaining ?? snapshotRemaining ?? 0).clamp(0, 365 * 86400);
+  final gameDate = minute == null
+      ? 'GAME DAY $day'
+      : formatGameDateTime(asIntOr(day, 1), minute);
   final duration = seconds >= 86400
       ? '${seconds ~/ 86400}d ${(seconds % 86400) ~/ 3600}h'
       : seconds >= 3600
           ? '${seconds ~/ 3600}h ${(seconds % 3600) ~/ 60}m'
           : '${seconds ~/ 60}m';
-  return 'Closes game day $day at $clock · in $duration real time';
+  return 'Closes $gameDate · in $duration real time';
 }
 
 /// Formats a World timestamp consistently with the global HUD.
@@ -90,4 +97,19 @@ String formatGameDateTime(int gameDay, int gameMinute) {
   final minute = minuteOfDay % 60;
   return 'YEAR $year   DAY ${daysLeft + 1}   '
       '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
+}
+
+/// Formats a duration in game minutes into a concise humanized string.
+String formatGameDuration(int minutes) {
+  if (minutes < 60) {
+    return '$minutes min${minutes == 1 ? '' : 's'}';
+  } else if (minutes < 1440) {
+    final h = minutes ~/ 60;
+    final m = minutes % 60;
+    return m == 0 ? '$h hr${h == 1 ? '' : 's'}' : '${h}h ${m}m';
+  } else {
+    final d = minutes ~/ 1440;
+    final h = (minutes % 1440) ~/ 60;
+    return h == 0 ? '$d day${d == 1 ? '' : 's'}' : '${d}d ${h}h';
+  }
 }

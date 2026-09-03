@@ -35,6 +35,17 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
+  Future<EarthState> completeBuildingConstruction({
+    required String buildingId,
+  }) async {
+    final res = await _request(
+      '/api/real-estate/complete-construction',
+      method: 'POST',
+      body: {'buildingId': buildingId},
+    );
+    return EarthState(res as Map<String, dynamic>);
+  }
+
   Future<EarthState> repairBuilding({
     required String buildingId,
   }) async {

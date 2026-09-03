@@ -47,7 +47,7 @@ Future<void> showFormationComposer(
             if (selectedName.length < 2) return;
             Navigator.pop(dialogContext);
             await action(() => city
-                ? const EarthApi().createCity(selectedName, communityId ?? 'COM-001')
+                ? const EarthApi().createCity(selectedName, communityId)
                 : const EarthApi().createCorporation(selectedName, cityId ?? 'CITY-0084'));
           },
         ),

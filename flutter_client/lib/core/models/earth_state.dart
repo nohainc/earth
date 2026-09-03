@@ -21,16 +21,17 @@ class EarthState {
   Map<String, dynamic> get resources => _toMap(json['resources']);
   Map<String, dynamic> get business => _toMap(json['business']);
   List<dynamic> get businesses => _toList(json['businesses']);
-  Map<String, dynamic> get technology =>
-      _toMap(json['technology'] is Map ? (json['technology'] as Map)['research'] : null);
+  Map<String, dynamic> get technology => _toMap(json['technology'] is Map
+      ? (json['technology'] as Map)['research']
+      : null);
   Map<String, dynamic> get technologyRegistry => _toMap(json['technology']);
   Map<String, dynamic> get governance => _toMap(json['governance']);
   Map<String, dynamic> get institutions => _toMap(json['institutions']);
   Map<String, dynamic> get life => _toMap(json['life']);
   List<dynamic> get aiAssistants => _toList(json['aiAssistants']);
   List<dynamic> get aiRecommendations => _toList(json['aiRecommendations']);
-  Map<String, dynamic> get market =>
-      _toMap(json['market'] is Map ? (json['market'] as Map)['products'] : null);
+  Map<String, dynamic> get market => _toMap(
+      json['market'] is Map ? (json['market'] as Map)['products'] : null);
   List<dynamic> get marketBook =>
       _toList(json['market'] is Map ? (json['market'] as Map)['book'] : null);
   List<dynamic> get marketTrades =>
@@ -38,7 +39,9 @@ class EarthState {
   List<dynamic> get marketOrders =>
       _toList(json['market'] is Map ? (json['market'] as Map)['orders'] : null);
   double get marketFeeRate =>
-      asDouble(json['market'] is Map ? (json['market'] as Map)['feeRate'] : null) ?? 0;
+      asDouble(
+          json['market'] is Map ? (json['market'] as Map)['feeRate'] : null) ??
+      0;
   List<dynamic> get communities => _toList(json['communities']);
   Map<String, dynamic> get audit => _toMap(json['audit']);
   Map<String, dynamic> get finance => _toMap(json['finance']);
@@ -58,10 +61,14 @@ class EarthState {
   List<dynamic> get investmentShares => _toList(json['investmentShares']);
   List<dynamic> get civicDividends => _toList(json['civicDividends']);
   List<dynamic> get corporateResearch => _toList(json['corporateResearch']);
-  List<dynamic> get buildingPatentLicenses => _toList(json['buildingPatentLicenses']);
+  Map<String, dynamic> get corporationBuildingResearch =>
+      _toMap(json['corporationBuildingResearch']);
+  List<dynamic> get buildingPatentLicenses =>
+      _toList(json['buildingPatentLicenses']);
   List<dynamic> get buildingCatalog => _toList(json['buildingCatalog']);
-  Map<String, dynamic>? get membership =>
-      json['membership'] is Map ? Map<String, dynamic>.from(json['membership'] as Map) : null;
+  Map<String, dynamic>? get membership => json['membership'] is Map
+      ? Map<String, dynamic>.from(json['membership'] as Map)
+      : null;
   List<Map<String, dynamic>> get myCommunities {
     final list = <Map<String, dynamic>>[];
     for (final c in communities) {

@@ -731,20 +731,9 @@ BEGIN
       v_cost_mult := 1.0;
     END IF;
 
-    -- Condition efficiency & degradation cost
-    IF v_b.condition >= 80.0 THEN
-      v_eff := 1.0;
-      v_cond_cost := 1.0;
-    ELSIF v_b.condition >= 50.0 THEN
-      v_eff := 0.75;
-      v_cond_cost := 1.15;
-    ELSIF v_b.condition >= 20.0 THEN
-      v_eff := 0.4;
-      v_cond_cost := 1.4;
-    ELSE
-      v_eff := 0.1;
-      v_cond_cost := 2.0;
-    END IF;
+    -- Multipliers are determined by operating policy; condition degradation curves are removed
+    v_eff := 1.0;
+    v_cond_cost := 1.0;
 
     -- Output addition
     v_out_amount := COALESCE(v_b.resource_output_amount, 0) * v_out_mult * v_eff;
@@ -928,8 +917,8 @@ BEGIN
       v_cost_mult := 1.0;
     END IF;
 
-    v_eff := GREATEST(0.1, LEAST(1.0, (v_b.condition / 100.0))) * v_out_mult;
-    v_cond_cost := (1.0 + (GREATEST(0, 100.0 - v_b.condition) / 200.0)) * v_cost_mult;
+    v_eff := v_out_mult;
+    v_cond_cost := v_cost_mult;
 
     -- Inflow
     v_out_amount := ROUND(v_b.resource_output_amount * v_eff, 6);

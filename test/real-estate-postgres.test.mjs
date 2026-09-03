@@ -49,13 +49,12 @@ test('getCityDistrictZoning calculates total slots, occupancy, and 30% civic quo
   const res = await getCityDistrictZoning(repo, 'CITY-0084');
   assert.equal(res.cityId, 'CITY-0084');
   assert.equal(res.population, 15);
-  // 8 + floor(15 / 5) = 11 total slots
-  assert.equal(res.totalSlots, 11);
-  // ceil(11 * 0.30) = 4 civic reserved slots
-  assert.equal(res.civicReservedSlots, 4);
+  // 1 District Module = 120 total slots (100 private, 20 civic)
+  assert.equal(res.totalSlots, 120);
+  assert.equal(res.civicReservedSlots, 20);
   assert.equal(res.usedPrivateSlots, 3);
   assert.equal(res.usedCivicSlots, 3);
-  assert.equal(res.availablePrivateSlots, 4); // (11 - 4) - 3 = 4
+  assert.equal(res.availablePrivateSlots, 97); // (120 - 20) - 3 = 97
 });
 
 test('purchasePrivatePlotAndConstruct verifies zoning slots, balances, and provisions building', async () => {

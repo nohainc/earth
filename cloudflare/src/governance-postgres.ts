@@ -4,6 +4,7 @@ import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
+import { getAuthoritativeGameTime } from './game-clock.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -27,7 +28,24 @@ function jsonObject(value: unknown): Record<string, unknown> {
   return {};
 }
 
-export async function createProposal(repository: PostgresRepository, input: { humanId: string; institutionId: string; title: string; body: string; durationHours: number; ruleVersionId?: string; targetCategory: string | null; targetValue: Record<string, unknown> | null; correlationId: string }): Promise<Record<string, unknown>> {
+const COMMON_GOVERNANCE_DEFAULTS = {
+  quorum: 0.25,
+  approvalThreshold: 0.50,
+  votingPeriodDays: 3,
+  implementationDelayDays: 1,
+};
+
+function absoluteMinute(gameDay: number, gameMinute: number): number {
+  // Game days are 1-based; day 1 minute 0 is the beginning of the world clock.
+  return Math.max(0, (Math.max(1, gameDay) - 1) * 1440 + Math.max(0, gameMinute));
+}
+
+function gamePosition(totalMinutes: number): { day: number; minute: number } {
+  const safeMinutes = Math.max(0, Math.floor(totalMinutes));
+  return { day: Math.floor(safeMinutes / 1440) + 1, minute: safeMinutes % 1440 };
+}
+
+export async function createProposal(repository: PostgresRepository, input: { humanId: string; institutionId: string; title: string; body: string; durationHours?: number; ruleVersionId?: string; targetCategory: string | null; targetValue: Record<string, unknown> | null; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const prior = await tx.query('SELECT * FROM proposals WHERE institution_id = $1 AND correlation_id = $2', [input.institutionId, input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposal: prior.rows[0], correlationId: input.correlationId };
@@ -39,6 +57,18 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       );
       const duplicate = existing.rows.find((proposal) => jsonObject(proposal.target_value_json).buildingType === input.targetValue?.buildingType);
       if (duplicate) throw new Error('A civic proposal for this building is already active or queued. No duplicate proposal was created.');
+
+      if (input.targetValue.buildingType === 'urban-district-module') {
+        const popRes = await tx.query<{ count: string }>('SELECT COUNT(*)::integer AS count FROM memberships WHERE city_id = $1', [input.institutionId]);
+        const distRes = await tx.query<{ count: string }>("SELECT COUNT(*)::integer AS count FROM buildings WHERE city_id = $1 AND building_type = 'urban-district-module' AND status NOT IN ('closed', 'foreclosed')", [input.institutionId]);
+        const population = Number(popRes.rows[0]?.count ?? 1);
+        const districtCount = Math.max(1, Number(distRes.rows[0]?.count || 1));
+        const maxCapacity = districtCount * 10;
+        const requiredPopulation = Math.ceil(maxCapacity * 0.80);
+        if (population < requiredPopulation) {
+          throw new Error(`Urban District expansion requires the city to reach at least 80% citizen capacity (${population}/${maxCapacity} citizens, requires ${requiredPopulation}).`);
+        }
+      }
     }
     if (!(await eligible(tx, input.humanId, input.institutionId))) throw new Error('Human is not eligible to propose at this institution');
     const rule = input.ruleVersionId
@@ -53,9 +83,9 @@ export async function createProposal(repository: PostgresRepository, input: { hu
         `INSERT INTO governance_rules (
           id, institution_id, name, category, quorum_threshold, approval_threshold,
           voting_period_days, implementation_delay_days, version, status, created_by
-        ) VALUES ($1, $2, $3, 'governance', 0.25, 0.50, 30, 1, 1, 'active', $4)
+        ) VALUES ($1, $2, $3, 'governance', $4, $5, $6, $7, 1, 'active', $8)
         ON CONFLICT (id) DO UPDATE SET status = 'active'`,
-        [baselineId, input.institutionId, `${instName} Governance Baseline`, input.humanId],
+        [baselineId, input.institutionId, `${instName} Governance Baseline`, COMMON_GOVERNANCE_DEFAULTS.quorum, COMMON_GOVERNANCE_DEFAULTS.approvalThreshold, COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays, COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays, input.humanId],
       );
       const inserted = await tx.query<{ id: string; quorum_threshold: string | null; approval_threshold: string | null; voting_period_days: number | null; implementation_delay_days: number | null }>(
         "SELECT id, quorum_threshold, approval_threshold, voting_period_days, implementation_delay_days FROM governance_rules WHERE id = $1",
@@ -66,26 +96,31 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     if (!ruleRow) throw new Error('An active governance rule version is required');
     const quorum = Number(ruleRow.quorum_threshold);
     const approvalThreshold = Number(ruleRow.approval_threshold);
-    const implementationDelay = Number(ruleRow.implementation_delay_days);
-    if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
+    const votingPeriodDays = Number(ruleRow.voting_period_days ?? COMMON_GOVERNANCE_DEFAULTS.votingPeriodDays);
+    const implementationDelay = Number(ruleRow.implementation_delay_days ?? COMMON_GOVERNANCE_DEFAULTS.implementationDelayDays);
+    if (!(quorum > 0 && quorum <= 1) || !(approvalThreshold > 0 && approvalThreshold <= 1) || !Number.isInteger(votingPeriodDays) || votingPeriodDays < 1 || votingPeriodDays > 90 || !Number.isInteger(implementationDelay) || implementationDelay < 0 || implementationDelay > 30) throw new Error('Governance rule parameters are invalid');
     const proposalId = `P-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
-    const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
-    const currentAbsoluteMinute = Number(world.rows[0]?.game_day ?? 0) * 1440 + Number(world.rows[0]?.game_minute ?? 0);
-    const closesAbsoluteMinute = currentAbsoluteMinute + input.durationHours * 60;
+    const world = await tx.query<{ game_day: number; game_minute: number; genesis_at: string | null; simulated_day_offset: number | null }>("SELECT game_day, game_minute, genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD' FOR UPDATE");
+    const authoritativeTime = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
+    const currentAbsoluteMinute = authoritativeTime.totalGameMinutes;
+    // Voting duration is an institution-rule snapshot. The legacy client durationHours
+    // is intentionally ignored so clients cannot bypass the active governance rule.
+    const closesAbsoluteMinute = currentAbsoluteMinute + votingPeriodDays * 1440;
     const implementationAbsoluteMinute = closesAbsoluteMinute + implementationDelay * 1440;
-    const closesGameDay = Math.floor(closesAbsoluteMinute / 1440);
-    const closesGameMinute = closesAbsoluteMinute % 1440;
-    const implementationGameDay = Math.floor(implementationAbsoluteMinute / 1440);
-    const implementationGameMinute = implementationAbsoluteMinute % 1440;
-    await tx.query("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, closes_game_day, closes_game_minute, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, implementation_game_day, implementation_game_minute, target_category, target_value_json, correlation_id) VALUES ($1,$2,$3,$4,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + ($5 * INTERVAL '1 hour'),$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + (($5 + $11 * 24) * INTERVAL '1 hour'),$12,$13,$14,$15,$16)", [proposalId, input.institutionId, input.title, input.body, input.durationHours, closesGameDay, closesGameMinute, ruleRow.id, quorum, approvalThreshold, implementationDelay, implementationGameDay, implementationGameMinute, input.targetCategory, input.targetValue ? toNanoMarkup(input.targetValue) : null, input.correlationId]);
+    const closes = gamePosition(closesAbsoluteMinute);
+    const implementation = gamePosition(implementationAbsoluteMinute);
+    await tx.query("INSERT INTO proposals (id, institution_id, title, body, status, opens_at, closes_at, closes_game_day, closes_game_minute, rule_version_id, quorum, approval_threshold, implementation_delay_days, implementation_at, implementation_game_day, implementation_game_minute, target_category, target_value_json, correlation_id) VALUES ($1,$2,$3,$4,'open',CURRENT_TIMESTAMP,CURRENT_TIMESTAMP + (($5 * 24) * INTERVAL '1 hour'),$6,$7,$8,$9,$10,$11,CURRENT_TIMESTAMP + (($5 + $11) * INTERVAL '1 day'),$12,$13,$14,$15,$16)", [proposalId, input.institutionId, input.title, input.body, votingPeriodDays, closes.day, closes.minute, ruleRow.id, quorum, approvalThreshold, implementationDelay, implementation.day, implementation.minute, input.targetCategory, input.targetValue ? toNanoMarkup(input.targetValue) : null, input.correlationId]);
     return { ok: true, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [proposalId])).rows[0], createdBy: input.humanId, correlationId: input.correlationId };
   });
 }
 
 export async function castVote(repository: PostgresRepository, input: { proposalId: string; humanId: string; choice: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const proposal = await tx.query<{ institution_id: string }>("SELECT p.institution_id FROM proposals p CROSS JOIN world_state w WHERE p.id = $1 AND p.status = 'open' AND (p.closes_game_day, p.closes_game_minute) > (w.game_day, w.game_minute) AND w.id = 'WORLD'", [input.proposalId]);
+    const proposal = await tx.query<{ institution_id: string; closes_game_day: number; closes_game_minute: number }>("SELECT institution_id, closes_game_day, closes_game_minute FROM proposals WHERE id = $1 AND status = 'open'", [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Open proposal not found');
+    const world = await tx.query<{ genesis_at: string | null; simulated_day_offset: number | null }>("SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
+    const now = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
+    if (absoluteMinute(now.gameDay, now.gameMinute) >= absoluteMinute(Number(proposal.rows[0].closes_game_day), Number(proposal.rows[0].closes_game_minute))) throw new Error('Voting deadline has passed');
     if (!(await eligible(tx, input.humanId, proposal.rows[0].institution_id))) throw new Error('Human is not eligible to vote at this institution');
     const representation = await tx.query<{ member_count: string | null; residents: string | null }>('SELECT corporations.member_count, cities.residents FROM memberships LEFT JOIN corporations ON corporations.id = memberships.corporation_id LEFT JOIN cities ON cities.id = memberships.city_id WHERE memberships.human_id = $1 LIMIT 1', [input.humanId]);
     const population = Number(representation.rows[0]?.member_count ?? representation.rows[0]?.residents ?? 0);
@@ -103,12 +138,15 @@ export async function castVote(repository: PostgresRepository, input: { proposal
   });
 }
 
-export async function resolveProposals(repository: PostgresRepository): Promise<number> {
-  await repository.query("UPDATE proposals p SET status = 'closed' FROM world_state w WHERE w.id = 'WORLD' AND p.status = 'open' AND (p.closes_game_day, p.closes_game_minute) <= (w.game_day, w.game_minute)");
+export async function resolveProposalsInTransaction(repository: PostgresRepository): Promise<number> {
+  const worldClock = await repository.query<{ genesis_at: string | null; simulated_day_offset: number | null }>("SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
+  const now = getAuthoritativeGameTime({ genesisAt: worldClock.rows[0]?.genesis_at, simulatedDayOffset: worldClock.rows[0]?.simulated_day_offset });
+  await repository.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [now.gameDay, now.gameMinute]);
   const closed = await repository.query<{ id: string; quorum: string; approval_threshold: string }>("SELECT id, quorum, approval_threshold FROM proposals WHERE status = 'closed' AND outcome = 'pending'");
   let resolved = 0;
   for (const proposal of closed.rows) {
-    await repository.transaction(async (tx) => {
+    const tx = repository;
+    {
       const counts = await tx.query<{ choice: string; weight: string }>('SELECT choice, COALESCE(SUM(weight), 0) AS weight FROM ballots WHERE proposal_id = $1 GROUP BY choice', [proposal.id]);
       const totals = Object.fromEntries(counts.rows.map((row) => [row.choice, Number(row.weight)]));
       const eligibleHumans = await tx.query<{ count: string }>("SELECT COUNT(*) AS count FROM humans WHERE life_status = 'active'");
@@ -119,13 +157,17 @@ export async function resolveProposals(repository: PostgresRepository): Promise<
       const passed = quorumMet && decisive > 0 && (totals.support ?? 0) / decisive >= Number(proposal.approval_threshold);
       const outcome = !quorumMet ? 'no_quorum' : passed ? 'passed' : 'rejected';
       await tx.query("UPDATE proposals SET outcome = $1, resolved_at = CURRENT_TIMESTAMP, implementation_at = CASE WHEN $2 = 'passed' THEN CURRENT_TIMESTAMP + (implementation_delay_days * INTERVAL '1 day') ELSE NULL END, execution_status = CASE WHEN $2 = 'passed' THEN 'ready' ELSE 'not_ready' END WHERE id = $3 AND outcome = 'pending'", [outcome, outcome, proposal.id]);
-    });
+    }
     resolved += 1;
   }
   return resolved;
 }
 
-export async function executeProposal(repository: PostgresRepository, input: { proposalId: string; humanId: string }): Promise<Record<string, unknown>> {
+export async function resolveProposals(repository: PostgresRepository): Promise<number> {
+  return repository.transaction((tx) => resolveProposalsInTransaction(tx));
+}
+
+export async function executeProposal(repository: PostgresRepository, input: { proposalId: string; humanId: string; systemExecution?: boolean }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const proposal = await tx.query<{ id: string; institution_id: string; title: string; outcome: string; executed_at: string | null; implementation_game_day: number | null; implementation_game_minute: number | null; target_category: string | null; target_value_json: unknown; execution_status: string }>('SELECT * FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
@@ -134,9 +176,10 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     if (current.executed_at) return { ok: true, executionStatus: 'executed', proposal: current };
     if (current.execution_status === 'challenged') throw new Error('Proposal is currently under constitutional challenge and cannot be executed');
     if (current.execution_status === 'voided') throw new Error('Proposal has been voided by constitutional appeal');
-    const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'");
-    if (current.implementation_game_day !== null && (Number(world.rows[0]?.game_day ?? 0) * 1440 + Number(world.rows[0]?.game_minute ?? 0)) < (Number(current.implementation_game_day) * 1440 + Number(current.implementation_game_minute ?? 0))) throw new Error('Implementation delay has not elapsed');
-    if (!(await eligible(tx, input.humanId, current.institution_id))) throw new Error('Human is not authorized to execute this institution rule');
+    const world = await tx.query<{ game_day: number; game_minute: number; genesis_at: string | null; simulated_day_offset: number | null }>("SELECT game_day, game_minute, genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
+    const authoritativeTime = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
+    if (current.implementation_game_day !== null && absoluteMinute(authoritativeTime.gameDay, authoritativeTime.gameMinute) < absoluteMinute(Number(current.implementation_game_day), Number(current.implementation_game_minute ?? 0))) throw new Error('Implementation delay has not elapsed');
+    if (!input.systemExecution && !(await eligible(tx, input.humanId, current.institution_id))) throw new Error('Human is not authorized to execute this institution rule');
     const category = String(current.target_category ?? '').trim();
     const value = jsonObject(current.target_value_json);
     if (!category || !Object.keys(value).length) {
@@ -147,6 +190,18 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       const bType = String(value.buildingType ?? 'geothermal-grid');
       const spec = BUILDING_CATALOG[bType] ?? BUILDING_CATALOG['geothermal-grid'];
       const cityId = current.institution_id;
+      const ownershipClass = value.ownershipClass === 'public_investment' ? 'public_investment' : 'civic';
+      if (ownershipClass === 'public_investment' && spec.resourceOutputType && spec.resourceOutputType !== 'credits') {
+        throw new Error('Public investment projects must produce Credits only');
+      }
+      const existingBuilding = await tx.query(
+        "SELECT id FROM buildings WHERE city_id = $1 AND building_type = $2 AND ownership_class = $3 AND status NOT IN ('closed', 'foreclosed') LIMIT 1",
+        [cityId, bType, ownershipClass],
+      );
+      if (existingBuilding.rows[0]) {
+        await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = $1", [current.id]);
+        return { ok: true, executionStatus: 'skipped', reason: 'This building already exists for the city', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+      }
       const cityAccount = await tx.query<{ account_id: string; balance: string }>(
         "SELECT account_id, balance FROM account_balances WHERE account_id = $1 AND currency = 'CREDIT' FOR UPDATE",
         [`account-city-${cityId}`],
@@ -157,7 +212,11 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       );
       const requiredCredits = Number(spec.baseCreditCost ?? 0);
       const requiredMaterials = Number(spec.baseMaterialCost ?? 0);
-      const hasCapacity = true;
+      const capacity = await tx.query<{ total_slots: string; used_slots: string }>(
+        "SELECT COALESCE((SELECT SUM(slot_footprint) FROM buildings WHERE city_id = $1 AND status NOT IN ('closed', 'foreclosed')), 0) AS used_slots, COALESCE((SELECT COUNT(*) FROM buildings WHERE city_id = $1 AND building_type = 'urban-district-module' AND status NOT IN ('closed', 'foreclosed')), 1) * 120 AS total_slots",
+        [cityId],
+      );
+      const hasCapacity = Number(capacity.rows[0]?.total_slots ?? 0) - Number(capacity.rows[0]?.used_slots ?? 0) >= Math.max(1, Number(spec.slotFootprint ?? 2));
       const enoughCredits = Boolean(cityAccount.rows[0]) && moneyToCents(cityAccount.rows[0].balance) >= moneyToCents(requiredCredits);
       const enoughMaterials = Number(cityMaterials.rows[0]?.amount ?? 0) >= requiredMaterials;
       if (!hasCapacity || !enoughCredits || !enoughMaterials) {
@@ -169,8 +228,18 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       const buildingId = `BLD-MUNI-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
       const day = Number(world.rows[0]?.game_day ?? 0);
 
-      const constructionDays = Math.max(2, (spec.slotFootprint ?? 2) * 2);
-      const completeDay = day + constructionDays;
+      const catalogRes = await tx.query<{ construction_minutes: number; construction_days: number }>(
+        'SELECT construction_minutes, construction_days FROM building_catalog WHERE id = $1',
+        [`${bType}-t${spec.tier || 1}`],
+      );
+      const constructionMinutes = Math.max(
+        1,
+        Number(catalogRes.rows[0]?.construction_minutes ??
+          ((catalogRes.rows[0]?.construction_days ?? Math.max(2, (spec.slotFootprint ?? 2) * 2)) * 1440)),
+      );
+      const startedMinute = Math.max(0, (day - 1) * 1440 + Number(world.rows[0]?.game_minute ?? 0));
+      const completeMinute = startedMinute + constructionMinutes;
+      const completeDay = Math.floor(completeMinute / 1440) + 1;
 
       await tx.query(
         `INSERT INTO buildings (
@@ -180,9 +249,10 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
           daily_operating_credits,
           resource_output_type, resource_output_amount,
-          construction_started_game_day, construction_complete_game_day, construction_progress,
+          construction_started_game_day, construction_complete_game_day,
+          construction_started_minute, construction_complete_minute, construction_progress,
           status, created_game_day
-        ) VALUES ($1, $2, $2, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, 0.0, 'under_construction', $17)`,
+        ) VALUES ($1, $2, $2, CASE WHEN $20 = 'public_investment' THEN 'public_investment' ELSE 'civic' END, $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0.0, 'under_construction', $19)`,
         [
           buildingId,
           current.institution_id,
@@ -200,7 +270,10 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           spec.resourceOutputAmount ?? 0,
           day,
           completeDay,
+          startedMinute,
+          completeMinute,
           day,
+          ownershipClass,
         ],
       );
 
@@ -223,6 +296,25 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'rule.changed', `Rule ${category} changed`, toNanoMarkup({ proposalId: current.id, ruleId })]);
     return { ok: true, executionStatus: 'executed', rule: (await tx.query('SELECT * FROM governance_rules WHERE id = $1', [ruleId])).rows[0], proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
   });
+}
+
+/** Execute approved civic proposals when their delay has elapsed and retry queued ones. */
+export async function executeQueuedProposals(repository: PostgresRepository): Promise<number> {
+  const queued = await repository.query<{ id: string }>(
+    "SELECT p.id FROM proposals p CROSS JOIN world_state w WHERE w.id = 'WORLD' AND p.outcome = 'passed' AND p.target_category = 'megaproject_procurement' AND p.executed_at IS NULL AND p.execution_status IN ('ready', 'queued') AND (p.implementation_game_day, p.implementation_game_minute) <= (w.game_day, w.game_minute) ORDER BY p.resolved_at NULLS FIRST, p.id LIMIT 50",
+  );
+  let executed = 0;
+  for (const proposal of queued.rows) {
+    try {
+      const result = await executeProposal(repository, { proposalId: proposal.id, humanId: 'SYSTEM', systemExecution: true });
+      if (result.executionStatus === 'executed' || result.executionStatus === 'skipped') executed += 1;
+    } catch (error) {
+      // A single unavailable city resource or an unelapsed delay must not abort
+      // the world tick. The proposal remains pending for the next tick.
+      console.warn(`[governance queue] proposal ${proposal.id} retry deferred`, error);
+    }
+  }
+  return executed;
 }
 
 export async function challengeProposal(repository: PostgresRepository, input: { humanId: string; proposalId: string; reason: string; correlationId: string }): Promise<Record<string, unknown>> {

@@ -4,23 +4,41 @@ import { centsToMoney, moneyToCents } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 
 export async function advanceBuildingConstruction(tx: PostgresRepository, day: number): Promise<void> {
+  const worldRes = await tx.query<{ game_day: number; game_minute: number; total_game_minutes: number }>(
+    "SELECT game_day, game_minute, total_game_minutes FROM world_state WHERE id = 'WORLD'",
+  );
+  const persistedTotalMinute = Number(worldRes.rows[0]?.total_game_minutes ?? 0);
+  const currentTotalMinute = persistedTotalMinute > 0
+    ? persistedTotalMinute
+    : ((Math.max(1, Number(worldRes.rows[0]?.game_day ?? day)) - 1) * 1440 +
+        Number(worldRes.rows[0]?.game_minute ?? 0));
+
   const constructionQuery = await tx.query<{
     id: string;
     name: string;
-    city_id: string;
+    city_id: string | null;
     owner_id: string;
     construction_started_game_day: number;
     construction_complete_game_day: number;
-  }>("SELECT id, name, city_id, owner_id, construction_started_game_day, construction_complete_game_day FROM buildings WHERE status = 'under_construction'");
+    construction_started_minute: number | null;
+    construction_complete_minute: number | null;
+  }>(
+    "SELECT id, name, city_id, owner_id, construction_started_game_day, construction_complete_game_day, construction_started_minute, construction_complete_minute FROM buildings WHERE status = 'under_construction'",
+  );
 
   for (const bld of constructionQuery.rows) {
-    const startDay = Number(bld.construction_started_game_day ?? 1);
-    const completeDay = Number(bld.construction_complete_game_day ?? (startDay + 1));
-    const totalDays = Math.max(1, completeDay - startDay);
-    const elapsedDays = Math.max(0, day - startDay);
-    const progress = Math.min(100.0, Math.round((elapsedDays / totalDays) * 10000) / 100);
+    const startMinute = bld.construction_started_minute != null
+      ? Number(bld.construction_started_minute)
+      : (Number(bld.construction_started_game_day ?? 1) - 1) * 1440;
+    const completeMinute = bld.construction_complete_minute != null
+      ? Number(bld.construction_complete_minute)
+      : (Number(bld.construction_complete_game_day ?? (Number(bld.construction_started_game_day ?? 1) + 1)) - 1) * 1440;
 
-    if (day >= completeDay) {
+    const totalMinutes = Math.max(1, completeMinute - startMinute);
+    const elapsedMinutes = Math.max(0, currentTotalMinute - startMinute);
+    const progress = Math.min(100.0, Math.round((elapsedMinutes / totalMinutes) * 10000) / 100);
+
+    if (currentTotalMinute >= completeMinute || day >= Number(bld.construction_complete_game_day ?? (Number(bld.construction_started_game_day ?? 1) + 1))) {
       await tx.query(
         "UPDATE buildings SET status = 'active', construction_progress = 100.0, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
         [bld.id],
@@ -57,7 +75,7 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
   const bldQuery = await tx.query<{
     id: string;
     owner_id: string;
-    city_id: string;
+    city_id: string | null;
     ownership_class: string | null;
     business_id: string | null;
     operating_policy: string | null;
@@ -67,18 +85,40 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     upkeep_components: string;
     upkeep_compute: string;
     daily_operating_credits: string;
+    output_credits: string;
+    output_energy: string;
+    output_food: string;
+    output_materials: string;
+    output_components: string;
+    output_compute: string;
     resource_output_type: string | null;
     resource_output_amount: string | null;
     tier: number;
     condition: string;
     auto_repair_enabled: boolean | null;
     profile_resources_applied: boolean;
-  }>(`SELECT b.*, EXISTS (
-      SELECT 1 FROM daily_settlement_profiles p
-      WHERE p.owner_id = CASE WHEN b.ownership_class = 'civic' THEN b.city_id ELSE b.owner_id END
-        AND p.last_settled_game_day = $1
-    ) AS profile_resources_applied
-    FROM buildings b WHERE b.status = 'active'`, [day]);
+  }>(`SELECT
+      b.*,
+      COALESCE(bc.output_credits, CASE WHEN b.resource_output_type = 'credits' OR b.resource_output_type IS NULL THEN b.resource_output_amount ELSE 0 END, 0) AS output_credits,
+      COALESCE(bc.output_energy, CASE WHEN b.resource_output_type = 'energy' THEN b.resource_output_amount ELSE 0 END, 0) AS output_energy,
+      COALESCE(bc.output_food, CASE WHEN b.resource_output_type = 'food' THEN b.resource_output_amount ELSE 0 END, 0) AS output_food,
+      COALESCE(bc.output_materials, CASE WHEN b.resource_output_type IN ('material', 'materials') THEN b.resource_output_amount ELSE 0 END, 0) AS output_materials,
+      COALESCE(bc.output_components, CASE WHEN b.resource_output_type = 'components' THEN b.resource_output_amount ELSE 0 END, 0) AS output_components,
+      COALESCE(bc.output_compute, CASE WHEN b.resource_output_type = 'compute' THEN b.resource_output_amount ELSE 0 END, 0) AS output_compute,
+      COALESCE(bc.upkeep_energy, b.upkeep_energy, 0) AS upkeep_energy,
+      COALESCE(bc.upkeep_food, b.upkeep_food, 0) AS upkeep_food,
+      COALESCE(bc.upkeep_materials, b.upkeep_materials, 0) AS upkeep_materials,
+      COALESCE(bc.upkeep_components, b.upkeep_components, 0) AS upkeep_components,
+      COALESCE(bc.upkeep_compute, b.upkeep_compute, 0) AS upkeep_compute,
+      COALESCE(bc.operating_credits, b.daily_operating_credits, 0) AS daily_operating_credits,
+      EXISTS (
+        SELECT 1 FROM daily_settlement_profiles p
+        WHERE p.owner_id = CASE WHEN b.ownership_class = 'civic' THEN b.city_id ELSE b.owner_id END
+          AND p.last_settled_game_day = $1
+      ) AS profile_resources_applied
+    FROM buildings b
+    LEFT JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
+    WHERE b.status = 'active'`, [day]);
 
   for (const bld of bldQuery.rows) {
     const oClass = (bld.ownership_class || 'private').toLowerCase();
@@ -92,10 +132,12 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     let actualOperatingCostsCrd = 0;
 
     // Dedicated city operations account is strictly the recipient of municipal operating costs
-    const opsAccount = `account-city-operations-${bld.city_id}`;
+    const opsAccount = bld.city_id
+      ? `account-city-operations-${bld.city_id}`
+      : 'account-ouc-treasury';
     await tx.query(
       'INSERT INTO account_balances (account_id, owner_id, currency, balance) VALUES ($1, $2, $3, 0.00) ON CONFLICT (account_id) DO NOTHING',
-      [opsAccount, bld.city_id, 'CREDIT'],
+      [opsAccount, bld.city_id ?? 'OUC', 'CREDIT'],
     );
 
     // Automatic Building Repair check (restores condition before daily run)
@@ -120,22 +162,9 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
       }
     }
 
-    // Condition Efficiency Curve
-    let efficiency = 1.0;
-    let costMult = 1.0;
-    if (condition >= 80) {
-      efficiency = 1.0;
-      costMult = 1.0;
-    } else if (condition >= 50) {
-      efficiency = 0.75;
-      costMult = 1.15;
-    } else if (condition >= 20) {
-      efficiency = 0.40;
-      costMult = 1.40;
-    } else {
-      efficiency = 0.10;
-      costMult = 2.00;
-    }
+    // Building Output and Cost Efficiency (Multipliers determined by policy)
+    const efficiency = 1.0;
+    const costMult = 1.0;
 
     // Policy Modifiers
     let policyYield = 1.0;

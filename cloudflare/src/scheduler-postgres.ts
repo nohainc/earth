@@ -10,6 +10,8 @@ import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './b
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
 import { applyPreparedResourceProfiles, rebuildDirtyDailySettlementProfiles, recordDailySettlementProfileShadow } from './daily-settlement-profiles.ts';
+import { executeQueuedProposals, resolveProposalsInTransaction } from './governance-postgres.ts';
+import { advanceCorporationBuildingResearch } from './corporation-building-research-postgres.ts';
 
 export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
 
@@ -634,6 +636,8 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     }
     await tx.query("UPDATE authority_delegations SET status = 'expired' WHERE status = 'active' AND ends_game_day <= $1", [day]);
     await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
+    await runLoggedEngine(tx, day, 'governance_resolution', () => resolveProposalsInTransaction(tx));
+    await runLoggedEngine(tx, day, 'corporation_building_research', () => advanceCorporationBuildingResearch(tx));
     await tx.query("UPDATE market_prices SET price = GREATEST(1, LEAST(1000000, ROUND((price * (1.0 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))), game_day = $1", [day]);
     if (newDay) {
       await runLoggedEngine(tx, day, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, day));
@@ -680,6 +684,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     return { day, minute, newDay, productionEvents };
   });
   if (result.alreadyProcessed) return result;
+  await executeQueuedProposals(repository);
   let marketSettlements = 0;
   for (const product of products) {
     const settled = await settleMarket(repository, product);

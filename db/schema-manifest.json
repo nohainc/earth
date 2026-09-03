@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 89,
+  "migrationVersion": 106,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -99,7 +99,18 @@
       "construction_started_game_day",
       "construction_complete_game_day",
       "construction_progress",
-      "status"
+      "status",
+      "catalog_id"
+    ],
+    "building_catalog": [
+      "id",
+      "building_type",
+      "tier",
+      "ownership_class",
+      "cost_credits",
+      "output_credits",
+      "effects",
+      "is_original"
     ],
     "building_settlement_journals": [
       "id",
@@ -238,6 +249,24 @@
       "capital_city_id",
       "admission_policy"
     ],
+    "corporation_building_research_projects": [
+      "id",
+      "corporation_id",
+      "building_type",
+      "catalog_id",
+      "target_tier",
+      "progress",
+      "status",
+      "started_game_day",
+      "duration_minutes"
+    ],
+    "corporation_building_unlocks": [
+      "corporation_id",
+      "catalog_id",
+      "research_project_id",
+      "status",
+      "unlocked_game_day"
+    ],
     "corporation_membership_requests": [
       "id",
       "corporation_id",
@@ -310,7 +339,15 @@
     "humans": [
       "id",
       "account_id",
-      "life_status"
+      "life_status",
+      "account_status",
+      "deleted_at"
+    ],
+    "owner_registry": [
+      "id",
+      "owner_type",
+      "source_id",
+      "status"
     ],
     "institution_roles": [
       "id",

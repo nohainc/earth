@@ -18,16 +18,39 @@ Future<void> showBuildingDetailUpgradeDialog(
   final condition = asDoubleOr(building['condition'], 100);
   final footprint = asIntOr(building['slot_footprint'], 1);
 
-  // Find catalog archetype spec and tier tree
-  final match = catalog.whereType<Map>().firstWhere(
-    (c) => c['type'] == bType,
+  // Find catalog archetype spec and tier tree. Research-created tiers are
+  // supplied as separate database catalog rows, so do not invent future
+  // tiers in the client when they have not been researched yet.
+  final catalogRows = catalog.whereType<Map>().where((c) {
+    final type = c['building_type'] ?? c['type'];
+    return type?.toString() == bType;
+  }).map((c) => Map<String, dynamic>.from(c)).toList();
+  final match = catalogRows.firstWhere(
+    (c) => c['type'] == bType || c['building_type'] == bType,
     orElse: () => <String, dynamic>{},
   );
 
   final rawTiers = match['tiers'];
-  final List<Map<String, dynamic>> tiers = (rawTiers is List && rawTiers.isNotEmpty)
-      ? rawTiers.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
-      : [
+  final researchedCatalogTiers = catalogRows
+      .where((row) => row['tier'] != null)
+      .map((row) => <String, dynamic>{
+            'tier': asIntOr(row['tier'], 1),
+            'name': row['name'],
+            'upgradeCreditCost': row['cost_credits'],
+            'upgradeMaterialCost': row['cost_materials'],
+            'upgradeComponentsCost': row['cost_components'],
+            'upgradeComputeCost': row['cost_compute'],
+            'dailyCreditRevenue': row['output_credits'],
+            'dailyOperatingCredits': row['operating_credits'],
+            'unlockedPerks': const <String>[],
+            'description': row['description'],
+          })
+      .toList();
+  final List<Map<String, dynamic>> tiers = researchedCatalogTiers.length > 1
+      ? researchedCatalogTiers
+      : (rawTiers is List && rawTiers.isNotEmpty)
+          ? rawTiers.whereType<Map>().map((m) => Map<String, dynamic>.from(m)).toList()
+          : [
           {
             'tier': 1,
             'name': '$bName (Standard)',
@@ -63,7 +86,18 @@ Future<void> showBuildingDetailUpgradeDialog(
             'requiredCityPopulation': 25,
             'description': 'Master-tier commercial installation.',
           },
-        ];
+            ];
+  if (bType == 'private-estate-plot') {
+    // A client-side legacy/static catalog may still contain future estate
+    // tiers. They are not available until a corporation research record has
+    // created the corresponding database blueprint.
+    if (researchedCatalogTiers.length <= 1) {
+      tiers.removeWhere((tier) => asIntOr(tier['tier'], 1) > currentTier);
+    }
+    for (final tier in tiers) {
+      tier.remove('requiredCityPopulation');
+    }
+  }
 
   final nextTier = currentTier + 1;
   final nextTierSpec = tiers.firstWhere(
@@ -117,9 +151,9 @@ Future<void> showBuildingDetailUpgradeDialog(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text('Active Tier: Tier $currentTier · $footprint Slot(s)', style: context.widgetTitleStyle),
-                    EarthBadge(
-                      label: '${condition.toStringAsFixed(0)}% HEALTH',
-                      variant: condition > 75 ? EarthBadgeVariant.success : EarthBadgeVariant.warning,
+                    const EarthBadge(
+                      label: 'OPERATIONAL',
+                      variant: EarthBadgeVariant.success,
                     ),
                   ],
                 ),

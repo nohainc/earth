@@ -80,12 +80,8 @@ export async function handleGovernanceRoutes(
     const institutionId = body.institutionId?.trim();
     const title = body.title?.trim();
     const proposalBody = body.body?.trim();
-    const durationHours = Number(body.durationHours ?? 72);
     if (!institutionId || !title || title.length < 3 || title.length > 120 || !proposalBody || proposalBody.length < 10 || proposalBody.length > 4000) {
       return Response.json({ ok: false, error: 'Title must be 3–120 characters and description 10–4000 characters' }, { status: 400 });
-    }
-    if (!Number.isInteger(durationHours) || durationHours < 24 || durationHours > 168) {
-      return Response.json({ ok: false, error: 'Decision window must be between 24 and 168 hours' }, { status: 400 });
     }
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
     if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
@@ -100,7 +96,7 @@ export async function handleGovernanceRoutes(
           institutionId,
           title,
           body: proposalBody,
-          durationHours,
+          durationHours: body.durationHours,
           ruleVersionId: body.ruleVersionId,
           targetCategory,
           targetValue: body.target?.value ?? null,

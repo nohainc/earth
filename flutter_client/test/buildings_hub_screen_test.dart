@@ -262,41 +262,6 @@ void main() {
       expect(actionCallCount, 2);
     });
 
-    testWidgets('Common auto-repair toggle invokes action callback for all grouped buildings', (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(() {
-        tester.view.resetPhysicalSize();
-        tester.view.resetDevicePixelRatio();
-      });
-
-      int autoRepairActions = 0;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: BuildingsHubScreen(
-                state: testState,
-                busy: false,
-                action: (cb) async {
-                  autoRepairActions++;
-                },
-              ),
-            ),
-          ),
-        ),
-      );
-
-      final switchFinder = find.byType(Switch);
-      expect(switchFinder, findsOneWidget);
-
-      // Toggle auto-repair switch
-      await tester.tap(switchFinder);
-      await tester.pumpAndSettle();
-
-      expect(autoRepairActions, 2);
-    });
-
     testWidgets('Controls are disabled when busy is true', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -326,11 +291,6 @@ void main() {
       await tester.tap(find.text('Frugal −30%'));
       await tester.pumpAndSettle();
       expect(actionsTriggered, 0);
-
-      // Tapping auto repair switch when busy should not invoke callback
-      await tester.tap(find.byType(Switch));
-      await tester.pumpAndSettle();
-      expect(actionsTriggered, 0);
     });
 
     testWidgets('Information dialogs open on info button tap', (tester) async {
@@ -354,19 +314,6 @@ void main() {
           ),
         ),
       );
-
-      // Tap Auto-repair info button
-      await tester.tap(find.byTooltip('Auto-repair information'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('Auto-repair'), findsOneWidget);
-      expect(find.textContaining('When enabled, the next settlement uses one component'), findsOneWidget);
-
-      // Close dialog
-      await tester.tap(find.text('CLOSE'));
-      await tester.pumpAndSettle();
-
-      expect(find.textContaining('When enabled, the next settlement uses one component'), findsNothing);
 
       // Tap Operating policy info button
       await tester.tap(find.byTooltip('Policy information'));
@@ -407,27 +354,41 @@ void main() {
       expect(find.text('Nova Molecular Bistro × 2'), findsOneWidget);
       expect(find.text('PRIVATE CATALOG'), findsOneWidget);
 
-      // 2. Switch to Civic tab
-      await tester.tap(find.text('CIVIC (1)'));
+      // 2. Switch to combined Civic tab (count is 1 civic + 1 invest = 2)
+      expect(find.text('CIVIC (2)'), findsOneWidget);
+      await tester.tap(find.text('CIVIC (2)'));
       await tester.pumpAndSettle();
 
-      expect(find.text('CIVIC (1)'), findsOneWidget);
-      expect(find.text('New Carthage Geothermal Core × 1'), findsOneWidget);
+      expect(find.text('CIVIC (2)'), findsOneWidget);
       expect(find.text('CIVIC CATALOG'), findsOneWidget);
 
-      // 3. Switch to Public Investment tab
-      await tester.tap(find.text('INVEST (1)'));
-      await tester.pumpAndSettle();
-
-      expect(find.text('INVEST (1)'), findsOneWidget);
+      // Both civic and public investment buildings appear under Civic tab
+      expect(find.text('New Carthage Geothermal Core × 1'), findsOneWidget);
       expect(find.text('Hyperloop Terminal Express × 1'), findsOneWidget);
-      expect(find.text('INVESTMENT CATALOG'), findsOneWidget);
+      expect(find.text('PUBLIC INVESTMENT'), findsWidgets);
 
       // Verify portfolio summary header metrics
       expect(find.text('SHARES HELD'), findsOneWidget);
       expect(find.text('10'), findsOneWidget);
       expect(find.text('INVESTED'), findsOneWidget);
       expect(find.text('5000 C'), findsOneWidget);
+
+      // Test built filters (ALL, CIVIC, INVEST)
+      expect(find.text('ALL (2)'), findsWidgets);
+      expect(find.text('CIVIC (1)'), findsWidgets);
+      expect(find.text('INVEST (1)'), findsWidgets);
+
+      // Filter by CIVIC only
+      await tester.tap(find.text('CIVIC (1)').first);
+      await tester.pumpAndSettle();
+      expect(find.text('New Carthage Geothermal Core × 1'), findsOneWidget);
+      expect(find.text('Hyperloop Terminal Express × 1'), findsNothing);
+
+      // Filter by INVEST only
+      await tester.tap(find.text('INVEST (1)').first);
+      await tester.pumpAndSettle();
+      expect(find.text('New Carthage Geothermal Core × 1'), findsNothing);
+      expect(find.text('Hyperloop Terminal Express × 1'), findsOneWidget);
 
       // Expand public investment group to verify individual details
       await tester.tap(find.text('Hyperloop Terminal Express × 1'));
@@ -470,6 +431,88 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Bistro & Molecular Restaurant'), findsOneWidget);
+    });
+
+    testWidgets('Independent citizen sees only private buildings and no ownership tabs', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      const independentState = EarthState({
+        'clock': {'day': 184, 'minute': 100},
+        'human': {'id': 'H-0044', 'credits': 50000},
+        'membership': null, // Independent
+        'institutions': {},
+        'districtZoning': {},
+        'resources': {},
+        'buildings': [
+          {
+            'id': 'BLD-01',
+            'city_id': 'CITY-0084',
+            'owner_id': 'H-0044',
+            'ownership_class': 'private',
+            'building_type': 'restaurant',
+            'name': 'Nova Molecular Bistro',
+            'tier': 1,
+            'slot_footprint': 1,
+            'operating_policy': 'balanced',
+            'daily_operating_credits': 60,
+            'resource_output_type': 'credits',
+            'resource_output_amount': 620.0,
+            'status': 'active',
+          },
+        ],
+        'investmentShares': [],
+        'civicDividends': [],
+        'buildingCatalog': [
+          {
+            'type': 'restaurant',
+            'name': 'Bistro & Molecular Restaurant',
+            'category': 'commercial',
+            'defaultOwnershipClass': 'private',
+            'slotFootprint': 1,
+            'baseCreditCost': 8500,
+            'baseMaterialCost': 120,
+            'dailyOperatingCredits': 120,
+            'dailyCreditRevenue': 620,
+          },
+        ],
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: BuildingsHubScreen(
+                state: independentState,
+                busy: false,
+                action: (cb) async => cb(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Ownership tabs should not exist for independent citizen
+      expect(find.text('PRIVATE (1)'), findsNothing);
+      expect(find.text('CIVIC (0)'), findsNothing);
+      expect(find.text('INVEST (0)'), findsNothing);
+
+      // Private content is rendered directly
+      expect(find.text('Nova Molecular Bistro × 1'), findsOneWidget);
+      expect(find.text('PRIVATE CATALOG'), findsOneWidget);
+
+      // Open spaces shows 9 (10 from default Tier 1 estate deed minus 1 slot used)
+      expect(find.text('OPEN SPACES'), findsOneWidget);
+      expect(find.text('9'), findsOneWidget);
+      expect(find.text('SPACES USED'), findsOneWidget);
+      expect(find.text('1'), findsOneWidget);
+
+      // District zoning & capacity widget is not displayed
+      expect(find.text('BUILDING CAPACITY & DISTRICT ZONING'), findsNothing);
     });
   });
 }

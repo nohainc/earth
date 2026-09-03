@@ -503,6 +503,16 @@ class Dashboard extends StatelessWidget {
         ];
       case 'civic':
       case 'governance':
+        if (state.membership?['city_id']?.toString().isNotEmpty != true) {
+          return [
+            const AffiliationRequiredPanel(
+              title: 'PUBLIC GOVERNANCE',
+              icon: Icons.public_outlined,
+              message:
+                  'Public Governance explains the common rules of Earth and how cities are managed. You are currently independent, so city proposals, municipal budgets, and local voting are not available yet. Join a city to participate in its governance.',
+            ),
+          ];
+        }
         return [
           PublicFinanceGovernancePanel(
               state: state, busy: busy, action: action),
@@ -548,6 +558,14 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case 'city':
+        if (state.membership?['city_id']?.toString().isNotEmpty != true) {
+          return [
+            CityFormationAccessPanel(
+              busy: busy,
+              action: action,
+            ),
+          ];
+        }
         return [
           LayoutBuilder(
             builder: (context, _) {

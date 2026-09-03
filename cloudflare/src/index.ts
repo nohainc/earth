@@ -28,7 +28,7 @@ import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesCont
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { listSocialDirectory } from './social-directory-postgres.ts';
-import { purchasePrivatePlotAndConstruct, upgradeBuilding, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, investInPublicBuilding, openPublicInvestmentOffering, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
+import { purchasePrivatePlotAndConstruct, upgradeBuilding, completeBuildingConstruction, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, investInPublicBuilding, openPublicInvestmentOffering, demolishBuilding, getCityDistrictZoning, getCivicDividendHistory, contributeCorporateResearch, acquireBuildingPatentLicense, renewBuildingPatentLicense } from './real-estate-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { handleAiRoutes } from './ai-routes.ts';
 import { handleHouseRoutes } from './house-routes.ts';
@@ -714,8 +714,8 @@ const worker = {
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const name = body.name?.trim();
-      const communityId = body.communityId?.trim();
-      if (!name || name.length < 3 || name.length > 80 || !communityId) return Response.json({ ok: false, error: 'City name and founding Community are required' }, { status: 400 });
+      const communityId = body.communityId?.trim() || null;
+      if (!name || name.length < 3 || name.length > 80) return Response.json({ ok: false, error: 'A city name is required' }, { status: 400 });
       try {
         const result = await withRepository(env, (repository) => createCityPostgres(repository, { founderId: viewer.id, communityId, name }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -994,6 +994,21 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building upgrade failed' }, { status: 409 });
+      }
+    }
+    if (url.pathname === '/api/real-estate/complete-construction' && request.method === 'POST') {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const parsed = await parseJsonBody<{ buildingId?: string }>(request);
+      if (!parsed.ok) return parsed.response;
+      const buildingId = parsed.value.buildingId?.trim() ?? '';
+      if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
+      try {
+        const result = await withRepository(env, (repository) => completeBuildingConstruction(repository, { humanId: viewer.id, buildingId }));
+        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+        return Response.json({ ...result, persistence: 'planetscale-postgres' });
+      } catch (error) {
+        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Construction completion failed' }, { status: 409 });
       }
     }
     if (url.pathname === '/api/real-estate/repair' && request.method === 'POST') {
@@ -1772,16 +1787,14 @@ const worker = {
       const institutionId = body.institutionId?.trim() || 'OUC-001';
       const title = body.title?.trim();
       const proposalBody = body.body?.trim();
-      const durationHours = Number(body.durationHours ?? 72);
       if (!title || title.length < 8 || title.length > 140) return Response.json({ ok: false, error: 'Proposal title must be 8–140 characters' }, { status: 400 });
       if (!proposalBody || proposalBody.length < 20 || proposalBody.length > 4000) return Response.json({ ok: false, error: 'Proposal body must be 20–4000 characters' }, { status: 400 });
-      if (!Number.isInteger(durationHours) || durationHours < 24 || durationHours > 168) return Response.json({ ok: false, error: 'Decision window must be between 24 and 168 hours' }, { status: 400 });
       const correlationId = resolveIdempotencyKey(request, body.correlationId);
       if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
       const targetCategory = body.target?.category?.trim() || null;
       if (targetCategory && !['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
       try {
-        const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue: body.target?.value ?? null, correlationId }));
+        const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours: body.durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue: body.target?.value ?? null, correlationId }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
       } catch (error) {

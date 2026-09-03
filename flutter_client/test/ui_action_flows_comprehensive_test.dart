@@ -395,8 +395,8 @@ void main() {
                   personalFinanceData: finance),
               spy);
           expect(find.text('PERSONAL FINANCE'), findsOneWidget);
-          expect(find.textContaining('120'), findsWidgets);
-          expect(find.text('LIFE MAINTENANCE'), findsOneWidget);
+          expect(find.textContaining('470'), findsWidgets);
+          expect(find.text('FROM PRIVATE BUILDINGS'), findsOneWidget);
         }
       });
     }

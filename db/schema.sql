@@ -527,16 +527,16 @@ CREATE TABLE IF NOT EXISTS businesses (
 
 CREATE TABLE IF NOT EXISTS buildings (
   id TEXT PRIMARY KEY,
-  city_id TEXT NOT NULL REFERENCES cities(id),
+  city_id TEXT REFERENCES cities(id),
   owner_id TEXT NOT NULL REFERENCES humans(id),
   business_id TEXT REFERENCES businesses(id),
   building_type TEXT NOT NULL,
   name TEXT NOT NULL,
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier >= 1),
   condition NUMERIC(10,4) NOT NULL DEFAULT 100.0 CHECK (condition >= 0.0 AND condition <= 100.0),
-  slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint >= 1),
-  ownership_class TEXT NOT NULL CHECK (ownership_class IN ('private','municipal','syndicate')),
-  operating_policy TEXT NOT NULL DEFAULT 'standard' CHECK (operating_policy IN ('standard','frugal','overclocked','halted')),
+  slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint >= 0),
+  ownership_class TEXT NOT NULL CHECK (ownership_class IN ('private','civic','public_investment')),
+  operating_policy TEXT NOT NULL DEFAULT 'balanced' CHECK (operating_policy IN ('balanced','high_output','eco_reserve','overclock')),
   auto_repair_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   daily_operating_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (daily_operating_credits >= 0),
   resource_output_amount NUMERIC(20,6) NOT NULL DEFAULT 0 CHECK (resource_output_amount >= 0),
@@ -569,7 +569,7 @@ CREATE INDEX IF NOT EXISTS idx_building_invest_building ON building_investment_s
 CREATE TABLE IF NOT EXISTS building_settlement_journals (
   id UUID PRIMARY KEY,
   building_id TEXT NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
-  city_id TEXT NOT NULL REFERENCES cities(id),
+  city_id TEXT REFERENCES cities(id),
   day BIGINT NOT NULL,
   ownership_class TEXT NOT NULL,
   gross_revenue_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
@@ -796,7 +796,7 @@ CREATE TABLE IF NOT EXISTS proposals (
   target_category TEXT,
   target_value_json JSONB,
   executed_at TIMESTAMPTZ,
-  execution_status TEXT NOT NULL DEFAULT 'not_ready' CHECK (execution_status IN ('not_ready','ready','executed','skipped')),
+  execution_status TEXT NOT NULL DEFAULT 'not_ready' CHECK (execution_status IN ('not_ready','ready','queued','executed','skipped','challenged','voided')),
   correlation_id TEXT,
   closes_game_day BIGINT,
   closes_game_minute INTEGER CHECK (closes_game_minute BETWEEN 0 AND 1439),
@@ -1135,4 +1135,3 @@ CREATE TABLE IF NOT EXISTS earth_schema_migrations (
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   checksum TEXT NOT NULL
 );
-

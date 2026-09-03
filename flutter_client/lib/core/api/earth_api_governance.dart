@@ -13,7 +13,6 @@ extension EarthApiGovernance on EarthApi {
       'institutionId': institutionId,
       'title': title,
       'body': body,
-      'durationHours': 72,
       if (targetCategory != null && targetCategory.isNotEmpty)
         'target': {
           'category': targetCategory,

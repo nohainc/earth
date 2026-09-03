@@ -91,23 +91,34 @@ BEGIN
   FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true;
   v_business_tax_rate := COALESCE(v_business_tax_rate, 0.05);
 
-  -- Aggregate active buildings
+  -- Aggregate active buildings joining building_catalog
   FOR v_b IN
     SELECT
-      b.resource_output_type,
-      b.resource_output_amount,
-      b.upkeep_energy,
-      b.upkeep_food,
-      b.upkeep_materials,
-      b.upkeep_components,
-      b.upkeep_compute,
-      b.daily_operating_credits,
+      bc.output_credits,
+      bc.output_energy,
+      bc.output_food,
+      bc.output_materials,
+      bc.output_components,
+      bc.output_compute,
+      bc.upkeep_credits,
+      bc.upkeep_energy,
+      bc.upkeep_food,
+      bc.upkeep_materials,
+      bc.upkeep_components,
+      bc.upkeep_compute,
+      bc.operating_credits,
+      bc.operating_energy,
+      bc.operating_food,
+      bc.operating_materials,
+      bc.operating_components,
+      bc.operating_compute,
       b.operating_policy,
       b.condition
     FROM buildings b
+    JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
     WHERE (
-      (v_owner_kind = 'city' AND b.city_id = p_owner_id AND b.ownership_class = 'civic')
-      OR (v_owner_kind <> 'city' AND b.owner_id = p_owner_id AND b.ownership_class = 'private')
+      (v_owner_kind = 'city' AND b.city_id = p_owner_id AND (b.ownership_class = 'civic' OR bc.ownership_class = 'civic'))
+      OR (v_owner_kind <> 'city' AND b.owner_id = p_owner_id AND (b.ownership_class = 'private' OR bc.ownership_class = 'private'))
     )
     AND b.status = 'active'
   LOOP
@@ -125,32 +136,24 @@ BEGIN
       v_cost_mult := 1.0;
     END IF;
 
-    v_eff := GREATEST(0.1, LEAST(1.0, (v_b.condition / 100.0))) * v_out_mult;
-    v_cond_cost := (1.0 + (GREATEST(0, 100.0 - v_b.condition) / 200.0)) * v_cost_mult;
+    v_eff := v_out_mult;
+    v_cond_cost := v_cost_mult;
 
-    -- Inflow
-    v_out_amount := ROUND(v_b.resource_output_amount * v_eff, 6);
-    IF v_b.resource_output_type = 'credits' THEN
-      v_in_credits := v_in_credits + v_out_amount;
-    ELSIF v_b.resource_output_type = 'energy' THEN
-      v_in_energy := v_in_energy + v_out_amount;
-    ELSIF v_b.resource_output_type = 'food' THEN
-      v_in_food := v_in_food + v_out_amount;
-    ELSIF v_b.resource_output_type = 'material' THEN
-      v_in_material := v_in_material + v_out_amount;
-    ELSIF v_b.resource_output_type = 'components' THEN
-      v_in_components := v_in_components + v_out_amount;
-    ELSIF v_b.resource_output_type = 'compute' THEN
-      v_in_compute := v_in_compute + v_out_amount;
-    END IF;
+    -- Inflows (Outputs)
+    v_in_credits := v_in_credits + ROUND(COALESCE(v_b.output_credits, 0) * v_eff, 6);
+    v_in_energy := v_in_energy + ROUND(COALESCE(v_b.output_energy, 0) * v_eff, 6);
+    v_in_food := v_in_food + ROUND(COALESCE(v_b.output_food, 0) * v_eff, 6);
+    v_in_material := v_in_material + ROUND(COALESCE(v_b.output_materials, 0) * v_eff, 6);
+    v_in_components := v_in_components + ROUND(COALESCE(v_b.output_components, 0) * v_eff, 6);
+    v_in_compute := v_in_compute + ROUND(COALESCE(v_b.output_compute, 0) * v_eff, 6);
 
-    -- Outflow
-    v_out_credits := v_out_credits + ROUND(COALESCE(v_b.daily_operating_credits, 0) * v_cond_cost, 6);
-    v_out_energy := v_out_energy + ROUND(v_b.upkeep_energy * v_cond_cost, 6);
-    v_out_food := v_out_food + ROUND(v_b.upkeep_food * v_cond_cost, 6);
-    v_out_material := v_out_material + ROUND(v_b.upkeep_materials * v_cond_cost, 6);
-    v_out_components := v_out_components + ROUND(v_b.upkeep_components * v_cond_cost, 6);
-    v_out_compute := v_out_compute + ROUND(v_b.upkeep_compute * v_cond_cost, 6);
+    -- Outflows (Upkeep + Operating)
+    v_out_credits := v_out_credits + ROUND((COALESCE(v_b.upkeep_credits, 0) + COALESCE(v_b.operating_credits, 0)) * v_cond_cost, 6);
+    v_out_energy := v_out_energy + ROUND((COALESCE(v_b.upkeep_energy, 0) + COALESCE(v_b.operating_energy, 0)) * v_cond_cost, 6);
+    v_out_food := v_out_food + ROUND((COALESCE(v_b.upkeep_food, 0) + COALESCE(v_b.operating_food, 0)) * v_cond_cost, 6);
+    v_out_material := v_out_material + ROUND((COALESCE(v_b.upkeep_materials, 0) + COALESCE(v_b.operating_materials, 0)) * v_cond_cost, 6);
+    v_out_components := v_out_components + ROUND((COALESCE(v_b.upkeep_components, 0) + COALESCE(v_b.operating_components, 0)) * v_cond_cost, 6);
+    v_out_compute := v_out_compute + ROUND((COALESCE(v_b.upkeep_compute, 0) + COALESCE(v_b.operating_compute, 0)) * v_cond_cost, 6);
   END LOOP;
 
   -- Taxes calculation for credits (basic civic levy + business revenue tax)

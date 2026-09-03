@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
@@ -215,7 +217,7 @@ class CivicInfluencePanel extends StatelessWidget {
   }
 }
 
-class ProposalPanel extends StatelessWidget {
+class ProposalPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
   final Future<void> Function(Future<EarthState> Function()) action;
@@ -232,7 +234,72 @@ class ProposalPanel extends StatelessWidget {
   });
 
   @override
+  State<ProposalPanel> createState() => _ProposalPanelState();
+}
+
+class _ProposalPanelState extends State<ProposalPanel> {
+  Timer? _timer;
+  DateTime _now = DateTime.now();
+  final Set<String> _expiredRefreshes = <String>{};
+
+  EarthState get state => widget.state;
+  bool get busy => widget.busy;
+  Future<void> Function(Future<EarthState> Function()) get action =>
+      widget.action;
+
+  @override
+  void initState() {
+    super.initState();
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      final now = DateTime.now();
+      if (mounted) setState(() => _now = now);
+      _refreshExpiredProposals(now);
+    });
+  }
+
+  void _refreshExpiredProposals(DateTime now) {
+    if (widget.busy) return;
+    final proposals =
+        ((widget.state.governance['proposals'] as List<dynamic>?) ?? const []);
+    for (final raw in proposals) {
+      if (raw is! Map) continue;
+      final id = raw['id']?.toString() ?? '';
+      final status = raw['status']?.toString().toLowerCase();
+      final deadline = raw['deadline'];
+      if (id.isEmpty || status != 'open' || deadline is! Map) continue;
+      final closesAt = DateTime.tryParse(deadline['closesAt']?.toString() ??
+          deadline['closes_at']?.toString() ??
+          '');
+      if (closesAt == null ||
+          now.isBefore(closesAt) ||
+          !_expiredRefreshes.add(id)) {
+        continue;
+      }
+      // The server performs the authoritative resolution. This refresh makes
+      // the City page show the new outcome without requiring a manual reload.
+      () async {
+        try {
+          await widget.action(() => const EarthApi().world());
+        } catch (_) {
+          _expiredRefreshes.remove(id);
+        }
+      }();
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final state = widget.state;
+    final busy = widget.busy;
+    final action = widget.action;
+    final institutionId = widget.institutionId;
+    final scopeLabel = widget.scopeLabel;
     final proposals =
         ((state.governance['proposals'] as List<dynamic>?) ?? const [])
             .where((raw) =>
@@ -241,32 +308,48 @@ class ProposalPanel extends StatelessWidget {
                         ?.toString() ==
                     institutionId)
             .toList();
-    final createProposalButton = EarthButton(
-      label: 'CREATE $scopeLabel PROPOSAL',
-      icon: Icons.note_add_outlined,
-      variant: EarthButtonVariant.primary,
-      onPressed: busy
-          ? null
-          : () => showProposalComposer(context, action,
-              institutionId: institutionId, scopeLabel: scopeLabel),
-    );
+    final rules = ((state.governance['rules'] as List<dynamic>?) ?? const [])
+        .where((raw) =>
+            raw is Map &&
+            raw['institution_id']?.toString() == institutionId &&
+            raw['status']?.toString() == 'active')
+        .toList();
+    final currentRule =
+        rules.isEmpty ? null : Map<String, dynamic>.from(rules.first as Map);
+    final ruleSummary = currentRule == null
+        ? 'Common governance defaults apply: 25% quorum · 50% approval · 3-day voting period.'
+        : 'Current rule: ${asIntOr(asDoubleOr(currentRule['quorum_threshold'], .25) * 100, 25)}% quorum · ${asIntOr(asDoubleOr(currentRule['approval_threshold'], .5) * 100, 50)}% approval · ${currentRule['voting_period_days'] ?? '—'}-day vote · ${currentRule['implementation_delay_days'] ?? '—'}-day delay.';
+
+    final createProposalButton = scopeLabel == 'CITY'
+        ? null
+        : EarthButton(
+            label: 'CREATE $scopeLabel PROPOSAL',
+            icon: Icons.note_add_outlined,
+            variant: EarthButtonVariant.primary,
+            onPressed: busy
+                ? null
+                : () => showProposalComposer(context, action,
+                    institutionId: institutionId, scopeLabel: scopeLabel),
+          );
 
     if (proposals.isEmpty) {
       return EarthSection(
         title: '$scopeLabel PROPOSALS',
         showSurface: false,
         trailing: null,
-        infoBulletPoints: const [
-          'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
-          'Quorum & Approval Thresholds: Quorum 25%, Approval 50% needed for enactment.',
-          'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
-          'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
+        infoBulletPoints: [
+          '$scopeLabel proposals remain open until their configured voting deadline. The result is calculated automatically after the deadline.',
+          'Quorum is the minimum participation required; approval is the percentage of decisive votes needed to pass.',
+          'Passed proposals observe the implementation delay, then execute automatically when their target conditions are met. Civic construction waits in the city queue if resources or space are unavailable.',
+          'Stages: OPEN → PASSED/REJECTED → COOLING-OFF → READY/QUEUED → EXECUTED.',
         ],
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            createProposalButton,
-            const SizedBox(height: 14),
+            _buildRuleSummary(context, ruleSummary),
+            const SizedBox(height: 12),
+            if (createProposalButton != null) createProposalButton,
+            if (createProposalButton != null) const SizedBox(height: 14),
             const EarthEmptyState(
               message: 'No active legislation is currently on the ballot.',
               icon: Icons.how_to_vote_outlined,
@@ -282,32 +365,52 @@ class ProposalPanel extends StatelessWidget {
         ? '$scopeLabel PROPOSAL ${first['id'] ?? ''}'
         : '$scopeLabel PROPOSALS (${proposals.length})';
 
-    final quorumNum = asDoubleOr(first['quorum'], .25);
-    final approvalThresholdNum = asDoubleOr(first['approval_threshold'], .50);
-    final quorumPercent = (quorumNum * 100).round();
-    final approvalPercent = (approvalThresholdNum * 100).round();
-
     return EarthSection(
       title: sectionTitle,
       showSurface: false,
       trailing: null,
       infoBulletPoints: [
         'Universal Citizenship Democratic Ballot: Citizen-initiated legislation governing macroeconomic tax rates, statutory funds, and constitutional amendments.',
-        'Quorum & Approval Thresholds: Quorum $quorumPercent%, Approval $approvalPercent% needed for enactment.',
+        'Quorum and approval requirements are shown once in the current-rule summary above, not repeated on every proposal.',
         'Mandatory Implementation Delay (Cooling-Off Period): All passed legislation enters a mandatory cooling-off window prior to execution, allowing affected entities to file constitutional challenges.',
         'Legislative Stages: ACTIVE (open for citizen voting), COOLING-OFF (undergoing judicial review window), READY (authorized for ledger enactment), CHALLENGED (under High Court injunction), EXECUTED (enacted into planetary statutory law).',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          createProposalButton,
-          const SizedBox(height: 14),
-          ...proposals.map((raw) {
-            final proposal = Map<String, dynamic>.from(raw as Map);
-            return _buildProposalItem(context, proposal);
-          }),
+          if (createProposalButton != null) createProposalButton,
+          if (createProposalButton != null) const SizedBox(height: 14),
+          _buildRuleSummary(context, ruleSummary),
+          const SizedBox(height: 12),
+          for (final entry in proposals.asMap().entries) ...[
+            Container(
+              width: double.infinity,
+              padding: EdgeInsets.all(context.cardPadding),
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(context.radiusCard),
+                border: Border.all(color: context.subtleBorderColor),
+              ),
+              child: _buildProposalItem(
+                  context, Map<String, dynamic>.from(entry.value as Map)),
+            ),
+            if (entry.key < proposals.length - 1)
+              SizedBox(height: context.spacingControl),
+          ],
         ],
       ),
+    );
+  }
+
+  Widget _buildRuleSummary(BuildContext context, String summary) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Icon(Icons.rule_outlined,
+            size: context.iconSize, color: context.primaryColor),
+        SizedBox(width: context.spacingInline),
+        Expanded(child: Text(summary, style: context.widgetFooterStyle)),
+      ],
     );
   }
 
@@ -322,6 +425,7 @@ class ProposalPanel extends StatelessWidget {
             (isPassed ? 'ready' : 'pending'))
         .toLowerCase();
     final isChallenged = executionStatus == 'challenged';
+    final isQueued = executionStatus == 'queued';
     final isVoided =
         executionStatus == 'voided' || proposal['outcome'] == 'voided';
     final isExecuted = executionStatus == 'executed';
@@ -341,17 +445,20 @@ class ProposalPanel extends StatelessWidget {
         !isChallenged &&
         !isVoided &&
         !isExecuted;
+    final deadline = proposal['deadline'];
+    final closesAt = deadline is Map
+        ? DateTime.tryParse(deadline['closesAt']?.toString() ??
+            deadline['closes_at']?.toString() ??
+            '')
+        : null;
+    final isVotingOpen =
+        proposal['status']?.toString().toLowerCase() == 'open' &&
+            (closesAt == null || _now.isBefore(closesAt));
 
     final supportCount = asIntOr(votes['support'], 0);
     final opposeCount = asIntOr(votes['oppose'], 0);
     final uncastCount = asIntOr(votes['uncast'], 0);
     final totalVotes = supportCount + opposeCount + uncastCount;
-
-    final quorumNum = asDoubleOr(proposal['quorum'], .25);
-    final approvalThresholdNum =
-        asDoubleOr(proposal['approval_threshold'], .50);
-    final quorumPercent = (quorumNum * 100).round();
-    final approvalPercent = (approvalThresholdNum * 100).round();
 
     final hasJudicialAuthority = state.roles.any((raw) {
       if (raw is! Map<String, dynamic>) return false;
@@ -369,6 +476,7 @@ class ProposalPanel extends StatelessWidget {
     if (isVoided) statusColor = context.errorColor;
     if (isExecuted) statusColor = context.successColor;
     if (isCoolingOff) statusColor = context.warningColor;
+    if (isQueued) statusColor = context.warningColor;
     if (isPassed &&
         !isCoolingOff &&
         !isChallenged &&
@@ -421,10 +529,16 @@ class ProposalPanel extends StatelessWidget {
                     'Status: ${proposal['status']} · Outcome: ${proposal['outcome'] ?? 'pending'}',
                     style: context.widgetFooterStyle,
                   ),
-                  Text(
-                    'Quorum $quorumPercent% · approval $approvalPercent%',
-                    style: context.widgetFooterStyle,
-                  ),
+                  if (isQueued) ...[
+                    const SizedBox(height: 6),
+                    Text(
+                      'Approved — waiting for city space or resources. It will be retried automatically.',
+                      style: context.widgetFooterStyle.copyWith(
+                        color: context.warningColor,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ],
                   if (isCoolingOff) ...[
                     const SizedBox(height: 6),
                     Container(
@@ -452,17 +566,6 @@ class ProposalPanel extends StatelessWidget {
                             ),
                           ),
                         ],
-                      ),
-                    ),
-                  ],
-                  if (proposal['deadline'] is Map) ...[
-                    const SizedBox(height: 4),
-                    Text(
-                      formatProposalDeadline(
-                          proposal['deadline'] as Map<String, dynamic>),
-                      style: context.widgetFooterStyle.copyWith(
-                        color: context.warningColor,
-                        fontWeight: FontWeight.w600,
                       ),
                     ),
                   ],
@@ -536,19 +639,21 @@ class ProposalPanel extends StatelessWidget {
           spacing: 8,
           runSpacing: 6,
           children: [
-            for (final choice in ['support', 'oppose', 'abstain'])
-              EarthButton(
-                label: choice,
-                variant: choice == 'support'
-                    ? EarthButtonVariant.primary
-                    : (choice == 'oppose'
-                        ? EarthButtonVariant.danger
-                        : EarthButtonVariant.ghost),
-                onPressed: busy || proposalId.isEmpty || isExecuted || isVoided
-                    ? null
-                    : () =>
-                        action(() => const EarthApi().vote(proposalId, choice)),
-              ),
+            if (isVotingOpen)
+              for (final choice in ['support', 'oppose', 'abstain'])
+                EarthButton(
+                  label: choice,
+                  variant: choice == 'support'
+                      ? EarthButtonVariant.primary
+                      : (choice == 'oppose'
+                          ? EarthButtonVariant.danger
+                          : EarthButtonVariant.ghost),
+                  onPressed:
+                      busy || proposalId.isEmpty || isExecuted || isVoided
+                          ? null
+                          : () => action(
+                              () => const EarthApi().vote(proposalId, choice)),
+                ),
             if (proposalId.isNotEmpty &&
                 isPassed &&
                 !isChallenged &&

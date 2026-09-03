@@ -64,13 +64,16 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<EarthState> createCity(String name, String communityId) async {
+  Future<EarthState> createCity(String name, [String? communityId]) async {
+    final body = <String, dynamic>{
+      'name': name,
+      'correlationId': 'city-formation-${DateTime.now().microsecondsSinceEpoch}',
+    };
+    if (communityId != null && communityId.trim().isNotEmpty) {
+      body['communityId'] = communityId;
+    }
     await _request('/api/cities',
-        method: 'POST', body: {
-          'name': name,
-          'communityId': communityId,
-          'correlationId': 'city-formation-${DateTime.now().microsecondsSinceEpoch}',
-        });
+        method: 'POST', body: body);
     return world();
   }
 

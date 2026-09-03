@@ -169,6 +169,123 @@ class TechnologyPortfolioPanel extends StatelessWidget {
   }
 }
 
+class CorporateBuildingResearchPanel extends StatelessWidget {
+  final EarthState state;
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const CorporateBuildingResearchPanel({
+    super.key,
+    required this.state,
+    required this.busy,
+    required this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final data = state.corporationBuildingResearch;
+    final corporationId = data['corporationId']?.toString();
+    final projects =
+        data['projects'] is List ? data['projects'] as List : const [];
+    final unlocks =
+        data['unlocks'] is List ? data['unlocks'] as List : const [];
+    final buildingTypes = <String, String>{};
+    for (final raw in state.buildingCatalog) {
+      if (raw is! Map) continue;
+      final item = Map<String, dynamic>.from(raw);
+      final type = item['building_type']?.toString();
+      if (type != null && type.isNotEmpty) {
+        buildingTypes[type] ??= item['name']?.toString() ?? type;
+      }
+    }
+
+    return EarthPanel(
+      title: 'CORPORATION BUILDING RESEARCH',
+      showSurface: false,
+      contentPadding: EdgeInsets.zero,
+      helpAfterTitle: true,
+      titleColor: mutedColor,
+      infoDescription:
+          'Research creates the next tier in the shared building catalog. Each corporation pays from its own treasury and receives its own unlock when the research completes. Other corporations can research the same tier without changing your access.',
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        if (corporationId == null || corporationId.isEmpty)
+          const Text(
+            'Building tier research is available through corporation membership. Join a corporation to use its treasury and unlock researched tiers.',
+            style: TextStyle(color: mutedColor, fontSize: 11, height: 1.35),
+          )
+        else ...[
+          Text(
+            '${unlocks.length} tier${unlocks.length == 1 ? '' : 's'} unlocked · ${projects.where((p) => p is Map && p['status'] == 'active').length} research in progress',
+            style: const TextStyle(color: mutedColor, fontSize: 10.5),
+          ),
+          const SizedBox(height: 9),
+          Wrap(spacing: 7, runSpacing: 7, children: [
+            ...projects.take(3).map((raw) {
+              final item = raw is Map
+                  ? Map<String, dynamic>.from(raw)
+                  : <String, dynamic>{};
+              final progress = asDoubleOr(item['progress'], 0)
+                  .clamp(0, 100)
+                  .toStringAsFixed(0);
+              return Chip(
+                avatar: const Icon(Icons.biotech_outlined, size: 14),
+                label: Text(
+                    '${item['catalog_name'] ?? item['building_type'] ?? 'Tier research'} · $progress%'),
+                visualDensity: VisualDensity.compact,
+              );
+            }),
+            if (buildingTypes.isNotEmpty)
+              OutlinedButton.icon(
+                onPressed:
+                    busy ? null : () => _chooseBuilding(context, buildingTypes),
+                icon: const Icon(Icons.science_outlined, size: 15),
+                label: const Text('RESEARCH NEXT TIER'),
+              ),
+          ]),
+        ],
+      ]),
+    );
+  }
+
+  Future<void> _chooseBuilding(
+      BuildContext context, Map<String, String> types) async {
+    String? selected;
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Research a building tier'),
+          content: DropdownButtonFormField<String>(
+            decoration: const InputDecoration(labelText: 'Building blueprint'),
+            items: types.entries
+                .map((entry) => DropdownMenuItem(
+                      value: entry.key,
+                      child: Text(entry.value),
+                    ))
+                .toList(),
+            onChanged: (value) => setState(() => selected = value),
+          ),
+          actions: [
+            TextButton(
+                onPressed: () => Navigator.pop(dialogContext),
+                child: const Text('CANCEL')),
+            FilledButton(
+              onPressed: selected == null
+                  ? null
+                  : () async {
+                      Navigator.pop(dialogContext);
+                      await action(() => const EarthApi()
+                          .startCorporationBuildingResearch(selected!));
+                    },
+              child: const Text('START RESEARCH'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class TechnologyOutcomePanel extends StatefulWidget {
   final EarthState state;
 
@@ -247,15 +364,24 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
     final resourceFlows = widget.state.json['resourceFlows'] is Map
         ? Map<String, dynamic>.from(widget.state.json['resourceFlows'] as Map)
         : const <String, dynamic>{};
-    final pressuredResource = ['energy', 'food', 'material', 'components', 'compute']
+    final pressuredResource = [
+      'energy',
+      'food',
+      'material',
+      'components',
+      'compute'
+    ]
         .map((key) {
           final raw = resourceFlows[key] ??
               (key == 'material' ? resourceFlows['materials'] : null);
           return MapEntry(key, asDoubleOr(raw is Map ? raw['net'] : raw, 0));
         })
         .where((entry) => entry.value < 0)
-        .fold<MapEntry<String, double>?>(null, (current, entry) =>
-            current == null || entry.value < current.value ? entry : current);
+        .fold<MapEntry<String, double>?>(
+            null,
+            (current, entry) => current == null || entry.value < current.value
+                ? entry
+                : current);
     final recommendation = pressuredResource == null
         ? 'Choose the path that supports your next building milestone.'
         : 'Consider ${_recommendationFor(pressuredResource.key)} because ${pressuredResource.key} is in net decline.';
@@ -279,8 +405,7 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Icon(Icons.lightbulb_outline,
-                  size: 17, color: violetColor),
+              const Icon(Icons.lightbulb_outline, size: 17, color: violetColor),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -340,114 +465,121 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
         ),
         const SizedBox(height: 14),
         ...visibleItems.take(8).map((item) {
-        final name =
-            (item['name'] ?? item['title'] ?? 'Approved capability').toString();
-        final description = (item['description'] ??
-                'Approved capability with a defined gameplay effect.')
-            .toString();
-        final effect = (item['effect'] ?? 'Practical capability improvement')
-            .toString()
-            .replaceAll('_', ' ');
-        final branch = _branchFor(item);
-        final target = (item['target'] ??
-                item['affected_buildings'] ??
-                item['resource_effect'] ??
-                'Buildings, businesses, or civic services')
-            .toString()
-            .replaceAll('_', ' ');
-        final requirement = item['requirements'] ?? item['requirement'];
-        final locked = item['locked'] == true;
-        final prerequisite = item['prerequisites'] ?? item['requires'];
-        final prerequisiteText = _formatPrerequisites(prerequisite);
-        final researchCost = item['researchCost'] ??
-            item['research_cost'] ??
-            item['cost'] ??
-            item['cost_credits'];
-        final before = item['before'] ?? item['currentValue'] ?? item['current_value'];
-        final after = item['after'] ?? item['projectedValue'] ?? item['projected_value'];
-        final milestone = item['milestone'] ?? item['tier'] ?? _milestoneFor(item);
-        final adopted = adoptedNames.contains(name);
-        return Container(
-          width: double.infinity,
-          margin: const EdgeInsets.only(bottom: 7),
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-              color: surfaceColor.withValues(alpha: .65),
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(color: Colors.white12)),
-          child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            const Icon(Icons.auto_awesome_outlined,
-                size: 16, color: cyanAccentColor),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                  Row(children: [
-                    Expanded(
-                        child: Text(name,
-                            style: const TextStyle(
-                                fontSize: 10.5, fontWeight: FontWeight.w800))),
-                    Text(_effectLabel(effect).toUpperCase(),
-                        style: const TextStyle(
-                            color: violetColor,
-                            fontSize: 8,
-                            fontWeight: FontWeight.w800))
-                  ]),
-                  const SizedBox(height: 3),
-                  Text(description,
-                      style: const TextStyle(color: mutedColor, fontSize: 9.5)),
-                  const SizedBox(height: 5),
-                  Text('PATH: $branch · $milestone · APPLIES TO: $target',
-                      style: const TextStyle(
-                          color: cyanAccentColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w700)),
-                  const SizedBox(height: 3),
-                  Text(
-                      'COST: ${researchCost == null ? 'Set by project' : '${researchCost.toString()} C'} · PREREQUISITE: $prerequisiteText',
-                      style: const TextStyle(
-                          color: mutedColor,
-                          fontSize: 8.5,
-                          fontWeight: FontWeight.w600)),
-                  if (before != null || after != null) ...[
-                    const SizedBox(height: 5),
-                    Text('BEFORE → AFTER: ${before ?? 'Current'} → ${after ?? 'Improved'}',
-                        style: const TextStyle(
-                            color: Colors.tealAccent,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                  if (adopted) ...[
+          final name = (item['name'] ?? item['title'] ?? 'Approved capability')
+              .toString();
+          final description = (item['description'] ??
+                  'Approved capability with a defined gameplay effect.')
+              .toString();
+          final effect = (item['effect'] ?? 'Practical capability improvement')
+              .toString()
+              .replaceAll('_', ' ');
+          final branch = _branchFor(item);
+          final target = (item['target'] ??
+                  item['affected_buildings'] ??
+                  item['resource_effect'] ??
+                  'Buildings, businesses, or civic services')
+              .toString()
+              .replaceAll('_', ' ');
+          final requirement = item['requirements'] ?? item['requirement'];
+          final locked = item['locked'] == true;
+          final prerequisite = item['prerequisites'] ?? item['requires'];
+          final prerequisiteText = _formatPrerequisites(prerequisite);
+          final researchCost = item['researchCost'] ??
+              item['research_cost'] ??
+              item['cost'] ??
+              item['cost_credits'];
+          final before =
+              item['before'] ?? item['currentValue'] ?? item['current_value'];
+          final after = item['after'] ??
+              item['projectedValue'] ??
+              item['projected_value'];
+          final milestone =
+              item['milestone'] ?? item['tier'] ?? _milestoneFor(item);
+          final adopted = adoptedNames.contains(name);
+          return Container(
+            width: double.infinity,
+            margin: const EdgeInsets.only(bottom: 7),
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+                color: surfaceColor.withValues(alpha: .65),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.white12)),
+            child: Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              const Icon(Icons.auto_awesome_outlined,
+                  size: 16, color: cyanAccentColor),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Row(children: [
+                      Expanded(
+                          child: Text(name,
+                              style: const TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w800))),
+                      Text(_effectLabel(effect).toUpperCase(),
+                          style: const TextStyle(
+                              color: violetColor,
+                              fontSize: 8,
+                              fontWeight: FontWeight.w800))
+                    ]),
                     const SizedBox(height: 3),
-                    const Text('ADOPTED · Currently affecting outcomes',
-                        style: TextStyle(
+                    Text(description,
+                        style:
+                            const TextStyle(color: mutedColor, fontSize: 9.5)),
+                    const SizedBox(height: 5),
+                    Text('PATH: $branch · $milestone · APPLIES TO: $target',
+                        style: const TextStyle(
                             color: cyanAccentColor,
                             fontSize: 8.5,
                             fontWeight: FontWeight.w700)),
-                  ],
-                  if (prerequisite != null) ...[
-                    const SizedBox(height: 3),
-                    Text('PREREQUISITE · $prerequisite',
-                        style: const TextStyle(
-                            color: Colors.orangeAccent,
-                            fontSize: 8.5,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                  if (locked || requirement != null) ...[
                     const SizedBox(height: 3),
                     Text(
-                        locked
-                            ? 'LOCKED · ${requirement ?? 'Complete the prerequisite research first.'}'
-                            : 'REQUIREMENT · $requirement',
+                        'COST: ${researchCost == null ? 'Set by project' : '${researchCost.toString()} C'} · PREREQUISITE: $prerequisiteText',
                         style: const TextStyle(
-                            color: Colors.orangeAccent,
+                            color: mutedColor,
                             fontSize: 8.5,
-                            fontWeight: FontWeight.w700)),
-                  ],
-                ])),
-          ]),
-        );
+                            fontWeight: FontWeight.w600)),
+                    if (before != null || after != null) ...[
+                      const SizedBox(height: 5),
+                      Text(
+                          'BEFORE → AFTER: ${before ?? 'Current'} → ${after ?? 'Improved'}',
+                          style: const TextStyle(
+                              color: Colors.tealAccent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (adopted) ...[
+                      const SizedBox(height: 3),
+                      const Text('ADOPTED · Currently affecting outcomes',
+                          style: TextStyle(
+                              color: cyanAccentColor,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (prerequisite != null) ...[
+                      const SizedBox(height: 3),
+                      Text('PREREQUISITE · $prerequisite',
+                          style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                    if (locked || requirement != null) ...[
+                      const SizedBox(height: 3),
+                      Text(
+                          locked
+                              ? 'LOCKED · ${requirement ?? 'Complete the prerequisite research first.'}'
+                              : 'REQUIREMENT · $requirement',
+                          style: const TextStyle(
+                              color: Colors.orangeAccent,
+                              fontSize: 8.5,
+                              fontWeight: FontWeight.w700)),
+                    ],
+                  ])),
+            ]),
+          );
         }),
       ]),
     );
@@ -561,6 +693,8 @@ class TechnologyPanel extends StatelessWidget {
         (tech['name'] as String?)?.toUpperCase() ??
         'ADAPTIVE MAINTENANCE AI';
     final techId = research['id']?.toString() ?? 'TECH-001';
+    final corporationId = state.membership?['corporation_id']?.toString();
+    final isCorporationMember = corporationId != null && corporationId.isNotEmpty;
     final progress =
         (asDouble(research['progress']) ?? asDouble(tech['progress']) ?? 0.0)
             .clamp(0.0, 100.0);
@@ -575,11 +709,15 @@ class TechnologyPanel extends StatelessWidget {
     final historyEvents = state.history['events'] is List
         ? (state.history['events'] as List).whereType<Map>().toList()
         : <Map>[];
-    final researchEvents = historyEvents.where((event) {
-      final text = '${event['event_type'] ?? ''} ${event['title'] ?? ''} ${event['details'] ?? ''}'.toLowerCase();
-      return text.contains('research') || text.contains('technology');
-    }).take(4).toList();
-
+    final researchEvents = historyEvents
+        .where((event) {
+          final text =
+              '${event['event_type'] ?? ''} ${event['title'] ?? ''} ${event['details'] ?? ''}'
+                  .toLowerCase();
+          return text.contains('research') || text.contains('technology');
+        })
+        .take(4)
+        .toList();
 
     Color focusColor = cyanAccentColor;
     if (focus == 'DURABILITY') focusColor = Colors.tealAccent;
@@ -598,6 +736,37 @@ class TechnologyPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          if (!isCorporationMember) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: Colors.amber.withValues(alpha: .08),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.amber.withValues(alpha: .32)),
+              ),
+              child: const Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Icon(Icons.info_outline, color: Colors.amber, size: 19),
+                  SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'You are currently independent. Building-tier research is managed by corporations because it uses the corporate treasury and unlocks new tiers for that corporation. Join a corporation to access it. Your research overview remains available here.',
+                      style: TextStyle(color: mutedColor, fontSize: 11, height: 1.4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+          CorporateBuildingResearchPanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
+          const SizedBox(height: 14),
           // ACTIVE RESEARCH PROJECT COCKPIT
           Container(
             width: double.infinity,
@@ -842,7 +1011,7 @@ class TechnologyPanel extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: busy || isComplete
+                  onPressed: busy || isComplete || !isCorporationMember
                       ? null
                       : () => action(() => const EarthApi().fundResearch()),
                   icon: const Icon(Icons.bolt_rounded, size: 15),
@@ -863,7 +1032,7 @@ class TechnologyPanel extends StatelessWidget {
                         const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
                     visualDensity: VisualDensity.compact,
                   ),
-                  onPressed: busy
+                  onPressed: busy || !isCorporationMember
                       ? null
                       : () => showResearchComposerDialog(context, action),
                   icon: const Icon(Icons.science_outlined, size: 15),
@@ -892,11 +1061,10 @@ class TechnologyPanel extends StatelessWidget {
             ),
             const SizedBox(height: 8),
             ...researchEvents.map((event) {
-              final title = (event['title'] ??
-                      event['event_type'] ??
-                      'Research event')
-                  .toString()
-                  .replaceAll('_', ' ');
+              final title =
+                  (event['title'] ?? event['event_type'] ?? 'Research event')
+                      .toString()
+                      .replaceAll('_', ' ');
               final day = event['game_day'] ?? event['day'];
               return Padding(
                 padding: const EdgeInsets.only(bottom: 5),
@@ -907,8 +1075,8 @@ class TechnologyPanel extends StatelessWidget {
                     Expanded(
                       child: Text(
                         day == null ? title : 'Day $day · $title',
-                        style: const TextStyle(
-                            color: mutedColor, fontSize: 9.5),
+                        style:
+                            const TextStyle(color: mutedColor, fontSize: 9.5),
                       ),
                     ),
                   ],
@@ -920,5 +1088,4 @@ class TechnologyPanel extends StatelessWidget {
       ),
     );
   }
-
 }

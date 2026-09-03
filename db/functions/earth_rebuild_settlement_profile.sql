@@ -66,22 +66,30 @@ BEGIN
     v_owner_kind := 'human';
   END IF;
 
-  -- Iterate through active buildings owned by this entity
+  -- Iterate through active buildings owned by this entity, joining building_catalog for authoritative resource vectors
   FOR v_b IN
     SELECT
-      b.resource_output_type,
-      b.resource_output_amount,
-      b.upkeep_energy,
-      b.upkeep_food,
-      b.upkeep_materials,
-      b.upkeep_components,
-      b.upkeep_compute,
-      b.operating_policy,
-      b.condition
+      bc.output_energy,
+      bc.output_food,
+      bc.output_materials,
+      bc.output_components,
+      bc.output_compute,
+      bc.upkeep_energy,
+      bc.upkeep_food,
+      bc.upkeep_materials,
+      bc.upkeep_components,
+      bc.upkeep_compute,
+      bc.operating_energy,
+      bc.operating_food,
+      bc.operating_materials,
+      bc.operating_components,
+      bc.operating_compute,
+      b.operating_policy
     FROM buildings b
+    JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
     WHERE (
-      (v_owner_kind = 'city' AND b.city_id = p_owner_id AND b.ownership_class = 'civic')
-      OR (v_owner_kind <> 'city' AND b.owner_id = p_owner_id AND b.ownership_class = 'private')
+      (v_owner_kind = 'city' AND b.city_id = p_owner_id AND (b.ownership_class = 'civic' OR bc.ownership_class = 'civic'))
+      OR (v_owner_kind <> 'city' AND b.owner_id = p_owner_id AND (b.ownership_class = 'private' OR bc.ownership_class = 'private'))
     )
     AND b.status = 'active'
   LOOP
@@ -100,41 +108,19 @@ BEGIN
       v_cost_mult := 1.0;
     END IF;
 
-    -- Condition efficiency & degradation cost
-    IF v_b.condition >= 80.0 THEN
-      v_eff := 1.0;
-      v_cond_cost := 1.0;
-    ELSIF v_b.condition >= 50.0 THEN
-      v_eff := 0.75;
-      v_cond_cost := 1.15;
-    ELSIF v_b.condition >= 20.0 THEN
-      v_eff := 0.4;
-      v_cond_cost := 1.4;
-    ELSE
-      v_eff := 0.1;
-      v_cond_cost := 2.0;
-    END IF;
+    -- Physical commodities output addition
+    v_energy_delta := v_energy_delta + (COALESCE(v_b.output_energy, 0) * v_out_mult);
+    v_food_delta := v_food_delta + (COALESCE(v_b.output_food, 0) * v_out_mult);
+    v_materials_delta := v_materials_delta + (COALESCE(v_b.output_materials, 0) * v_out_mult);
+    v_components_delta := v_components_delta + (COALESCE(v_b.output_components, 0) * v_out_mult);
+    v_compute_delta := v_compute_delta + (COALESCE(v_b.output_compute, 0) * v_out_mult);
 
-    -- Output addition
-    v_out_amount := COALESCE(v_b.resource_output_amount, 0) * v_out_mult * v_eff;
-    IF v_b.resource_output_type = 'energy' THEN
-      v_energy_delta := v_energy_delta + v_out_amount;
-    ELSIF v_b.resource_output_type = 'food' THEN
-      v_food_delta := v_food_delta + v_out_amount;
-    ELSIF v_b.resource_output_type IN ('material', 'materials') THEN
-      v_materials_delta := v_materials_delta + v_out_amount;
-    ELSIF v_b.resource_output_type = 'components' THEN
-      v_components_delta := v_components_delta + v_out_amount;
-    ELSIF v_b.resource_output_type = 'compute' THEN
-      v_compute_delta := v_compute_delta + v_out_amount;
-    END IF;
-
-    -- Upkeep subtraction
-    v_energy_delta := v_energy_delta - (COALESCE(v_b.upkeep_energy, 0) * v_cost_mult * v_cond_cost);
-    v_food_delta := v_food_delta - (COALESCE(v_b.upkeep_food, 0) * v_cost_mult * v_cond_cost);
-    v_materials_delta := v_materials_delta - (COALESCE(v_b.upkeep_materials, 0) * v_cost_mult * v_cond_cost);
-    v_components_delta := v_components_delta - (COALESCE(v_b.upkeep_components, 0) * v_cost_mult * v_cond_cost);
-    v_compute_delta := v_compute_delta - (COALESCE(v_b.upkeep_compute, 0) * v_cost_mult * v_cond_cost);
+    -- Physical commodities upkeep & operating subtraction
+    v_energy_delta := v_energy_delta - ((COALESCE(v_b.upkeep_energy, 0) + COALESCE(v_b.operating_energy, 0)) * v_cost_mult);
+    v_food_delta := v_food_delta - ((COALESCE(v_b.upkeep_food, 0) + COALESCE(v_b.operating_food, 0)) * v_cost_mult);
+    v_materials_delta := v_materials_delta - ((COALESCE(v_b.upkeep_materials, 0) + COALESCE(v_b.operating_materials, 0)) * v_cost_mult);
+    v_components_delta := v_components_delta - ((COALESCE(v_b.upkeep_components, 0) + COALESCE(v_b.operating_components, 0)) * v_cost_mult);
+    v_compute_delta := v_compute_delta - ((COALESCE(v_b.upkeep_compute, 0) + COALESCE(v_b.operating_compute, 0)) * v_cost_mult);
   END LOOP;
 
   -- Update daily_settlement_profiles

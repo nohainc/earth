@@ -38,9 +38,9 @@ export async function handleInstitutionRoutes(
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
     const name = body.name?.trim();
-    const communityId = body.communityId?.trim();
-    if (!name || name.length < 3 || name.length > 80 || !communityId) {
-      return Response.json({ ok: false, error: 'City name and founding Community are required' }, { status: 400 });
+    const communityId = body.communityId?.trim() || null;
+    if (!name || name.length < 3 || name.length > 80) {
+      return Response.json({ ok: false, error: 'A city name is required' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>

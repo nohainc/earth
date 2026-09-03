@@ -22,8 +22,6 @@ class PersonalFinancePanel extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final maintenance = _map(personalFinanceData['lifeMaintenance']);
-    final dailyProfile = _map(personalFinanceData['dailyProfile']);
-    final lastSettlement = _map(maintenance['lastSettlement']);
     final taxes = _map(personalFinanceData['taxes']);
     final taxRules = (taxes['rules'] as List? ?? const [])
         .whereType<Map>()
@@ -35,14 +33,14 @@ class PersonalFinancePanel extends StatelessWidget {
         .where((building) =>
             building['ownership_class']?.toString() == 'private' &&
             building['owner_id']?.toString() == viewerId &&
-            building['status']?.toString() != 'closed')
+            building['status']?.toString() == 'active')
         .map((building) => Map<String, dynamic>.from(building))
         .toList();
     final publicBuildings = state.buildings
         .whereType<Map>()
         .where((building) =>
             building['ownership_class']?.toString() == 'public_investment' &&
-            building['status']?.toString() != 'closed')
+            building['status']?.toString() == 'active')
         .map((building) => Map<String, dynamic>.from(building))
         .toList();
     final investmentDividend = _investmentDividend(
@@ -52,9 +50,7 @@ class PersonalFinancePanel extends StatelessWidget {
             .map((share) => Map<String, dynamic>.from(share))
             .toList());
     final buildingChange = _buildingResourceChange(privateBuildings);
-    final preparedBuildingChange = dailyProfile['status'] == 'clean'
-        ? _profileChange(dailyProfile)
-        : buildingChange;
+    final preparedBuildingChange = buildingChange;
     final basicRule = taxRules
         .where((rule) => rule['category']?.toString() == 'basic_income')
         .firstOrNull;
@@ -62,10 +58,9 @@ class PersonalFinancePanel extends StatelessWidget {
     final grossCredits =
         preparedBuildingChange['credits']! + investmentDividend;
     final incomeTax = grossCredits > 0 ? grossCredits * basicRate : 0.0;
-    final maintenanceChange = _maintenanceResourceChange(lastSettlement);
     final finalChange = _addChanges(
         _addChanges(preparedBuildingChange, {'credits': investmentDividend}),
-        _addChanges(maintenanceChange, {'credits': -incomeTax}));
+        {'credits': -incomeTax});
     final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
     final protected = asDoubleOr(
         _map(personalFinanceData['protectedMinimum'])['credits'], 100);
@@ -110,15 +105,11 @@ class PersonalFinancePanel extends StatelessWidget {
                 ..remove('credits'))),
           const SizedBox(height: 24),
         ],
-        const Text('LIFE MAINTENANCE', style: _sectionStyle),
-        const SizedBox(height: 8),
-        _resourceLine(_withoutZeroes(maintenanceChange)),
         if (unpaid > 0) ...[
-          const SizedBox(height: 10),
           _notice(Icons.warning_amber_rounded, Colors.orangeAccent,
               '${_credits(unpaid)} of essential costs remain unpaid.'),
+          const SizedBox(height: 24),
         ],
-        const SizedBox(height: 24),
         const Text('YOUR DAILY RESULT', style: _sectionStyle),
         const SizedBox(height: 8),
         _resourceLine(_withoutZeroes(finalChange), emphasize: true),
@@ -226,6 +217,7 @@ class PersonalFinancePanel extends StatelessWidget {
   static Map<String, double> _buildingResourceChange(
       List<Map<String, dynamic>> buildings) {
     final changes = _emptyChanges();
+    double rounded(double value) => (value * 10).ceil() / 10;
     for (final building in buildings) {
       final policy = building['operating_policy']?.toString() ?? 'balanced';
       final outputMultiplier = policy == 'high_output'
@@ -238,63 +230,28 @@ class PersonalFinancePanel extends StatelessWidget {
           : (policy == 'frugal' || policy == 'eco_reserve')
               ? .7
               : 1.0;
-      final output =
-          asDoubleOr(building['resource_output_amount'], 0) * outputMultiplier;
-      final outputType =
-          building['resource_output_type']?.toString() ?? 'credits';
-      changes[outputType] = (changes[outputType] ?? 0) + output;
-      changes['credits'] = changes['credits']! -
-          asDoubleOr(building['daily_operating_credits'], 0) * costMultiplier;
-      final condition = asDoubleOr(building['condition'], 100);
-      final conditionCostMultiplier = condition >= 80
-          ? 1.0
-          : condition >= 50
-              ? 1.15
-              : condition >= 20
-                  ? 1.4
-                  : 2.0;
-      final autoRepair = building['auto_repair_enabled'] == true ||
-          building['auto_repair_enabled']?.toString() == 'true';
-      final repairResource = building['ownership_class']?.toString() == 'civic'
-          ? 'materials'
-          : 'components';
-      for (final key in [
-        'energy',
-        'food',
-        'materials',
-        'components',
-        'compute'
-      ]) {
-        changes[key] = changes[key]! -
-            asDoubleOr(building['upkeep_$key'], 0) *
-                costMultiplier *
-                conditionCostMultiplier -
-            (autoRepair && key == repairResource ? 1 : 0);
+
+      for (final key in ['credits', 'energy', 'food', 'materials', 'components', 'compute']) {
+        double outVal = asDoubleOr(building['output_$key'], 0);
+        if (outVal == 0 && building['resource_output_type']?.toString() == key) {
+          outVal = asDoubleOr(building['resource_output_amount'], 0);
+        } else if (outVal == 0 && key == 'credits' && (building['resource_output_type']?.toString() == 'credits' || building['resource_output_type'] == null)) {
+          outVal = asDoubleOr(building['resource_output_amount'], 0);
+        }
+
+        double upkeepVal = asDoubleOr(building['upkeep_$key'], 0);
+        double opVal = asDoubleOr(building['operating_$key'], 0);
+        if (key == 'credits' && opVal == 0) {
+          opVal = asDoubleOr(building['daily_operating_credits'], 0);
+        }
+
+        final net = (outVal * outputMultiplier) - ((upkeepVal + opVal) * costMultiplier);
+        changes[key] = (changes[key] ?? 0) +
+            (key == 'credits' ? net : rounded(net));
       }
     }
     return changes;
   }
-
-  static Map<String, double> _maintenanceResourceChange(
-          Map<String, dynamic> settlement) =>
-      {
-        'credits': -asDoubleOr(
-            settlement['credits_for_resources'] ??
-                (settlement['credits'] != null ? -settlement['credits'] : null),
-            0),
-        'energy': -asDoubleOr(
-            settlement['energy_used'] ??
-                (settlement['energy'] != null ? -settlement['energy'] : null),
-            settlement.isEmpty ? 1 : 0),
-        'food': -asDoubleOr(
-            settlement['food_used'] ??
-                (settlement['food'] != null ? -settlement['food'] : null),
-            settlement.isEmpty ? 1 : 0),
-        'compute': -asDoubleOr(
-            settlement['compute_used'] ??
-                (settlement['compute'] != null ? -settlement['compute'] : null),
-            settlement.isEmpty ? .25 : 0),
-      };
 
   static double _investmentDividend(
       List<Map<String, dynamic>> buildings, List<Map<String, dynamic>> shares) {
@@ -316,19 +273,10 @@ class PersonalFinancePanel extends StatelessWidget {
           : (policy == 'frugal' || policy == 'eco_reserve')
               ? .7
               : 1.0;
-      final condition = asDoubleOr(building['condition'], 100);
-      final conditionCostMultiplier = condition >= 80
-          ? 1.0
-          : condition >= 50
-              ? 1.15
-              : condition >= 20
-                  ? 1.4
-                  : 2.0;
       final gross =
           asDoubleOr(building['resource_output_amount'], 0) * yieldMultiplier;
       final cost = asDoubleOr(building['daily_operating_credits'], 0) *
-          costMultiplier *
-          conditionCostMultiplier;
+          costMultiplier;
       total += (gross - cost).clamp(0, double.infinity) *
           asDoubleOr(holding['shares_owned'], 0) /
           asDoubleOr(holding['total_shares_issued'], 1000)

@@ -80,7 +80,6 @@ void main() {
     expect(find.text('Private buildings'), findsOneWidget);
     expect(find.text('Investment dividend'), findsOneWidget);
     expect(find.text('FROM PRIVATE BUILDINGS'), findsOneWidget);
-    expect(find.text('LIFE MAINTENANCE'), findsOneWidget);
     expect(find.text('ESTIMATED TAX ON THIS INCOME'), findsOneWidget);
     expect(find.text('Basic income tax'), findsOneWidget);
     expect(find.text('YOUR DAILY RESULT'), findsOneWidget);
@@ -119,7 +118,6 @@ void main() {
 
     expect(find.text('PERSONAL FINANCE'), findsOneWidget);
     expect(find.text('DAILY INCOME'), findsOneWidget);
-    expect(find.text('LIFE MAINTENANCE'), findsOneWidget);
     expect(find.text('YOUR DAILY RESULT'), findsOneWidget);
     expect(find.text('ON TRACK'), findsOneWidget);
     expect(find.textContaining('Protected reserve: 100 C'), findsOneWidget);

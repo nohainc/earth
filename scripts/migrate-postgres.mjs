@@ -10,6 +10,14 @@ if (!connectionString) {
 
 const migrationDirectory = new URL('../db/migrations/', import.meta.url);
 const names = (await readdir(migrationDirectory)).filter((name) => /^\d+_.+\.sql$/.test(name)).sort();
+// These checksums identify historical migrations that were applied before the
+// canonical files were restored. Reconcile metadata only; never rerun them.
+const knownAppliedLegacyChecksums = new Map([
+  [82, new Set(['a2823b34c6fcb946d18074df75693f9894bdf3839feeab85200d845ffc69ad15'])],
+  [83, new Set(['5eddbfba8cb5e96eb21ca627250de3d825e97e789d678bd6891553c58241fcb9'])],
+  [98, new Set(['e2718362ed4075091ac45a3256ccd83c68c37aa46cd2ddbab723383111c3a70a'])],
+  [104, new Set(['bbbc3dbec5fef0860aafb8a7433e1ad7d302c1ea0babe28cf0945ce666985bf2'])],
+]);
 const parsedConnection = new URL(connectionString);
 const usesSystemRoot = parsedConnection.searchParams.get('sslrootcert') === 'system';
 if (usesSystemRoot) {
@@ -45,6 +53,14 @@ try {
     const existing = await client.query('select name, checksum from earth_schema_migrations where version = $1', [version]);
     if (existing.rowCount) {
       if (existing.rows[0].name !== name || existing.rows[0].checksum !== checksum) {
+        if (existing.rows[0].name === name && knownAppliedLegacyChecksums.get(version)?.has(existing.rows[0].checksum)) {
+          await client.query(
+            'update earth_schema_migrations set checksum = $1 where version = $2',
+            [checksum, version],
+          );
+          console.warn(`Reconciled legacy checksum for already-applied migration ${name}; SQL was not rerun.`);
+          continue;
+        }
         if (allowRepair) {
           console.warn(`Repairing migration ${name} with updated checksum...`);
           await client.query('begin');

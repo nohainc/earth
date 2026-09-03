@@ -24,6 +24,15 @@ extension EarthApiTechnology on EarthApi {
     return world();
   }
 
+  Future<EarthState> startCorporationBuildingResearch(String buildingType) async {
+    await _request('/api/corporation/building-research', method: 'POST', body: {
+      'buildingType': buildingType,
+      'correlationId':
+          'corporation-building-research-${DateTime.now().microsecondsSinceEpoch}',
+    });
+    return world();
+  }
+
   Future<EarthState> grantPatent() async {
     await _request('/api/technology/me/patent', method: 'POST');
     return world();

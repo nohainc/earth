@@ -3275,6 +3275,93 @@ class CorporationOverviewPanel extends StatelessWidget {
   }
 }
 
+class AffiliationRequiredPanel extends StatelessWidget {
+  final String title;
+  final String message;
+  final IconData icon;
+
+  const AffiliationRequiredPanel({
+    super.key,
+    required this.title,
+    required this.message,
+    required this.icon,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return EarthSection(
+      title: title,
+      showSurface: false,
+      infoBulletPoints: const [
+        'Affiliation is optional. Independent people can inspect the available institutions and join when they are ready.',
+      ],
+      child: Container(
+        width: double.infinity,
+        padding: EdgeInsets.all(context.cardPadding),
+        decoration: BoxDecoration(
+          color: context.surfaceColor.withValues(alpha: .72),
+          borderRadius: BorderRadius.circular(context.radiusCard),
+          border: Border.all(color: context.subtleBorderColor),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, color: context.warningColor, size: 22),
+            SizedBox(width: context.spacingInline),
+            Expanded(
+              child: Text(message, style: context.widgetFooterStyle),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class CityFormationAccessPanel extends StatelessWidget {
+  final bool busy;
+  final Future<void> Function(Future<EarthState> Function()) action;
+
+  const CityFormationAccessPanel({
+    super.key,
+    required this.busy,
+    required this.action,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return EarthSection(
+      title: 'CITY FORMATION',
+      showSurface: false,
+      infoBulletPoints: const [
+        'Cities and communities are independent institutions. A community may support a city, but it is not required to found one.',
+      ],
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'You are not affiliated with a city yet. You can found a new city directly as an independent pioneer; you will become its first resident and it will receive its foundational Urban District Module.',
+            style: context.widgetFooterStyle,
+          ),
+          SizedBox(height: context.spacingControl),
+          EarthButton(
+            label: 'FORM CITY',
+            icon: Icons.add_business_outlined,
+            variant: EarthButtonVariant.primary,
+            onPressed: busy
+                ? null
+                : () => showFormationComposer(
+                      context,
+                      action,
+                      city: true,
+                    ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
 class InstitutionsCapacityPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -3469,21 +3556,6 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                           ? null
                           : () => showTaxCharterDialog(context, action, cityId),
                     ),
-                    if (state.communities.isNotEmpty)
-                      EarthButton(
-                        label: 'FORM CITY',
-                        icon: Icons.add_business_outlined,
-                        variant: EarthButtonVariant.primary,
-                        onPressed: busy
-                            ? null
-                            : () => showFormationComposer(
-                                  context,
-                                  action,
-                                  city: true,
-                                  communityId: (state.communities.first
-                                      as Map<String, dynamic>)['id'] as String,
-                                ),
-                      ),
                   ],
                 ),
               ],

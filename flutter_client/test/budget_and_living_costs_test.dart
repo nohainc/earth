@@ -66,7 +66,6 @@ void main() {
       // Section Headings
       expect(find.text('PERSONAL FINANCE'), findsOneWidget);
       expect(find.text('DAILY INCOME'), findsOneWidget);
-      expect(find.text('LIFE MAINTENANCE'), findsOneWidget);
       expect(find.text('YOUR DAILY RESULT'), findsOneWidget);
 
       // Unpaid alert and status pill

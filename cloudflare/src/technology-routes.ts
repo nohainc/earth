@@ -9,6 +9,10 @@ import {
   grantPatent as grantPatentPostgres,
   licenseTechnology as licenseTechnologyPostgres,
 } from './technology-postgres.ts';
+import {
+  listCorporationBuildingResearch,
+  startCorporationBuildingResearch,
+} from './corporation-building-research-postgres.ts';
 
 export async function handleTechnologyRoutes(
   request: Request,
@@ -24,6 +28,27 @@ export async function handleTechnologyRoutes(
     const result = await withRepository(env, (repository) => listTechnologyPostgres(repository, viewer.id));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/corporation/building-research' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => listCorporationBuildingResearch(repository, viewer.id));
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  if (url.pathname === '/api/corporation/building-research' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ buildingType?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const buildingType = parsed.value.buildingType?.trim();
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!buildingType || !correlationId) return Response.json({ ok: false, error: 'Building type and Idempotency-Key are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => startCorporationBuildingResearch(repository, { humanId: viewer.id, buildingType, correlationId }));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Building research failed' }, { status: 409 });
+    }
   }
 
   if (url.pathname === '/api/technology/adopt' && request.method === 'POST') {

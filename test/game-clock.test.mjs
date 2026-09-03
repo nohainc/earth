@@ -26,11 +26,11 @@ test('projects an authoritative game-time deadline without using wall-clock time
     deadlineGameMinute: 220,
     closesAt: null,
     nowMs: Date.parse('2026-08-15T00:00:00.000Z'),
-    realSecondsPerGameMinute: 60,
+    realSecondsPerGameMinute: 1,
   });
   assert.equal(deadline?.gameDay, 100);
   assert.equal(deadline?.gameMinute, 220);
-  assert.equal(deadline?.realSecondsRemaining, 6000);
+  assert.equal(deadline?.realSecondsRemaining, 100);
 });
 
 test('clamps expired deadlines without moving the game clock backwards', () => {
@@ -55,21 +55,21 @@ test('getEffectiveGenesisTime shifts start time back according to simulated day 
   assert.equal(effective0.toISOString(), '2026-01-01T00:00:00.000Z');
 
   const effective5 = getEffectiveGenesisTime({ genesisAt: genesis, simulatedDayOffset: 5 });
-  // 5 days before 2026-01-01 is 2025-12-27
-  assert.equal(effective5.toISOString(), '2025-12-27T00:00:00.000Z');
+  // Five simulated game days are two real hours at 1 second per game minute.
+  assert.equal(effective5.toISOString(), '2025-12-31T22:00:00.000Z');
 });
 
 test('getAuthoritativeGameTime derives game day and minute from effective genesis', () => {
   const genesis = '2026-01-01T00:00:00.000Z';
   // 10 days and 30 minutes after genesis
-  const nowMs = Date.parse('2026-01-11T00:30:00.000Z');
+  const nowMs = Date.parse('2026-01-01T04:00:30.000Z');
   
   const time = getAuthoritativeGameTime({
     nowMs,
     genesisAt: genesis,
     simulatedDayOffset: 0,
   });
-  assert.equal(time.gameDay, 10);
+  assert.equal(time.gameDay, 11);
   assert.equal(time.gameMinute, 30);
   assert.equal(time.effectiveGenesisAt, '2026-01-01T00:00:00.000Z');
 
@@ -79,7 +79,7 @@ test('getAuthoritativeGameTime derives game day and minute from effective genesi
     genesisAt: genesis,
     simulatedDayOffset: 3,
   });
-  assert.equal(timeWithOffset.gameDay, 13);
+  assert.equal(timeWithOffset.gameDay, 14);
   assert.equal(timeWithOffset.gameMinute, 30);
-  assert.equal(timeWithOffset.effectiveGenesisAt, '2025-12-29T00:00:00.000Z');
+  assert.equal(timeWithOffset.effectiveGenesisAt, '2025-12-31T22:48:00.000Z');
 });

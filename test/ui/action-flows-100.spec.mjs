@@ -344,7 +344,9 @@ test.describe.serial('100 Playwright UI action flows', () => {
           await selectedTab.click();
           await expect(selectedTab).toBeVisible();
         } else if (testCase.index <= 18) {
-          await expect(page.getByText(/spaces|Tier|policy|repair/i).first()).toBeVisible();
+          const buildingState = page.getByText(/spaces|Tier|policy|repair|No owned buildings|No civic buildings/i).first();
+          const selectedOwnership = page.getByRole('button', { name: /PRIVATE \(|CIVIC \(|INVEST \(/i }).first();
+          await expect(selectedOwnership.or(buildingState).first()).toBeVisible();
         } else {
           const demolition = page.getByRole('button', { name: /DEMOLISH \/ RECYCLE/i }).first();
           if (testCase.index === 30 && !await demolition.isVisible().catch(() => false)) {

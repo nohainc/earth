@@ -70,6 +70,7 @@
     "db:verify:schema": "node scripts/verify-schema.mjs",
     "db:verify:manifest": "node scripts/verify-schema-manifest.mjs",
     "db:verify:invariants": "node scripts/verify-postgres-invariants.mjs",
+    "db:verify:integrity": "node scripts/verify-postgres-integrity.mjs",
     "db:recalculate:profiles": "node scripts/recalculate-profiles.mjs",
     "test:postgres": "node --experimental-strip-types --test test/postgres-integration.test.mjs test/auth-postgres.test.mjs",
     "rankings:calc": "node scripts/calculate-rankings.mjs",
