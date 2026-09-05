@@ -35,26 +35,6 @@ test('Scheduler and Game-Time Recovery Controls', async () => {
     assert.ok(health.checks);
     assert.equal(typeof health.checks.balancesNonNegative, 'boolean');
 
-    // 2. Authoritative day advancement
-    const tickKey = `sched-tick-${Date.now()}`;
-    const advance1 = await fetch(`${baseUrl}/api/day/advance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': tickKey },
-    });
-    assert.equal(advance1.status, 200);
-    const result1 = await advance1.json();
-    assert.ok(result1.ok);
-    const initialDay = result1.state.clock.day;
-
-    // 3. Replay with identical idempotency key produces identical result without re-advancing
-    const advance2 = await fetch(`${baseUrl}/api/day/advance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': tickKey },
-    });
-    assert.equal(advance2.status, 200);
-    const result2 = await advance2.json();
-    assert.equal(result2.state.clock.day, initialDay, 'Identical tickId must not double-advance game day');
-
     // 4. Invariant audit confirmation
     const auditRes = await fetch(`${baseUrl}/api/audit`);
     const audit = await auditRes.json();

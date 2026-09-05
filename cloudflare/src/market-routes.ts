@@ -111,12 +111,12 @@ export async function handleMarketRoutes(
   }
 
   if (url.pathname === '/api/market/futures/create' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ commodity?: string; size?: number; strikePrice?: number; expiryGameDay?: number; correlationId?: string }>(request);
+    const parsed = await parseJsonBody<{ commodity?: string; size?: number; strikePrice?: number; durationGameMinutes?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const commodity = parsed.value.commodity?.toLowerCase().trim() ?? 'energy';
     const size = Number(parsed.value.size);
     const strikePrice = Number(parsed.value.strikePrice);
-    const expiryGameDay = Number(parsed.value.expiryGameDay);
+    const durationGameMinutes = Number(parsed.value.durationGameMinutes);
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
 
     try {
@@ -126,7 +126,7 @@ export async function handleMarketRoutes(
           commodity,
           size,
           strikePrice,
-          expiryGameDay,
+          durationGameMinutes,
           correlationId,
         }),
       );

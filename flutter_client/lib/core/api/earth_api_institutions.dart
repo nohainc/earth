@@ -26,7 +26,7 @@ extension EarthApiInstitutions on EarthApi {
     await _request('/api/cities/$cityId/budget', method: 'POST', body: {
       'category': category,
       'amount': 100,
-      'correlationId': 'city-budget-$cityId-${DateTime.now().microsecondsSinceEpoch}',
+      'correlationId': newClientCorrelationId('city-budget-$cityId'),
     });
     return world();
   }
@@ -67,7 +67,7 @@ extension EarthApiInstitutions on EarthApi {
   Future<EarthState> createCity(String name, [String? communityId]) async {
     final body = <String, dynamic>{
       'name': name,
-      'correlationId': 'city-formation-${DateTime.now().microsecondsSinceEpoch}',
+      'correlationId': newClientCorrelationId('city-formation'),
     };
     if (communityId != null && communityId.trim().isNotEmpty) {
       body['communityId'] = communityId;
@@ -103,7 +103,7 @@ extension EarthApiInstitutions on EarthApi {
           'amount': amount,
           'cityId': 'CITY-0084',
           'correlationId':
-              'corporation-spending-${DateTime.now().microsecondsSinceEpoch}',
+              newClientCorrelationId('corporation-spending'),
         });
     return world();
   }
@@ -115,7 +115,7 @@ extension EarthApiInstitutions on EarthApi {
         body: {
           'amount': amount,
           'correlationId':
-              'corporation-contribution-${DateTime.now().microsecondsSinceEpoch}',
+              newClientCorrelationId('corporation-contribution'),
         });
     return world();
   }
@@ -132,7 +132,7 @@ extension EarthApiInstitutions on EarthApi {
       'admissionPolicy': admissionPolicy,
       if (applicationQuestion != null && applicationQuestion.isNotEmpty) 'applicationQuestion': applicationQuestion,
       'correlationId':
-          'community-formation-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('community-formation'),
     });
     return world();
   }
@@ -190,17 +190,6 @@ extension EarthApiInstitutions on EarthApi {
     return world();
   }
 
-  Future<EarthState> contributeToCommunity(
-      String communityId, double amount) async {
-    await _request('/api/communities/$communityId/contributions',
-        method: 'POST',
-        body: {
-          'amount': amount,
-          'correlationId': 'flutter-${DateTime.now().millisecondsSinceEpoch}',
-        });
-    return world();
-  }
-
   Future<EarthState> joinCommunity(String communityId, {String? applicationMessage}) async {
     await _request('/api/communities/$communityId/members', method: 'POST', body: {
       if (applicationMessage != null && applicationMessage.isNotEmpty) 'applicationMessage': applicationMessage,
@@ -226,7 +215,7 @@ extension EarthApiInstitutions on EarthApi {
       'corporateTaxBps': corporateTaxBps,
       'propertyTaxBps': propertyTaxBps,
       'correlationId':
-          'tax-charter-$cityId-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('tax-charter-$cityId'),
     });
     return world();
   }
@@ -246,7 +235,7 @@ extension EarthApiInstitutions on EarthApi {
           'corporateTaxBps': corporateTaxBps,
           'propertyTaxBps': propertyTaxBps,
           'correlationId':
-              'corp-tax-charter-$corporationId-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('corp-tax-charter-$corporationId'),
         });
     return world();
   }

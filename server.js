@@ -275,7 +275,7 @@ const commState = {
       scope: 'direct',
       scope_id: null,
       name: 'Dmitri Rostov (Direct Link)',
-      description: 'Encrypted peer-to-peer diplomatic link.',
+      description: 'Private peer-to-peer communication channel.',
     },
   ],
   messages: {
@@ -338,44 +338,6 @@ const commState = {
       },
     ],
   },
-  dispatches: [
-    {
-      id: 'mail-1',
-      sender_human_id: 'H-0012',
-      sender_display_name: 'Dmitri Rostov',
-      sender_house_name: 'House of Rostov',
-      sender_dynasty_name: 'House of Rostov',
-      recipient_human_id: 'H-0044',
-      recipient_display_name: 'Amara Vance',
-      subject: 'Tender Offer & Supply Contract Inquiry',
-      body: 'Greetings Executive Vance. We are seeking to secure long-term rights to 250 units of standard circuit boards per cycle. We have enclosed a preliminary bilateral trade agreement for your executive review.',
-      status: 'unread',
-      game_day: 184,
-      game_minute: 510,
-      dispatch_type: 'contract_offer',
-      action_payload: { contractId: 'CTR-904', creditsOffered: 1500 },
-      created_at: new Date(Date.now() - 600000).toISOString(),
-      read_at: null,
-    },
-    {
-      id: 'mail-2',
-      sender_human_id: 'H-0088',
-      sender_display_name: 'Kaelen Thorne',
-      sender_house_name: 'House of Thorne',
-      sender_dynasty_name: 'House of Thorne',
-      recipient_human_id: 'H-0044',
-      recipient_display_name: 'Amara Vance',
-      subject: 'Quantum Core Patent Licensing Inquiry',
-      body: 'We would like to license your Quantum Core patent for our Geneva fabrication plant. We offer 5% gross royalties plus 500 Credits upfront.',
-      status: 'unread',
-      game_day: 184,
-      game_minute: 320,
-      dispatch_type: 'patent_license',
-      action_payload: { patentId: 'PAT-01', royaltyPercent: 5.0, upfrontCredits: 500 },
-      created_at: new Date(Date.now() - 7200000).toISOString(),
-      read_at: null,
-    },
-  ],
 };
 
 const supplyContractsState = [
@@ -934,12 +896,6 @@ async function command(path, body, req = null) {
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
   }
-  if (path === '/api/governance/authority/events' && body.method === 'GET') {
-    return {
-      events: state.authorityEvents || [{ id: 'auth-001', proposalId: 'PROP-001', outcome: 'PASSED', enactedDay: state.clock.day, timestamp: Date.now() }],
-      persistence: database ? 'postgres-reference' : 'reference-simulator',
-    };
-  }
   if (path === '/api/market/book' && body.method === 'GET') {
     return {
       feeRate: 0.005,
@@ -1187,7 +1143,7 @@ async function command(path, body, req = null) {
     };
   }
 
-  // --- Universal Comm-Link & Diplomatic Mail ---
+  // --- Universal Comm-Link Channels ---
   if (path === '/api/comm/channels' && body.method === 'GET') {
     return {
       ok: true,
@@ -1214,15 +1170,27 @@ async function command(path, body, req = null) {
     const text = (body.body || '').trim();
     if (!text) throw new ApiError('Message body cannot be empty', 400, 'VALIDATION_ERROR');
 
+    const session = resolveSession(req);
+    let senderHuman = null;
+    try {
+      senderHuman = human(session?.humanId || 'amara', req);
+    } catch {
+      senderHuman = null;
+    }
+    const senderDisplayName = session?.displayName || senderHuman?.display_name || senderHuman?.name || 'Citizen';
+    const senderHumanId = session?.humanId || senderHuman?.id || 'H-0044';
+    const senderDynasty = senderHuman?.dynasty_name || senderHuman?.house_name || 'Vance Dynasty';
+    const currentClock = computeCosmicClock();
+
     const newMsg = {
       id: `msg-${Date.now()}`,
       channel_id: channelId,
-      sender_human_id: 'H-0044',
-      sender_display_name: 'Amara Vance',
-      sender_dynasty_name: 'Vance Dynasty',
+      sender_human_id: senderHumanId,
+      sender_display_name: senderDisplayName,
+      sender_dynasty_name: senderDynasty,
       body: text,
-      game_day: state.clock.day || 184,
-      game_minute: state.clock.minute || 500,
+      game_day: body.gameDay != null ? Number(body.gameDay) : (state.clock.day || currentClock.day),
+      game_minute: body.gameMinute != null ? Number(body.gameMinute) : (state.clock.minute != null ? state.clock.minute : currentClock.minute),
       attachments: body.attachments || [],
       created_at: new Date().toISOString(),
     };
@@ -1236,107 +1204,11 @@ async function command(path, body, req = null) {
     };
   }
 
-  if (path === '/api/comm/dispatches' && body.method === 'GET') {
-    const session = resolveSession(req);
-    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const viewerId = session.humanId;
-    const url = req ? new URL(req.url, 'http://127.0.0.1') : null;
-    const folder = url?.searchParams.get('folder') || body.folder || 'inbox';
-    const limit = Math.min(100, Math.max(1, Number(url?.searchParams.get('limit') || body.limit || 30)));
-    const offset = Math.max(0, Number(url?.searchParams.get('offset') || body.offset || 0));
-    let list = commState.dispatches;
-    if (folder === 'sent') {
-      list = list.filter((d) => d.sender_human_id === viewerId);
-    } else if (folder === 'archived') {
-      list = list.filter((d) => d.recipient_human_id === viewerId && d.status === 'archived');
-    } else {
-      list = list.filter((d) => d.recipient_human_id === viewerId && d.status !== 'archived');
-    }
-    const total = list.length;
-    list = list.slice(offset, offset + limit);
-    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === viewerId && d.status === 'unread').length;
-    return {
-      ok: true,
-      folder,
-      dispatches: list,
-      total,
-      limit,
-      offset,
-      unreadCount,
-      persistence: database ? 'postgres-reference' : 'reference-simulator',
-    };
-  }
-
-  if (path === '/api/comm/dispatches' && body.method === 'POST') {
-    const session = resolveSession(req);
-    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const senderId = session.humanId;
-    const recipientId = (body.recipientId || '').trim();
-    const subject = (body.subject || '').trim();
-    const text = (body.body || '').trim();
-    if (!recipientId || !subject || !text) {
-      throw new ApiError('recipientId, subject, and body are required', 400, 'VALIDATION_ERROR');
-    }
-    const newDispatch = {
-      id: `mail-${Date.now()}`,
-      sender_human_id: senderId,
-      sender_display_name: 'Amara Vance',
-      sender_dynasty_name: 'Vance Dynasty',
-      recipient_human_id: recipientId,
-      recipient_display_name: recipientId === 'H-0012' ? 'Dmitri Rostov' : (recipientId === 'H-0088' ? 'Kaelen Thorne' : recipientId),
-      subject,
-      body: text,
-      status: 'unread',
-      game_day: state.clock.day || 184,
-      game_minute: state.clock.minute || 520,
-      dispatch_type: body.dispatchType || 'diplomatic',
-      action_payload: body.actionPayload || {},
-      created_at: new Date().toISOString(),
-      read_at: null,
-    };
-    commState.dispatches.unshift(newDispatch);
-    publish('comm.dispatch.sent', newDispatch);
-    return {
-      ok: true,
-      dispatch: newDispatch,
-      persistence: database ? 'postgres-reference' : 'reference-simulator',
-    };
-  }
-
-  if (path === '/api/comm/dispatches/read' && body.method === 'POST') {
-    const session = resolveSession(req);
-    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const dispatchId = body.dispatchId;
-    const found = commState.dispatches.find((d) => d.id === dispatchId && d.recipient_human_id === session.humanId);
-    if (found) {
-      found.status = 'read';
-      found.read_at = new Date().toISOString();
-    }
-    return {
-      ok: true,
-      dispatchId,
-      read: true,
-      persistence: database ? 'postgres-reference' : 'reference-simulator',
-    };
-  }
-
-  if (path === '/api/comm/dispatches/archive' && body.method === 'POST') {
-    const session = resolveSession(req);
-    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const dispatchId = body.dispatchId;
-    const found = commState.dispatches.find((d) => d.id === dispatchId && d.recipient_human_id === session.humanId);
-    if (!found) throw new ApiError('Dispatch not found', 404, 'NOT_FOUND');
-    found.status = body.archived === false ? 'read' : 'archived';
-    return { ok: true, dispatchId, archived: found.status === 'archived', persistence: database ? 'postgres-reference' : 'reference-simulator' };
-  }
-
   if (path === '/api/comm/metrics' && body.method === 'GET') {
     const session = resolveSession(req);
     if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const unreadCount = commState.dispatches.filter((d) => d.recipient_human_id === session.humanId && d.status === 'unread').length;
     return {
       ok: true,
-      unreadDispatches: unreadCount,
       activeChannelsCount: commState.channels.length,
       persistence: database ? 'postgres-reference' : 'reference-simulator',
     };
@@ -2410,22 +2282,7 @@ async function command(path, body, req = null) {
   }
 
   if ((path === '/api/businesses/kline-works/policy' || path === '/api/businesses/B-1048/policy' || path === '/api/business/policy' || path === '/api/businesses/me/policy') && body.method === 'POST') {
-    const session = resolveSession(req);
-    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
-    const player = human('amara', req);
-    if (!player) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
-    const actorId = player.id || 'H-0044';
-    if (state.businesses.klineWorks.ownerId && state.businesses.klineWorks.ownerId !== actorId && state.businesses.klineWorks.ownerId !== 'H-0044') {
-      throw new ApiError('Unauthorized: Not business owner', 403, 'FORBIDDEN');
-    }
-    const policy = body.policy === 'growth' ? 'capacity' : body.policy;
-    if (!['reliability', 'margin', 'capacity', 'growth'].includes(body.policy)) throw new ApiError('Unknown policy', 400, 'VALIDATION_ERROR');
-    state.businesses.klineWorks.policy = policy;
-    if (database) void database.saveBusiness(state.businesses.klineWorks).catch((error) => console.error('policy persistence failed', error.message));
-    publish('business.policy_changed', { businessId: 'B-1048', policy });
-    const result = { ok: true, policy, business: state.businesses.klineWorks, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
+    throw new ApiError('Business entities are no longer supported; use Human-owned assets', 410, 'GONE');
   }
 
   if (path === '/api/ai' && body.method === 'GET') {

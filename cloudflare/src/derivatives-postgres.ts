@@ -1,3 +1,6 @@
+import type { PostgresRepository } from './repository.ts';
+import { getAuthoritativeGameTime } from './game-clock.ts';
+
 export interface OHLCSnapshot {
   id: string;
   commodity: string;
@@ -111,11 +114,11 @@ export async function createFuturesListing(
     commodity: string;
     size: number;
     strikePrice: number;
-    expiryGameDay: number;
+    durationGameMinutes: number;
     correlationId?: string;
   }
 ): Promise<{ ok: boolean; contractId: string; commodity: string; size: number; strikePrice: number; expiryGameDay: number }> {
-  const { sellerId, commodity, size, strikePrice, expiryGameDay } = params;
+  const { sellerId, commodity, size, strikePrice, durationGameMinutes } = params;
   const c = commodity.toLowerCase();
 
   if (!['energy', 'material', 'compute', 'food'].includes(c)) {
@@ -127,11 +130,15 @@ export async function createFuturesListing(
   if (!Number.isFinite(strikePrice) || strikePrice <= 0) {
     throw new Error('Strike price must be greater than 0.');
   }
-  if (!Number.isFinite(expiryGameDay) || expiryGameDay <= 0) {
-    throw new Error('Invalid expiry game day.');
+  if (!Number.isInteger(durationGameMinutes) || durationGameMinutes < 1 || durationGameMinutes > 525600) {
+    throw new Error('Duration must be between 1 and 525,600 game minutes.');
   }
 
   return transactional(client, async () => {
+  const world = await client.query<{ genesis_at: string | null; simulated_day_offset: number | null }>("SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
+  const now = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
+  const expiryAbsoluteMinute = now.totalGameMinutes + durationGameMinutes;
+  const expiryGameDay = Math.floor(expiryAbsoluteMinute / 1440) + 1;
   // Check seller resource balance
   const balRes = await client.query(
     `SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = $2 FOR UPDATE`,

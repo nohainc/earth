@@ -29,7 +29,7 @@ export interface LineageRecord {
   cause_of_death: string | null;
   epitaph: string | null;
   lifetime_wealth: string | number;
-  businesses_founded: number;
+  operations_completed: number;
   proposals_authored: number;
   legacy_score: number;
   created_at: string;
@@ -109,6 +109,12 @@ export async function getHouseOverview(
   catalogPerks: typeof HOUSE_PERK_CATALOG;
 }> {
   return transactional(client, async () => {
+    const founder = await client.query(
+      'SELECT id FROM humans WHERE id = $1 AND account_status = \'active\'',
+      [humanId],
+    );
+    if (!founder.rows[0]) throw new Error('Human account not found or inactive');
+
     // Ensure house exists or create initial one
     let houseRes = await client.query(
       `SELECT * FROM houses WHERE email = $1 OR id = $2 LIMIT 1`,
@@ -141,7 +147,7 @@ export async function getHouseOverview(
         `INSERT INTO house_lineage_records (
            id, house_id, human_id, predecessor_human_id, generation, name, title,
            birth_game_day, death_game_day, is_incumbent, cause_of_death, epitaph,
-           lifetime_wealth, businesses_founded, proposals_authored, legacy_score
+           lifetime_wealth, operations_completed, proposals_authored, legacy_score
          ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
          ON CONFLICT (id) DO NOTHING`,
         [

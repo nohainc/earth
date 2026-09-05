@@ -6,7 +6,6 @@ class BuildingModel {
   final String cityId;
   final String ownerId;
   final String ownershipClass;
-  final String? businessId;
   final String buildingType;
   final String name;
   final int tier;
@@ -29,7 +28,6 @@ class BuildingModel {
     required this.cityId,
     required this.ownerId,
     required this.ownershipClass,
-    this.businessId,
     required this.buildingType,
     required this.name,
     required this.tier,
@@ -52,7 +50,7 @@ class BuildingModel {
   bool get isActive => status == 'active';
   bool get isClosed => status == 'closed' || status == 'foreclosed';
   bool get isCivic => ownershipClass == 'civic';
-  bool get isPublicInvestment => ownershipClass == 'public_investment';
+  bool get isPublicInvestment => false;
   bool get isPrivate => ownershipClass == 'private';
 
   factory BuildingModel.fromJson(Map<String, dynamic> json) {
@@ -61,7 +59,6 @@ class BuildingModel {
       cityId: json['city_id']?.toString() ?? '',
       ownerId: json['owner_id']?.toString() ?? '',
       ownershipClass: json['ownership_class']?.toString() ?? 'private',
-      businessId: json['business_id']?.toString(),
       buildingType: json['building_type']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Facility',
       tier: (json['tier'] is num) ? (json['tier'] as num).toInt() : int.tryParse(json['tier']?.toString() ?? '') ?? 1,

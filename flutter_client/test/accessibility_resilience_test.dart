@@ -1,8 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/shared/widgets/earth_primitives.dart';
-import 'package:earth_client/core/models/earth_state.dart';
-import 'package:earth_client/features/operations/business_panel.dart';
 
 void main() {
   group('Accessibility & UX Resilience', () {
@@ -63,58 +61,6 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(reconnected, isTrue);
-    });
-
-    testWidgets('BusinessPanel buttons are disabled when busy to prevent duplicate actions',
-        (tester) async {
-      const state = EarthState({
-        'clock': {'day': 184, 'minute': 100},
-        'human': {'id': 'H-0044', 'credits': 5000},
-        'world': {'health': 100},
-        'resources': {},
-        'business': {
-          'id': 'B-1048',
-          'name': 'Kline Works',
-          'policy': 'growth',
-          'condition': 95,
-          'status': 'operating',
-        },
-        'technology': {'research': {}},
-        'institutions': {},
-        'life': {},
-        'governance': {},
-        'market': {'orders': []},
-      });
-
-      const financials = {
-        'revenue': 8000,
-        'operating_costs': 2000,
-        'profit': 6000,
-        'taxed_revenue': 500,
-      };
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: BusinessPanel(
-                state: state,
-                busy: true, // Pending command active
-                businessOwnership: const {},
-                businessFinancials: financials,
-                businessProfile: const {},
-                action: (_) async {},
-              ),
-            ),
-          ),
-        ),
-      );
-
-      final dividendButton = tester.widget<OutlinedButton>(
-        find.widgetWithText(OutlinedButton, 'DISTRIBUTE DIVIDENDS'),
-      );
-      expect(dividendButton.onPressed, isNull,
-          reason: 'Button must be disabled when busy');
     });
 
     testWidgets('Responsive layouts adapt smoothly to narrow (360px) and wide (1200px) viewports',

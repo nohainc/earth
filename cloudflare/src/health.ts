@@ -5,13 +5,13 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
   const postgres = await probePostgres(env.HYPERDRIVE);
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
     const [core, feature, reservations, governance, financial, assets, taxed, balances, scheduler, outbox, migrations, counts] = await Promise.all([
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events', 'authority_events']]),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['ai_assistants', 'buildings', 'building_investment_shares', 'civic_dividend_payouts']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['ai_assistants', 'buildings', 'civic_dividend_payouts', 'global_bank_deposits']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_orders' AND column_name = 'reserved_credits'"),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['business_constitutions', 'business_management']]),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'business_financials'"),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['corporations', 'cities']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'personal_financial_states'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'buildings'"),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'business_financials' AND column_name = 'taxed_revenue'"),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'buildings' AND column_name = 'daily_operating_credits'"),
       repository.query('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
       repository.query("SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_scheduler_at)) AS age_seconds FROM world_state WHERE id = 'WORLD'"),
       repository.query(`
@@ -28,7 +28,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       repository.query('SELECT COALESCE(MAX(version), 0)::integer AS version FROM earth_schema_migrations'),
       Promise.all([
         repository.query('SELECT COUNT(*)::integer AS count FROM humans'),
-        repository.query('SELECT COUNT(*)::integer AS count FROM businesses'),
+        repository.query('SELECT COUNT(*)::integer AS count FROM buildings WHERE ownership_class = \'private\''),
         repository.query('SELECT COUNT(*)::integer AS count FROM ledger_entries'),
         repository.query("SELECT COUNT(*)::integer AS count FROM world_state WHERE id = 'WORLD'"),
       ]),
@@ -78,7 +78,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       },
       counts: {
         humans: Number(counts[0].rows[0]?.count ?? 0),
-        businesses: Number(counts[1].rows[0]?.count ?? 0),
+        privateBuildings: Number(counts[1].rows[0]?.count ?? 0),
         ledger: Number(counts[2].rows[0]?.count ?? 0),
         world: Number(counts[3].rows[0]?.count ?? 0),
       },

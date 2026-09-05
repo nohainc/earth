@@ -7,13 +7,9 @@ import {
   setBuildingOperatingPolicy,
   setBuildingAutoRepair,
   repairBuilding,
-  investInPublicBuilding,
   demolishBuilding,
   getCityDistrictZoning,
   contributeCorporateResearch,
-  acquireBuildingPatentLicense,
-  renewBuildingPatentLicense,
-  checkBuildingPatentAccess,
 } from '../cloudflare/src/real-estate-postgres.ts';
 
 class MockDbClient {
@@ -161,6 +157,9 @@ test('setBuildingOperatingPolicy updates policy on facility', async () => {
 
 test('repairBuilding consumes components and restores condition to 100%', async () => {
   const client = new MockDbClient((sql) => {
+    if (sql.includes('earth_mutate_resource_balance')) {
+      return { rows: [{ status: 'success', ledger_id: 'LED-RESOURCE', owner_id: 'H-001', resource: 'components', delta: -4, balance_after: 46, already_processed: false }], rowCount: 1 };
+    }
     if (sql.includes('FROM buildings WHERE id = $1')) {
       return { rows: [{ id: 'BLD-01', owner_id: 'H-001', condition: '60', tier: 2 }], rowCount: 1 };
     }
@@ -180,35 +179,11 @@ test('repairBuilding consumes components and restores condition to 100%', async 
   assert.equal(res.condition, 100);
 });
 
-test('investInPublicBuilding transfers credits and issues crowdfunding shares', async () => {
-  const client = new MockDbClient((sql) => {
-    if (sql.includes('SELECT details FROM world_events')) return { rows: [], rowCount: 0 };
-    if (sql.includes('SELECT game_day')) return { rows: [{ game_day: 184 }], rowCount: 1 };
-    if (sql.includes('FROM buildings WHERE id = $1')) {
-      return { rows: [{ id: 'BLD-MALL', city_id: 'CITY-0084', ownership_class: 'public_investment', name: 'Mega-Mall' }], rowCount: 1 };
-    }
-    if (sql.includes('FROM account_balances')) return { rows: [{ account_id: 'account-human-H-001', balance: '10000' }], rowCount: 1 };
-    if (sql.includes('transfer_credits')) return { rows: [{ success: true, debit_balance: '7500', credit_balance: '12500' }], rowCount: 1 };
-    if (sql.includes('SELECT * FROM building_investment_shares')) {
-      return { rows: [{ building_id: 'BLD-MALL', investor_id: 'H-001', shares_owned: 5, invested_credits: '2500' }], rowCount: 1 };
-    }
-    return { rows: [{ balance: '7500', success: true }], rowCount: 1 };
-  });
-  const repo = new PostgresRepository(client);
-
-  const res = await investInPublicBuilding(repo, {
-    humanId: 'H-001',
-    buildingId: 'BLD-MALL',
-    sharesCount: 5,
-    correlationId: 'test-invest-1',
-  });
-
-  assert.equal(res.ok, true);
-  assert.equal(res.shares.shares_owned, 5);
-});
-
 test('demolishBuilding marks facility closed and recycles materials to owner', async () => {
   const client = new MockDbClient((sql) => {
+    if (sql.includes('earth_mutate_resource_balance')) {
+      return { rows: [{ status: 'success', ledger_id: 'LED-RESOURCE', owner_id: 'H-001', resource: 'material', delta: 30, balance_after: 80, already_processed: false }], rowCount: 1 };
+    }
     if (sql.includes('FROM buildings WHERE id = $1')) {
       return { rows: [{ id: 'BLD-01', owner_id: 'H-001', building_type: 'restaurant', slot_footprint: 1 }], rowCount: 1 };
     }
@@ -281,203 +256,6 @@ test('contributeCorporateResearch contributes credits and compute to corporate p
   assert.equal(res.pool.status, 'active');
 });
 
-test('checkBuildingPatentAccess allows corporate members and licensed holders, blocks unlicensed', async () => {
-  const reqPatent = {
-    patentId: 'PAT-DAT-02',
-    patentName: 'Photonic Neural Architecture',
-    owningCorporationId: 'CORP-001',
-    owningCorporationName: 'Aetheria Systems',
-    privateLicenseCostCrd: 12000,
-    privateDailyRoyaltyCrd: 150,
-    cityCivicLicenseCostCrd: 45000,
-    termDays: 30,
-    technologyId: 'tech-photonic',
-  };
-
-  // Case 1: Corporate Member has access
-  const memberClient = new MockDbClient((sql, params) => {
-    if (sql.includes('FROM memberships WHERE human_id') && params[1] === 'CORP-001') {
-      return { rows: [{ corporation_id: 'CORP-001' }], rowCount: 1 };
-    }
-    return { rows: [], rowCount: 0 };
-  });
-  const memberRepo = new PostgresRepository(memberClient);
-  const memberAccess = await checkBuildingPatentAccess(memberRepo, {
-    humanId: 'H-001',
-    cityId: 'CITY-0084',
-    requiredPatent: reqPatent,
-  });
-  assert.equal(memberAccess.hasAccess, true);
-  assert.equal(memberAccess.accessType, 'corporate_member');
-
-  // Case 2: Non-member without license is blocked
-  const unlicensedClient = new MockDbClient((sql, params) => {
-    if (sql.includes('FROM memberships WHERE human_id') && params[1] === 'CORP-001') {
-      return { rows: [], rowCount: 0 };
-    }
-    if (sql.includes('FROM building_patent_licenses')) return { rows: [], rowCount: 0 };
-    return { rows: [], rowCount: 0 };
-  });
-  const unlicensedRepo = new PostgresRepository(unlicensedClient);
-  const unlicAccess = await checkBuildingPatentAccess(unlicensedRepo, {
-    humanId: 'H-002',
-    cityId: 'CITY-0084',
-    requiredPatent: reqPatent,
-  });
-  assert.equal(unlicAccess.hasAccess, false);
-  assert.equal(unlicAccess.accessType, 'none');
-
-  // Case 3: Non-member with active private license has access
-  const licensedClient = new MockDbClient((sql, params) => {
-    if (sql.includes('FROM memberships WHERE human_id') && params[1] === 'CORP-001') {
-      return { rows: [], rowCount: 0 };
-    }
-    if (sql.includes('FROM building_patent_licenses WHERE licensee_id')) {
-      return { rows: [{ id: 'LIC-01', patent_id: 'PAT-DAT-02', status: 'active' }], rowCount: 1 };
-    }
-    return { rows: [], rowCount: 0 };
-  });
-  const licensedRepo = new PostgresRepository(licensedClient);
-  const licAccess = await checkBuildingPatentAccess(licensedRepo, {
-    humanId: 'H-002',
-    cityId: 'CITY-0084',
-    requiredPatent: reqPatent,
-  });
-  assert.equal(licAccess.hasAccess, true);
-  assert.equal(licAccess.accessType, 'private_building');
-});
-
-test('acquireBuildingPatentLicense purchases private license and transfers credits', async () => {
-  const client = new MockDbClient((sql) => {
-    if (sql.includes('SELECT details FROM world_events')) return { rows: [], rowCount: 0 };
-    if (sql.includes('SELECT reason_id FROM ledger_entries')) return { rows: [], rowCount: 0 };
-    if (sql.includes('FROM buildings WHERE id')) return { rows: [{ id: 'BLD-01', owner_id: 'H-001' }], rowCount: 1 };
-    if (sql.includes('FROM building_patent_licenses WHERE building_id')) return { rows: [], rowCount: 0 };
-    if (sql.includes('SELECT game_day')) return { rows: [{ game_day: 184 }], rowCount: 1 };
-    if (sql.includes('FROM account_balances')) return { rows: [{ account_id: 'acc-h-1', balance: '50000' }], rowCount: 1 };
-    if (sql.includes('UPDATE account_balances')) return { rows: [{ balance: '38000' }], rowCount: 1 };
-    if (sql.includes('SELECT * FROM building_patent_licenses WHERE id = $1')) {
-      return {
-        rows: [
-          {
-            id: 'LIC-TEST-01',
-            patent_id: 'PAT-DAT-02',
-            license_type: 'private_building',
-            licensee_id: 'H-001',
-            building_id: 'BLD-01',
-            status: 'active',
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [{ balance: '38000' }], rowCount: 1 };
-  });
-  const repo = new PostgresRepository(client);
-
-  const res = await acquireBuildingPatentLicense(repo, {
-    humanId: 'H-001',
-    patentId: 'PAT-DAT-02',
-    licenseType: 'private_building',
-    buildingId: 'BLD-01',
-    correlationId: 'test-acq-lic-1',
-  });
-
-  assert.equal(res.ok, true);
-  assert.equal(res.license.status, 'active');
-});
-
-test('renewBuildingPatentLicense extends expiry and transfers renewal fee', async () => {
-  const client = new MockDbClient((sql) => {
-    if (sql.includes('SELECT details FROM world_events')) return { rows: [], rowCount: 0 };
-    if (sql.includes('SELECT reason_id FROM ledger_entries')) return { rows: [], rowCount: 0 };
-    if (sql.includes('SELECT game_day')) return { rows: [{ game_day: 184 }], rowCount: 1 };
-    if (sql.includes('FROM building_patent_licenses WHERE id = $1 FOR UPDATE')) {
-      return {
-        rows: [
-          {
-            id: 'LIC-TEST-01',
-            patent_id: 'PAT-DAT-02',
-            license_type: 'private_building',
-            licensee_id: 'H-001',
-            licensor_corporation_id: 'CORP-001',
-            is_permanent: false,
-            expiry_game_day: '184',
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    if (sql.includes('FROM account_balances')) return { rows: [{ account_id: 'acc-h-1', balance: '50000' }], rowCount: 1 };
-    if (sql.includes('UPDATE account_balances')) return { rows: [{ balance: '38000' }], rowCount: 1 };
-    if (sql.includes('SELECT * FROM building_patent_licenses WHERE id = $1')) {
-      return {
-        rows: [
-          {
-            id: 'LIC-TEST-01',
-            patent_id: 'PAT-DAT-02',
-            expiry_game_day: '214',
-            status: 'active',
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [{ balance: '38000' }], rowCount: 1 };
-  });
-  const repo = new PostgresRepository(client);
-
-  const res = await renewBuildingPatentLicense(repo, {
-    humanId: 'H-001',
-    licenseId: 'LIC-TEST-01',
-    correlationId: 'test-renew-lic-1',
-  });
-
-  assert.equal(res.ok, true);
-  assert.equal(res.license.expiry_game_day, '214');
-  assert.equal(res.license.status, 'active');
-});
-
-test('acquireBuildingPatentLicense supports city civic licensing debited to city account', async () => {
-  const client = new MockDbClient((sql) => {
-    if (sql.includes('SELECT reason_id FROM ledger_entries')) return { rows: [], rowCount: 0 };
-    if (sql.includes('FROM memberships WHERE city_id')) return { rows: [{ 1: 1 }], rowCount: 1 };
-    if (sql.includes('FROM building_patent_licenses WHERE city_id')) return { rows: [], rowCount: 0 };
-    if (sql.includes('SELECT game_day')) return { rows: [{ game_day: 184 }], rowCount: 1 };
-    if (sql.includes('earth_transfer_credits')) return { rows: [{ status: 'applied', ledger_id: 'LED-01', amount: '100', already_processed: false }], rowCount: 1 };
-    if (sql.includes('FROM account_balances')) return { rows: [{ account_id: 'account-city-CITY-0084', balance: '100000' }], rowCount: 1 };
-    if (sql.includes('UPDATE account_balances')) return { rows: [{ balance: '85000' }], rowCount: 1 };
-    if (sql.includes('SELECT * FROM building_patent_licenses WHERE id = $1')) {
-      return {
-        rows: [
-          {
-            id: 'LIC-CIVIC-01',
-            patent_id: 'PAT-DAT-02',
-            license_type: 'city_civic',
-            licensee_id: 'CITY-0084',
-            status: 'active',
-          },
-        ],
-        rowCount: 1,
-      };
-    }
-    return { rows: [], rowCount: 1 };
-  });
-  const repo = new PostgresRepository(client);
-
-  const res = await acquireBuildingPatentLicense(repo, {
-    humanId: 'H-001',
-    patentId: 'PAT-DAT-02',
-    licenseType: 'city_civic',
-    cityId: 'CITY-0084',
-    correlationId: 'test-civic-lic-1',
-  });
-
-  assert.equal(res.ok, true);
-  assert.equal(res.license.licensee_id, 'CITY-0084');
-  assert.equal(res.license.license_type, 'city_civic');
-});
-
 test('setBuildingAutoRepair updates auto repair toggle on facility', async () => {
   const updates = [];
   const client = new MockDbClient((sql, params) => {
@@ -504,5 +282,3 @@ test('setBuildingAutoRepair updates auto repair toggle on facility', async () =>
   assert.equal(updates[0][0], false);
   assert.equal(updates[0][1], 'BLD-TEST');
 });
-
-

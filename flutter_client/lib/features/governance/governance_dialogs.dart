@@ -97,50 +97,6 @@ Future<void> showProposalComposer(
   );
 }
 
-Future<void> showDelegateDialog(
-  BuildContext context,
-  Future<void> Function(Future<EarthState> Function()) action,
-  String roleId,
-) async {
-  final delegate = TextEditingController();
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: context.panelColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusPanel),
-        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-      ),
-      title: Text(
-        'Delegate authority',
-        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
-      ),
-      content: TextField(
-        controller: delegate,
-        style: context.bodyStyle.copyWith(color: context.inkColor),
-        decoration: InputDecoration(
-          labelText: 'Active Human ID',
-          labelStyle: context.widgetFooterStyle,
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text('Cancel', style: context.controlStyle.copyWith(color: context.mutedColor)),
-        ),
-        EarthButton(
-          label: 'Delegate',
-          onPressed: () async {
-            if (delegate.text.trim().isEmpty) return;
-            await action(() => const EarthApi().delegateRole(roleId, delegate.text.trim()));
-            if (dialogContext.mounted) Navigator.pop(dialogContext);
-          },
-        ),
-      ],
-    ),
-  );
-}
-
 Future<void> showChallengeDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
@@ -260,6 +216,7 @@ Future<void> showAppealRulingDialog(
   );
 }
 
+/* Retired contract arbitration dialogs.
 Future<void> showDisputeDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
@@ -305,7 +262,9 @@ Future<void> showDisputeDialog(
     ),
   );
 }
+*/
 
+/*
 Future<void> showResolveDialog(
   BuildContext context,
   Future<void> Function(Future<EarthState> Function()) action,
@@ -374,3 +333,4 @@ Future<void> showResolveDialog(
     ),
   );
 }
+*/

@@ -20,8 +20,7 @@ test("Page 12: Personal Finance, Taxation & Municipal Treasury", async (t) => {
   await t.test("TC-12.1: Public Treasury Spending with Mayor Role", async () => {
     await repo.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ('account-ouc-treasury', 'OUC', 1000000.00, 'CREDIT') ON CONFLICT (account_id) DO UPDATE SET balance = account_balances.balance + 50000.00");
     await repo.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ('account-city-CITY-0084', 'CITY-0084', 50000.00, 'CREDIT') ON CONFLICT (account_id) DO NOTHING");
-    await repo.query("INSERT INTO institution_roles (id, institution_id, name) VALUES ('ROLE-MAYOR-0084', 'CITY-0084', 'City Mayor') ON CONFLICT (id) DO NOTHING");
-    await repo.query("INSERT INTO role_assignments (id, role_id, human_id, institution_id, status, started_game_day, ends_game_day) VALUES ('ROLE-ASSIGN-MAYOR', 'ROLE-MAYOR-0084', $1, 'CITY-0084', 'active', 1, 99999) ON CONFLICT (id) DO UPDATE SET status = 'active', ends_game_day = 99999", [TEST_HUMAN_ID]);
+    await repo.query("UPDATE institutions SET administrator_human_id = $1 WHERE id = 'CITY-0084'", [TEST_HUMAN_ID]);
 
     const correlationId = "pub-spend-" + Date.now();
     const res = await publicSpending(repo, {

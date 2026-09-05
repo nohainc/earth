@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -43,7 +44,9 @@ class EarthApiTransport {
     int? statusCode,
     Map<String, dynamic>? context,
   }) async {
-    if (endpoint == '/api/telemetry/error') return;
+    // A 401 is an expected authentication boundary during startup, logout,
+    // and session expiry. Do not turn it into noisy client-error telemetry.
+    if (endpoint == '/api/telemetry/error' || statusCode == 401) return;
     try {
       final uri = Uri.parse('$baseUrl/api/telemetry/error');
       final headers = <String, String>{
@@ -73,7 +76,7 @@ class EarthApiTransport {
       {String method = 'GET', Map<String, dynamic>? body}) async {
     final uri = Uri.parse('$baseUrl$path');
     final requestId =
-        'flutter-${DateTime.now().microsecondsSinceEpoch}-${method.toLowerCase()}';
+        'flutter-${Random.secure().nextInt(0x7fffffff)}-${method.toLowerCase()}';
     final headers = <String, String>{
       'content-type': 'application/nanomarkup',
       'accept': 'application/nanomarkup, application/json',

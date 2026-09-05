@@ -19,8 +19,6 @@ class EarthState {
   Map<String, dynamic> get human => _toMap(json['human']);
   Map<String, dynamic> get world => _toMap(json['world']);
   Map<String, dynamic> get resources => _toMap(json['resources']);
-  Map<String, dynamic> get business => _toMap(json['business']);
-  List<dynamic> get businesses => _toList(json['businesses']);
   Map<String, dynamic> get technology => _toMap(json['technology'] is Map
       ? (json['technology'] as Map)['research']
       : null);
@@ -54,8 +52,6 @@ class EarthState {
   Map<String, dynamic> get history => _toMap(json['history']);
   List<dynamic> get financeStatus => _toList(json['financeStatus']);
   Map<String, dynamic> get personalFinance => _toMap(json['personalFinance']);
-  List<dynamic> get contracts => _toList(json['contracts']);
-  List<dynamic> get roles => _toList(json['roles']);
   List<dynamic> get buildings => _toList(json['buildings']);
   Map<String, dynamic> get districtZoning => _toMap(json['districtZoning']);
   List<dynamic> get investmentShares => _toList(json['investmentShares']);

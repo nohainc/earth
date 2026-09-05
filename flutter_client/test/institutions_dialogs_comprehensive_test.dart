@@ -41,43 +41,6 @@ void main() {
     expect(founded, true);
   });
 
-  testWidgets('showCommunityContributionDialog accepts credits and submits',
-      (tester) async {
-    bool contributed = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => showCommunityContributionDialog(
-                context,
-                (fn) async {
-                  contributed = true;
-                },
-                'COM-001',
-              ),
-              child: const Text('Open Contribution Dialog'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open Contribution Dialog'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Contribute to Community'), findsOneWidget);
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Amount (Credits)'), '150');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Contribute'));
-    await tester.pumpAndSettle();
-
-    expect(contributed, true);
-  });
-
   testWidgets('showTaxCharterDialog accepts tax rates and submits',
       (tester) async {
     bool saved = false;

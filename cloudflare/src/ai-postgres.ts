@@ -7,7 +7,7 @@ export async function listAssistants(repository: PostgresRepository, ownerId: st
 
 export async function updateAssistantPolicy(repository: PostgresRepository, input: { ownerId: string; assistantId: string; policy: string; enabled: boolean }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const result = await tx.query("UPDATE ai_assistants SET policy = $1, enabled = $2 WHERE id = $3 AND owner_id = $4 AND tier IN ('basic','business')", [input.policy, input.enabled, input.assistantId, input.ownerId]);
+    const result = await tx.query("UPDATE ai_assistants SET policy = $1, enabled = $2 WHERE id = $3 AND owner_id = $4 AND tier IN ('basic','advanced')", [input.policy, input.enabled, input.assistantId, input.ownerId]);
     if (result.rowCount !== 1) throw new Error('AI assistant not found');
     return { ok: true, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
   });
@@ -17,7 +17,7 @@ export async function upgradeAssistant(repository: PostgresRepository, input: { 
   return repository.transaction(async (tx) => {
     const assistant = await tx.query<{ id: string; tier: string }>('SELECT id, tier FROM ai_assistants WHERE id = $1 AND owner_id = $2 FOR UPDATE', [input.assistantId, input.ownerId]);
     if (!assistant.rows[0]) throw new Error('AI assistant not found');
-    if (assistant.rows[0].tier === 'business') return { ok: true, alreadyUpgraded: true, assistant: assistant.rows[0] };
+    if (assistant.rows[0].tier === 'advanced') return { ok: true, alreadyUpgraded: true, assistant: assistant.rows[0] };
     const ruleRow = await tx.query<{ value: string }>("SELECT value FROM world_rules WHERE key = 'ai.upgrade_cost' LIMIT 1");
     const cost = Number(ruleRow.rows[0]?.value ?? 2400);
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.ownerId]);
@@ -39,7 +39,7 @@ export async function upgradeAssistant(repository: PostgresRepository, input: { 
       correlationId,
     });
     if (transfer.status === 'already_processed') return { ok: true, alreadyProcessed: true, cost, correlationId, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
-    await tx.query("UPDATE ai_assistants SET tier = 'business' WHERE id = $1 AND owner_id = $2", [input.assistantId, input.ownerId]);
+    await tx.query("UPDATE ai_assistants SET tier = 'advanced' WHERE id = $1 AND owner_id = $2", [input.assistantId, input.ownerId]);
     await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Business AI activated', 'Your AI assistant now supports bounded business maintenance automation and recommendation policies.', input.assistantId]);
     return { ok: true, cost, correlationId, assistant: (await tx.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE id = $1', [input.assistantId])).rows[0] };
   });

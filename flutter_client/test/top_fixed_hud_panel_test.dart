@@ -46,13 +46,14 @@ void main() {
     bool drawerOpened = false;
     bool loggedOut = false;
     bool securityOpened = false;
-
     bool commLinkOpened = false;
+    bool notificationsOpened = false;
 
     tester.view.physicalSize = const Size(1200, 800);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.resetPhysicalSize);
 
+    // 1. Desktop mode (showDrawerButton: false) -> displays EARTH and UNITED CORPORATIONS and telemetry
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -62,40 +63,43 @@ void main() {
             unreadCommMessages: 5,
             isLiveConnected: true,
             isReconnecting: false,
-            showDrawerButton: true,
+            showDrawerButton: false,
             onOpenDrawer: () => drawerOpened = true,
             onNavigate: (_) {},
             onLogout: () => loggedOut = true,
             onSecurity: () => securityOpened = true,
             onCommLink: () => commLinkOpened = true,
+            onNotifications: () => notificationsOpened = true,
           ),
         ),
       ),
     );
 
-    // Verify brand header
+    // Verify brand header text and telemetry in desktop mode
     expect(find.text('EARTH'), findsOneWidget);
     expect(find.text('UNITED CORPORATIONS'), findsOneWidget);
-    expect(find.text('8'), findsOneWidget); // Combined alerts badge
+    expect(find.text('LIVE'), findsOneWidget);
 
-    // Test grouped alerts menu and Messages action
-    final notifBtn = find.byIcon(Icons.notifications_none_outlined);
+    // Verify separate badges for Notifications (3) and Comm Messages (5)
+    expect(find.text('3'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+
+    // Test Notifications button (opens popup menu)
+    final notifBtn = find.byIcon(Icons.notifications_active_outlined);
     expect(notifBtn, findsOneWidget);
     await tester.tap(notifBtn);
     await tester.pumpAndSettle();
-    expect(find.text('Notifications'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
-    await tester.tap(find.text('Messages'));
+    expect(find.text('VIEW ALL NOTIFICATIONS'), findsOneWidget);
+    await tester.tap(find.text('VIEW ALL NOTIFICATIONS'));
+    await tester.pumpAndSettle();
+    expect(notificationsOpened, isTrue);
+
+    // Test Messages button
+    final messagesBtn = find.byIcon(Icons.forum_outlined);
+    expect(messagesBtn, findsOneWidget);
+    await tester.tap(messagesBtn);
+    await tester.pumpAndSettle();
     expect(commLinkOpened, isTrue);
-
-    // The comm-link action is now exposed through the grouped Messages item.
-
-    // Test drawer trigger
-    final drawerBtn = find.byIcon(Icons.menu);
-    if (drawerBtn.evaluate().isNotEmpty) {
-      await tester.tap(drawerBtn.first);
-      expect(drawerOpened, isTrue);
-    }
 
     // Test security trigger
     final securityBtn = find.byIcon(Icons.shield_outlined);
@@ -110,6 +114,33 @@ void main() {
       await tester.tap(logoutBtn.first);
       expect(loggedOut, isTrue);
     }
+
+    // 2. Mobile / collapsed sidebar mode (showDrawerButton: true) -> shows hamburger menu on left, hides brand text & telemetry
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: TopFixedHudPanel(
+            state: state,
+            unreadNotifications: 0,
+            unreadCommMessages: 0,
+            isLiveConnected: true,
+            isReconnecting: false,
+            showDrawerButton: true,
+            onOpenDrawer: () => drawerOpened = true,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.text('EARTH'), findsNothing);
+    expect(find.text('UNITED CORPORATIONS'), findsNothing);
+    expect(find.text('LIVE'), findsNothing);
+
+    final drawerBtn = find.byIcon(Icons.menu_rounded);
+    expect(drawerBtn, findsOneWidget);
+    await tester.tap(drawerBtn);
+    expect(drawerOpened, isTrue);
   });
 
   testWidgets('TopFixedHudPanel triggers 3-stage rollover lifecycle callbacks',

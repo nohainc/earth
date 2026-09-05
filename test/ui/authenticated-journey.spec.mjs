@@ -217,7 +217,7 @@ async function openBriefing(page) {
 async function openMessages(page) {
   await openSection(page, 'Messages', 'NOW');
   const messagesHeader = page.getByText('CHANNELS', { exact: false })
-    .or(page.getByText('DIPLOMATIC DISPATCHES', { exact: false }));
+    .or(page.getByText('Write a message to this channel', { exact: false }));
   await expect(messagesHeader.first()).toBeVisible({ timeout: 30_000 });
 }
 
@@ -1524,13 +1524,12 @@ test.describe.serial('authenticated player journeys', () => {
     await page.waitForTimeout(200);
   });
 
-  test('Messages page renders comm channels, scope filters, and diplomatic dispatches container', async () => {
+  test('Messages page renders channels and scope filters', async () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openMessages(page);
 
-    // 1. Channel and Dispatches Headings
+    // 1. Channel heading
     await expect(page.getByRole('heading', { name: /CHANNELS/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /DIPLOMATIC DISPATCHES/i })).toBeVisible();
 
     // 2. Channel Transmission Bar & Scope Filters
     await expect(page.getByRole('button', { name: 'SEND', exact: true })).toBeVisible();
@@ -1541,44 +1540,12 @@ test.describe.serial('authenticated player journeys', () => {
     expect(hasHorizontalOverflow).toBe(false);
   });
 
-  test('Messages page switches to compose diplomatic dispatch form and respects cancel', async () => {
-    await page.setViewportSize({ width: 1280, height: 900 });
-    await openMessages(page);
-
-    // 1. Switch to Compose folder in Diplomatic Dispatches
-    const composeFolderBtn = page.getByRole('button', { name: /COMPOSE/i }).first();
-    await expect(composeFolderBtn).toBeVisible();
-    await composeFolderBtn.click();
-    await page.waitForTimeout(250);
-
-    // 2. Validate Compose Form Controls
-    const recipientInput = page.getByRole('textbox', { name: /Recipient ID/i });
-    const subjectInput = page.getByRole('textbox', { name: /Subject/i });
-    const bodyInput = page.getByRole('textbox', { name: /Formal Dispatch Body/i });
-    const sendDispatchBtn = page.getByRole('button', { name: /SEND DISPATCH/i });
-    const cancelBtn = page.getByRole('button', { name: 'CANCEL', exact: true });
-
-    await expect(recipientInput).toBeVisible();
-    await expect(subjectInput).toBeVisible();
-    await expect(bodyInput).toBeVisible();
-    await expect(sendDispatchBtn).toBeVisible();
-    await expect(cancelBtn).toBeVisible();
-
-    // 3. Validate Cancel button dismisses compose view
-    await cancelBtn.click();
-    await page.waitForTimeout(200);
-
-    await expect(recipientInput).toBeHidden();
-  });
-
   test('Messages page adapts responsively to tablet (768x1024) and mobile (375x667) viewports without horizontal overflow', async () => {
     // 1. Tablet Viewport
     await page.setViewportSize({ width: 768, height: 1024 });
     await page.waitForTimeout(300);
 
     await expect(page.getByRole('heading', { name: /CHANNELS/i })).toBeVisible();
-    await expect(page.getByRole('heading', { name: /DIPLOMATIC DISPATCHES/i })).toBeVisible();
-
     let hasOverflow = await page.evaluate(() => document.documentElement.scrollWidth > window.innerWidth + 1);
     expect(hasOverflow).toBe(false);
 

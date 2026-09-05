@@ -8,7 +8,7 @@ export type BuildingCategory =
   | 'orbital'
   | 'food';
 
-export type OwnershipClass = 'private' | 'civic' | 'public_investment';
+export type OwnershipClass = 'private' | 'civic';
 export type OperatingPolicy = 'balanced' | 'high_output' | 'eco_reserve' | 'overclock';
 
 export interface RequiredPatentSpec {
@@ -252,7 +252,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
     name: 'Metropolitan Commercial Galleria',
     category: 'commercial',
     slotFootprint: 4,
-    defaultOwnershipClass: 'public_investment',
+    defaultOwnershipClass: 'civic',
     tier: 1,
     baseCreditCost: 42000,
     baseMaterialCost: 580,
@@ -845,7 +845,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
     name: 'Inter-District Hyperloop Terminal',
     category: 'civic',
     slotFootprint: 3,
-    defaultOwnershipClass: 'public_investment',
+    defaultOwnershipClass: 'civic',
     tier: 1,
     baseCreditCost: 38000,
     baseMaterialCost: 520,
@@ -910,7 +910,7 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
     name: 'Equatorial Orbital Spaceport',
     category: 'orbital',
     slotFootprint: 6,
-    defaultOwnershipClass: 'public_investment',
+    defaultOwnershipClass: 'civic',
     tier: 1,
     baseCreditCost: 95000,
     baseMaterialCost: 1200,

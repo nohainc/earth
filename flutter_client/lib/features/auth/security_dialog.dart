@@ -191,7 +191,7 @@ Future<void> showSecurityDialog(
                                 fontWeight: FontWeight.w600,
                                 letterSpacing: 0.4)),
                         subtitle: Text(
-                            'Created ${formatSecurityDate(session['created_at'])}\nExpires ${formatSecurityDate(session['expires_at'])}',
+                            'Created ${formatSecurityDate(session['created_at'])}',
                             style: const TextStyle(
                                 color: mutedColor,
                                 fontSize: 10,

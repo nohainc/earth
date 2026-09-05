@@ -77,7 +77,6 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     owner_id: string;
     city_id: string | null;
     ownership_class: string | null;
-    business_id: string | null;
     operating_policy: string | null;
     upkeep_energy: string;
     upkeep_food: string;
@@ -233,12 +232,6 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
               correlationId: `BLD-OP-${bld.id}-${day}`,
             });
             actualOperatingCostsCrd = opCostCrd;
-            if (bld.business_id) {
-              await tx.query(
-                'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2 WHERE business_id = $3',
-                [opCostCrd, day, bld.business_id],
-              );
-            }
           }
         }
       }
@@ -389,12 +382,6 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
 
               actualGrossRevenueCrd = Number(clearedAmt);
 
-              if (bld.business_id) {
-                await tx.query(
-                  'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2 WHERE business_id = $3',
-                  [actualGrossRevenueCrd, day, bld.business_id],
-                );
-              }
             }
           } else if (oClass === 'civic') {
             // Civic municipal facility: Genuine resident utility consumers pay utility bills

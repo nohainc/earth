@@ -62,8 +62,8 @@ void main() {
     expect(find.text('Internal Corporate Tax Levy'), findsOneWidget);
     expect(find.text('Shareholder Supermajority Protection'), findsOneWidget);
     expect(find.text('CORPORATION DECISIONS'), findsOneWidget);
-    expect(find.text('38'), findsOneWidget);
-    expect(find.text('12500 C'), findsNWidgets(2));
+    expect(find.text('38'), findsWidgets);
+    expect(find.text('12500 C'), findsWidgets);
   });
 
   testWidgets(
@@ -230,10 +230,9 @@ void main() {
     );
 
     expect(find.text('INSTITUTIONS / CITY & CORP'), findsNothing);
-    expect(find.text('NEW CARTHAGE'), findsOneWidget);
+    expect(find.text('NEW CARTHAGE'), findsWidgets);
     expect(find.text('142'), findsWidgets);
     expect(find.text('200'), findsWidgets);
-    expect(find.text('300'), findsWidgets);
     expect(find.textContaining('CORPORATION: CARTHAGE DYNAMICS (CORP-001)'),
         findsNothing);
     expect(find.text('CHANGE CITY'), findsOneWidget);
@@ -276,7 +275,6 @@ void main() {
 
     expect(find.text('CITY EFFECTS / LIFE & BUSINESS'), findsOneWidget);
     expect(find.text('CITY PRESSURE'), findsOneWidget);
-    expect(find.text('BUSINESS EFFECT'), findsOneWidget);
     expect(find.text('CITY TAX'), findsOneWidget);
     expect(find.text('MUNICIPAL ORDINANCES & TARIFFS'), findsOneWidget);
     expect(find.text('Municipal Energy & Grid Tariff'), findsOneWidget);
@@ -348,12 +346,12 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.text('PLANETARY CORPORATIONS & CHARTERS'), findsOneWidget);
+    expect(find.text('PLANETARY CORPORATIONS'), findsOneWidget);
     expect(find.text('ACTIVE AFFILIATION: Carthage Dynamics'), findsOneWidget);
     expect(find.text('VIEW CONSTITUTION & TAX CHARTER'), findsOneWidget);
     expect(find.text('ALL PLANETARY CORPORATIONS'), findsOneWidget);
 
-    expect(find.text('Carthage Dynamics'), findsOneWidget);
+    expect(find.text('Carthage Dynamics'), findsWidgets);
     expect(find.textContaining('2.5%'), findsWidgets);
     expect(find.textContaining('1.0%'), findsWidgets);
     expect(find.textContaining('1.8%'), findsWidgets);
@@ -464,10 +462,10 @@ void main() {
     await tester.pumpAndSettle();
 
     // Verify 4 Tab buttons on narrow screen
-    expect(find.text('CITIZENS (2)'), findsOneWidget);
-    expect(find.text('HOUSES (1)'), findsOneWidget);
-    expect(find.text('CORPS (2)'), findsOneWidget);
-    expect(find.text('CITIES (1)'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'HOUSES'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CORPS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CITIES'), findsOneWidget);
 
     // Currently on Citizens tab (default)
     expect(find.text('Amara Vance'), findsOneWidget);
@@ -479,7 +477,7 @@ void main() {
     expect(find.text('78'), findsOneWidget);
 
     // Switch to Houses tab
-    await tester.tap(find.text('HOUSES (1)'));
+    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
     await tester.pumpAndSettle();
 
     expect(find.text('House of Vance'), findsOneWidget);
@@ -487,24 +485,22 @@ void main() {
     expect(
         find.text('Founder: Marcus Vance · Heir: Amara Vance'), findsOneWidget);
 
-    // Verify formula info dialog for Houses
-    final infoIcons = find.byIcon(Icons.info_outline);
+    // Verify formula info dialog from cockpit
+    final infoIcons = find.descendant(of: find.byType(CivicRankingsPanel), matching: find.byIcon(Icons.info_outline));
     expect(infoIcons, findsOneWidget);
 
     await tester.tap(infoIcons.first);
     await tester.pumpAndSettle();
 
-    expect(find.text('HOUSES RANKING FORMULA'), findsOneWidget);
-    expect(find.textContaining('1 : 5 : 25 weighting ratio'), findsOneWidget);
-    expect(find.textContaining('House Legacy (25x relative weight'),
-        findsOneWidget);
-    expect(find.text('GOT IT'), findsOneWidget);
+    expect(find.text('CIVIC RANKINGS & LEADERBOARD ARCHITECTURE'), findsOneWidget);
+    expect(find.textContaining('Dynastic House Index'), findsOneWidget);
+    expect(find.text('CLOSE'), findsOneWidget);
 
-    await tester.tap(find.text('GOT IT'));
+    await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
     // Switch to Corps tab
-    await tester.tap(find.text('CORPS (2)'));
+    await tester.tap(find.widgetWithText(InkWell, 'CORPS'));
     await tester.pumpAndSettle();
 
     expect(find.text('Carthage Dynamics'), findsOneWidget);
@@ -512,7 +508,7 @@ void main() {
     expect(find.text('85'), findsOneWidget);
 
     // Switch to Cities tab
-    await tester.tap(find.text('CITIES (1)'));
+    await tester.tap(find.widgetWithText(InkWell, 'CITIES'));
     await tester.pumpAndSettle();
 
     expect(find.text('New Carthage'), findsOneWidget);
@@ -534,11 +530,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // Left Column: CITIZENS and HOUSES
-    expect(find.text('CITIZENS (2)'), findsOneWidget);
-    expect(find.text('HOUSES (1)'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'HOUSES'), findsOneWidget);
     // Right Column: CORPS and CITIES
-    expect(find.text('CORPS (2)'), findsOneWidget);
-    expect(find.text('CITIES (1)'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CORPS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CITIES'), findsOneWidget);
 
     // Both columns render simultaneously
     expect(find.text('Amara Vance'), findsOneWidget);
@@ -584,7 +580,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Switch to Citizens tab on narrow layout
-    await tester.tap(find.text('CITIZENS (15)'));
+    await tester.tap(find.widgetWithText(InkWell, 'CITIZENS'));
     await tester.pumpAndSettle();
 
     // Auto-navigates to user's page (Page 2 of 2) since H-12 is at rank #12

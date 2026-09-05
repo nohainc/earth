@@ -58,8 +58,6 @@ test('Comprehensive Worker & API Endpoint Surface Validation', async () => {
     assert.equal(ownRes.status, 200);
     const memRes = await fetchJson(`${baseUrl}/api/membership/events`);
     assert.equal(memRes.status, 200);
-    const authRes = await fetchJson(`${baseUrl}/api/governance/authority/events`);
-    assert.equal(authRes.status, 200);
 
     // 3. Finance & Market
     const bookRes = await fetchJson(`${baseUrl}/api/market/book`);

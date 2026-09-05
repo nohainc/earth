@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
+
 
 class ConstitutionPanel extends StatelessWidget {
   final EarthState state;
@@ -29,22 +31,50 @@ class ConstitutionPanel extends StatelessWidget {
             .take(12)
             .toList()
         : const <Map<String, dynamic>>[];
+    final cockpit = EarthPageCockpit(
+      status: 'SUPREME LAW',
+      statusColor: context.primaryColor,
+      infoTitle: 'PLANETARY CONSTITUTION & LEGAL ORDER',
+      infoDescription:
+          '• Supreme Law: The highest legal baseline across Earth. All municipal charters and corporate policies must conform to constitutional invariants.\n\n• 3-Tier Governance Hierarchy:\n  1. Earth Baseline (Supreme global statutes & unalienable citizen rights)\n  2. Corporation Policy (Intermediate organizational rules & dividends)\n  3. City Charter (Final permitted local overrides, municipal taxation, & zoning)\n\n• Precedence: A later permitted local override modifies the tier before it, provided it does not violate a global constitutional constraint.',
+      title: 'PLANETARY CONSTITUTION',
+      subtitle: 'Supreme legal architecture and governance override hierarchy across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Statutes',
+          value: constitutionalRules.isNotEmpty ? '${constitutionalRules.length}' : '0',
+          icon: Icons.gavel_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Hierarchy',
+          value: '3',
+          icon: Icons.account_tree_outlined,
+          color: context.secondaryColor,
+        ),
+        CockpitMetric(
+          label: 'Amendments',
+          value: '${constitutionalChanges.length}',
+          icon: Icons.history_outlined,
+          color: context.warningColor,
+        ),
+      ],
+    );
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Governance & Override Model
-          EarthSection(
-            title: 'GOVERNANCE HIERARCHY & OVERRIDE MODEL',
-            showSurface: false,
-            child: _buildTierFlow(context),
-          ),
+          cockpit,
+          const SizedBox(height: 28),
+          _buildTierFlow(context),
 
           SizedBox(height: context.spacingSection),
 
           // Constitution Code
           EarthSection(
             title: 'CONSTITUTION CODE',
+            showHeader: false,
             showSurface: false,
             child: constitutionalRules.isEmpty
                 ? const EarthEmptyState(

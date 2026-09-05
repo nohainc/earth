@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/models/live_connection_status.dart';
+import '../../core/notification_classifier.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/format_helpers.dart';
 
 class ActivityPanel extends StatefulWidget {
   final List<dynamic> events;
@@ -13,6 +15,7 @@ class ActivityPanel extends StatefulWidget {
   final Future<void> Function(String) onMarkRead;
   final Future<void> Function() onMarkAllRead;
   final Key? panelKey;
+  final VoidCallback? onClose;
 
   const ActivityPanel({
     super.key,
@@ -23,6 +26,7 @@ class ActivityPanel extends StatefulWidget {
     this.isLiveConnected = true,
     this.isReconnecting = false,
     this.connectionStatus,
+    this.onClose,
     required this.onRefresh,
     required this.onMarkRead,
     required this.onMarkAllRead,
@@ -36,6 +40,43 @@ class _ActivityPanelState extends State<ActivityPanel> {
   final Set<String> _locallyReadIds = <String>{};
   int _currentPage = 0;
   static const int _pageSize = 10;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _triggerAutoRead();
+    });
+  }
+
+  void _triggerAutoRead() {
+    final validNotifications = widget.notifications
+        .whereType<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
+        .where((n) => !isCorpOrCityNotification(n))
+        .toList();
+
+    bool hasUnread = false;
+    for (final n in validNotifications) {
+      final id = n['id']?.toString();
+      if (id != null && id.isNotEmpty && !_isNotificationRead(n)) {
+        _locallyReadIds.add(id);
+        hasUnread = true;
+      }
+    }
+
+    if (hasUnread) {
+      if (mounted) setState(() {});
+      widget.onMarkAllRead();
+    }
+  }
+
+  String? _formatNotificationDate(Map<String, dynamic> n) {
+    final rawDate = n['created_at'] ?? n['createdAt'] ?? n['timestamp'] ?? n['date'];
+    if (rawDate == null) return null;
+    final formatted = formatRealToGameDateTime(rawDate);
+    return formatted != 'unknown' ? formatted : null;
+  }
 
   bool _isNotificationRead(Map<String, dynamic> n) {
     final id = n['id']?.toString() ?? '';
@@ -62,11 +103,8 @@ class _ActivityPanelState extends State<ActivityPanel> {
     final validNotifications = widget.notifications
         .whereType<Map>()
         .map((raw) => Map<String, dynamic>.from(raw))
+        .where((n) => !isCorpOrCityNotification(n))
         .toList();
-
-    final unreadCount = validNotifications
-        .where((n) => !_isNotificationRead(n))
-        .length;
 
     final totalPages = (validNotifications.length / _pageSize).ceil().clamp(1, 9999);
     if (_currentPage >= totalPages) {
@@ -83,28 +121,55 @@ class _ActivityPanelState extends State<ActivityPanel> {
 
     return EarthSection(
       key: widget.panelKey,
-      title: unreadCount > 0
-          ? 'DIRECT ALERTS & NOTIFICATIONS ($unreadCount)'
-          : 'DIRECT ALERTS & NOTIFICATIONS',
+      title: 'DIRECT ALERTS & NOTIFICATIONS',
       showSurface: false,
-      trailing: validNotifications.isNotEmpty
-          ? EarthButton(
-              label: 'MARK ALL AS READ',
-              icon: Icons.done_all_rounded,
-              onPressed: unreadCount > 0
-                  ? () async {
-                      for (final n in validNotifications) {
-                        final id = n['id']?.toString();
-                        if (id != null && id.isNotEmpty) {
-                          _locallyReadIds.add(id);
-                        }
-                      }
-                      setState(() {});
-                      await widget.onMarkAllRead();
-                    }
-                  : null,
-            )
-          : null,
+      trailing: Tooltip(
+        message: 'Close notifications',
+        child: Material(
+          color: Colors.transparent,
+          child: InkWell(
+            key: const ValueKey('notifications_close_button'),
+            borderRadius: BorderRadius.circular(8),
+            onTap: () {
+              if (widget.onClose != null) {
+                widget.onClose!();
+              } else if (Navigator.of(context).canPop()) {
+                Navigator.of(context).pop();
+              }
+            },
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: context.primaryColor.withValues(alpha: 0.35),
+                  width: 1,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.close_rounded,
+                    size: 16,
+                    color: context.inkColor,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'CLOSE',
+                    style: context.captionStyle.copyWith(
+                      color: context.inkColor,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
       child: validNotifications.isEmpty
           ? const EarthEmptyState(
               message: 'No pending notifications. All personal systems nominal.',
@@ -115,39 +180,31 @@ class _ActivityPanelState extends State<ActivityPanel> {
               children: [
                 EarthDataList(
                   children: pageItems.map((n) {
-                    final id = n['id']?.toString() ?? 'NOTIF';
                     final title = n['title']?.toString() ?? 'Notification';
                     final body = n['body']?.toString() ?? '';
                     final isRead = _isNotificationRead(n);
+                    final dateTimeStr = _formatNotificationDate(n);
 
                     return EarthDataRow(
-                      title: title,
-                      subtitle: body.isNotEmpty ? body : null,
-                      leading: Icon(
-                        isRead
-                            ? Icons.notifications_none_rounded
-                            : Icons.notifications_active_outlined,
-                        size: context.iconSize,
-                        color: isRead ? context.mutedColor : context.primaryColor,
-                      ),
-                      badges: [
-                        EarthBadge(
-                          label: isRead ? 'READ' : 'NEW',
-                          variant: isRead ? EarthBadgeVariant.neutral : EarthBadgeVariant.primary,
-                        ),
-                      ],
-                      trailing: !isRead
-                          ? Tooltip(
-                              message: 'Mark read',
-                              child: EarthButton(
-                                label: 'MARK READ',
-                                onPressed: () async {
-                                  setState(() => _locallyReadIds.add(id));
-                                  await widget.onMarkRead(id);
-                                },
+                      leading: !isRead
+                          ? Container(
+                              width: 8,
+                              height: 8,
+                              decoration: BoxDecoration(
+                                color: context.primaryColor,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: context.primaryColor.withValues(alpha: 0.8),
+                                    blurRadius: 4,
+                                  ),
+                                ],
                               ),
                             )
                           : null,
+                      title: title,
+                      subtitle: body.isNotEmpty ? body : null,
+                      secondarySubtitle: dateTimeStr,
                     );
                   }).toList(),
                 ),

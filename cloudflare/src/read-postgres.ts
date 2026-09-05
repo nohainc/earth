@@ -2,12 +2,13 @@ import type { PostgresRepository } from './repository';
 import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
 
 export async function listEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
-  const [ledger, trades, proposals] = await Promise.all([
+  const [ledger, trades, proposals, publicNews] = await Promise.all([
     repository.query('SELECT id, created_at AS occurred_at, reason_type AS type, amount, game_day, debit_account AS actor FROM ledger_entries ORDER BY created_at DESC LIMIT $1', [limit]),
     repository.query("SELECT id, created_at AS occurred_at, 'market_trade' AS type, quantity AS amount, game_day, product AS actor FROM market_trades ORDER BY created_at DESC LIMIT $1", [limit]),
     repository.query("SELECT id, opens_at AS occurred_at, 'proposal_opened' AS type, 0 AS amount, EXTRACT(EPOCH FROM opens_at)::integer AS game_day, institution_id AS actor FROM proposals ORDER BY opens_at DESC LIMIT $1", [limit]),
+    repository.query("SELECT id, created_at AS occurred_at, event_type, title, details, game_day FROM world_events WHERE event_type NOT IN ('world_clock', 'scheduled_tick') AND LOWER(COALESCE(title, '')) NOT LIKE '%public world announcement%' ORDER BY created_at DESC LIMIT $1", [limit]),
   ]);
-  const events = [...ledger.rows, ...trades.rows, ...proposals.rows]
+  const events = [...ledger.rows, ...trades.rows, ...proposals.rows, ...publicNews.rows]
     .sort((a, b) => String((b as Record<string, unknown>).occurred_at).localeCompare(String((a as Record<string, unknown>).occurred_at)))
     .slice(0, limit);
   return { ok: true, events, generatedAt: new Date().toISOString() };
@@ -88,7 +89,7 @@ export async function listRankings(repository: PostgresRepository, options: Rank
        FROM corporations
        ORDER BY (LEAST(1, GREATEST(0, member_count::numeric) / 100.0) * 55
                  + LEAST(1, GREATEST(0, treasury::numeric) / 25000.0) * 25
-                 + LEAST(1, (SELECT COUNT(*)::numeric FROM businesses b WHERE b.owner_id IN (SELECT human_id FROM memberships m WHERE m.corporation_id = corporations.id) AND b.status = 'active') / 10.0) * 20) DESC,
+                 + LEAST(1, (SELECT COUNT(*)::numeric FROM buildings b JOIN memberships m ON m.human_id = b.owner_id WHERE m.corporation_id = corporations.id AND b.ownership_class = 'private' AND b.status = 'active') / 10.0) * 20) DESC,
                 member_count DESC, id
        LIMIT $1`,
       [limit]
@@ -257,13 +258,8 @@ export async function listMembershipEvents(repository: PostgresRepository, human
   return { events: events.rows };
 }
 
-export async function listAuthorityEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
-  const events = await repository.query('SELECT id, institution_id, role_id, action, game_day, reason, created_at FROM authority_events WHERE human_id = $1 ORDER BY game_day DESC, created_at DESC LIMIT $2', [humanId, limit]);
-  return { events: events.rows };
-}
-
 export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const projects = await repository.query('SELECT * FROM research_projects WHERE owner_id = $1 ORDER BY id', [humanId]);
+  const projects = await repository.query('SELECT p.* FROM corporation_technology_projects p JOIN memberships m ON m.corporation_id = p.corporation_id WHERE m.human_id = $1 ORDER BY p.created_at DESC', [humanId]).catch(() => ({ rows: [] }));
   return { catalog: TECHNOLOGY_CATALOG_DETAILS, projects: projects.rows };
 }
 

@@ -47,24 +47,6 @@ test('Production Readiness Monitoring and Health Probes', async () => {
       assert.equal(typeof body.readiness.outboxMetrics.deadLetterCount, 'number');
     }
 
-    // 2. Monitored simulation check: day advancement produces valid clock and outbox events
-    const advanceRes = await fetch(`${baseUrl}/api/day/advance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'readiness-sim-advance-1' },
-    });
-    assert.equal(advanceRes.status, 200);
-    const advanceBody = await advanceRes.json();
-    assert.ok(advanceBody.ok);
-    assert.ok(advanceBody.state && advanceBody.state.clock);
-    assert.ok(typeof advanceBody.state.clock.day === 'number');
-
-    // 3. Repeated advancement with identical idempotency key is idempotent
-    const repeatRes = await fetch(`${baseUrl}/api/day/advance`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'readiness-sim-advance-1' },
-    });
-    assert.equal(repeatRes.status, 200);
-
   } finally {
     server.kill('SIGKILL');
   }

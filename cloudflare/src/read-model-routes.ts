@@ -3,7 +3,6 @@ import { withRepository } from './repository.ts';
 import { currentHuman } from './auth-session.ts';
 import {
   auditWorld as auditWorldPostgres,
-  listAuthorityEvents as listAuthorityEventsPostgres,
   listCemeteryProfiles as listCemeteryProfilesPostgres,
   listEvents as listEventsPostgres,
   listHistory as listHistoryPostgres,
@@ -114,15 +113,6 @@ export async function handleReadModelRoutes(
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
     const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
-    if (!result) throw new Error('PostgreSQL repository is unavailable');
-    return Response.json({ ...result, persistence: 'planetscale-postgres' });
-  }
-
-  if (url.pathname === '/api/governance/authority/events' && request.method === 'GET') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-    const result = await withRepository(env, (repository) => listAuthorityEventsPostgres(repository, viewer.id, limit));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }

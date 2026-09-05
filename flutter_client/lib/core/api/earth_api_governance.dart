@@ -19,7 +19,7 @@ extension EarthApiGovernance on EarthApi {
           'value': targetValue ?? (targetRate != null ? {'rate': targetRate} : <String, dynamic>{}),
         },
       'correlationId':
-          'governance-proposal-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('governance-proposal'),
     });
     return world();
   }
@@ -30,7 +30,7 @@ extension EarthApiGovernance on EarthApi {
         body: {
           'reason': reason.trim(),
           'correlationId':
-              'governance-challenge-${DateTime.now().microsecondsSinceEpoch}',
+              newClientCorrelationId('governance-challenge'),
         });
     return world();
   }
@@ -43,29 +43,8 @@ extension EarthApiGovernance on EarthApi {
           'ruling': ruling,
           'rationale': rationale.trim(),
           'correlationId':
-              'governance-ruling-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('governance-ruling'),
         });
-    return world();
-  }
-
-  Future<EarthState> claimRole(String roleId) async {
-    await _request('/api/governance/roles/$roleId/claim', method: 'POST');
-    return world();
-  }
-
-  Future<EarthState> resignRole(String roleId) async {
-    await _request('/api/governance/roles/$roleId/resign', method: 'POST');
-    return world();
-  }
-
-  Future<EarthState> delegateRole(String roleId, String delegateHumanId) async {
-    await _request('/api/governance/roles/$roleId/delegate',
-        method: 'POST', body: {'delegateHumanId': delegateHumanId.trim()});
-    return world();
-  }
-
-  Future<EarthState> recallRole(String roleId) async {
-    await _request('/api/governance/roles/$roleId/recall', method: 'POST');
     return world();
   }
 

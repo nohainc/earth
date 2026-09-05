@@ -19,7 +19,7 @@ void main() {
       addTearDown(tester.view.resetPhysicalSize);
       await tester.pumpWidget(MaterialApp(
         theme: createEarthTheme(),
-        home: Scaffold(body: InstitutionsCapacityPanel(state: state, busy: false, action: (_) async {})),
+        home: Scaffold(body: SingleChildScrollView(child: InstitutionsCapacityPanel(state: state, busy: false, action: (_) async {}))),
       ));
       await tester.pumpAndSettle();
       await expectLater(find.byType(MaterialApp), matchesGoldenFile('goldens/qa/city_${viewport.width.toInt()}.png'));

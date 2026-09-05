@@ -5,7 +5,6 @@ import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
-import '../governance/governance_dialogs.dart';
 import 'lifecycle_dialogs.dart';
 import 'global_rankings_dialog.dart';
 
@@ -198,11 +197,6 @@ class LifeTodayPanel extends StatelessWidget {
     final birthDayInYear = ((birthGameDay - 1) % 365) + 1;
     final birthDayFormatted = 'Year $birthYear, Day $birthDayInYear';
 
-    final isMatured = human['politicalMaturity'] == true ||
-        (human['political_eligibility_game_day'] != null &&
-            asIntOr(state.clock['day'], 0) >=
-                asIntOr(human['political_eligibility_game_day'], 0));
-
     final cityName = state.institutions['city'] is Map
         ? (state.institutions['city'] as Map)['name']?.toString().toUpperCase()
         : null;
@@ -232,203 +226,48 @@ class LifeTodayPanel extends StatelessWidget {
         decoration: BoxDecoration(
           color: context.surfaceColor.withValues(alpha: .75),
           borderRadius: BorderRadius.circular(context.radiusCard),
-          border: Border.all(color: context.subtleBorderColor),
         ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // 1. Citizen Identity Header Row
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            final isWide = constraints.maxWidth >= 450;
+            final leftColumn = [
+              _buildAttributeRow(
+                context,
+                icon: Icons.cake_outlined,
+                label: 'BIRTH DAY',
+                value: birthDayFormatted,
+                accentColor: context.primaryColor,
+              ),
+            ];
+
+            final rightColumn = [
+              _buildAttributeRow(
+                context,
+                icon: Icons.verified_user_outlined,
+                label: 'USER STANDING',
+                value: formatWholeNumber(standing.toDouble()),
+                accentColor: context.primaryColor,
+              ),
+            ];
+
+            if (isWide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: Column(children: leftColumn)),
+                  const SizedBox(width: 24),
+                  Expanded(child: Column(children: rightColumn)),
+                ],
+              );
+            }
+
+            return Column(
               children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: context.primaryColor.withValues(alpha: .15),
-                  child: Text(
-                    initials,
-                    style: context.widgetTitleStyle.copyWith(
-                      color: context.primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              displayName.toUpperCase(),
-                              style: context.topicTitleStyle.copyWith(
-                                color: context.inkColor,
-                                fontWeight: FontWeight.w700,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (action != null) ...[
-                            const SizedBox(width: 6),
-                            IconButton(
-                              tooltip: 'Edit name',
-                              icon: Icon(
-                                Icons.edit_outlined,
-                                size: 16,
-                                color: context.primaryColor,
-                              ),
-                              onPressed: busy ? null : () => _editName(context),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              epitaph,
-                              style: context.bodyStyle.copyWith(
-                                color: context.inkColor.withValues(alpha: .9),
-                                fontStyle: FontStyle.italic,
-                                fontSize: 13.5,
-                                fontWeight: FontWeight.w500,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                          if (action != null) ...[
-                            const SizedBox(width: 6),
-                            IconButton(
-                              tooltip: 'Edit epitaph / motto',
-                              icon: Icon(
-                                Icons.edit_outlined,
-                                size: 16,
-                                color: context.primaryColor,
-                              ),
-                              onPressed: busy
-                                  ? null
-                                  : () => _editEpitaph(context, epitaph),
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
+                ...leftColumn,
+                ...rightColumn,
               ],
-            ),
-            const SizedBox(height: 14),
-            Divider(height: 1, color: context.subtleBorderColor),
-            const SizedBox(height: 10),
-            // 2. Two-Column Single-Row Key-Value Grid with White Values and Full-Row Residence / Corporation
-            LayoutBuilder(
-              builder: (context, constraints) {
-                final isWide = constraints.maxWidth >= 450;
-                final leftColumn = [
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.person_outline,
-                    label: 'AGE',
-                    value: '$age',
-                    accentColor: context.primaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.cake_outlined,
-                    label: 'BIRTH DAY',
-                    value: birthDayFormatted,
-                    accentColor: context.primaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.alt_route_outlined,
-                    label: 'GENERATION',
-                    value: '$generation',
-                    accentColor: context.secondaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.how_to_vote_outlined,
-                    label: 'POLITICAL STATUS',
-                    value: isMatured ? 'ELIGIBLE' : 'IN TRAINING',
-                    accentColor:
-                        isMatured ? context.successColor : context.mutedColor,
-                  ),
-                ];
-
-                final rightColumn = [
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.favorite_outline,
-                    label: 'BIOMETRIC HEALTH',
-                    value: '${health.toStringAsFixed(0)}%',
-                    accentColor: healthColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.bolt_outlined,
-                    label: 'LIFE ENERGY',
-                    value: '${energy.toStringAsFixed(0)}%',
-                    accentColor: context.warningColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.verified_user_outlined,
-                    label: 'CIVIC STANDING',
-                    value: formatWholeNumber(standing.toDouble()),
-                    accentColor: context.primaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.auto_awesome_outlined,
-                    label: 'LIFETIME LEGACY',
-                    value: formatWholeNumber(legacy),
-                    accentColor: context.secondaryColor,
-                  ),
-                ];
-
-                return Column(
-                  children: [
-                    if (isWide)
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Expanded(child: Column(children: leftColumn)),
-                          const SizedBox(width: 24),
-                          Expanded(child: Column(children: rightColumn)),
-                        ],
-                      )
-                    else ...[
-                      ...leftColumn,
-                      ...rightColumn,
-                    ],
-                    const SizedBox(height: 2),
-                    Divider(height: 12, color: context.subtleBorderColor),
-                    _buildAttributeRow(
-                      context,
-                      icon: Icons.corporate_fare_outlined,
-                      label: 'CORPORATION',
-                      value: corporationName ?? 'INDEPENDENT',
-                      accentColor: context.secondaryColor,
-                    ),
-                    _buildAttributeRow(
-                      context,
-                      icon: Icons.location_city_outlined,
-                      label: 'RESIDENCE',
-                      value: cityName ?? 'INDEPENDENT',
-                      accentColor: context.secondaryColor,
-                    ),
-                  ],
-                );
-              },
-            ),
-          ],
+            );
+          },
         ),
       ),
     );
@@ -985,103 +824,6 @@ class InstitutionSolvencyPanel extends StatelessWidget {
                 );
               }).toList(),
             ),
-    );
-  }
-}
-
-class NegotiatedContractsPanel extends StatelessWidget {
-  final EarthState state;
-  final bool busy;
-  final Future<void> Function(Future<EarthState> Function()) action;
-
-  const NegotiatedContractsPanel({
-    super.key,
-    required this.state,
-    required this.busy,
-    required this.action,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final canArbitrate = state.roles.any((raw) {
-      final role = raw as Map<String, dynamic>;
-      return role['id'] == 'ROLE-OUC-DELEGATE' &&
-          (role['human_id'] == state.human['id'] ||
-              role['delegate_id'] == state.human['id']);
-    });
-
-    return EarthPanel(
-      title: 'NEGOTIATED CONTRACTS / DIRECT AGREEMENTS',
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          if (state.contracts.isEmpty)
-            const Text('No direct agreements yet.',
-                style: TextStyle(color: mutedColor, fontSize: 11))
-          else
-            ...state.contracts.take(8).map((raw) {
-              final contract = raw as Map<String, dynamic>;
-              final mine = contract['proposer_id'] == state.human['id'];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 8),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        '${contract['title']}  ·  ${contract['kind']}  ·  ${contract['status']}  ·  ${contract['amount']} C',
-                        style: const TextStyle(fontSize: 11),
-                      ),
-                    ),
-                    if (contract['status'] == 'proposed' && !mine)
-                      OutlinedButton(
-                        onPressed: busy
-                            ? null
-                            : () => action(() => const EarthApi()
-                                .acceptContract(contract['id'] as String)),
-                        child: const Text('ACCEPT'),
-                      ),
-                    if (contract['status'] == 'proposed')
-                      OutlinedButton(
-                        onPressed: busy
-                            ? null
-                            : () => action(() => const EarthApi()
-                                .cancelContract(contract['id'] as String)),
-                        child: const Text('CANCEL'),
-                      ),
-                    if ((contract['status'] == 'accepted' ||
-                            contract['status'] == 'completed') &&
-                        contract['dispute_id'] == null)
-                      OutlinedButton(
-                        onPressed: busy
-                            ? null
-                            : () => showDisputeDialog(
-                                context, action, contract['id'] as String),
-                        child: const Text('DISPUTE'),
-                      ),
-                    if (contract['dispute_id'] != null)
-                      const Text(
-                        'DISPUTE OPEN',
-                        style: TextStyle(color: Colors.orange, fontSize: 10),
-                      ),
-                    if (canArbitrate && contract['dispute_id'] != null)
-                      OutlinedButton(
-                        onPressed: busy
-                            ? null
-                            : () => showResolveDialog(
-                                context, action, contract['id'] as String),
-                        child: const Text('ARBITRATE'),
-                      ),
-                  ],
-                ),
-              );
-            }),
-          OutlinedButton(
-            onPressed:
-                busy ? null : () => showContractComposerDialog(context, action),
-            child: const Text('PROPOSE AGREEMENT'),
-          ),
-        ],
-      ),
     );
   }
 }
@@ -1662,6 +1404,7 @@ class CivicMembershipHistoryPanel extends StatelessWidget {
   }
 }
 
+/* Removed with the Authority / Active Terms & Delegation feature.
 class AuthorityHistoryPanel extends StatelessWidget {
   final List<dynamic> authorityEvents;
 
@@ -1778,6 +1521,7 @@ class AuthorityHistoryPanel extends StatelessWidget {
     );
   }
 }
+*/
 
 class RankingLine extends StatelessWidget {
   final String label;

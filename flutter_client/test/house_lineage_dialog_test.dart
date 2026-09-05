@@ -94,7 +94,7 @@ void main() {
       await tester.pumpAndSettle();
 
       // Switch to HOUSES tab on column 1
-      final housesTab = find.text('HOUSES (1)');
+      final housesTab = find.widgetWithText(InkWell, 'HOUSES');
       expect(housesTab, findsOneWidget);
       await tester.tap(housesTab);
       await tester.pumpAndSettle();

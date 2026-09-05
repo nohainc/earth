@@ -199,30 +199,11 @@ const personalBankruptcy = await get('/api/finance/personal/declare', { method: 
 assert.equal(personalBankruptcy.response.status, 401);
 assert.equal(personalBankruptcy.body.error, 'Authentication required');
 
-const roleDelegation = await get('/api/governance/roles/ROLE-OUC-DELEGATE/delegate', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ delegateHumanId: 'H-SMOKE' }) });
-assert.equal(roleDelegation.response.status, 401);
-assert.equal(roleDelegation.body.error, 'Authentication required');
-const roleRecall = await get('/api/governance/roles/ROLE-OUC-DELEGATE/recall', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(roleRecall.response.status, 401);
-assert.equal(roleRecall.body.error, 'Authentication required');
-
-const contracts = await get('/api/contracts');
-assert.equal(contracts.response.status, 401);
-assert.equal(contracts.body.error, 'Authentication required');
-const contractCreate = await get('/api/contracts', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ kind: 'capacity', counterpartyId: 'H-SMOKE', title: 'Smoke capacity agreement', amount: 10, durationDays: 30 }) });
-assert.equal(contractCreate.response.status, 401);
-assert.equal(contractCreate.body.error, 'Authentication required');
 
 const residency = await get('/api/cities/CITY-0084/residency', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ correlationId: 'smoke-residency' }) });
 assert.equal(residency.response.status, 401);
 assert.equal(residency.body.error, 'Authentication required');
 
-const contractDispute = await get('/api/contracts/CON-SMOKE/dispute', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ reason: 'Smoke arbitration reason' }) });
-assert.equal(contractDispute.response.status, 401);
-assert.equal(contractDispute.body.error, 'Authentication required');
-const contractResolve = await get('/api/contracts/CON-SMOKE/resolve', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ outcome: 'uphold', resolution: 'Smoke resolution record' }) });
-assert.equal(contractResolve.response.status, 401);
-assert.equal(contractResolve.body.error, 'Authentication required');
 
 const decommission = await get('/api/machines/unknown/decommission', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
 assert.equal(decommission.response.status, 401);
@@ -295,8 +276,5 @@ const membershipEvents = await get('/api/membership/events');
 assert.equal(membershipEvents.response.status, 401);
 assert.equal(membershipEvents.body.error, 'Authentication required');
 
-const authorityEvents = await get('/api/governance/authority/events');
-assert.equal(authorityEvents.response.status, 401);
-assert.equal(authorityEvents.body.error, 'Authentication required');
 
 console.log(`EARTH remote smoke passed: ${baseUrl}`);

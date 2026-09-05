@@ -8,8 +8,8 @@ export async function publicSpending(
   input: { actorId: string; cityId: string; category: string; amount: number; correlationId: string },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const role = await tx.query("SELECT role_assignments.id FROM role_assignments JOIN institution_roles ON institution_roles.id = role_assignments.role_id WHERE role_assignments.human_id = $1 AND role_assignments.institution_id = $2 AND role_assignments.status = 'active' AND institution_roles.name = ANY($3::text[]) AND role_assignments.ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [input.actorId, input.cityId, ['City Mayor', 'Infrastructure Planner']]);
-    if (!role.rows[0]) throw new Error('An active City Mayor or Infrastructure Planner term is required');
+    const role = await tx.query("SELECT id FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [input.cityId, input.actorId]);
+    if (!role.rows[0]) throw new Error('Institution administrator permission is required');
     const prior = await tx.query<{ amount: string; game_day: number }>("SELECT amount, game_day FROM ledger_entries WHERE reason_type = 'public_spending' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, amount: Number(prior.rows[0].amount), gameDay: prior.rows[0].game_day, correlationId: input.correlationId };
     const treasury = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE account_id = 'account-ouc-treasury'");
@@ -76,30 +76,23 @@ export async function declarePersonalInsolvency(repository: PostgresRepository, 
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     const buildings = await tx.query<{ id: string }>("SELECT id FROM buildings WHERE owner_id = $1 AND ownership_class = 'private' FOR UPDATE", [humanId]);
-    const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [humanId]);
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [humanId]);
     if (!account.rows[0]) throw new Error('Human Credit account is required for insolvency');
     const currentCents = moneyToCents(account.rows[0].balance);
     const protectedTopUpCents = currentCents < 10000n ? 10000n - currentCents : 0n;
     const buildingValueCents = BigInt(buildings.rows.length) * 10000n;
-    const treasuryAssetPaymentCents = buildingValueCents + BigInt(businesses.rows.length) * 10000n;
+    const treasuryAssetPaymentCents = buildingValueCents;
     const treasury = await tx.query<{ balance: string }>("SELECT balance FROM account_balances WHERE account_id = 'account-ouc-treasury'");
     if (!treasury.rows[0] || moneyToCents(treasury.rows[0].balance) < protectedTopUpCents + treasuryAssetPaymentCents) throw new Error('OUC treasury cannot fund insolvency protection and liquidation');
     if (protectedTopUpCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-ouc-treasury', creditAccount: account.rows[0].account_id, amount: centsToMoney(protectedTopUpCents), reasonType: 'insolvency_protection', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-PROTECTION-${humanId}-${day}` });
     if (treasuryAssetPaymentCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: 'account-ouc-treasury', creditAccount: account.rows[0].account_id, amount: centsToMoney(treasuryAssetPaymentCents), reasonType: 'asset_liquidation', reasonId: humanId, ruleVersion: 'finance-v3', correlationId: `INSOLVENCY-ASSETS-${humanId}-${day}` });
-    const liquidationValue = Number(centsToMoney(buildingValueCents + BigInt(businesses.rows.length) * 10000n));
+    const liquidationValue = Number(centsToMoney(buildingValueCents));
     await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [humanId]);
-    for (const business of businesses.rows) {
-      await tx.query('DELETE FROM business_shares WHERE business_id = $1', [business.id]);
-    }
-    await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [humanId]);
-    await tx.query('DELETE FROM businesses WHERE owner_id = $1', [humanId]);
-    for (const business of businesses.rows) await tx.query("DELETE FROM institutions WHERE id = $1 AND kind = 'BUSINESS'", [business.id]);
     await tx.query('INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1,\'bankrupt\',$2,100,$3) ON CONFLICT(human_id) DO UPDATE SET status = EXCLUDED.status, since_game_day = EXCLUDED.since_game_day, last_reason = EXCLUDED.last_reason, updated_at = CURRENT_TIMESTAMP', [humanId, day, reason]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`PERSONAL-BANKRUPTCY-${humanId}-${day}`, day, 'human.bankruptcy', 'A Human entered insolvency restructuring', toNanoMarkup({ humanId, liquidationValue, protectedTopUp: Number(centsToMoney(protectedTopUpCents)), reason })]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), humanId, 'finance', 'Personal insolvency recorded', 'Non-protected private buildings and businesses were liquidated. The 100 Credit protected minimum remains.', `PERSONAL-BANKRUPTCY-${humanId}-${day}`]);
+    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), humanId, 'finance', 'Personal insolvency recorded', 'Non-protected private buildings were liquidated. The 100 Credit protected minimum remains.', `PERSONAL-BANKRUPTCY-${humanId}-${day}`]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [humanId]);
-    return { ok: true, state: (await tx.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [humanId])).rows[0], protectedCredits: 100, liquidated: { buildings: buildings.rows.length, businesses: businesses.rows.length, estimatedValue: liquidationValue } };
+    return { ok: true, state: (await tx.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [humanId])).rows[0], protectedCredits: 100, liquidated: { buildings: buildings.rows.length, estimatedValue: liquidationValue } };
   });
 }
 
@@ -107,9 +100,8 @@ export async function recoverInstitution(repository: PostgresRepository, input: 
   return repository.transaction(async (tx) => {
     const institution = await tx.query<{ id: string; kind: 'CITY' | 'CORPORATION' }>("SELECT id, kind FROM institutions WHERE id = $1 AND kind IN ('CITY','CORPORATION') FOR UPDATE", [input.institutionId]);
     if (!institution.rows[0]) throw new Error('Recoverable institution not found');
-    const roleNames = institution.rows[0].kind === 'CITY' ? ['City Mayor', 'Infrastructure Planner'] : ['Corporation Executive', 'Corporation Treasurer'];
-    const role = await tx.query("SELECT role_assignments.id FROM role_assignments JOIN institution_roles ON institution_roles.id = role_assignments.role_id WHERE role_assignments.human_id = $1 AND role_assignments.institution_id = $2 AND role_assignments.status = 'active' AND institution_roles.name = ANY($3::text[]) AND role_assignments.ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [input.humanId, input.institutionId, roleNames]);
-    if (!role.rows[0]) throw new Error('An active institutional finance role is required');
+    const role = await tx.query("SELECT id FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [input.institutionId, input.humanId]);
+    if (!role.rows[0]) throw new Error('Institution administrator permission is required');
     const state = await tx.query<{ status: string }>("SELECT status FROM financial_states WHERE institution_id = $1 AND status IN ('distressed','insolvent') FOR UPDATE", [input.institutionId]);
     if (!state.rows[0]) throw new Error('Institution is not currently in a recoverable crisis state');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [input.humanId]);

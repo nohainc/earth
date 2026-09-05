@@ -66,7 +66,7 @@ void main() {
       ),
     );
 
-    expect(find.text('CITIZEN COMMUNITIES & GUILDS'), findsOneWidget);
+    expect(find.text('COMMUNITIES & GUILDS'), findsOneWidget);
     expect(find.text('ALL (2)'), findsOneWidget);
     expect(find.text('MY COMMUNITIES (1)'), findsOneWidget);
     expect(find.text('OPEN TO JOIN (1)'), findsOneWidget);
@@ -268,7 +268,7 @@ void main() {
     expect(find.text('JOIN'), findsOneWidget);
   });
 
-  testWidgets('MyCommunityPanel renders active guild metrics, manifesto, contribution actions, and role badges',
+  testWidgets('MyCommunityPanel renders active guild metrics and role badges',
       (tester) async {
     const state = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -290,7 +290,6 @@ void main() {
           'admission_policy': 'approval',
           'my_role': 'founder',
           'member_count': 5,
-          'shared_credits': 1250.0,
         },
       ],
       'life': {},
@@ -298,8 +297,7 @@ void main() {
       'market': {'orders': []},
     });
 
-    bool contributionTriggered = false;
-
+    String? navigatedSection;
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -307,9 +305,8 @@ void main() {
             child: MyCommunityPanel(
               state: state,
               busy: false,
-              action: (cb) async {
-                contributionTriggered = true;
-              },
+              action: (cb) async {},
+              onNavigate: (sec) => navigatedSection = sec,
             ),
           ),
         ),
@@ -317,17 +314,17 @@ void main() {
     );
 
     expect(find.text('SOLAR ENGINEERS'), findsOneWidget);
-    expect(find.text('FOUNDED BY: Amara Vance'), findsOneWidget);
-    expect(find.text('OWNER / FOUNDER'), findsOneWidget);
-    expect(find.text('1250.00 C'), findsOneWidget);
+    expect(find.text('Founded by Amara Vance'), findsNothing);
+    expect(find.text('FOUNDER'), findsOneWidget);
+    expect(find.text('5'), findsOneWidget);
+    expect(find.text('APPROVAL'), findsOneWidget);
+    expect(find.text('COMMUNITY CHAT'), findsOneWidget);
     expect(find.text('GUILD MANIFESTO & PURPOSE'), findsNothing);
     expect(find.text('Pioneering clean renewable energy across the quadrant.'), findsOneWidget);
-    expect(find.text('CONTRIBUTE TO GUILD TREASURY'), findsOneWidget);
-    expect(find.text('+100 C'), findsOneWidget);
+    expect(find.text('CONTRIBUTE TO GUILD TREASURY'), findsNothing);
 
-    await tester.tap(find.text('+100 C'));
+    await tester.tap(find.text('COMMUNITY CHAT'));
     await tester.pumpAndSettle();
-
-    expect(contributionTriggered, isTrue);
+    expect(navigatedSection, 'messages:channel-community-COM-002');
   });
 }

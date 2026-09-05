@@ -16,6 +16,7 @@ import '../../core/navigation_deep_link.dart';
 import 'dashboard.dart';
 import 'sidebar.dart';
 import 'top_fixed_hud_panel.dart';
+import '../communications/comm_link_dialog.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../core/auth_storage.dart';
 import '../../earth_http_client.dart';
@@ -44,7 +45,6 @@ class _CommandCenterState extends State<CommandCenter> {
   final _sectionKeys = <String, Key>{
     'command': const ValueKey('section-command'),
     'market': const ValueKey('section-market'),
-    'business': const ValueKey('section-business'),
     'civic': const ValueKey('section-civic'),
     'corporation': const ValueKey('section-corporation'),
     'corporations': const ValueKey('section-corporations'),
@@ -52,7 +52,6 @@ class _CommandCenterState extends State<CommandCenter> {
     'technology': const ValueKey('section-technology'),
     'life': const ValueKey('section-life'),
     'finance': const ValueKey('section-finance'),
-    'contracts': const ValueKey('section-contracts'),
     'activity': const ValueKey('section-activity'),
   };
   EarthState? state;
@@ -62,18 +61,13 @@ class _CommandCenterState extends State<CommandCenter> {
   List<dynamic> notifications = const [];
   List<dynamic> ownershipEvents = const [];
   List<dynamic> membershipEvents = const [];
-  List<dynamic> authorityEvents = const [];
-  Map<String, dynamic> businessOwnership = const {};
-  Map<String, dynamic> businessFinancials = const {};
-  Map<String, dynamic> businessProfile = const {};
-  String? selectedBusinessId;
   Map<String, dynamic> marketHistory = const {};
   Map<String, dynamic> pantheon = const {};
   Map<String, dynamic> personalFinanceData = const {};
-  List<dynamic> contractsList = const [];
   int unreadNotifications = 0;
   int unreadCommMessages = 0;
   String selectedSection = 'command';
+  String _previousSection = 'command';
   LiveConnectionStatus connectionStatus = LiveConnectionStatus.reconnecting;
   Timer? eventTimer;
   Timer? liveReconnectTimer;
@@ -81,6 +75,7 @@ class _CommandCenterState extends State<CommandCenter> {
   http.Client? liveClient;
   StreamSubscription<String>? liveSubscription;
   bool _liveConnecting = false;
+  bool _authExpiredHandled = false;
   int _wsFailCount = 0;
   final Set<String> _seenEventKeys = <String>{};
   int _requestGeneration = 0;
@@ -167,6 +162,10 @@ class _CommandCenterState extends State<CommandCenter> {
         request.headers['authorization'] = 'Bearer $token';
       }
       final response = await client.send(request);
+      if (response.statusCode == 401) {
+        await _handleAuthenticationExpired();
+        return;
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw StateError('SSE connection failed (${response.statusCode})');
       }
@@ -196,6 +195,7 @@ class _CommandCenterState extends State<CommandCenter> {
         _onWebSocketDisconnected();
       });
     } catch (_) {
+      if (_authExpiredHandled) return;
       _closeLiveConnection();
       _onWebSocketDisconnected();
     } finally {
@@ -257,11 +257,9 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   Future<void> _onDayRecalculateTrigger() async {
-    try {
-      await api.recalculateWorld();
-    } catch (_) {
-      // Background calculation trigger network errors are handled gracefully.
-    }
+    // World advancement is server-owned. The HUD callback now only refreshes
+    // the prefetched snapshot; clients must not trigger a second clock path.
+    await _onDayPrefetch();
   }
 
   Future<void> _onDayPrefetch() async {
@@ -329,29 +327,21 @@ class _CommandCenterState extends State<CommandCenter> {
         api.notifications(),
         api.ownershipEvents(),
         api.membershipEvents(),
-        api.authorityEvents(),
         api.personalFinance().catchError((_) => personalFinanceData),
-        api.contracts().catchError((_) => contractsList),
         api.commMetrics().catchError((_) => <String, dynamic>{}),
       ]);
       final latest = results[0] as List<dynamic>;
       final notificationData = results[1] as Map<String, dynamic>;
       final ownership = results[2] as List<dynamic>;
       final memberships = results[3] as List<dynamic>;
-      final authority = results[4] as List<dynamic>;
-      final finData = results[5] as Map<String, dynamic>;
-      final cList = results[6] as List<dynamic>;
-      final commUnread =
-          asInt((results[7] as Map<String, dynamic>)['unreadDispatches']) ??
-              unreadCommMessages;
+      final finData = results[4] as Map<String, dynamic>;
+      final commUnread = 0;
       if (mounted) {
         setState(() {
           events = latest;
           ownershipEvents = ownership;
           membershipEvents = memberships;
-          authorityEvents = authority;
           personalFinanceData = finData;
-          contractsList = cList;
           unreadCommMessages = commUnread;
           notifications =
               (notificationData['notifications'] as List<dynamic>?) ?? const [];
@@ -365,12 +355,33 @@ class _CommandCenterState extends State<CommandCenter> {
           }
         });
       }
-    } catch (_) {
+    } catch (exception) {
+      // Protected feeds are allowed to reject a request while the session is
+      // being restored or has just expired. AuthGate owns that transition;
+      // do not mark the whole command center offline for an expected 401.
+      if (exception is EarthApiException && exception.isAuthenticationError) {
+        await _handleAuthenticationExpired();
+        return;
+      }
       // If requests fail completely, transition to offline state
       if (mounted && connectionStatus != LiveConnectionStatus.reconnecting) {
         setState(() => connectionStatus = LiveConnectionStatus.offline);
       }
     }
+  }
+
+  Future<void> _handleAuthenticationExpired() async {
+    if (_authExpiredHandled) return;
+    _authExpiredHandled = true;
+    eventTimer?.cancel();
+    liveReconnectTimer?.cancel();
+    pollingFallbackTimer?.cancel();
+    await liveSubscription?.cancel();
+    liveSubscription = null;
+    liveClient?.close();
+    liveClient = null;
+    await AuthStorage.clearToken();
+    if (mounted) widget.onLogout();
   }
 
   Future<void> _run(Future<EarthState> Function() action) async {
@@ -413,29 +424,6 @@ class _CommandCenterState extends State<CommandCenter> {
   }
 
   Future<void> _loadSecondaryPanels(EarthState value) async {
-    final available = value.businesses.whereType<Map>().toList();
-    if (selectedBusinessId == null ||
-        !available
-            .any((item) => item['id']?.toString() == selectedBusinessId)) {
-      selectedBusinessId = value.business['id']?.toString();
-    }
-    final businessId = selectedBusinessId;
-    if (businessId != null && businessId.isNotEmpty) {
-      _loadPanel('business', () async {
-        final results = await Future.wait<dynamic>([
-          api.businessProfile(businessId),
-          api.businessOwnership(businessId),
-          api.businessFinancials(businessId),
-        ]);
-        if (mounted) {
-          setState(() {
-            businessProfile = results[0];
-            businessOwnership = results[1];
-            businessFinancials = results[2];
-          });
-        }
-      });
-    }
     for (final product in value.market.keys) {
       if (marketHistory.containsKey(product)) continue;
       final request = _historyRequests.putIfAbsent(
@@ -450,31 +438,6 @@ class _CommandCenterState extends State<CommandCenter> {
         if (mounted) setState(() => pantheon = data);
       });
     }
-  }
-
-  Future<void> _selectBusiness(String businessId) async {
-    if (businessId == selectedBusinessId) return;
-    setState(() => selectedBusinessId = businessId);
-    final results = await Future.wait<dynamic>([
-      api.businessProfile(businessId),
-      api.businessOwnership(businessId),
-      api.businessFinancials(businessId),
-    ]);
-    if (!mounted || selectedBusinessId != businessId) return;
-    setState(() {
-      businessProfile = results[0];
-      businessOwnership = results[1];
-      businessFinancials = results[2];
-    });
-  }
-
-  Map<String, dynamic>? _activeBusiness(EarthState current) {
-    for (final raw in current.businesses) {
-      if (raw is Map && raw['id']?.toString() == selectedBusinessId) {
-        return Map<String, dynamic>.from(raw);
-      }
-    }
-    return null;
   }
 
   Future<void> _loadPanel(String panel, Future<void> Function() action) async {
@@ -514,7 +477,7 @@ class _CommandCenterState extends State<CommandCenter> {
       OnboardingController.instance.completeStep('join_community');
     } else if (section == 'market' || section == 'derivatives') {
       OnboardingController.instance.completeStep('first_market_decision');
-    } else if (section == 'business' || section == 'technology') {
+    } else if (section == 'technology') {
       OnboardingController.instance.completeStep('start_enterprise');
     } else if (section == 'activity' || section == 'comm') {
       OnboardingController.instance.completeStep('receive_consequence');
@@ -524,10 +487,14 @@ class _CommandCenterState extends State<CommandCenter> {
       NavigationDeepLink.updateSection(section);
     }
     if (mounted) {
+      if (selectedSection != section &&
+          !selectedSection.startsWith('messages') &&
+          selectedSection != 'notifications') {
+        _previousSection = selectedSection;
+      }
       setState(() => selectedSection = section);
       final current = state;
-      if (current != null &&
-          (section == 'business' || section == 'market' || section == 'life')) {
+      if (current != null && (section == 'market' || section == 'life')) {
         unawaited(_loadSecondaryPanels(current));
       }
     }
@@ -539,6 +506,8 @@ class _CommandCenterState extends State<CommandCenter> {
 
     return LayoutBuilder(builder: (context, viewport) {
       final compact = viewport.maxWidth < 800;
+      final isMessagesMode = selectedSection == 'messages' ||
+          selectedSection.startsWith('messages:');
       return Scaffold(
         key: _scaffoldKey,
         drawer: current != null && compact
@@ -547,7 +516,6 @@ class _CommandCenterState extends State<CommandCenter> {
                 child: SafeArea(
                   child: Sidebar(
                     state: current,
-                    activeBusiness: _activeBusiness(current),
                     selectedSection: selectedSection,
                     busy: busy,
                     unreadNotifications: unreadNotifications,
@@ -595,6 +563,7 @@ class _CommandCenterState extends State<CommandCenter> {
                     children: [
                       TopFixedHudPanel(
                         state: current,
+                        notifications: notifications,
                         unreadNotifications: unreadNotifications,
                         unreadCommMessages: unreadCommMessages,
                         isLiveConnected: liveClient != null,
@@ -617,35 +586,70 @@ class _CommandCenterState extends State<CommandCenter> {
                         onCommLink: () => _navigateToSection(
                             context, 'messages',
                             closeDrawer: false),
+                        onNotifications: () => _navigateToSection(
+                            context, 'notifications',
+                            closeDrawer: false),
+                        onOpenNotifications: () async {
+                          await api.markAllNotificationsRead();
+                          await _refreshEvents();
+                        },
                         onReconnect: _manualReconnect,
                         onDayRecalculateTrigger: _onDayRecalculateTrigger,
                         onDayPrefetch: _onDayPrefetch,
                         onDayRollover: _onDayRollover,
                       ),
-                      Expanded(
-                        child: Row(
-                          children: [
-                            if (!compact)
-                              Sidebar(
-                                key: ValueKey<String>(selectedSection),
+                    Expanded(
+                      child: Row(
+                        children: [
+                          if (!compact)
+                            Sidebar(
+                              state: current,
+                              selectedSection: selectedSection,
+                              busy: busy,
+                              unreadNotifications: unreadNotifications,
+                              unreadCommMessages: unreadCommMessages,
+                              isSlim: isMessagesMode,
+                              onLogout: () async {
+                                await api.logout();
+                                if (mounted) widget.onLogout();
+                              },
+                              onSecurity: () => showSecurityDialog(
+                                  context, api, widget.onLogout),
+                              onNavigate: (section) => _navigateToSection(
+                                context,
+                                section,
+                                closeDrawer: false,
+                              ),
+                            ),
+                          if (isMessagesMode)
+                            Expanded(
+                              child: CommLinkDialog(
+                                api: api,
                                 state: current,
-                                activeBusiness: _activeBusiness(current),
-                                selectedSection: selectedSection,
-                                busy: busy,
-                                unreadNotifications: unreadNotifications,
-                                unreadCommMessages: unreadCommMessages,
-                                onLogout: () async {
-                                  await api.logout();
-                                  if (mounted) widget.onLogout();
-                                },
-                                onSecurity: () => showSecurityDialog(
-                                    context, api, widget.onLogout),
+                                initialChannelId: selectedSection.contains(':')
+                                    ? selectedSection.substring(
+                                        selectedSection.indexOf(':') + 1)
+                                    : null,
+                                isPageMode: true,
+                                compact: compact,
                                 onNavigate: (section) => _navigateToSection(
                                   context,
                                   section,
                                   closeDrawer: false,
                                 ),
+                                onClose: () => _navigateToSection(
+                                  context,
+                                  _previousSection.isNotEmpty &&
+                                          _previousSection != 'messages' &&
+                                          !_previousSection
+                                              .startsWith('messages:')
+                                      ? _previousSection
+                                      : 'command',
+                                  closeDrawer: false,
+                                ),
                               ),
+                            )
+                          else
                             Expanded(
                               child: ListView(
                                 padding: EdgeInsets.fromLTRB(
@@ -683,6 +687,7 @@ class _CommandCenterState extends State<CommandCenter> {
                                     child: Dashboard(
                                       state: current,
                                       selectedSection: selectedSection,
+                                      previousSection: _previousSection,
                                       onNavigate: (section) =>
                                           _navigateToSection(
                                         context,
@@ -693,17 +698,10 @@ class _CommandCenterState extends State<CommandCenter> {
                                       events: events,
                                       notifications: notifications,
                                       ownershipEvents: ownershipEvents,
-                                      businessOwnership: businessOwnership,
-                                      businessFinancials: businessFinancials,
-                                      businessProfile: businessProfile,
-                                      activeBusiness: _activeBusiness(current),
-                                      onSelectBusiness: _selectBusiness,
                                       membershipEvents: membershipEvents,
-                                      authorityEvents: authorityEvents,
                                       marketHistory: marketHistory,
                                       pantheon: pantheon,
                                       personalFinanceData: personalFinanceData,
-                                      contracts: contractsList,
                                       isLiveConnected: liveClient != null,
                                       isReconnecting:
                                           liveReconnectTimer?.isActive == true,

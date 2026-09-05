@@ -20,6 +20,7 @@ void main() {
     expect(find.textContaining('Aether Dynamics'), findsWidgets);
     expect(find.textContaining('New Kyoto'), findsWidgets);
     expect(find.text('LEAVE CORPORATION'), findsOneWidget);
+    await tester.ensureVisible(find.text('LEAVE CORPORATION').first);
     await tester.tap(find.text('LEAVE CORPORATION').first);
     await tester.pumpAndSettle();
     expect(find.text('Leave Corporation?'), findsOneWidget);

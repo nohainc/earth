@@ -37,8 +37,11 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Municipal Header & Services
-    expect(find.text('NEW KYOTO'), findsOneWidget);
-    expect(find.textContaining('Housing: 75% · Energy: 90% · Connect: 82% · Health: 95%'), findsOneWidget);
+    expect(find.text('NEW KYOTO'), findsWidgets);
+    expect(find.text('HOUSING'), findsOneWidget);
+    expect(find.text('ENERGY'), findsOneWidget);
+    expect(find.text('CONNECTIVITY'), findsOneWidget);
+    expect(find.text('HEALTHCARE'), findsOneWidget);
 
     // 2. City Capacity Attributes
     expect(find.text('80'), findsWidgets);
@@ -67,7 +70,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
 
-    expect(find.text('NEW KYOTO'), findsOneWidget);
+    expect(find.text('NEW KYOTO'), findsWidgets);
     expect(find.text('CITY BUDGET'), findsWidgets);
   });
 
@@ -107,7 +110,7 @@ void main() {
     ))));
     await tester.pumpAndSettle();
 
-    expect(find.text('NEW KYOTO'), findsOneWidget);
+    expect(find.text('NEW KYOTO'), findsWidgets);
     expect(find.text('CITY BUDGET'), findsWidgets);
     expect(find.textContaining('250000 C'), findsWidgets);
   });

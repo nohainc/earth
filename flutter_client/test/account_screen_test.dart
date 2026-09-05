@@ -83,10 +83,12 @@ void main() {
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
-          body: AccountScreen(
-            state: state,
-            api: api,
-            onLogout: () {},
+          body: SingleChildScrollView(
+            child: AccountScreen(
+              state: state,
+              api: api,
+              onLogout: () {},
+            ),
           ),
         ),
       ),

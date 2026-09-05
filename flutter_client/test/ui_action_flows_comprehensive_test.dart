@@ -299,19 +299,14 @@ void main() {
         } else if (i <= 20) {
           await pumpLauncher(
               tester,
-              (context, _) => showPublicShareInvestDialog(context, spy.invoke,
-                  baseState.buildings[2] as Map<String, dynamic>));
-          expect(find.text('Invest in Public Megaproject'), findsOneWidget);
-          if (i.isOdd) {
-            await tester.tap(find.byIcon(Icons.add_circle_outline));
-            await tester.pump();
-            expect(find.text('2'), findsOneWidget);
-          }
+              (context, _) => showBuildingUpgradeDialog(context, spy.invoke,
+                  baseState.buildings.first as Map<String, dynamic>));
+          expect(find.textContaining('Upgrade'), findsWidgets);
           if (i == 12) {
             await tester.tap(find.text('CANCEL'));
             expect(spy.calls, 0);
           } else {
-            await tester.tap(find.text('PURCHASE SHARES'));
+            await tester.tap(find.textContaining('EXECUTE'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);
           }
@@ -396,7 +391,7 @@ void main() {
               spy);
           expect(find.text('PERSONAL FINANCE'), findsOneWidget);
           expect(find.textContaining('470'), findsWidgets);
-          expect(find.text('FROM PRIVATE BUILDINGS'), findsOneWidget);
+          expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
         }
       });
     }

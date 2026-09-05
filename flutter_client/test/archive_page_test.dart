@@ -18,15 +18,14 @@ void main() {
       events: [],
     ))));
     await tester.pumpAndSettle();
-    expect(find.textContaining('MEMORIAL CITIZENS'), findsWidgets);
-    expect(find.text('CITIZENS (1)'), findsOneWidget);
-    expect(find.text('HOUSES (1)'), findsOneWidget);
+    expect(find.text('MEMORIAL & PANTHEON'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'CITIZENS'), findsOneWidget);
+    expect(find.widgetWithText(InkWell, 'HOUSES'), findsOneWidget);
     expect(find.textContaining('Founder Marcus Vance'), findsOneWidget);
 
     // Switch to Houses tab on narrow layout
-    await tester.tap(find.text('HOUSES (1)'));
+    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('HISTORICAL HOUSES'), findsWidgets);
     expect(find.textContaining('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
@@ -39,54 +38,28 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('No citizens have entered the public archive yet.'), findsOneWidget);
 
-    await tester.tap(find.text('HOUSES (0)'));
+    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
     await tester.pumpAndSettle();
     expect(find.text('No extinct houses have been recorded in the archive yet.'), findsOneWidget);
     expect(find.text('WORLD MILESTONES'), findsNothing);
   });
 
-  testWidgets('tapping info icon on MEMORIAL CITIZENS opens formula modal', (tester) async {
+  testWidgets('tapping info icon on cockpit opens memorial and formula modal', (tester) async {
     await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
       pantheon: pantheon,
       events: [],
     ))));
     await tester.pumpAndSettle();
 
-    final infoIcon = find.byIcon(Icons.info_outline);
+    final infoIcon = find.descendant(of: find.byType(HistoricalArchivePanel), matching: find.byIcon(Icons.info_outline)).first;
     expect(infoIcon, findsOneWidget);
 
     await tester.tap(infoIcon);
     await tester.pumpAndSettle();
 
-    expect(find.text('MEMORIAL CITIZENS'), findsWidgets);
-    expect(find.textContaining('1 : 5 : 25 weighting ratio'), findsOneWidget);
-    expect(find.textContaining('1 Legacy Pt = 5 Civic Standing Pts = 25 Age Years'), findsOneWidget);
-    expect(find.text('CLOSE'), findsOneWidget);
-
-    await tester.tap(find.text('CLOSE'));
-    await tester.pumpAndSettle();
-  });
-
-  testWidgets('tapping info icon on HISTORICAL HOUSES opens prestige score modal', (tester) async {
-    await tester.pumpWidget(const MaterialApp(home: Scaffold(body: HistoricalArchivePanel(
-      pantheon: pantheon,
-      events: [],
-    ))));
-    await tester.pumpAndSettle();
-
-    // Switch to Houses tab
-    await tester.tap(find.text('HOUSES (1)'));
-    await tester.pumpAndSettle();
-
-    final infoIcon = find.byIcon(Icons.info_outline);
-    expect(infoIcon, findsOneWidget);
-
-    await tester.tap(infoIcon);
-    await tester.pumpAndSettle();
-
-    expect(find.text('HISTORICAL HOUSES'), findsWidgets);
-    expect(find.textContaining('1 : 5 : 25 weighting ratio'), findsOneWidget);
-    expect(find.textContaining('House Legacy (25x relative weight)'), findsOneWidget);
+    expect(find.text('MEMORIAL & PANTHEON ARCHIVE'), findsOneWidget);
+    expect(find.textContaining('1 : 5 : 25 ratio'), findsOneWidget);
+    expect(find.textContaining('House Prestige Score'), findsOneWidget);
     expect(find.text('CLOSE'), findsOneWidget);
 
     await tester.tap(find.text('CLOSE'));
@@ -134,7 +107,7 @@ void main() {
     expect(find.textContaining('Elena Rostova'), findsOneWidget);
 
     // Switch to Houses tab
-    await tester.tap(find.textContaining('HOUSES'));
+    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
     await tester.pumpAndSettle();
 
     expect(find.textContaining('House of Vance'), findsWidgets);

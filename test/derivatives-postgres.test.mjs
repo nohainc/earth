@@ -180,7 +180,7 @@ test('createFuturesListing locks collateral and creates contract', async () => {
     commodity: 'energy',
     size: 100,
     strikePrice: 29.50,
-    expiryGameDay: 220,
+    durationGameMinutes: 220,
   });
 
   assert.equal(res.ok, true);

@@ -18,8 +18,6 @@ test("Page 9: Institutions Hub, Municipal Charters & Corporation Formation", asy
   t.after(async () => {
     try {
       await repo.query("UPDATE memberships SET city_id = 'CITY-0084' WHERE human_id = $1", [TEST_HUMAN_ID]);
-      await repo.query("DELETE FROM role_assignments WHERE institution_id IN ($1, $2)", [CITY_A, CITY_B]);
-      await repo.query("DELETE FROM institution_roles WHERE institution_id IN ($1, $2)", [CITY_A, CITY_B]);
       await repo.query("DELETE FROM account_balances WHERE owner_id IN ($1, $2)", [CITY_A, CITY_B]);
       await repo.query("DELETE FROM cities WHERE id IN ($1, $2)", [CITY_A, CITY_B]);
       await repo.query("DELETE FROM institutions WHERE id IN ($1, $2)", [CITY_A, CITY_B]);
@@ -58,8 +56,6 @@ test("Page 9: Institutions Hub, Municipal Charters & Corporation Formation", asy
   });
 
   await t.test("TC-9.3: Update Municipal Tax Charter with Safe Bound Clamping", async () => {
-    await repo.query("INSERT INTO institution_roles (id, institution_id, name) VALUES ('ROLE-MAYOR-CITY-B', $1, 'City Mayor') ON CONFLICT (id) DO NOTHING", [CITY_B]);
-    await repo.query("INSERT INTO role_assignments (id, role_id, human_id, institution_id, status, started_game_day, ends_game_day) VALUES ('ROLE-ASSIGN-MAYOR-B', 'ROLE-MAYOR-CITY-B', $1, $2, 'active', 1, 99999) ON CONFLICT (id) DO UPDATE SET status = 'active', ends_game_day = 99999", [TEST_HUMAN_ID, CITY_B]);
 
     const res = await setCityTaxCharter(repo, {
       cityId: CITY_B,

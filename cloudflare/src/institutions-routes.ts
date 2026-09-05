@@ -2,23 +2,23 @@ import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
-  listCitiesPostgres,
-  createCityPostgres,
-  cityQualificationPostgres,
-  listCorporationsPostgres,
-  createCorporationWithCapitalPostgres,
-  createCorporationPostgres,
-  corporationQualificationPostgres,
-  setCityBudgetPostgres,
-  setCityTaxCharterPostgres,
-  setCorporationTaxCharterPostgres,
-  adoptCityForCorporationPostgres,
-  changeCorporationMembershipPostgres,
-  setCorporationAdmissionPolicyPostgres,
-  decideCorporationMembershipRequestPostgres,
-  changeCityResidencyPostgres,
-  spendCorporationTreasuryPostgres,
-  contributeToCorporationPostgres,
+  listCities,
+  createCity,
+  cityQualification,
+  listCorporations,
+  createCorporationWithCapital,
+  createCorporation,
+  corporationQualification,
+  setCityBudget,
+  setCityTaxCharter,
+  setCorporationTaxCharter,
+  adoptCityForCorporation,
+  changeCorporationMembership,
+  setCorporationAdmissionPolicy,
+  decideCorporationMembershipRequest,
+  changeCityResidency,
+  spendCorporationTreasury,
+  contributeToCorporation,
 } from './institutions-postgres.ts';
 
 export async function handleInstitutionRoutes(
@@ -28,7 +28,7 @@ export async function handleInstitutionRoutes(
   viewer: { id: string },
 ): Promise<Response | null> {
   if (url.pathname === '/api/cities' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listCitiesPostgres(repository));
+    const result = await withRepository(env, (repository) => listCities(repository));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
@@ -44,7 +44,7 @@ export async function handleInstitutionRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        createCityPostgres(repository, { founderId: viewer.id, communityId, name }),
+        createCity(repository, { founderId: viewer.id, communityId, name }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
@@ -57,7 +57,7 @@ export async function handleInstitutionRoutes(
   const cityQualificationMatch = url.pathname.match(/^\/api\/cities\/([^/]+)\/qualification$/);
   if (cityQualificationMatch && request.method === 'GET') {
     try {
-      const result = await withRepository(env, (repository) => cityQualificationPostgres(repository, cityQualificationMatch[1]));
+      const result = await withRepository(env, (repository) => cityQualification(repository, cityQualificationMatch[1]));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -66,7 +66,7 @@ export async function handleInstitutionRoutes(
   }
 
   if (url.pathname === '/api/corporations' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listCorporationsPostgres(repository, url.searchParams.get('search') ?? ''));
+    const result = await withRepository(env, (repository) => listCorporations(repository, url.searchParams.get('search') ?? ''));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
@@ -81,7 +81,7 @@ export async function handleInstitutionRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        createCorporationWithCapitalPostgres(repository, { founderId: viewer.id, corporationName, cityName }),
+        createCorporationWithCapital(repository, { founderId: viewer.id, corporationName, cityName }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
@@ -102,7 +102,7 @@ export async function handleInstitutionRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        createCorporationPostgres(repository, { founderId: viewer.id, cityId, name }),
+        createCorporation(repository, { founderId: viewer.id, cityId, name }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: 201 });
@@ -115,7 +115,7 @@ export async function handleInstitutionRoutes(
   const corporationQualificationMatch = url.pathname.match(/^\/api\/corporations\/([^/]+)\/qualification$/);
   if (corporationQualificationMatch && request.method === 'GET') {
     try {
-      const result = await withRepository(env, (repository) => corporationQualificationPostgres(repository, corporationQualificationMatch[1]));
+      const result = await withRepository(env, (repository) => corporationQualification(repository, corporationQualificationMatch[1]));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -136,7 +136,7 @@ export async function handleInstitutionRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        setCityBudgetPostgres(repository, { humanId: viewer.id, cityId: cityBudgetMatch[1], category, amount, correlationId }),
+        setCityBudget(repository, { humanId: viewer.id, cityId: cityBudgetMatch[1], category, amount, correlationId }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -155,7 +155,7 @@ export async function handleInstitutionRoutes(
     if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        setCityTaxCharterPostgres(repository, {
+        setCityTaxCharter(repository, {
           humanId: viewer.id,
           cityId: cityTaxCharterMatch[1],
           incomeTaxBps: Number(body.incomeTaxBps ?? 0),
@@ -182,7 +182,7 @@ export async function handleInstitutionRoutes(
     if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        setCorporationTaxCharterPostgres(repository, {
+        setCorporationTaxCharter(repository, {
           humanId: viewer.id,
           corporationId: corporationTaxCharterMatch[1],
           incomeTaxBps: Number(body.incomeTaxBps ?? 0),
@@ -204,7 +204,7 @@ export async function handleInstitutionRoutes(
   if (corporationCityMatch && request.method === 'POST') {
     try {
       const result = await withRepository(env, (repository) =>
-        adoptCityForCorporationPostgres(repository, { humanId: viewer.id, corporationId: corporationCityMatch[1], cityId: corporationCityMatch[2] }),
+        adoptCityForCorporation(repository, { humanId: viewer.id, corporationId: corporationCityMatch[1], cityId: corporationCityMatch[2] }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -218,7 +218,7 @@ export async function handleInstitutionRoutes(
   if (corporationMembershipMatch && (request.method === 'POST' || request.method === 'DELETE')) {
     try {
       const result = await withRepository(env, (repository) =>
-        changeCorporationMembershipPostgres(repository, {
+        changeCorporationMembership(repository, {
           humanId: viewer.id,
           corporationId: corporationMembershipMatch[1],
           action: request.method === 'POST' ? 'join' : 'leave',
@@ -240,7 +240,7 @@ export async function handleInstitutionRoutes(
     if (!policy) return Response.json({ ok: false, error: 'Policy must be open or approval' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        setCorporationAdmissionPolicyPostgres(repository, { humanId: viewer.id, corporationId: corporationAdmissionMatch[1], policy }),
+        setCorporationAdmissionPolicy(repository, { humanId: viewer.id, corporationId: corporationAdmissionMatch[1], policy }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -257,7 +257,7 @@ export async function handleInstitutionRoutes(
     if (!decision) return Response.json({ ok: false, error: 'Decision must be approved or rejected' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        decideCorporationMembershipRequestPostgres(repository, { humanId: viewer.id, corporationId: corporationRequestMatch[1], requestId: corporationRequestMatch[2], decision }),
+        decideCorporationMembershipRequest(repository, { humanId: viewer.id, corporationId: corporationRequestMatch[1], requestId: corporationRequestMatch[2], decision }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -276,7 +276,7 @@ export async function handleInstitutionRoutes(
     if (correlationId.length > 120) return Response.json({ ok: false, error: 'Correlation ID is too long' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        changeCityResidencyPostgres(repository, { humanId: viewer.id, cityId: residencyMatch[1], action: request.method === 'POST' ? 'join' : 'leave', correlationId }),
+        changeCityResidency(repository, { humanId: viewer.id, cityId: residencyMatch[1], action: request.method === 'POST' ? 'join' : 'leave', correlationId }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -300,7 +300,7 @@ export async function handleInstitutionRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        spendCorporationTreasuryPostgres(repository, { humanId: viewer.id, corporationId: corporationSpendMatch[1], cityId, category, amount, correlationId }),
+        spendCorporationTreasury(repository, { humanId: viewer.id, corporationId: corporationSpendMatch[1], cityId, category, amount, correlationId }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -322,7 +322,7 @@ export async function handleInstitutionRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        contributeToCorporationPostgres(repository, { humanId: viewer.id, corporationId: corporationContributionMatch[1], amount, correlationId }),
+        contributeToCorporation(repository, { humanId: viewer.id, corporationId: corporationContributionMatch[1], amount, correlationId }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });

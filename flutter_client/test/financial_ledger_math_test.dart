@@ -91,9 +91,6 @@ void main() {
       final state = EarthState(rawState);
       expect(state.clock['day'], 120);
       expect(state.human['credits'], 15000.0);
-      expect(state.business['id'], 'B-501');
-      expect(state.business['name'], 'Vance Orbital Logistics');
-      expect(state.business['profit'], 4300.0);
 
       // Commodity resource net worth calculation
       final energyVal = 250.0 * 1.25; // 312.5

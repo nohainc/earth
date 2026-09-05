@@ -18,7 +18,7 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/house' || path == '/api/dynasty') {
+      if (path == '/api/house') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
@@ -153,7 +153,7 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/house' || path == '/api/dynasty') {
+      if (path == '/api/house') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
@@ -248,7 +248,7 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/house' || path == '/api/dynasty') {
+      if (path == '/api/house') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,
@@ -349,7 +349,7 @@ void main() {
     final mockClient = MockClient((request) async {
       final path = request.url.path;
 
-      if (path == '/api/house' || path == '/api/dynasty') {
+      if (path == '/api/house') {
         return http.Response(
           NanoMarkupHelper.encode({
             'ok': true,

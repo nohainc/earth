@@ -6,15 +6,6 @@ extension EarthApiWorld on EarthApi {
   Future<EarthState> world() async =>
       EarthState(await _request('/api/world') as Map<String, dynamic>);
 
-  Future<EarthState> advanceDay() async {
-    await _request('/api/day/advance', method: 'POST');
-    return world();
-  }
-
-  Future<void> recalculateWorld() async {
-    await _request('/api/world/recalculate', method: 'POST');
-  }
-
   Future<List<dynamic>> events() async {
     final response =
         (await _request('/api/events?limit=20')) as Map<String, dynamic>;
@@ -49,13 +40,6 @@ extension EarthApiWorld on EarthApi {
   Future<List<dynamic>> membershipEvents() async {
     final response = (await _request('/api/membership/events?limit=20'))
         as Map<String, dynamic>;
-    return (response['events'] as List<dynamic>?) ?? const [];
-  }
-
-  Future<List<dynamic>> authorityEvents() async {
-    final response =
-        (await _request('/api/governance/authority/events?limit=20'))
-            as Map<String, dynamic>;
     return (response['events'] as List<dynamic>?) ?? const [];
   }
 

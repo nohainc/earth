@@ -161,12 +161,12 @@ update cities
 set residents = (select count(*) from memberships where memberships.city_id = cities.id)
 where id in ('CITY-0091', 'TEST-CITY-004', 'TEST-CITY-005', 'TEST-CITY-006');
 
-insert into communities (id, name, founder_id, status, shared_credits, description, admission_policy)
+insert into communities (id, name, founder_id, status, description, admission_policy)
 values
-  ('TEST-COMM-001', 'Aurora Makers Guild', 'TEST-H-001', 'active', 1250, 'A practical community for builders, repairers, and industrial designers.', 'open'),
-  ('TEST-COMM-002', 'Port Meridian Civic Lab', 'TEST-H-003', 'active', 640, 'Residents experimenting with better civic services and shared infrastructure.', 'approval'),
-  ('TEST-COMM-003', 'Freight & Futures Circle', 'TEST-H-004', 'active', 300, 'A discussion and trading group for logistics, markets, and long-range planning.', 'open'),
-  ('TEST-COMM-004', 'Cedar Commons', 'TEST-H-007', 'active', 2100, 'A neighborhood commons focused on learning, health, and mutual support.', 'approval')
+  ('TEST-COMM-001', 'Aurora Makers Guild', 'TEST-H-001', 'active', 'A practical community for builders, repairers, and industrial designers.', 'open'),
+  ('TEST-COMM-002', 'Port Meridian Civic Lab', 'TEST-H-003', 'active', 'Residents experimenting with better civic services and shared infrastructure.', 'approval'),
+  ('TEST-COMM-003', 'Freight & Futures Circle', 'TEST-H-004', 'active', 'A discussion and trading group for logistics, markets, and long-range planning.', 'open'),
+  ('TEST-COMM-004', 'Cedar Commons', 'TEST-H-007', 'active', 'A neighborhood commons focused on learning, health, and mutual support.', 'approval')
 on conflict (id) do nothing;
 
 insert into community_members (community_id, human_id, role, joined_game_day)

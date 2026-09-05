@@ -184,7 +184,7 @@ void main() {
 
     expect(find.text('UC PROPOSALS'), findsOneWidget);
     expect(find.text('No active legislation is currently on the ballot.'), findsOneWidget);
-    expect(find.text('CREATE UC PROPOSAL'), findsOneWidget);
+    expect(find.text('CREATE UC PROPOSAL'), findsNothing);
     expect(find.text('No open proposal is currently available.'), findsNothing);
     expect(find.text('Support 0  ·  Oppose 0  ·  Uncast 0'), findsNothing);
   });

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
+import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
 
@@ -136,7 +138,6 @@ class SuppliesTodayPanel extends StatelessWidget {
         ),
       ));
     }
-    final contractCount = state.contracts.length;
     final marketEntries = state.market.entries
         .map((entry) => entry.value is Map
             ? Map<String, dynamic>.from(entry.value as Map)
@@ -163,7 +164,7 @@ class SuppliesTodayPanel extends StatelessWidget {
       helpAfterTitle: true,
       titleColor: mutedColor,
       infoDescription:
-          '• Available stock after currently reserved quantities.\n\n• A shortage can be handled by buying, producing, signing a contract, or reducing consumption.\n\n• Open orders may fill fully, partially, or later at the next market clearing.',
+          '• Available stock after currently reserved quantities.\n\n• A shortage can be handled by buying, producing, or reducing consumption.\n\n• Open orders may fill fully, partially, or later at the next market clearing.',
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Container(
           width: double.infinity,
@@ -200,7 +201,7 @@ class SuppliesTodayPanel extends StatelessWidget {
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
         Text(
-            '$contractCount active or recent supply commitment${contractCount == 1 ? '' : 's'} · Reserved stock is excluded from available quantities.',
+            'Reserved stock is excluded from available quantities.',
             style: const TextStyle(color: mutedColor, fontSize: 10.5)),
         const SizedBox(height: 12),
         Wrap(spacing: 10, runSpacing: 10, children: cards),
@@ -257,66 +258,175 @@ class _MarketWorkspaceState extends State<MarketWorkspace> {
 
   @override
   Widget build(BuildContext context) {
-    return DefaultTabController(
-      length: 3,
-      initialIndex: _selectedTab,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          TabBar(
-            onTap: (index) => setState(() => _selectedTab = index),
-            tabs: const [
-              Tab(text: 'OVERVIEW'),
-              Tab(text: 'TRADE'),
-              Tab(text: 'ORDERS'),
+    final activeOrders = widget.state.marketOrders.whereType<Map>().where((order) {
+      final status = order['status']?.toString().toLowerCase();
+      return status == 'open' || status == 'partial';
+    }).length;
+    final feePercent = (widget.state.marketFeeRate * 100).toStringAsFixed(1);
+
+    final cockpit = EarthPageCockpit(
+      status: 'COMMODITY EXCHANGE',
+      statusColor: context.primaryColor,
+      infoTitle: 'PLANETARY COMMODITY EXCHANGE ARCHITECTURE',
+      infoDescription:
+          '• Spot Commodity Exchange: Central clearing house for planetary resources (Energy, Food, Materials, Components, Compute).\n\n• Exchange Transaction Fee: Standard clearance and order matching fee rate applied on executed trade volumes.\n\n• Supply Contracts & Order Telemetry: Active limit orders and forward supply agreements protecting against macroeconomic volatility.',
+      title: 'COMMODITY EXCHANGE',
+      subtitle:
+          'Spot commodity order books, real-time supply flows, and trade clearance across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Trading Fee',
+          value: '$feePercent%',
+          icon: Icons.percent_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'My Orders',
+          value: '$activeOrders',
+          icon: Icons.receipt_outlined,
+          color: context.secondaryColor,
+        ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        cockpit,
+        const SizedBox(height: 24),
+        Container(
+          margin: EdgeInsets.only(bottom: context.spacingControl),
+          decoration: BoxDecoration(
+            color: context.surfaceColor.withValues(alpha: .6),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: context.subtleBorderColor),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: _buildTabButton(
+                  context,
+                  title: 'OVERVIEW',
+                  icon: Icons.dashboard_outlined,
+                  isSelected: _selectedTab == 0,
+                  onTap: () => setState(() => _selectedTab = 0),
+                ),
+              ),
+              Expanded(
+                child: _buildTabButton(
+                  context,
+                  title: 'TRADE',
+                  icon: Icons.swap_horiz_outlined,
+                  isSelected: _selectedTab == 1,
+                  onTap: () => setState(() => _selectedTab = 1),
+                ),
+              ),
+              Expanded(
+                child: _buildTabButton(
+                  context,
+                  title: 'ORDERS',
+                  icon: Icons.receipt_long_outlined,
+                  isSelected: _selectedTab == 2,
+                  onTap: () => setState(() => _selectedTab = 2),
+                ),
+              ),
             ],
           ),
-          const SizedBox(height: 20),
-          if (_selectedTab == 0)
-            SuppliesTodayPanel(state: widget.state, action: widget.action)
-          else if (_selectedTab == 1)
-            MarketSignalsPanel(
-              state: widget.state,
-              busy: widget.busy,
-              priceHistory: widget.priceHistory,
-              action: widget.action,
-            )
-          else
-            Theme(
-              data: Theme.of(context).copyWith(
-                dividerColor: Colors.transparent,
-                splashColor: Colors.transparent,
-              ),
-              child: ExpansionTile(
-                initiallyExpanded: true,
-                tilePadding: const EdgeInsets.symmetric(horizontal: 4),
-                childrenPadding: EdgeInsets.zero,
-                title: const Text(
-                  'ORDERS & ADVANCED DATA',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                    color: mutedColor,
-                  ),
-                ),
-                subtitle: const Text(
-                  'Track your orders first; inspect market depth and liquidity when needed.',
-                  style: TextStyle(fontSize: 11, color: mutedColor),
-                ),
-                children: [
-                  const SizedBox(height: 12),
-                  MyMarketOrdersPanel(
-                    state: widget.state,
-                    busy: widget.busy,
-                    action: widget.action,
-                  ),
-                  const SizedBox(height: 24),
-                  MarketOrderBookPanel(state: widget.state),
-                ],
-              ),
+        ),
+        const SizedBox(height: 20),
+        if (_selectedTab == 0)
+          SuppliesTodayPanel(state: widget.state, action: widget.action)
+        else if (_selectedTab == 1)
+          MarketSignalsPanel(
+            state: widget.state,
+            busy: widget.busy,
+            priceHistory: widget.priceHistory,
+            action: widget.action,
+          )
+        else
+          Theme(
+            data: Theme.of(context).copyWith(
+              dividerColor: Colors.transparent,
+              splashColor: Colors.transparent,
             ),
-        ],
+            child: ExpansionTile(
+              initiallyExpanded: true,
+              tilePadding: const EdgeInsets.symmetric(horizontal: 4),
+              childrenPadding: EdgeInsets.zero,
+              title: const Text(
+                'ORDERS & ADVANCED DATA',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: 1.1,
+                  color: mutedColor,
+                ),
+              ),
+              subtitle: const Text(
+                'Track your orders first; inspect market depth and liquidity when needed.',
+                style: TextStyle(fontSize: 11, color: mutedColor),
+              ),
+              children: [
+                const SizedBox(height: 12),
+                MyMarketOrdersPanel(
+                  state: widget.state,
+                  busy: widget.busy,
+                  action: widget.action,
+                ),
+                const SizedBox(height: 24),
+                MarketOrderBookPanel(state: widget.state),
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildTabButton(
+    BuildContext context, {
+    required String title,
+    required IconData icon,
+    required bool isSelected,
+    required VoidCallback onTap,
+    String? subtitle,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 10),
+        decoration: BoxDecoration(
+          color: isSelected
+              ? context.primaryColor.withValues(alpha: .15)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(8),
+          border: isSelected
+              ? Border.all(color: context.primaryColor.withValues(alpha: .4))
+              : null,
+        ),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 14,
+                color: isSelected ? context.primaryColor : context.mutedColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                subtitle != null ? '$title ($subtitle)' : title,
+                maxLines: 1,
+                style: context.controlStyle.copyWith(
+                  color: isSelected ? context.primaryColor : context.mutedColor,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -910,7 +1020,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
       showTitle: false,
       contentPadding: EdgeInsets.zero,
       infoDescription:
-          '• Buy resources you need, sell what your businesses do not use, or leave an order open for a later fill.\n\n• Compare the current price with your stock, production plans, and contracts before acting.\n\n• Orders may fill later, partially, or at a market-cleared price.\n\n• The market supports your businesses; it is not the main source of progression.',
+          '• Buy resources you need, sell what your businesses do not use, or leave an order open for a later fill.\n\n• Compare the current price with your stock and production plans before acting.\n\n• Orders may fill later, partially, or at a market-cleared price.\n\n• The market supports your businesses; it is not the main source of progression.',
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -918,7 +1028,7 @@ class _MarketSignalsPanelState extends State<MarketSignalsPanel> {
             context,
             'TRADE',
             description:
-                '• Decide whether to buy, sell, produce internally, sign a supply contract, or wait. Open orders can fill later.',
+                '• Decide whether to buy, sell, produce internally, or wait. Open orders can fill later.',
           ),
           // 0. BATCH AUCTION CLEARING BANNER
           Container(

@@ -42,9 +42,9 @@ void main() {
     ));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('MEMORIAL CITIZENS'), findsWidgets);
+    expect(find.text('MEMORIAL & PANTHEON'), findsOneWidget);
     expect(find.text('Mira Vance'), findsOneWidget);
-    await tester.tap(find.textContaining('HOUSES'));
+    await tester.tap(find.widgetWithText(InkWell, 'HOUSES'));
     await tester.pumpAndSettle();
     expect(find.text('House of Vance'), findsWidgets);
     expect(find.text('WORLD MILESTONES'), findsNothing);

@@ -6,35 +6,23 @@ import '../../shared/widgets/format_helpers.dart';
 
 class CommandExecutiveQuadrant extends StatelessWidget {
   final EarthState state;
-  final Map<String, dynamic> businessFinancials;
-  final List<dynamic> contracts;
   final ValueChanged<String>? onNavigate;
 
   const CommandExecutiveQuadrant({
     super.key,
     required this.state,
-    this.businessFinancials = const {},
-    this.contracts = const [],
     this.onNavigate,
   });
 
   @override
   Widget build(BuildContext context) {
-    final business = state.business;
-    final businessName =
-        (business['name']?.toString() ?? 'KLINE WORKS').toUpperCase();
-    final businessStatus =
-        (business['status']?.toString() ?? 'ACTIVE').toUpperCase();
-    final condition = asIntOr(business['condition'], 96);
-    final policy =
-        (business['policy']?.toString() ?? 'reliability').toUpperCase();
-
-    final finMap = businessFinancials['business'] is Map
-        ? Map<String, dynamic>.from(businessFinancials['business'] as Map)
-        : business;
-    final revenue = asDoubleOr(finMap['revenue'], 1240.0);
-    final costs = asDoubleOr(finMap['operating_costs'] ?? finMap['costs'], 820.0);
-    final profit = asDoubleOr(finMap['profit'], revenue - costs);
+    final activeBuildings = state.buildings.whereType<Map>().where((building) {
+      return (building['status']?.toString().toLowerCase() ?? 'active') == 'active';
+    }).length;
+    final buildingName = activeBuildings == 0 ? 'NO ACTIVE BUILDINGS' : 'PRIVATE OPERATIONS';
+    final condition = activeBuildings == 0 ? 0 : 100;
+    final profit = 0.0;
+    final policy = 'BALANCED';
 
     final cityRaw = state.institutions['city'];
     final city = cityRaw is Map ? Map<String, dynamic>.from(cityRaw) : <String, dynamic>{};
@@ -60,12 +48,6 @@ class CommandExecutiveQuadrant extends StatelessWidget {
     final energyPrice = rawEnergy != '—' ? rawEnergy : '14.20';
     final rawMat = formatPrice(marketProducts['materials']);
     final materialsPrice = rawMat != '—' ? rawMat : '42.00';
-
-    final activeContracts = contracts.where((c) {
-      if (c is! Map) return false;
-      final s = c['status']?.toString();
-      return s == 'active' || s == 'signed';
-    }).length;
 
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -128,14 +110,14 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   width: cardWidth,
                   icon: '◈',
                   iconColor: violetColor,
-                  title: 'BUSINESS',
-                  subtitle: '$businessName · $businessStatus',
+                  title: 'OPERATIONS',
+                  subtitle: '$buildingName · $activeBuildings ACTIVE',
                   infoDescription:
                       '• Fleet Condition: Average structural integrity across all registered machinery. Drops below 50% risk severe downtime and emergency maintenance surcharges.\n\n• Projected Net P&L: Net credits earned per operating cycle after subtracting power, raw materials, and municipal taxes.\n\n• Operating Policy: Active dispatch strategy (Reliability, Margin, or Capacity) balancing output yield against wear rate.\n\n• Action: Tap card to manage unit economics, issue shares, distribute dividends, or tune policies.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _rowMetric('Machine Fleet Condition', '$condition%',
+                      _rowMetric('Building Condition', '$condition%',
                           condition < 50 ? Colors.orangeAccent : cyanAccentColor),
                       const SizedBox(height: 5),
                       _rowMetric(
@@ -147,7 +129,7 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                       _rowMetric('Operating Policy', policy, mutedColor),
                     ],
                   ),
-                  onTap: () => onNavigate?.call('business'),
+                  onTap: () => onNavigate?.call('buildings'),
                 ),
 
                 // 3. CIVIC & CITY CARD
@@ -174,23 +156,21 @@ class CommandExecutiveQuadrant extends StatelessWidget {
                   onTap: () => onNavigate?.call('city'),
                 ),
 
-                // 4. FINANCE & CONTRACTS CARD
+                // 4. FINANCE CARD
                 _ExecutiveCard(
                   width: cardWidth,
                   icon: '§',
                   iconColor: Colors.tealAccent,
-                  title: 'FINANCE & CONTRACTS',
+                  title: 'FINANCE',
                   subtitle: 'DOUBLE-ENTRY SETTLED LEDGER',
                   infoDescription:
-                      '• Liquid Credits: Spendable funds available immediately for spot trading, machine purchases, and escrow deposits.\n\n• Active Agreements: Total active bilateral contracts with open delivery, payment, or collateral obligations.\n\n• Ledger Integrity: Real-time cryptographic validation of double-entry transaction ledgers ensuring zero balance leakage.\n\n• Action: Tap card to open financial statements, transaction history, and contract negotiation tools.',
+                      '• Liquid Credits: Spendable funds available immediately for market orders and operating expenses.\n\n• Ledger Integrity: Real-time validation of double-entry transaction ledgers ensuring zero balance leakage.\n\n• Action: Tap card to open financial statements and transaction history.',
                   body: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _rowMetric('Liquid Credits',
                           formatCreditsAmount(state.human['credits']), violetColor),
                       const SizedBox(height: 5),
-                      _rowMetric('Active Agreements',
-                          '$activeContracts active contracts', mutedColor),
                       const SizedBox(height: 5),
                       _rowMetric('Ledger Integrity', 'Audited', cyanAccentColor),
                     ],

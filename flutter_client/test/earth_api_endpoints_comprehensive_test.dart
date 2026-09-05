@@ -78,54 +78,18 @@ void main() {
       () async {
     await api.world();
     await api.events();
-    await api.advanceDay();
     await api.rankings();
     await api.pantheon();
     await api.publicActivity();
     await api.ownershipEvents();
     await api.membershipEvents();
-    await api.authorityEvents();
     await api.notifications();
     await api.markNotificationRead('notif-1');
     await api.markAllNotificationsRead();
 
     expect(recordedCalls.contains('GET /api/world'), true);
     expect(recordedCalls.contains('GET /api/events'), true);
-    expect(recordedCalls.contains('POST /api/day/advance'), true);
     expect(recordedCalls.contains('GET /api/rankings'), true);
-  });
-
-  test('Business API endpoints execute expected HTTP calls', () async {
-    await api.createBusiness('Solar Fab', 'energy');
-    await api.appointBusinessManager('B-1', 'H-2');
-    await api.liquidateBusiness('B-1', otp: '123456');
-    await api.updateBusinessConstitution('B-1', 0.6, 0.6, 7);
-    await api.transferShares('H-2', 10);
-    await api.distributeDividends('B-1', 5000);
-    await api.issueShares('B-1', 'H-2', 20, 100);
-    await api.proposeMerger(
-        acquirerBusinessId: 'B-1', targetBusinessId: 'B-2', pricePerShare: 150);
-    await api.executeMerger('MERGER-1');
-
-    expect(recordedCalls.contains('POST /api/businesses'), true);
-    expect(recordedCalls.contains('POST /api/businesses/B-1/manager'), true);
-    expect(recordedCalls.contains('POST /api/businesses/B-1/liquidate'), true);
-    expect(recordedCalls.contains('POST /api/businesses/B-1/dividends'), true);
-  });
-
-  test('Contracts API endpoints execute expected HTTP calls', () async {
-    await api.contracts();
-    await api.contract('C-1');
-    await api.createContract('strategic', 'H-2', 'Supply Contract', 500);
-    await api.acceptContract('C-1');
-    await api.cancelContract('C-1');
-    await api.disputeContract('C-1', 'Failed delivery');
-    await api.resolveContract('C-1', 'uphold', 'Terms verified');
-
-    expect(recordedCalls.contains('POST /api/contracts'), true);
-    expect(recordedCalls.contains('POST /api/contracts/C-1/accept'), true);
-    expect(recordedCalls.contains('POST /api/contracts/C-1/cancel'), true);
-    expect(recordedCalls.contains('POST /api/contracts/C-1/dispute'), true);
   });
 
   test('Governance & Institutions API endpoints execute expected HTTP calls',
@@ -135,9 +99,6 @@ void main() {
     await api.vote('P-1', 'yes');
     await api.challengeProposal('P-1', 'Constitutional dispute');
     await api.resolveConstitutionalAppeal('P-1', 'uphold', 'Ruling upheld');
-    await api.claimRole('ROLE-1');
-    await api.resignRole('ROLE-1');
-    await api.delegateRole('ROLE-1', 'H-3');
 
     await api.createCommunity(
         name: 'Carthage Guild', description: 'Artisanal guild');

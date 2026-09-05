@@ -47,7 +47,6 @@ void main() {
     expect(state.human['id'], 'H-1');
     expect(state.world['health'], 100);
     expect(state.resources['food'], 50);
-    expect(state.business['id'], 'B-1');
     expect(state.technology['eff'], 1);
     expect(state.technologyRegistry['research']['eff'], 1);
     expect(state.governance['active'], isEmpty);

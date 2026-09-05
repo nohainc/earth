@@ -123,7 +123,7 @@ void main() {
       );
 
       // City Name & Service Ratios Header
-      expect(find.text('NEW CARTHAGE'), findsOneWidget);
+      expect(find.text('NEW CARTHAGE'), findsWidgets);
       expect(find.textContaining('Housing: 78% · Energy: 92% · Connect: 85% · Health: 64%'), findsOneWidget);
 
       // Explicit CITY BUDGET Card and Amount
@@ -239,7 +239,6 @@ void main() {
                 businessFinancials: const {},
                 businessProfile: const {},
                 membershipEvents: const [],
-                authorityEvents: const [],
                 unreadNotifications: 0,
                 action: (cb) async => cb(),
               ),

@@ -66,28 +66,18 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [input.successorId]);
 
     const buildings = await tx.query<{ id: string }>('SELECT id FROM buildings WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
-    const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
-    const shares = await tx.query<{ business_id: string; shares: string }>('SELECT business_id, shares FROM business_shares WHERE holder_id = $1 FOR UPDATE', [input.predecessorId]);
     const resources = await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
     await tx.query('UPDATE buildings SET owner_id = $1 WHERE owner_id = $2', [input.successorId, input.predecessorId]);
-    await tx.query('UPDATE businesses SET owner_id = $1 WHERE owner_id = $2', [input.successorId, input.predecessorId]);
-    await tx.query('UPDATE business_management SET manager_id = $1, appointed_by = $1, appointed_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE manager_id = $3 AND business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [input.successorId, input.day, input.predecessorId]);
-    for (const share of shares.rows) {
-      await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,$3) ON CONFLICT (business_id, holder_id) DO UPDATE SET shares = business_shares.shares + EXCLUDED.shares, updated_at = CURRENT_TIMESTAMP', [share.business_id, input.successorId, share.shares]);
-    }
-    await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [input.predecessorId]);
     for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [input.successorId, resource.resource, resource.amount]);
     await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [input.predecessorId]);
     await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [input.predecessorId]);
     await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, $1 FROM humans WHERE id = $2 ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name', [input.successorName, input.predecessorId]);
     await tx.query('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES ($1,$2,\'inheritance\',$3,$4,$5)', [eventId, input.predecessorId, input.day, input.successorName, inherited]);
     for (const building of buildings.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUILDING\',$2,$3,$4,1,\'late_inheritance\',$5,$6)', [crypto.randomUUID(), building.id, input.predecessorId, input.successorId, eventId, input.day]);
-    for (const business of businesses.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUSINESS\',$2,$3,$4,1,\'late_inheritance\',$5,$6)', [crypto.randomUUID(), business.id, input.predecessorId, input.successorId, eventId, input.day]);
-    for (const share of shares.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUSINESS_SHARES\',$2,$3,$4,$5,\'late_inheritance\',$6,$7)', [crypto.randomUUID(), share.business_id, input.predecessorId, input.successorId, share.shares, eventId, input.day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'life\',\'Inheritance received\',$3,$4)', [crypto.randomUUID(), input.successorId, `You received ${inherited} Credits and the registered assets of ${predecessor.rows[0].display_name}.`, eventId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'human.life_event\',\'An Estate completed succession\',$3) ON CONFLICT (id) DO NOTHING', [`LATE-INHERITANCE-${input.predecessorId}-${input.day}`, input.day, toNanoMarkup({ predecessor: input.predecessorId, successor: input.successorId, inherited, tax })]);
     await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [input.predecessorId]);
-    return { ok: true, lateSuccession: true, successorHumanId: input.successorId, inherited, tax, eventId, assets: { buildings: buildings.rows.length, businesses: businesses.rows.length, shareLots: shares.rows.length, resourceTypes: resources.rows.length } };
+    return { ok: true, lateSuccession: true, successorHumanId: input.successorId, inherited, tax, eventId, assets: { buildings: buildings.rows.length, resourceTypes: resources.rows.length } };
   });
 }
 
@@ -123,8 +113,7 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
     const successorRow = successor.rows[0];
     const membership = await tx.query<{ corporation_id: string | null; city_id: string | null }>('SELECT corporation_id, city_id FROM memberships WHERE human_id = $1 FOR UPDATE', [human.id]);
     const membershipRow = membership.rows[0];
-    const assets = successorRow ? await tx.query<{ id: string; type: string }>("SELECT id, 'BUILDING' AS type FROM buildings WHERE owner_id = $1 UNION ALL SELECT id, 'BUSINESS' FROM businesses WHERE owner_id = $1", [human.id]) : { rows: [] } as { rows: Array<{ id: string; type: string }> };
-    const shares = successorRow ? await tx.query<{ business_id: string; shares: string }>('SELECT business_id, shares FROM business_shares WHERE holder_id = $1 FOR UPDATE', [human.id]) : { rows: [] } as { rows: Array<{ business_id: string; shares: string }> };
+    const assets = successorRow ? await tx.query<{ id: string; type: string }>("SELECT id, 'BUILDING' AS type FROM buildings WHERE owner_id = $1", [human.id]) : { rows: [] } as { rows: Array<{ id: string; type: string }> };
     const resources = successorRow ? await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [human.id]) : { rows: [] } as { rows: Array<{ resource: string; amount: string }> };
     const grossCents = moneyToCents(human.balance);
     const taxCents = successorRow ? taxToCents(human.balance, '0.10') : 0n;
@@ -139,14 +128,9 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
       if (taxCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(taxCents), reasonType: 'inheritance_tax', reasonId: eventId, ruleVersion: 'life-v4', correlationId: `TAX-${eventId}` });
       await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [successorRow.id]);
       await tx.query('UPDATE buildings SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
-      await tx.query('UPDATE businesses SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
-      await tx.query('UPDATE business_management SET manager_id = $1, appointed_by = $1, appointed_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE manager_id = $3 AND business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [successorRow.id, day, human.id]);
-      for (const share of shares.rows) await tx.query('INSERT INTO business_shares (business_id, holder_id, shares) VALUES ($1,$2,$3) ON CONFLICT (business_id, holder_id) DO UPDATE SET shares = business_shares.shares + EXCLUDED.shares, updated_at = CURRENT_TIMESTAMP', [share.business_id, successorRow.id, share.shares]);
-      await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [human.id]);
       for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [successorRow.id, resource.resource, resource.amount]);
       await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [human.id]);
       for (const asset of assets.rows) await tx.query('INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,$2,$3,$4,$5,1,\'inheritance\',$6,$7)', [crypto.randomUUID(), asset.type, asset.id, human.id, successorRow.id, eventId, day]);
-      for (const share of shares.rows) await tx.query('INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,\'BUSINESS_SHARES\',$2,$3,$4,$5,\'inheritance\',$6,$7)', [crypto.randomUUID(), share.business_id, human.id, successorRow.id, share.shares, eventId, day]);
       await tx.query('INSERT INTO life_events (id,human_id,event_type,game_day,successor_name,estate_credits) VALUES ($1,$2,\'inheritance\',$3,$4,$5)', [`INHERIT-${human.id}-${day}`, human.id, day, human.successor_name, inherited]);
       await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'life\',\'Inheritance received\',$3,$4)', [crypto.randomUUID(), successorRow.id, `You received ${inherited} Credits and the productive assets of ${human.display_name}.`, eventId]);
     }
@@ -159,7 +143,6 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
       await tx.query('INSERT INTO membership_events (id,human_id,institution_type,institution_id,action,game_day,reason) VALUES ($1,$2,\'CITY\',$3,\'released\',$4,\'mortality\')', [crypto.randomUUID(), human.id, membershipRow.city_id, day]);
     }
     await tx.query('UPDATE memberships SET city_id = NULL, corporation_id = NULL WHERE human_id = $1', [human.id]);
-    await tx.query("UPDATE role_assignments SET status = 'expired' WHERE human_id = $1 AND status = 'active'", [human.id]);
     await tx.query("UPDATE humans SET life_status = $1, death_game_day = $2 WHERE id = $3", [successorRow ? 'deceased' : 'estate', day, human.id]);
     // Keep the modern house tree accurate during the estate window, before
     // the next generation is selected.
@@ -183,7 +166,6 @@ export async function liquidateExpiredEstates(repository: PostgresRepository, da
   let processed = 0;
   for (const estate of estates.rows) {
     await repository.transaction(async (tx) => {
-      const businesses = await tx.query<{ id: string }>('SELECT id FROM businesses WHERE owner_id = $1 FOR UPDATE', [estate.id]);
       const balanceCents = moneyToCents(estate.balance);
       const balance = Number(centsToMoney(balanceCents));
       if (balanceCents > 0n) {
@@ -191,14 +173,10 @@ export async function liquidateExpiredEstates(repository: PostgresRepository, da
         await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: estate.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(balanceCents), reasonType: 'estate_liquidation', reasonId: estate.id, ruleVersion: 'life-v3', correlationId: `ESTATE-LIQUIDATION-${estate.id}-${day}` });
       }
       await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [estate.id]);
-      for (const business of businesses.rows) await tx.query('DELETE FROM business_shares WHERE business_id = $1', [business.id]);
-      await tx.query('DELETE FROM business_shares WHERE holder_id = $1', [estate.id]);
-      await tx.query('DELETE FROM businesses WHERE owner_id = $1', [estate.id]);
-      for (const business of businesses.rows) await tx.query("DELETE FROM institutions WHERE id = $1 AND kind = 'BUSINESS'", [business.id]);
       await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [estate.id]);
       await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [estate.id]);
       await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, NULL FROM humans WHERE id = $1 ON CONFLICT (human_id) DO NOTHING', [estate.id]);
-      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`ESTATE-LIQUIDATION-${estate.id}-${day}`, day, 'human.estate_liquidated', 'An unclaimed estate was liquidated', toNanoMarkup({ humanId: estate.id, credits: balance, businessCount: businesses.rows.length })]);
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [`ESTATE-LIQUIDATION-${estate.id}-${day}`, day, 'human.estate_liquidated', 'An unclaimed estate was liquidated', toNanoMarkup({ humanId: estate.id, credits: balance })]);
       await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [estate.id]);
     });
     processed += 1;

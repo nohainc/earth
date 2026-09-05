@@ -137,7 +137,7 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
       return;
     }
     if (expiry == null || expiry <= 0) {
-      setState(() => _error = 'Invalid expiry game day');
+      setState(() => _error = 'Invalid contract duration');
       return;
     }
 
@@ -151,7 +151,7 @@ class _DerivativesDialogState extends State<DerivativesDialog> {
         commodity: _selectedCommodity,
         size: size,
         strikePrice: strike,
-        expiryGameDay: expiry,
+        durationGameMinutes: expiry,
       );
       EarthAudioEngine.instance.playChime();
       if (mounted) {

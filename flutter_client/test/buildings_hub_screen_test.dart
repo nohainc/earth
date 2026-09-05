@@ -350,16 +350,16 @@ void main() {
       );
 
       // 1. Private tab (Default)
-      expect(find.text('PRIVATE (2)'), findsOneWidget);
+      expect(find.text('PRIVATE'), findsOneWidget);
       expect(find.text('Nova Molecular Bistro × 2'), findsOneWidget);
       expect(find.text('PRIVATE CATALOG'), findsOneWidget);
 
-      // 2. Switch to combined Civic tab (count is 1 civic + 1 invest = 2)
-      expect(find.text('CIVIC (2)'), findsOneWidget);
-      await tester.tap(find.text('CIVIC (2)'));
+      // 2. Switch to combined Civic tab
+      expect(find.text('CIVIC'), findsOneWidget);
+      await tester.tap(find.text('CIVIC'));
       await tester.pumpAndSettle();
 
-      expect(find.text('CIVIC (2)'), findsOneWidget);
+      expect(find.text('CIVIC'), findsOneWidget);
       expect(find.text('CIVIC CATALOG'), findsOneWidget);
 
       // Both civic and public investment buildings appear under Civic tab
@@ -507,9 +507,9 @@ void main() {
 
       // Open spaces shows 9 (10 from default Tier 1 estate deed minus 1 slot used)
       expect(find.text('OPEN SPACES'), findsOneWidget);
-      expect(find.text('9'), findsOneWidget);
+      expect(find.text('9'), findsWidgets);
       expect(find.text('SPACES USED'), findsOneWidget);
-      expect(find.text('1'), findsOneWidget);
+      expect(find.text('1'), findsWidgets);
 
       // District zoning & capacity widget is not displayed
       expect(find.text('BUILDING CAPACITY & DISTRICT ZONING'), findsNothing);

@@ -2,7 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 
 export interface CommChannel {
   id: string;
-  scope: 'global' | 'city' | 'institution' | 'direct';
+  scope: 'global' | 'city' | 'corporation' | 'community' | 'direct';
   scope_id: string | null;
   name: string;
   description: string | null;
@@ -23,47 +23,52 @@ export interface CommMessage {
   created_at: string;
 }
 
-export interface DiplomaticDispatch {
-  id: string;
-  sender_human_id: string;
-  sender_display_name?: string;
-  sender_house_name?: string;
-  sender_dynasty_name?: string;
-  recipient_human_id: string;
-  recipient_display_name?: string;
-  subject: string;
-  body: string;
-  status: 'unread' | 'read' | 'archived';
-  game_day: number;
-  game_minute: number;
-  dispatch_type: 'diplomatic' | 'contract_offer' | 'patent_license' | 'merger_tender' | 'succession_notice';
-  action_payload: Record<string, unknown>;
-  created_at: string;
-  read_at: string | null;
-}
-
 export async function listAccessibleChannels(
   repository: PostgresRepository,
-  humanId: string,
-  cityId?: string | null
+  humanId: string
 ): Promise<CommChannel[]> {
   const sql = `
-    SELECT id, scope, scope_id, name, description
-    FROM comm_channels
-    WHERE scope = 'global'
-       OR (scope = 'city' AND (scope_id = $1 OR $1 IS NULL))
-       OR (scope = 'direct' AND id LIKE '%' || $2 || '%')
-    ORDER BY CASE scope WHEN 'global' THEN 1 WHEN 'city' THEN 2 WHEN 'institution' THEN 3 ELSE 4 END, name ASC
+    SELECT ch.id, ch.scope, ch.scope_id,
+           CASE WHEN ch.scope = 'direct' THEN COALESCE(other.display_name, ch.name) ELSE ch.name END AS name,
+           ch.description,
+           latest.body AS latest_message,
+           latest.created_at AS latest_message_at
+    FROM comm_channels ch
+    LEFT JOIN comm_direct_conversations direct ON direct.channel_id = ch.id
+    LEFT JOIN humans other ON other.id = CASE
+      WHEN direct.participant_low_id = $1 THEN direct.participant_high_id
+      ELSE direct.participant_low_id
+    END
+    LEFT JOIN LATERAL (
+      SELECT body, created_at FROM comm_messages
+      WHERE channel_id = ch.id ORDER BY created_at DESC LIMIT 1
+    ) latest ON TRUE
+    WHERE ch.scope = 'global'
+       OR (ch.scope = 'city' AND EXISTS (
+            SELECT 1 FROM memberships m WHERE m.human_id = $1 AND m.city_id = ch.scope_id))
+       OR (ch.scope = 'corporation' AND EXISTS (
+            SELECT 1 FROM memberships m WHERE m.human_id = $1 AND m.corporation_id = ch.scope_id))
+       OR (ch.scope = 'community' AND EXISTS (
+            SELECT 1 FROM community_members cm WHERE cm.human_id = $1 AND cm.community_id = ch.scope_id))
+       OR (ch.scope = 'direct' AND EXISTS (
+            SELECT 1 FROM comm_direct_conversations d
+            WHERE d.channel_id = ch.id AND $1 IN (d.participant_low_id, d.participant_high_id)))
+    ORDER BY CASE ch.scope
+      WHEN 'corporation' THEN 1 WHEN 'city' THEN 2 WHEN 'community' THEN 3
+      WHEN 'direct' THEN 4 WHEN 'global' THEN 5 ELSE 6 END,
+      latest.created_at DESC NULLS LAST, name ASC
   `;
-  const res = await repository.query<CommChannel>(sql, [cityId ?? null, humanId]);
+  const res = await repository.query<CommChannel>(sql, [humanId]);
   return res.rows;
 }
 
 export async function listChannelMessages(
   repository: PostgresRepository,
+  humanId: string,
   channelId: string,
   limit = 50
 ): Promise<CommMessage[]> {
+  if (!(await canAccessChannel(repository, humanId, channelId))) return [];
   const boundedLimit = Math.min(100, Math.max(1, limit));
   const sql = `
     SELECT id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name AS sender_house_name, sender_dynasty_name,
@@ -91,6 +96,9 @@ export async function sendChannelMessage(
 ): Promise<CommMessage> {
   const msgId = `msg-${correlationId}`;
   return repository.transaction(async (tx) => {
+    if (!(await canAccessChannel(tx, senderHumanId, channelId))) {
+      throw new Error('You do not have access to this channel');
+    }
     const sql = `
     INSERT INTO comm_messages (id, channel_id, sender_human_id, sender_display_name, sender_dynasty_name, body, game_day, game_minute, attachments)
     VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
@@ -117,133 +125,83 @@ export async function sendChannelMessage(
   });
 }
 
-export async function listDiplomaticDispatches(
+export async function canAccessChannel(
   repository: PostgresRepository,
   humanId: string,
-  folder: 'inbox' | 'sent' | 'archived' = 'inbox',
-  limit = 30,
-  offset = 0
-): Promise<{ dispatches: DiplomaticDispatch[]; unreadCount: number }> {
-  const boundedLimit = Math.min(100, Math.max(1, limit));
-  const boundedOffset = Math.max(0, offset);
-
-  let filterClause = '';
-  const params: unknown[] = [humanId];
-
-  if (folder === 'inbox') {
-    filterClause = `d.recipient_human_id = $1 AND d.status IN ('unread', 'read')`;
-  } else if (folder === 'sent') {
-    filterClause = `d.sender_human_id = $1`;
-  } else {
-    filterClause = `d.recipient_human_id = $1 AND d.status = 'archived'`;
-  }
-
-  const sql = `
-    SELECT d.id, d.sender_human_id, d.recipient_human_id, d.subject, d.body,
-           d.status, d.game_day, d.game_minute, d.dispatch_type, d.action_payload,
-           d.created_at, d.read_at,
-           sh.display_name AS sender_display_name,
-           sd.house_name AS sender_house_name,
-           sd.house_name AS sender_dynasty_name,
-           rh.display_name AS recipient_display_name
-    FROM diplomatic_dispatches d
-    LEFT JOIN humans sh ON sh.id = d.sender_human_id
-    LEFT JOIN houses sd ON sd.founder_human_id = sh.id
-    LEFT JOIN humans rh ON rh.id = d.recipient_human_id
-    WHERE ${filterClause}
-    ORDER BY d.game_day DESC, d.created_at DESC
-    LIMIT $2 OFFSET $3
-  `;
-
-  params.push(boundedLimit, boundedOffset);
-
-  const [dispatchesRes, unreadRes] = await Promise.all([
-    repository.query<DiplomaticDispatch>(sql, params),
-    repository.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM diplomatic_dispatches WHERE recipient_human_id = $1 AND status = 'unread'`,
-      [humanId]
-    ),
-  ]);
-
-  return {
-    dispatches: dispatchesRes.rows,
-    unreadCount: unreadRes.rows[0]?.count ?? 0,
-  };
-}
-
-export async function sendDiplomaticDispatch(
-  repository: PostgresRepository,
-  senderHumanId: string,
-  recipientHumanId: string,
-  subject: string,
-  body: string,
-  dispatchType: 'diplomatic' | 'contract_offer' | 'patent_license' | 'merger_tender' | 'succession_notice' = 'diplomatic',
-  actionPayload: Record<string, unknown> = {},
-  gameDay = 1,
-  gameMinute = 0,
-  correlationId = crypto.randomUUID()
-): Promise<DiplomaticDispatch> {
-  const dispatchId = `mail-${correlationId}`;
-  return repository.transaction(async (tx) => {
-    const sql = `
-    INSERT INTO diplomatic_dispatches (id, sender_human_id, recipient_human_id, subject, body, status, game_day, game_minute, dispatch_type, action_payload)
-    VALUES ($1, $2, $3, $4, $5, 'unread', $6, $7, $8, $9)
-    ON CONFLICT (id) DO NOTHING
-    RETURNING id, sender_human_id, recipient_human_id, subject, body, status, game_day, game_minute, dispatch_type, action_payload, created_at, read_at
-  `;
-    const res = await tx.query<DiplomaticDispatch>(sql, [
-    dispatchId,
-    senderHumanId,
-    recipientHumanId,
-    subject,
-    body,
-    gameDay,
-    gameMinute,
-    dispatchType,
-    JSON.stringify(actionPayload),
-    ]);
-    if (res.rows[0]) return res.rows[0];
-    const replay = await tx.query<DiplomaticDispatch>(
-      `SELECT id, sender_human_id, recipient_human_id, subject, body, status, game_day, game_minute, dispatch_type, action_payload, created_at, read_at FROM diplomatic_dispatches WHERE id = $1`,
-      [dispatchId]
-    );
-    return replay.rows[0];
-  });
-}
-
-export async function markDispatchRead(
-  repository: PostgresRepository,
-  humanId: string,
-  dispatchId: string
+  channelId: string,
 ): Promise<boolean> {
+  const result = await repository.query<{ allowed: boolean }>(
+    `SELECT EXISTS (
+       SELECT 1 FROM comm_channels ch
+       WHERE ch.id = $1 AND (
+         ch.scope = 'global'
+         OR (ch.scope = 'city' AND EXISTS (SELECT 1 FROM memberships m WHERE m.human_id = $2 AND m.city_id = ch.scope_id))
+         OR (ch.scope = 'corporation' AND EXISTS (SELECT 1 FROM memberships m WHERE m.human_id = $2 AND m.corporation_id = ch.scope_id))
+         OR (ch.scope = 'community' AND EXISTS (SELECT 1 FROM community_members cm WHERE cm.human_id = $2 AND cm.community_id = ch.scope_id))
+         OR (ch.scope = 'direct' AND EXISTS (SELECT 1 FROM comm_direct_conversations d WHERE d.channel_id = ch.id AND $2 IN (d.participant_low_id, d.participant_high_id)))
+       )
+     ) AS allowed`,
+    [channelId, humanId],
+  );
+  return Boolean(result.rows[0]?.allowed);
+}
+
+export async function openDirectConversation(
+  repository: PostgresRepository,
+  humanId: string,
+  targetHumanId: string,
+  correlationId = crypto.randomUUID(),
+): Promise<CommChannel> {
+  if (humanId === targetHumanId) throw new Error('You cannot message yourself');
+  const [low, high] = [humanId, targetHumanId].sort();
   return repository.transaction(async (tx) => {
-    const sql = `
-    UPDATE diplomatic_dispatches
-    SET status = 'read', read_at = NOW()
-    WHERE id = $1 AND recipient_human_id = $2 AND status = 'unread'
-  `;
-    await tx.query(sql, [dispatchId, humanId]);
-    return true;
+    const target = await tx.query<{ id: string }>(
+      `SELECT id FROM humans WHERE id = $1 AND account_status = 'active' AND life_status = 'active'`,
+      [targetHumanId],
+    );
+    if (!target.rows[0]) throw new Error('The selected user is not available');
+    const existing = await tx.query<CommChannel>(
+      `SELECT ch.id, ch.scope, ch.scope_id, other.display_name AS name, ch.description
+       FROM comm_direct_conversations d
+       JOIN comm_channels ch ON ch.id = d.channel_id
+       JOIN humans other ON other.id = CASE WHEN d.participant_low_id = $1 THEN d.participant_high_id ELSE d.participant_low_id END
+       WHERE d.participant_low_id = $1 AND d.participant_high_id = $2`,
+      [low, high],
+    );
+    if (existing.rows[0]) return existing.rows[0];
+    const channelId = `channel-direct-${low}-${high}`;
+    await tx.query(
+      `INSERT INTO comm_channels (id, scope, scope_id, name, description)
+       VALUES ($1, 'direct', NULL, 'Private conversation', 'Private conversation between two active users')
+       ON CONFLICT (id) DO NOTHING`,
+      [channelId],
+    );
+    await tx.query(
+      `INSERT INTO comm_direct_conversations (channel_id, participant_low_id, participant_high_id)
+       VALUES ($1, $2, $3) ON CONFLICT (participant_low_id, participant_high_id) DO NOTHING`,
+      [channelId, low, high],
+    );
+    const created = await tx.query<CommChannel>(
+      `SELECT ch.id, ch.scope, ch.scope_id, other.display_name AS name, ch.description
+       FROM comm_direct_conversations d JOIN comm_channels ch ON ch.id = d.channel_id
+       JOIN humans other ON other.id = CASE WHEN d.participant_low_id = $1 THEN d.participant_high_id ELSE d.participant_low_id END
+       WHERE d.participant_low_id = $1 AND d.participant_high_id = $2`,
+      [low, high],
+    );
+    return created.rows[0];
   });
 }
 
 export async function getCommunicationsMetrics(
   repository: PostgresRepository,
-  humanId: string
-): Promise<{ unreadDispatches: number; activeChannelsCount: number }> {
-  const [unreadRes, channelsRes] = await Promise.all([
-    repository.query<{ count: number }>(
-      `SELECT COUNT(*)::int AS count FROM diplomatic_dispatches WHERE recipient_human_id = $1 AND status = 'unread'`,
-      [humanId]
-    ).catch(() => ({ rows: [{ count: 0 }] })),
-    repository.query<{ count: number }>(
+  _humanId: string
+): Promise<{ activeChannelsCount: number }> {
+  const channelsRes = await repository.query<{ count: number }>(
       `SELECT COUNT(*)::int AS count FROM comm_channels WHERE scope = 'global'`,
       []
-    ).catch(() => ({ rows: [{ count: 1 }] })),
-  ]);
+    ).catch(() => ({ rows: [{ count: 1 }] }));
 
   return {
-    unreadDispatches: unreadRes.rows[0]?.count ?? 0,
     activeChannelsCount: channelsRes.rows[0]?.count ?? 1,
   };
 }

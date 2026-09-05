@@ -1,6 +1,5 @@
 export type DecisionCategory =
   | 'business'
-  | 'contracts'
   | 'governance'
   | 'civic'
   | 'technology'
@@ -26,7 +25,6 @@ export interface DecisionQueueItem {
 
 export interface DecisionQueueInput {
   resources?: Record<string, unknown>;
-  contracts?: Array<{ id: string; title?: string; status?: string; delivery_tick?: unknown; terms?: string }>;
   proposals?: Array<{ id: string; title?: string; status?: string; closes_game_day?: unknown; closes_game_minute?: unknown }>;
   technology?: { progress?: unknown; active_patents?: unknown; is_funding_open?: boolean };
   house?: { successor_id?: string | null; heirloom_unlocked?: boolean; perks_available?: boolean };
@@ -119,27 +117,7 @@ export function generateDecisionQueue(input: DecisionQueueInput): DecisionQueueI
     });
   }
 
-  // 2. Supply / Service Contracts Expiration & Delivery
-  const activeContracts = (input.contracts ?? []).filter(
-    (c) => c.status === 'active' || c.status === 'pending' || c.status === 'open'
-  );
-  if (activeContracts.length > 0) {
-    const nextContract = activeContracts[0];
-    items.push({
-      id: `decision-contract-expiry-${nextContract.id}`,
-      category: 'contracts',
-      title: 'A contract expires in 2 days',
-      whyItMatters: 'Unfulfilled supply obligations risk forfeiture of escrow collateral and damage commercial reliability standing.',
-      deadline: 'In 2 Game Days',
-      expectedImpact: 'Fulfill shipment to unlock full credit payout and improve corporate credit score.',
-      riskLevel: 'high',
-      primaryActionLabel: 'Review Contract',
-      targetSection: 'contracts',
-      urgencyScore: 85,
-    });
-  }
-
-  // 3. Unresolved Governance & Civic Referendums
+  // 2. Unresolved Governance & Civic Referendums
   const openProposals = (input.proposals ?? []).filter((p) => p.status === 'open');
   if (openProposals.length > 0) {
     const proposal = openProposals[0];

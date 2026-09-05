@@ -66,6 +66,10 @@ function createMockDb(initialData = {}) {
     async query(sql, params = []) {
       const s = sql.trim().toUpperCase();
 
+      if (s.includes('FROM HUMANS WHERE ID = $1')) {
+        return { rows: [{ id: params[0] }] };
+      }
+
       if (s.includes('FROM HOUSES WHERE EMAIL = $1') || s.includes('FROM DYNASTIES WHERE EMAIL = $1')) {
         const found = houses.find((d) => d.email === params[0] || d.id === params[1]);
         return { rows: found ? [found] : [] };

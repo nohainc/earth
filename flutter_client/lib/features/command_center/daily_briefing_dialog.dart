@@ -3,6 +3,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/models/daily_briefing.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
 
 void showDailyBriefingDialog(
@@ -166,9 +167,51 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
   }
 
   Widget _buildAllBriefingContent(DailyBriefingReport r) {
+    final netWealth = r.netWealthDelta;
+    final cashflow = r.cashflow;
+    final isPosWealth = netWealth.delta >= 0;
+
+    final cockpit = EarthPageCockpit(
+      status: 'EXECUTIVE BRIEFING',
+      tag: 'GAME DAY ${r.gameDay}',
+      statusColor: context.primaryColor,
+      infoTitle: 'DAILY PRIORITIES & BRIEFING ARCHITECTURE',
+      infoDescription:
+          '• Overnight Telemetry: Compares sovereign balance and asset valuations across elapsed game days.\n\n• Daily Cashflow: Net daily yields across enterprise dividends, commodity trade, and municipal tax deductions.\n\n• Action Directives: High-urgency operational, commercial, and civic recommendations requiring immediate attention.',
+      title: 'DAILY PRIORITIES',
+      subtitle:
+          'Executive status report, overnight delta telemetry, and recommended daily directives across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Net Wealth',
+          value:
+              '${formatWholeNumber(netWealth.current)} (${isPosWealth ? '+' : ''}${netWealth.deltaPct.toStringAsFixed(1)}%)',
+          icon: isPosWealth ? Icons.trending_up : Icons.trending_down,
+          color: isPosWealth ? context.successColor : context.warningColor,
+        ),
+        CockpitMetric(
+          label: 'Net Cashflow',
+          value:
+              '${cashflow.netProfit >= 0 ? '+' : ''}${formatWholeNumber(cashflow.netProfit)}',
+          icon: Icons.account_balance_wallet_outlined,
+          color: cashflow.netProfit >= 0 ? context.successColor : context.warningColor,
+        ),
+        CockpitMetric(
+          label: 'Directives',
+          value: '${r.recommendedDirectives.length}',
+          icon: Icons.bolt_outlined,
+          color: r.recommendedDirectives.isNotEmpty
+              ? context.secondaryColor
+              : context.mutedColor,
+        ),
+      ],
+    );
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        cockpit,
+        const SizedBox(height: 24),
         EarthSection(
           title: 'SINCE YOUR LAST VISIT',
           showSurface: false,
@@ -202,7 +245,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           title: 'CURRENT OPERATIONS',
           showSurface: false,
           infoBulletPoints: const [
-            'Active enterprise summary, building portfolio, output volume, and pending commercial contracts.',
+            'Active enterprise summary, building portfolio, and output volume.',
           ],
           child: _buildIndustryContent(r),
         ),
@@ -229,7 +272,7 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
       ),
       (
         'Operations',
-        '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeBuildings} buildings · ${r.businessSummary.pendingContractsCount} pending contracts',
+        '${r.businessSummary.activeBusinesses} businesses · ${r.businessSummary.activeBuildings} buildings',
         Icons.business_center_outlined,
         context.primaryColor,
       ),
@@ -320,12 +363,6 @@ class _DailyBriefingDialogState extends State<DailyBriefingDialog> {
           value: '${r.businessSummary.activeBuildings}',
           icon: Icons.domain_outlined,
           accentColor: context.primaryColor,
-        ),
-        EarthMetricTile(
-          label: 'PENDING CONTRACTS',
-          value: '${r.businessSummary.pendingContractsCount}',
-          icon: Icons.assignment_outlined,
-          accentColor: r.businessSummary.pendingContractsCount > 0 ? context.warningColor : context.mutedColor,
         ),
       ],
     );

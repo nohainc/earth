@@ -111,13 +111,11 @@ class BusinessProductionSummary {
   final int activeBusinesses;
   final int totalDailyOutput;
   final int activeBuildings;
-  final int pendingContractsCount;
 
   const BusinessProductionSummary({
     required this.activeBusinesses,
     required this.totalDailyOutput,
     required this.activeBuildings,
-    required this.pendingContractsCount,
   });
 
   factory BusinessProductionSummary.fromJson(Map<String, dynamic>? json) {
@@ -126,14 +124,12 @@ class BusinessProductionSummary {
         activeBusinesses: 0,
         totalDailyOutput: 0,
         activeBuildings: 0,
-        pendingContractsCount: 0,
       );
     }
     return BusinessProductionSummary(
       activeBusinesses: _parseInt(json['activeBusinesses']),
       totalDailyOutput: _parseInt(json['totalDailyOutput']),
       activeBuildings: _parseInt(json['activeBuildings']),
-      pendingContractsCount: _parseInt(json['pendingContractsCount']),
     );
   }
 }
@@ -299,7 +295,7 @@ class DailyBriefingReport {
           MarketMovementSummary(commodity: 'materials', currentPrice: 4.8, previousPrice: 4.9, deltaPct: -2.0, trend: 'down', volume24h: 1800),
           MarketMovementSummary(commodity: 'components', currentPrice: 28.5, previousPrice: 26.0, deltaPct: 9.6, trend: 'up', volume24h: 640),
         ],
-        businessSummary: BusinessProductionSummary(activeBusinesses: 1, totalDailyOutput: 85, activeBuildings: 0, pendingContractsCount: 1),
+        businessSummary: BusinessProductionSummary(activeBusinesses: 1, totalDailyOutput: 85, activeBuildings: 0),
         civicSummary: CivicEventSummary(activeProposals: 2, passedProposals24h: 1, cityResidency: 'Pacific Rim Sprawl', cityTaxRatePct: 4.5, recentCivicEvents: ['Civic Infrastructure Bond passed in Pacific Rim Sprawl']),
         unreadAlerts: UnreadAlertsSummary(unreadNotifications: 2, unreadComms: 1, criticalAlertsCount: 0),
         recommendedDirectives: [],
@@ -363,7 +359,6 @@ class DailyBriefingReport {
         activeBusinesses: 1,
         totalDailyOutput: 85,
         activeBuildings: 0,
-        pendingContractsCount: 1,
       ),
       civicSummary: const CivicEventSummary(
         activeProposals: 2,

@@ -91,14 +91,6 @@ test('governance rejects a duplicate ballot', async () => {
   assert.match(duplicate.body.error, /already recorded/);
 });
 
-test('day advancement applies business output and advances the clock', async () => {
-  const beforeState = await request('/api/world');
-  const result = await request('/api/day/advance', { method: 'POST' });
-  assert.equal(result.body.result.day, beforeState.body.clock.day + 1);
-  assert.ok(result.body.state.human.credits > beforeState.body.human.credits);
-  assert.ok(result.body.state.business.condition < beforeState.body.business.condition);
-});
-
 test('successor registration is explicit and auditable in world state', async () => {
   const result = await request('/api/life/successor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Mira Kline' }) });
   assert.equal(result.status, 200);
@@ -236,8 +228,6 @@ test('authenticated session response uses the public human projection only', asy
 });
 
 test('live event stream and JSON endpoints support event replay after reconnect', async () => {
-  // Advance day to trigger published events
-  await request('/api/day/advance', { method: 'POST' });
   await request('/api/life/successor', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ name: 'Replay Test Successor' }) });
 
   // Query events JSON with cursor / after

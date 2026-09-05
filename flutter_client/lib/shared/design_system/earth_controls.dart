@@ -159,6 +159,9 @@ class EarthSearchInput extends StatelessWidget {
   final ValueChanged<String>? onChanged;
   final String hintText;
   final VoidCallback? onClear;
+  final double? fontSize;
+  final FocusNode? focusNode;
+  final bool autofocus;
 
   const EarthSearchInput({
     super.key,
@@ -166,10 +169,21 @@ class EarthSearchInput extends StatelessWidget {
     this.onChanged,
     this.hintText = 'Search...',
     this.onClear,
+    this.fontSize,
+    this.focusNode,
+    this.autofocus = false,
   });
 
   @override
   Widget build(BuildContext context) {
+    final effectiveStyle = context.bodyStyle.copyWith(
+      color: context.inkColor,
+      fontSize: fontSize,
+    );
+    final effectiveHintStyle = context.widgetFooterStyle.copyWith(
+      fontSize: fontSize,
+    );
+
     return Container(
       height: context.inputHeight,
       decoration: BoxDecoration(
@@ -182,26 +196,28 @@ class EarthSearchInput extends StatelessWidget {
         label: hintText,
         child: TextField(
           controller: controller,
+          focusNode: focusNode,
+          autofocus: autofocus,
           onChanged: onChanged,
-          style: context.bodyStyle.copyWith(color: context.inkColor),
+          style: effectiveStyle,
           decoration: InputDecoration(
-          hintText: hintText,
-          hintStyle: context.widgetFooterStyle,
-          prefixIcon: Icon(Icons.search, size: 16, color: context.mutedColor),
-          suffixIcon: controller.text.isNotEmpty
-              ? IconButton(
-                  icon: Icon(Icons.close, size: 14, color: context.mutedColor),
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints(),
-                  onPressed: () {
-                    controller.clear();
-                    onClear?.call();
-                    onChanged?.call('');
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
+            hintText: hintText,
+            hintStyle: effectiveHintStyle,
+            prefixIcon: Icon(Icons.search, size: 16, color: context.mutedColor),
+            suffixIcon: controller.text.isNotEmpty
+                ? IconButton(
+                    icon: Icon(Icons.close, size: 14, color: context.mutedColor),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      controller.clear();
+                      onClear?.call();
+                      onChanged?.call('');
+                    },
+                  )
+                : null,
+            border: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 11),
           ),
         ),
       ),

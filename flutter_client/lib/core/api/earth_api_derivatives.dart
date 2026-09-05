@@ -13,7 +13,7 @@ extension EarthApiDerivatives on EarthApi {
     required String commodity,
     required double size,
     required double strikePrice,
-    required int expiryGameDay,
+    required int durationGameMinutes,
   }) async {
     final response = await _request(
       '/api/market/futures/create',
@@ -22,7 +22,7 @@ extension EarthApiDerivatives on EarthApi {
         'commodity': commodity,
         'size': size,
         'strikePrice': strikePrice,
-        'expiryGameDay': expiryGameDay,
+        'durationGameMinutes': durationGameMinutes,
       },
     );
     if (response is Map<String, dynamic>) {

@@ -5,6 +5,7 @@ import '../../app/theme.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../core/models/live_connection_status.dart';
+import '../../core/notification_classifier.dart';
 import '../../shared/design_system/earth_logo.dart';
 import '../../shared/design_system/earth_theme_context.dart';
 import '../../core/onboarding_controller.dart';
@@ -42,6 +43,7 @@ class _HudResource {
 
 class TopFixedHudPanel extends StatefulWidget {
   final EarthState state;
+  final List<dynamic> notifications;
   final int unreadNotifications;
   final int unreadCommMessages;
   final bool isLiveConnected;
@@ -53,11 +55,14 @@ class TopFixedHudPanel extends StatefulWidget {
   final VoidCallback? onLogout;
   final VoidCallback? onSecurity;
   final VoidCallback? onCommLink;
+  final VoidCallback? onNotifications;
+  final VoidCallback? onOpenNotifications;
   final VoidCallback? onReconnect;
 
   const TopFixedHudPanel({
     super.key,
     required this.state,
+    this.notifications = const [],
     this.unreadNotifications = 0,
     this.unreadCommMessages = 0,
     this.isLiveConnected = false,
@@ -69,6 +74,8 @@ class TopFixedHudPanel extends StatefulWidget {
     this.onLogout,
     this.onSecurity,
     this.onCommLink,
+    this.onNotifications,
+    this.onOpenNotifications,
     this.onReconnect,
     this.onDayRecalculateTrigger,
     this.onDayPrefetch,
@@ -197,12 +204,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   @override
   Widget build(BuildContext context) {
     final human = widget.state.human;
-    final name = '${human['name'] ?? human['display_name'] ?? 'Human'}';
-    final initials = _extractInitials(name);
-    final standing = asInt(human['standing']) ?? 0;
-    final city =
-        '${(widget.state.institutions['city'] is Map ? widget.state.institutions['city']['name'] : null) ?? 'Independent'}';
-
     final credits = formatWholeNumber(human['credits']);
     final flowMap = (widget.state.json['resourceFlows'] is Map
         ? widget.state.json['resourceFlows'] as Map
@@ -304,12 +305,29 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              // 1. BRAND LOGO & TITLE
-              _buildBrandHeader(context, isMobile, isTablet),
+              // 1. HAMBURGER MENU WHEN SIDEBAR IS INVISIBLE
+              if (widget.showDrawerButton) ...[
+                Tooltip(
+                  message: 'Open navigation menu',
+                  child: InkWell(
+                    onTap: widget.onOpenDrawer,
+                    borderRadius: BorderRadius.circular(8),
+                    child: Padding(
+                      padding: const EdgeInsets.all(4),
+                      child: Icon(Icons.menu_rounded,
+                          size: 22, color: context.inkColor),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 6),
+              ],
 
-              if (!isMobile) const SizedBox(width: 12),
+              // 2. BRAND LOGO & (OPTIONAL) TITLE
+              _buildBrandHeader(context, isMobile, isTablet, hideTitle: widget.showDrawerButton),
 
-              // 2. CENTER: GAME CLOCK & RESOURCE BAR
+              if (!isMobile && !widget.showDrawerButton) const SizedBox(width: 12),
+
+              // 3. CENTER: GAME CLOCK & RESOURCE BAR
               Expanded(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
@@ -327,43 +345,27 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
               const SizedBox(width: 8),
 
-              // 3. RIGHT TELEMETRY & ACTIONS
-              if (!isMobile) ...[
+              // 4. RIGHT TELEMETRY & ACTIONS
+              if (!isMobile && !widget.showDrawerButton) ...[
                 _buildLiveTelemetryPill(context, status),
                 const SizedBox(width: 8),
               ],
 
-              // ALERTS MENU
-              _buildAlertsMenu(context, status),
+              // NOTIFICATIONS BUTTON
+              _buildNotificationsButton(context),
+
+              const SizedBox(width: 4),
+
+              // MESSAGES BUTTON
+              _buildCommLinkButton(context),
 
               const SizedBox(width: 6),
 
-              // USER ACCOUNT & EXECUTIVE PERSONA
-              _buildExecutiveProfileMenu(
+              // SETTINGS & ACCOUNT MENU
+              _buildSettingsMenu(
                 context,
-                name: name,
-                initials: initials,
-                standing: standing,
-                city: city,
                 isMobile: isMobile,
               ),
-
-              // 4. HAMBURGER MENU FOR MOBILE / COLLAPSED SIDEBAR
-              if (widget.showDrawerButton) ...[
-                const SizedBox(width: 4),
-                Tooltip(
-                  message: 'Open navigation menu',
-                  child: InkWell(
-                    onTap: widget.onOpenDrawer,
-                    borderRadius: BorderRadius.circular(8),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(Icons.menu_rounded,
-                          size: 21, color: context.inkColor),
-                    ),
-                  ),
-                ),
-              ],
             ],
           ),
         );
@@ -372,7 +374,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   }
 
   // --- BRAND HEADER ---
-  Widget _buildBrandHeader(BuildContext context, bool isMobile, bool isTablet) {
+  Widget _buildBrandHeader(BuildContext context, bool isMobile, bool isTablet,
+      {bool hideTitle = false}) {
     return InkWell(
       onTap: () {
         EarthAudioEngine.instance.playClick();
@@ -386,10 +389,10 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           crossAxisAlignment: CrossAxisAlignment.center,
           children: [
             EarthLogo(
-              size: isMobile ? 22 : 28,
+              size: (isMobile || hideTitle) ? 22 : 28,
               showGlow: true,
             ),
-            if (!isMobile) ...[
+            if (!isMobile && !hideTitle) ...[
               const SizedBox(width: 10),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -662,14 +665,38 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     );
   }
 
-  // --- ALERTS DROPDOWN MENU ---
-  Widget _buildAlertsMenu(BuildContext context, LiveConnectionStatus status) {
-    final unreadTotal = widget.unreadNotifications + widget.unreadCommMessages;
+  // --- NOTIFICATIONS BUTTON (QUICK VIEW FLYOUT) ---
+  Widget _buildNotificationsButton(BuildContext context) {
+    final unread = widget.unreadNotifications;
+    final isUnread = unread > 0;
+
+    // Filter to personal alerts and unread items
+    final validAlerts = widget.notifications
+        .whereType<Map>()
+        .map((raw) => Map<String, dynamic>.from(raw))
+        .where((n) => !isCorpOrCityNotification(n))
+        .toList();
+
+    final unreadAlerts = validAlerts.where((n) {
+      final readAt = n['read_at'] ?? n['readAt'];
+      if (readAt != null && readAt.toString().isNotEmpty && readAt.toString() != 'null') return false;
+      final read = n['read'];
+      if (read == true || read == 'true' || read == 1 || read == '1') return false;
+      final status = n['status']?.toString().toLowerCase();
+      if (status == 'read') return false;
+      return true;
+    }).toList();
+
+    // Show up to 5 most recent alerts (if no unread, show recent 5 general alerts)
+    final previewAlerts = unreadAlerts.isNotEmpty
+        ? unreadAlerts.take(5).toList()
+        : validAlerts.take(5).toList();
 
     return PopupMenuButton<String>(
+      tooltip: 'Notifications ($unread unread)',
       position: PopupMenuPosition.under,
       offset: const Offset(0, 8),
-      constraints: const BoxConstraints(minWidth: 220, maxWidth: 260),
+      constraints: const BoxConstraints(minWidth: 290, maxWidth: 340),
       color: context.surfaceColor,
       elevation: 14,
       shape: RoundedRectangleBorder(
@@ -678,48 +705,271 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
           color: context.primaryColor.withValues(alpha: 0.25),
         ),
       ),
+      onOpened: () {
+        widget.onOpenNotifications?.call();
+      },
       onSelected: (value) {
         EarthAudioEngine.instance.playClick();
-        if (value == 'notifications') {
+        if (widget.onNotifications != null) {
+          widget.onNotifications!();
+        } else {
           widget.onNavigate?.call('notifications');
-        } else if (value == 'messages') {
-          widget.onCommLink?.call();
         }
       },
-      itemBuilder: (context) => [
-        _menuItem(
-          context,
-          'notifications',
-          Icons.notifications_none_outlined,
-          'Notifications',
-          trailing: widget.unreadNotifications > 0
-              ? '${widget.unreadNotifications}'
-              : null,
+      itemBuilder: (popupContext) {
+        final items = <PopupMenuEntry<String>>[];
+
+        // Header Entry
+        items.add(
+          PopupMenuItem<String>(
+            enabled: false,
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'NOTIFICATIONS',
+                  style: context.widgetFooterStyle.copyWith(
+                    color: context.primaryColor,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.2,
+                    fontSize: 11,
+                  ),
+                ),
+                if (unread > 0)
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
+                    decoration: BoxDecoration(
+                      color: context.primaryColor.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: context.primaryColor.withValues(alpha: 0.4)),
+                    ),
+                    child: Text(
+                      '$unread NEW',
+                      style: context.captionStyle.copyWith(
+                        color: context.primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 9.5,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
+        );
+
+        items.add(const PopupMenuDivider(height: 1));
+
+        if (previewAlerts.isEmpty) {
+          items.add(
+            PopupMenuItem<String>(
+              enabled: false,
+              height: 48,
+              padding: const EdgeInsets.symmetric(horizontal: 14),
+              child: Center(
+                child: Text(
+                  'No notifications. Systems nominal.',
+                  style: context.bodyStyle.copyWith(
+                    color: context.mutedColor,
+                    fontSize: 12,
+                  ),
+                ),
+              ),
+            ),
+          );
+        } else {
+          for (final alert in previewAlerts) {
+            final title = alert['title']?.toString() ?? 'Alert';
+            final body = (alert['body'] ?? alert['details'] ?? '').toString();
+            final rawDate = alert['created_at'] ?? alert['createdAt'] ?? alert['timestamp'];
+            final gameTime = rawDate != null ? formatRealToGameDateTime(rawDate) : null;
+            final isItemUnread = unreadAlerts.contains(alert);
+
+            items.add(
+              PopupMenuItem<String>(
+                value: 'view_all',
+                height: 52,
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    if (isItemUnread) ...[
+                      Container(
+                        width: 6,
+                        height: 6,
+                        margin: const EdgeInsets.only(right: 8),
+                        decoration: BoxDecoration(
+                          color: context.primaryColor,
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: context.primaryColor.withValues(alpha: 0.8),
+                              blurRadius: 4,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Text(
+                            title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: context.bodyStyle.copyWith(
+                              color: context.inkColor,
+                              fontWeight: isItemUnread ? FontWeight.w700 : FontWeight.w600,
+                              fontSize: 12.5,
+                            ),
+                          ),
+                          if (body.isNotEmpty) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              body,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.widgetFooterStyle.copyWith(
+                                color: context.mutedColor,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                          if (gameTime != null) ...[
+                            const SizedBox(height: 2),
+                            Text(
+                              gameTime,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: context.widgetFooterStyle.copyWith(
+                                color: context.primaryColor.withValues(alpha: 0.75),
+                                fontSize: 9.5,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }
+        }
+
+        items.add(const PopupMenuDivider(height: 1));
+
+        // Footer "View All Notifications" Link
+        items.add(
+          PopupMenuItem<String>(
+            value: 'view_all',
+            height: 38,
+            padding: const EdgeInsets.symmetric(horizontal: 14),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Text(
+                  'VIEW ALL NOTIFICATIONS',
+                  style: context.bodyStyle.copyWith(
+                    color: context.primaryColor,
+                    fontWeight: FontWeight.w700,
+                    fontSize: 11.5,
+                    letterSpacing: 0.8,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                Icon(
+                  Icons.arrow_forward_rounded,
+                  size: 13,
+                  color: context.primaryColor,
+                ),
+              ],
+            ),
+          ),
+        );
+
+        return items;
+      },
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Icon(
+              isUnread
+                  ? Icons.notifications_active_outlined
+                  : Icons.notifications_none_outlined,
+              size: 21,
+              color: isUnread ? context.primaryColor : context.mutedColor,
+            ),
+            if (isUnread)
+              Positioned(
+                top: -4,
+                right: -6,
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                  constraints:
+                      const BoxConstraints(minWidth: 15, minHeight: 15),
+                  alignment: Alignment.center,
+                  decoration: BoxDecoration(
+                    color: context.primaryColor,
+                    borderRadius: BorderRadius.circular(8),
+                    boxShadow: [
+                      BoxShadow(
+                        color: context.primaryColor.withValues(alpha: 0.5),
+                        blurRadius: 4,
+                      ),
+                    ],
+                  ),
+                  child: Text(
+                    '$unread',
+                    style: const TextStyle(
+                      color: Colors.black,
+                      fontSize: 8.5,
+                      fontWeight: FontWeight.w900,
+                    ),
+                  ),
+                ),
+              ),
+          ],
         ),
-        _menuItem(
-          context,
-          'messages',
-          Icons.settings_input_antenna,
-          'Messages',
-          trailing: widget.unreadCommMessages > 0
-              ? '${widget.unreadCommMessages}'
-              : null,
-        ),
-      ],
+      ),
+    );
+  }
+
+  // --- MESSAGES & COMM-LINK SHORTCUT ---
+  Widget _buildCommLinkButton(BuildContext context) {
+    final unread = widget.unreadCommMessages;
+
+    return InkWell(
+      onTap: () {
+        EarthAudioEngine.instance.playClick();
+        if (widget.onCommLink != null) {
+          widget.onCommLink!();
+        } else {
+          widget.onNavigate?.call('messages');
+        }
+      },
+      borderRadius: BorderRadius.circular(10),
       child: Tooltip(
-        message: 'Alerts & Communications ($unreadTotal unread)',
+        message: 'Messages ($unread unread)',
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Stack(
             clipBehavior: Clip.none,
             children: [
               Icon(
-                Icons.notifications_none_outlined,
+                Icons.forum_outlined,
                 size: 21,
                 color:
-                    unreadTotal > 0 ? context.primaryColor : context.mutedColor,
+                    unread > 0 ? context.primaryColor : context.mutedColor,
               ),
-              if (unreadTotal > 0)
+              if (unread > 0)
                 Positioned(
                   top: -4,
                   right: -6,
@@ -740,7 +990,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                       ],
                     ),
                     child: Text(
-                      '$unreadTotal',
+                      '$unread',
                       style: const TextStyle(
                         color: Colors.black,
                         fontSize: 8.5,
@@ -756,17 +1006,13 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     );
   }
 
-  // --- EXECUTIVE PROFILE MENU ---
-  Widget _buildExecutiveProfileMenu(
+  // --- SETTINGS / ACCOUNT MENU ---
+  Widget _buildSettingsMenu(
     BuildContext context, {
-    required String name,
-    required String initials,
-    required int standing,
-    required String city,
     required bool isMobile,
   }) {
     return PopupMenuButton<String>(
-      tooltip: 'Account Menu',
+      tooltip: 'Settings & Account',
       position: PopupMenuPosition.under,
       offset: const Offset(0, 8),
       constraints: const BoxConstraints(minWidth: 230, maxWidth: 270),
@@ -780,9 +1026,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
       ),
       onSelected: (value) {
         EarthAudioEngine.instance.playClick();
-        if (value == 'life') {
-          widget.onNavigate?.call('life');
-        } else if (value == 'account') {
+        if (value == 'account') {
           widget.onNavigate?.call('account');
         } else if (value == 'theme') {
           showThemeCustomizerDialog(context);
@@ -804,33 +1048,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         }
       },
       itemBuilder: (context) => [
-        PopupMenuItem(
-          value: 'life',
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                name,
-                style: TextStyle(
-                  fontSize: 13,
-                  color: context.inkColor,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                'Citizen of $city · Standing $standing',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: context.mutedColor,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const PopupMenuDivider(),
         _menuItem(
           context,
           'theme',
@@ -867,56 +1084,13 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         ),
       ],
       child: Tooltip(
-        message: '$name · Standing $standing · Account Menu',
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 3),
-          decoration: BoxDecoration(
-            color: context.surfaceColor.withValues(alpha: 0.5),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: context.primaryColor.withValues(alpha: 0.3),
-              width: 0.8,
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                width: 22,
-                height: 22,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  gradient: LinearGradient(
-                    colors: [
-                      context.primaryColor.withValues(alpha: 0.8),
-                      context.secondaryColor.withValues(alpha: 0.8),
-                    ],
-                  ),
-                ),
-                child: Center(
-                  child: Text(
-                    initials,
-                    style: const TextStyle(
-                      fontSize: 9,
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black,
-                    ),
-                  ),
-                ),
-              ),
-              if (!isMobile) ...[
-                const SizedBox(width: 5),
-                Text(
-                  '$standing',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w700,
-                    color: context.primaryColor,
-                  ),
-                ),
-                const SizedBox(width: 2),
-              ],
-            ],
+        message: 'Settings & Account',
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Icon(
+            Icons.settings_outlined,
+            size: 21,
+            color: context.mutedColor,
           ),
         ),
       ),
@@ -963,17 +1137,5 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         ],
       ),
     );
-  }
-
-  String _extractInitials(String fullName) {
-    final parts = fullName.trim().split(RegExp(r'\s+'));
-    if (parts.length >= 2) {
-      final p1 = parts[0].isNotEmpty ? parts[0][0] : '';
-      final p2 = parts[1].isNotEmpty ? parts[1][0] : '';
-      return '$p1$p2'.toUpperCase();
-    } else if (fullName.isNotEmpty) {
-      return fullName.substring(0, fullName.length.clamp(1, 2)).toUpperCase();
-    }
-    return 'EX';
   }
 }

@@ -8,6 +8,7 @@
   "observability": { "enabled": true, "head_sampling_rate": 1 },
   "vars": { "ENVIRONMENT": "production", "PERSISTENCE_AUTHORITY": "postgres", "EMAIL_FROM": "earth@nohainc.com", "SMTP_USER": "vitalii@nohainc.com" },
   "send_email": [{ "name": "EMAIL" }],
+  "r2_buckets": [{ "binding": "BUILDING_ASSETS", "bucket_name": "earth-building-assets" }],
   "hyperdrive": [{ "binding": "HYPERDRIVE", "id": "3e522e38b938448a8887080d6ef89642" }],
   "durable_objects": { "bindings": [{ "name": "MARKET_COORDINATOR", "class_name": "MarketCoordinator" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MarketCoordinator"] }],

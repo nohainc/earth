@@ -17,7 +17,7 @@ async function eligible(tx: PostgresRepository, humanId: string, institutionId: 
   if (!maturity.rows[0] || !politicalMaturityReached(Number(maturity.rows[0].game_day), Number(maturity.rows[0].political_eligibility_game_day ?? 0))) return false;
   if (institution.rows[0].kind === 'CORPORATION') return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND corporation_id = $2', [humanId, institutionId])).rows[0]);
   if (institution.rows[0].kind === 'CITY') return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND city_id = $2', [humanId, institutionId])).rows[0]);
-  return Boolean((await tx.query("SELECT 1 FROM role_assignments WHERE human_id = $1 AND institution_id = $2 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') UNION ALL SELECT 1 FROM authority_delegations WHERE delegate_id = $1 AND institution_id = $2 AND status = 'active' AND ends_game_day > (SELECT game_day FROM world_state WHERE id = 'WORLD') LIMIT 1", [humanId, institutionId])).rows[0]);
+  return Boolean((await tx.query("SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [institutionId, humanId])).rows[0]);
 }
 
 function jsonObject(value: unknown): Record<string, unknown> {
@@ -190,10 +190,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       const bType = String(value.buildingType ?? 'geothermal-grid');
       const spec = BUILDING_CATALOG[bType] ?? BUILDING_CATALOG['geothermal-grid'];
       const cityId = current.institution_id;
-      const ownershipClass = value.ownershipClass === 'public_investment' ? 'public_investment' : 'civic';
-      if (ownershipClass === 'public_investment' && spec.resourceOutputType && spec.resourceOutputType !== 'credits') {
-        throw new Error('Public investment projects must produce Credits only');
-      }
+      const ownershipClass = 'civic';
       const existingBuilding = await tx.query(
         "SELECT id FROM buildings WHERE city_id = $1 AND building_type = $2 AND ownership_class = $3 AND status NOT IN ('closed', 'foreclosed') LIMIT 1",
         [cityId, bType, ownershipClass],
@@ -252,7 +249,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           construction_started_game_day, construction_complete_game_day,
           construction_started_minute, construction_complete_minute, construction_progress,
           status, created_game_day
-        ) VALUES ($1, $2, $2, CASE WHEN $20 = 'public_investment' THEN 'public_investment' ELSE 'civic' END, $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0.0, 'under_construction', $19)`,
+        ) VALUES ($1, $2, NULL, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, 0.0, 'under_construction', $19)`,
         [
           buildingId,
           current.institution_id,

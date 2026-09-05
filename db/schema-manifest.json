@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 106,
+  "migrationVersion": 121,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -46,16 +46,6 @@
       "human_id",
       "token_hash"
     ],
-    "authority_delegations": [
-      "id",
-      "institution_id",
-      "delegate_id"
-    ],
-    "authority_events": [
-      "id",
-      "human_id",
-      "institution_id"
-    ],
     "ballots": [
       "proposal_id",
       "human_id",
@@ -72,14 +62,35 @@
       "institution_id",
       "amount"
     ],
-    "building_investment_shares": [
+    "global_bank_deposits": [
       "id",
-      "building_id",
-      "investor_id",
-      "shares_owned",
-      "total_shares_issued",
-      "invested_credits",
-      "accumulated_dividends_crd"
+      "human_id",
+      "principal",
+      "daily_rate",
+      "accrued_interest",
+      "start_game_day",
+      "start_game_minute",
+      "maturity_game_day",
+      "maturity_game_minute",
+      "last_settled_game_day",
+      "status"
+    ],
+    "global_bank_loans": [
+      "id",
+      "corporation_id",
+      "principal",
+      "outstanding_principal",
+      "daily_rate",
+      "status"
+    ],
+    "global_bank_settlement_journals": [
+      "id",
+      "game_day",
+      "loan_income",
+      "operating_costs",
+      "reserve_contribution",
+      "interest_pool",
+      "interest_paid"
     ],
     "buildings": [
       "id",
@@ -125,51 +136,18 @@
       "condition_end",
       "auto_repaired"
     ],
-    "business_technology_adoptions": [
-      "business_id",
+    "human_technology_adoptions": [
+      "human_id",
       "technology_id",
-      "adopted_by",
       "adopted_game_day",
       "status"
     ],
-    "business_employees": [
-      "id",
-      "business_id",
-      "role",
-      "skill",
-      "morale",
-      "wage",
-      "status"
-    ],
-    "business_constitutions": [
-      "business_id",
-      "version"
-    ],
-    "business_tax_allocation_rules": [
-      "id",
-      "city_share",
-      "corporation_share",
-      "earth_share",
-      "active"
-    ],
-    "business_financials": [
-      "business_id",
-      "revenue",
-      "profit"
-    ],
-    "business_management": [
-      "business_id",
-      "manager_id"
-    ],
-    "business_shares": [
-      "business_id",
-      "holder_id",
-      "shares"
-    ],
-    "businesses": [
-      "id",
-      "owner_id",
-      "status"
+    "human_technology_subscriptions": [
+      "human_id",
+      "corporation_id",
+      "technology_key",
+      "status",
+      "last_billed_game_day"
     ],
     "cities": [
       "id",
@@ -189,7 +167,13 @@
     "comm_channels": [
       "id",
       "scope",
-      "name"
+      "name",
+      "description"
+    ],
+    "comm_direct_conversations": [
+      "channel_id",
+      "participant_low_id",
+      "participant_high_id"
     ],
     "comm_messages": [
       "id",
@@ -199,8 +183,7 @@
     ],
     "communities": [
       "id",
-      "founder_id",
-      "shared_credits"
+      "founder_id"
     ],
     "community_members": [
       "community_id",
@@ -221,33 +204,20 @@
       "default_value",
       "authority"
     ],
-    "contract_delivery_ticks": [
-      "id",
-      "contract_id",
-      "game_day",
-      "status",
-      "quantity_delivered",
-      "credits_transferred"
-    ],
-    "contract_disputes": [
-      "id",
-      "contract_id",
-      "status"
-    ],
-    "contract_escrow_vaults": [
-      "id",
-      "contract_id",
-      "buyer_id",
-      "seller_id",
-      "locked_amount",
-      "status"
-    ],
     "corporations": [
       "id",
       "institution_id",
       "treasury",
       "capital_city_id",
       "admission_policy"
+    ],
+    "corporation_technology_projects": [
+      "id",
+      "corporation_id",
+      "technology_key",
+      "research_cost_credits",
+      "progress",
+      "status"
     ],
     "corporation_building_research_projects": [
       "id",
@@ -304,13 +274,6 @@
       "mode",
       "expected_delta"
     ],
-    "diplomatic_dispatches": [
-      "id",
-      "sender_human_id",
-      "recipient_human_id",
-      "subject",
-      "status"
-    ],
     "earth_schema_migrations": [
       "version",
       "name",
@@ -349,18 +312,12 @@
       "source_id",
       "status"
     ],
-    "institution_roles": [
-      "id",
-      "institution_id",
-      "name",
-      "can_propose",
-      "can_vote"
-    ],
     "institutions": [
       "id",
       "kind",
       "status",
-      "charter_rules"
+      "charter_rules",
+      "administrator_human_id"
     ],
     "ledger_entries": [
       "id",
@@ -398,23 +355,6 @@
     "memberships": [
       "human_id",
       "joined_game_day"
-    ],
-    "merger_contracts": [
-      "contract_id",
-      "acquirer_business_id",
-      "target_business_id",
-      "price_per_share",
-      "total_shares",
-      "total_amount"
-    ],
-    "negotiated_contracts": [
-      "id",
-      "proposer_id",
-      "counterparty_id",
-      "status",
-      "terms_markup",
-      "proposer_business_id",
-      "counterparty_business_id"
     ],
     "notifications": [
       "id",
@@ -497,25 +437,10 @@
       "updated_game_day",
       "last_reason"
     ],
-    "role_assignments": [
-      "id",
-      "role_id",
-      "institution_id",
-      "human_id"
-    ],
     "succession_plans": [
       "human_id",
       "successor_name",
       "successor_human_id"
-    ],
-    "supply_contracts": [
-      "contract_id",
-      "resource_type",
-      "daily_quantity",
-      "unit_price",
-      "total_days",
-      "escrow_total",
-      "escrow_remaining"
     ],
     "tax_rules": [
       "id",
@@ -646,19 +571,14 @@
       "human_id"
     ],
     [
-      "business_technology_adoptions",
-      "business_id",
+      "human_technology_adoptions",
+      "human_id",
       "technology_id"
     ],
     [
       "resource_balances",
       "owner_id",
       "resource"
-    ],
-    [
-      "building_investment_shares",
-      "building_id",
-      "investor_id"
     ],
     [
       "civic_dividend_payouts",
@@ -690,8 +610,8 @@
     "idx_rate_history_owner_day",
     "idx_rate_history_owner_resource_day",
     "idx_rate_history_created",
-    "building_shares_building_idx",
-    "building_shares_investor_idx",
+    "global_bank_deposits_human_idx",
+    "global_bank_loans_corporation_idx",
     "civic_dividends_city_day_idx",
     "ledger_game_day_idx",
     "market_orders_book_idx",
@@ -707,11 +627,6 @@
     "deceased_profiles_rank_idx",
     "deceased_profiles_house_idx",
     "comm_messages_channel_idx",
-    "diplomatic_dispatches_recipient_idx",
-    "diplomatic_dispatches_sender_idx",
-    "supply_contracts_resource_idx",
-    "contract_escrow_vaults_contract_idx",
-    "contract_delivery_ticks_contract_day_idx",
     "idx_houses_email",
     "idx_house_lineage_records_house",
     "idx_house_lineage_records_human",
@@ -722,21 +637,17 @@
     "idx_commodity_futures_buyer",
     "idx_market_ohlc_commodity_day",
     "idx_net_worth_human_day",
-    "business_technology_adoptions_technology_idx",
+    "corporation_technology_projects_status_idx",
     "idx_ai_rec_feedback_human",
     "idx_scheduler_tick_logs_day",
     "personal_life_maintenance_human_day_idx",
     "daily_settlement_profiles_due_idx",
     "daily_settlement_profile_runs_day_idx",
     "idx_market_trades_order",
-    "idx_building_invest_building",
-    "idx_contract_disputes_parties",
     "idx_corp_research_corp_tech",
     "idx_futures_settlement",
-    "idx_business_shares_biz",
     "idx_proposals_institution_status",
     "idx_gov_rules_inst_cat",
-    "idx_notifications_unread",
-    "idx_dispatch_recipient_status"
+    "idx_notifications_unread"
   ]
 }

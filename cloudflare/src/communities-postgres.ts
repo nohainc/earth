@@ -33,7 +33,6 @@ export async function listCommunities(repository: PostgresRepository): Promise<R
       c.status, 
       COALESCE(c.admission_policy, 'open') AS admission_policy, 
       COALESCE(c.application_question, '') AS application_question,
-      c.shared_credits,
       (SELECT COUNT(*)::integer FROM community_members cm WHERE cm.community_id = c.id) AS member_count
     FROM communities c
     LEFT JOIN humans h ON h.id = c.founder_id
@@ -78,10 +77,10 @@ export async function createCommunity(
     const day = await currentDay(tx);
     const communityId = `COMM-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await tx.query(
-      'INSERT INTO communities (id, name, description, admission_policy, application_question, founder_id, shared_credits) VALUES ($1,$2,$3,$4,$5,$6,0)',
+      'INSERT INTO communities (id, name, description, admission_policy, application_question, founder_id) VALUES ($1,$2,$3,$4,$5,$6)',
       [communityId, name, description, admissionPolicy, applicationQuestion, input.founderId],
     );
-    await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $2, 0, 'CREDIT')", [`account-community-${communityId}`, communityId]);
+    await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'community',$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description", [`channel-community-${communityId}`, communityId, name, `Private conversation for current members of ${name}.`]);
     await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'founder',$3)", [communityId, input.founderId, day]);
     await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'community_formation')", [input.correlationId, input.founderId, communityId, day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [
@@ -197,6 +196,7 @@ export async function changeCommunityMembership(
 
     await tx.query("DELETE FROM community_membership_requests WHERE community_id = $1 AND human_id = $2", [input.communityId, input.humanId]);
     await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'member',$3) ON CONFLICT (community_id, human_id) DO UPDATE SET role = 'member', joined_game_day = $3", [input.communityId, input.humanId, day]);
+    await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'community',$2,$3,$4) ON CONFLICT (id) DO NOTHING", [`channel-community-${input.communityId}`, input.communityId, community.rows[0].name, `Private conversation for current members of ${community.rows[0].name}.`]);
     await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'voluntary_membership')", [crypto.randomUUID(), input.humanId, input.communityId, day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [crypto.randomUUID(), input.humanId, 'community', 'Community joined', `You joined community ${input.communityId}.`, input.communityId]);
     return { ok: true, member: (await tx.query('SELECT * FROM community_members WHERE community_id = $1 AND human_id = $2', [input.communityId, input.humanId])).rows[0] };
@@ -256,6 +256,8 @@ export async function decideCommunityMembershipRequest(
     if (input.action === 'approve') {
       await tx.query('UPDATE community_membership_requests SET status = \'approved\', decided_game_day = $1, decided_by = $2 WHERE id = $3', [day, input.deciderId, input.requestId]);
       await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'member',$3) ON CONFLICT (community_id, human_id) DO UPDATE SET role = 'member', joined_game_day = $3", [input.communityId, applicantId, day]);
+      const commName = community.rows[0].name ?? input.communityId;
+      await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'community',$2,$3,$4) ON CONFLICT (id) DO NOTHING", [`channel-community-${input.communityId}`, input.communityId, commName, `Private conversation for current members of ${commName}.`]);
       await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'approved_application')", [crypto.randomUUID(), applicantId, input.communityId, day]);
       await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [
         crypto.randomUUID(), applicantId, 'community', 'Membership Approved', `Your request to join community ${community.rows[0].name ?? input.communityId} was approved.`, input.communityId,
@@ -297,17 +299,12 @@ export async function disbandCommunity(
   input: { communityId: string; humanId: string },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const community = await tx.query<{ id: string; founder_id: string; shared_credits: string }>(
-      'SELECT id, founder_id, shared_credits FROM communities WHERE id = $1 FOR UPDATE',
+    const community = await tx.query<{ id: string; founder_id: string }>(
+      'SELECT id, founder_id FROM communities WHERE id = $1 FOR UPDATE',
       [input.communityId],
     );
     if (!community.rows[0]) throw new Error('Community not found');
     if (community.rows[0].founder_id !== input.humanId) throw new Error('Only the community founder can disband the community');
-
-    const treasury = Number(community.rows[0].shared_credits ?? 0);
-    if (treasury > 0) {
-      throw new Error(`Cannot disband community with remaining shared treasury of ${treasury.toFixed(2)} Credits. Disburse or transfer shared funds first.`);
-    }
 
     await tx.query('DELETE FROM community_membership_requests WHERE community_id = $1', [input.communityId]);
     await tx.query('DELETE FROM community_members WHERE community_id = $1', [input.communityId]);
@@ -338,11 +335,14 @@ export async function contributeToCommunity(repository: PostgresRepository, inpu
     if (!community.rows[0]) throw new Error('Community not found');
     if (community.rows[0].status !== 'active') throw new Error('Community is not active');
     const membership = await tx.query('SELECT human_id FROM community_members WHERE community_id = $1 AND human_id = $2', [input.communityId, input.humanId]);
-    if (!membership.rows[0]) throw new Error('Contributor must be a community member');
     const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.humanId]);
     const amountCents = moneyToCents(input.amount);
     const amount = centsToMoney(amountCents);
     const communityAccount = `account-community-${input.communityId}`;
+    await tx.query(
+      "INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $2, $3, 'CREDIT') ON CONFLICT (account_id) DO NOTHING",
+      [communityAccount, input.communityId, community.rows[0].shared_credits ?? 0],
+    );
     if (!account.rows[0]) throw new Error('Contributor account not found');
     if (moneyToCents(account.rows[0].balance) < amountCents) throw new Error('Insufficient Credits');
     const day = await currentDay(tx);

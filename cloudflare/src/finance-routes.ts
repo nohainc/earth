@@ -9,6 +9,7 @@ import { getNetWorthHistory } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { estimateLifeMaintenance } from './life-maintenance-postgres.ts';
 import { fromNanoMarkup } from './nano-markup.ts';
+import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
 
 function charterRate(raw: unknown, key: string): number | null {
   const charter = fromNanoMarkup<Record<string, unknown>>(raw);
@@ -23,24 +24,50 @@ export async function handleFinanceRoutes(
   viewer: { id: string },
   sensitiveActionAllowed: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
+  if (url.pathname === '/api/finance/bank/deposits' && request.method === 'GET') {
+    const result = await withRepository(env, (repository) => listBankDeposits(repository, viewer.id));
+    return Response.json({ ...(result ?? { deposits: [] }), persistence: 'planetscale-postgres' });
+  }
+  if (url.pathname === '/api/finance/bank/deposit' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ amount?: number; termDays?: number; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) return Response.json({ ok: false, error: 'Correlation ID is required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => createBankDeposit(repository, { humanId: viewer.id, amount: Number(parsed.value.amount ?? 0), termDays: Number(parsed.value.termDays ?? 7), correlationId }));
+      return Response.json({ ...(result ?? { ok: false }), persistence: 'planetscale-postgres' }, { status: result?.alreadyProcessed ? 200 : 201 });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank deposit failed' }, { status: 409 }); }
+  }
+  if (url.pathname === '/api/finance/bank/withdraw' && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ depositId?: string; correlationId?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    const depositId = parsed.value.depositId?.trim() ?? '';
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!depositId || !correlationId) return Response.json({ ok: false, error: 'Deposit ID and correlation ID are required' }, { status: 400 });
+    try {
+      const result = await withRepository(env, (repository) => withdrawBankDeposit(repository, { humanId: viewer.id, depositId, correlationId }));
+      return Response.json({ ...(result ?? { ok: false }), persistence: 'planetscale-postgres' });
+    } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank withdrawal failed' }, { status: 409 }); }
+  }
   if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
     const result = await withRepository(env, async (repository) => {
-      const [account, state, buildings, businesses, context, latestMaintenance, arrears, basicRule, businessIncome, buildingOutput, dividends, allTaxRules, paidTaxes, taxPayments, dailyProfile] = await Promise.all([
+      const [account, state, buildings, businesses, context, latestMaintenance, arrears, basicRule, businessIncome, buildingOutput, dividends, allTaxRules, paidTaxes, taxPayments, dailyProfile, bankDeposits] = await Promise.all([
         repository.query("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
         repository.query("SELECT id, name, building_type, condition, status FROM buildings WHERE owner_id = $1 AND ownership_class = 'private'", [viewer.id]),
-        repository.query('SELECT id, name, status FROM businesses WHERE owner_id = $1', [viewer.id]),
+        repository.query('SELECT NULL::text AS id WHERE false'),
         repository.query<{ age_years: number; city_id: string | null; residents: string | null; housing_capacity: string | null; energy_capacity: string | null; connectivity_capacity: string | null; health_capacity: string | null; living_cost_index: string; city_charter: string | null; corporation_charter: string | null }>("SELECT h.age_years, m.city_id, c.residents, c.housing_capacity, c.energy_capacity, c.connectivity_capacity, c.health_capacity, w.living_cost_index, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM humans h CROSS JOIN world_state w LEFT JOIN memberships m ON m.human_id = h.id LEFT JOIN cities c ON c.id = m.city_id LEFT JOIN institutions city_institution ON city_institution.id = m.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = m.corporation_id WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
         repository.query('SELECT game_day, food_used, energy_used, compute_used, credits_for_resources, life_condition_after, shortfall_notes, paid, unpaid, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
         repository.query<{ total: string }>('SELECT COALESCE(SUM(unpaid), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
         repository.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true", []),
-        repository.query<{ profit: string }>("SELECT COALESCE(SUM(f.profit), 0) AS profit FROM businesses b LEFT JOIN business_financials f ON f.business_id = b.id WHERE b.owner_id = $1 AND b.status = 'active'", [viewer.id]),
+        repository.query<{ profit: string }>('SELECT 0::numeric AS profit'),
         repository.query("SELECT resource_output_type, resource_output_amount, daily_operating_credits, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_policy, condition, auto_repair_enabled, ownership_class FROM buildings WHERE owner_id = $1 AND ownership_class = 'private' AND status = 'active'", [viewer.id]),
-        repository.query<{ amount: string }>("SELECT COALESCE(SUM(GREATEST(0, b.resource_output_amount * CASE WHEN b.operating_policy = 'high_output' THEN 1.3 WHEN b.operating_policy IN ('frugal','eco_reserve') THEN .75 ELSE 1 END - b.daily_operating_credits * CASE WHEN b.operating_policy = 'high_output' THEN 1.4 WHEN b.operating_policy IN ('frugal','eco_reserve') THEN .7 ELSE 1 END) * s.shares_owned / GREATEST(1, s.total_shares_issued)), 0) AS amount FROM building_investment_shares s JOIN buildings b ON b.id = s.building_id WHERE s.investor_id = $1 AND b.ownership_class = 'public_investment' AND b.status = 'active'", [viewer.id]),
+        repository.query<{ amount: string }>('SELECT 0::numeric AS amount'),
         repository.query<{ id: string; category: string; rate: string }>('SELECT id, category, rate FROM tax_rules WHERE active = true ORDER BY id'),
-        repository.query<{ amount: string }>("SELECT COALESCE(SUM(amount), 0) AS amount FROM ledger_entries WHERE debit_account = (SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' LIMIT 1) AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD') AND reason_type IN ('basic_levy','business_tax_city','business_tax_corp','business_tax_ouc','market_tax')", [viewer.id]),
-        repository.query<{ category: string; amount: string }>("SELECT CASE WHEN reason_type = 'basic_levy' THEN 'basic_income' WHEN reason_type LIKE 'business_tax%' THEN 'business' WHEN reason_type = 'market_tax' THEN 'market' END AS category, COALESCE(SUM(amount), 0) AS amount FROM ledger_entries WHERE debit_account = (SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' LIMIT 1) AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD') AND reason_type IN ('basic_levy','business_tax_city','business_tax_corp','business_tax_ouc','market_tax') GROUP BY 1", [viewer.id]),
+        repository.query<{ amount: string }>("SELECT COALESCE(SUM(amount), 0) AS amount FROM ledger_entries WHERE debit_account = (SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' LIMIT 1) AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD') AND reason_type IN ('basic_levy','market_tax')", [viewer.id]),
+        repository.query<{ category: string; amount: string }>("SELECT CASE WHEN reason_type = 'basic_levy' THEN 'basic_income' WHEN reason_type = 'market_tax' THEN 'market' END AS category, COALESCE(SUM(amount), 0) AS amount FROM ledger_entries WHERE debit_account = (SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' LIMIT 1) AND game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD') AND reason_type IN ('basic_levy','market_tax') GROUP BY 1", [viewer.id]),
         repository.query('SELECT owner_kind, profile_version, status, effective_game_day, last_settled_game_day, credits_delta, energy_delta, food_delta, materials_delta, components_delta, compute_delta FROM daily_settlement_profiles WHERE owner_id = $1', [viewer.id]),
+        repository.query('SELECT id, principal, daily_rate, accrued_interest, start_game_day, start_game_minute, maturity_game_day, maturity_game_minute, status FROM global_bank_deposits WHERE human_id = $1 ORDER BY created_at DESC', [viewer.id]).catch(() => ({ rows: [] })),
       ]);
       const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
       const resident = context.rows[0];
@@ -64,7 +91,8 @@ export async function handleFinanceRoutes(
         },
         basicLevy: { rate: taxRate, source: taxSource, version: basicRule.rows[0]?.version ?? null, estimatedDailyLevy },
         taxes: { rules: allTaxRules.rows.map((row) => ({ ...row, rate: Number(row.rate) })), paidToday: Number(paidTaxes.rows[0]?.amount ?? 0), payments: Object.fromEntries(taxPayments.rows.map((row) => [row.category, Number(row.amount)])) },
-        assetIncome: { businessProfit: Number(businessIncome.rows[0]?.profit ?? 0), privateBuildings: buildingOutput.rows, civicDividends: Number(dividends.rows[0]?.amount ?? 0) },
+        assetIncome: { businessProfit: Number(businessIncome.rows[0]?.profit ?? 0), privateBuildings: buildingOutput.rows, civicDividends: 0 },
+        bank: { deposits: bankDeposits.rows },
         dailyProfile: dailyProfile.rows[0] ? Object.fromEntries(Object.entries(dailyProfile.rows[0]).map(([key, value]) => [key, typeof value === 'string' && /^-?\\d+(?:\\.\\d+)?$/.test(value) ? Number(value) : value])) : null,
       };
     });

@@ -97,7 +97,7 @@ Future<void> showBuildingAcquisitionDialog(
           },
         ];
 
-  final privateBlueprints = catalog.where((b) => b['ownershipClass'] != 'civic' && b['ownershipClass'] != 'public_investment').toList();
+  final privateBlueprints = catalog.where((b) => b['ownershipClass'] != 'civic').toList();
   String selectedType = privateBlueprints.first['type']?.toString() ?? 'restaurant';
   final nameCtrl = TextEditingController(text: privateBlueprints.first['name']?.toString() ?? 'Facility');
 
@@ -396,135 +396,6 @@ Future<void> showBuildingUpgradeDialog(
   );
 }
 
-Future<void> showPublicShareInvestDialog(
-  BuildContext context,
-  Future<void> Function(Future<EarthState> Function()) action,
-  Map<String, dynamic> publicBuilding,
-) async {
-  final id = publicBuilding['id']?.toString() ?? '';
-  final name = publicBuilding['name']?.toString() ?? 'Megaproject';
-  final pricePerShare = asDoubleOr(publicBuilding['price_per_share_crd'], 500);
-  final totalShares = asIntOr(publicBuilding['total_shares'], 100);
-
-  int selectedShares = 1;
-
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => StatefulBuilder(
-      builder: (context, setState) {
-        final totalInvestment = selectedShares * pricePerShare;
-
-        return AlertDialog(
-          backgroundColor: context.panelColor,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(context.radiusPanel),
-            side: BorderSide(color: context.secondaryColor.withValues(alpha: .35)),
-          ),
-          title: Row(
-            children: [
-              Icon(Icons.pie_chart_outline, color: context.secondaryColor),
-              const SizedBox(width: 8),
-              Text('Invest in Public Megaproject', style: context.topicTitleStyle),
-            ],
-          ),
-          content: SizedBox(
-            width: 440,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  'Acquire equity shares in $name. Public megaprojects yield continuous pro-rata daily dividend distributions to shareholders directly from facility surplus revenue.',
-                  style: context.bodyStyle,
-                ),
-                const SizedBox(height: 12),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: context.surfaceColor,
-                    borderRadius: BorderRadius.circular(context.radiusControl),
-                    border: Border.all(color: context.subtleBorderColor),
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('SHARE QUANTITY', style: context.captionStyle),
-                          Row(
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.remove_circle_outline),
-                                onPressed: selectedShares > 1
-                                    ? () {
-                                        setState(() => selectedShares--);
-                                      }
-                                    : null,
-                              ),
-                              Text('$selectedShares', style: context.topicTitleStyle),
-                              IconButton(
-                                icon: const Icon(Icons.add_circle_outline),
-                                onPressed: selectedShares < totalShares
-                                    ? () {
-                                        setState(() => selectedShares++);
-                                      }
-                                    : null,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const Divider(height: 16),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Price Per Share:', style: context.widgetFooterStyle),
-                          Text('${formatWholeNumber(pricePerShare)} CRD', style: context.widgetFooterStyle),
-                        ],
-                      ),
-                      const SizedBox(height: 4),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text('Total Investment:', style: context.widgetTitleStyle),
-                          Text(
-                            '${formatWholeNumber(totalInvestment)} CRD',
-                            style: context.widgetTitleStyle.copyWith(color: context.successColor),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            EarthButton(
-              label: 'CANCEL',
-              variant: EarthButtonVariant.neutral,
-              onPressed: () => Navigator.of(dialogContext).pop(),
-            ),
-            EarthButton(
-              label: 'PURCHASE SHARES',
-              icon: Icons.account_balance_outlined,
-              variant: EarthButtonVariant.secondary,
-              onPressed: () async {
-                EarthAudioEngine.instance.playClick();
-                Navigator.of(dialogContext).pop();
-                await action(() => const EarthApi().investInPublicBuilding(
-                      buildingId: id,
-                      sharesCount: selectedShares,
-                    ));
-              },
-            ),
-          ],
-        );
-      },
-    ),
-  );
-}
 
 Future<void> showDemolishConfirmDialog(
   BuildContext context,

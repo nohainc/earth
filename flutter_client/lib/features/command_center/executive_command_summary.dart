@@ -8,8 +8,6 @@ import '../../core/audio/earth_audio_engine.dart';
 
 class ExecutiveCommandSummary extends StatefulWidget {
   final EarthState state;
-  final Map<String, dynamic> businessFinancials;
-  final List<dynamic> contracts;
   final ValueChanged<String>? onNavigate;
   final ValueChanged<DecisionQueueItem>? onExecuteDecision;
   final VoidCallback? onOpenFullBriefing;
@@ -17,8 +15,6 @@ class ExecutiveCommandSummary extends StatefulWidget {
   const ExecutiveCommandSummary({
     super.key,
     required this.state,
-    this.businessFinancials = const {},
-    this.contracts = const [],
     this.onNavigate,
     this.onExecuteDecision,
     this.onOpenFullBriefing,
@@ -80,9 +76,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
   // 1. SITUATION MATRIX
   // ==========================================================================
   Widget _buildSituationMatrix(BuildContext context) {
-    final business = widget.businessFinancials['business'] is Map
-        ? Map<String, dynamic>.from(widget.businessFinancials['business'] as Map)
-        : widget.state.business;
+    final business = <String, dynamic>{};
     final credits = asDouble(widget.state.human['credits']) ??
         asDouble(widget.state.json['player'] is Map
             ? (widget.state.json['player'] as Map)['credits']
@@ -122,7 +116,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           accentColor: profit == null || profit >= 0 ? context.successColor : context.warningColor,
           onTap: () {
             EarthAudioEngine.instance.playClick();
-            widget.onNavigate?.call('business');
+            widget.onNavigate?.call('buildings');
           },
         ),
         EarthMetricTile(
@@ -133,7 +127,7 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
           accentColor: context.primaryColor,
           onTap: () {
             EarthAudioEngine.instance.playClick();
-            widget.onNavigate?.call('business');
+            widget.onNavigate?.call('buildings');
           },
         ),
         EarthMetricTile(
@@ -246,13 +240,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
                   Icons.domain_outlined,
                   '${briefing.businessSummary.activeBuildings} building${briefing.businessSummary.activeBuildings == 1 ? '' : 's'} operating',
                   context.successColor,
-                ),
-              if (briefing.businessSummary.pendingContractsCount > 0)
-                _headlineChip(
-                  context,
-                  Icons.description_outlined,
-                  '${briefing.businessSummary.pendingContractsCount} contract${briefing.businessSummary.pendingContractsCount == 1 ? '' : 's'} pending',
-                  context.primaryColor,
                 ),
               if (briefing.civicSummary.recentCivicEvents.isNotEmpty)
                 _headlineChip(
@@ -429,7 +416,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
             .where((i) =>
                 i.category.toLowerCase() == 'business' ||
                 i.category.toLowerCase() == 'buildings' ||
-                i.category.toLowerCase() == 'contracts' ||
                 i.category.toLowerCase() == 'market')
             .toList();
       case 'CIVIC':
@@ -553,8 +539,6 @@ class _ExecutiveCommandSummaryState extends State<ExecutiveCommandSummary> {
       case 'governance':
       case 'civic':
         return Icons.how_to_vote_outlined;
-      case 'contracts':
-        return Icons.handshake_outlined;
       case 'house':
       case 'dynasty':
         return Icons.shield_outlined;

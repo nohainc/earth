@@ -20,8 +20,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 1. Core Header & Invariants Metrics
-    // Hierarchy tiers
-    expect(find.text('GOVERNANCE HIERARCHY & OVERRIDE MODEL'), findsOneWidget);
+    expect(find.text('PLANETARY CONSTITUTION'), findsOneWidget);
     expect(find.text('EARTH'), findsOneWidget);
     expect(find.text('CORPORATION'), findsOneWidget);
     expect(find.text('CITY'), findsOneWidget);

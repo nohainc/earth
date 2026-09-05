@@ -65,9 +65,8 @@ String formatProposalDeadline(Map<String, dynamic> deadline, {DateTime? now}) {
       '');
   final snapshotRemaining = asInt(
       deadline['realSecondsRemaining'] ?? deadline['real_seconds_remaining']);
-  final calculatedRemaining = closesAt == null
-      ? null
-      : closesAt.difference(now ?? DateTime.now()).inSeconds.ceil();
+  final calculatedRemaining =
+      closesAt?.difference(now ?? DateTime.now()).inSeconds.ceil();
   final seconds =
       (calculatedRemaining ?? snapshotRemaining ?? 0).clamp(0, 365 * 86400);
   final gameDate = minute == null
@@ -99,17 +98,16 @@ String formatGameDateTime(int gameDay, int gameMinute) {
       '${hour.toString().padLeft(2, '0')}:${minute.toString().padLeft(2, '0')}';
 }
 
-/// Formats a duration in game minutes into a concise humanized string.
-String formatGameDuration(int minutes) {
-  if (minutes < 60) {
-    return '$minutes min${minutes == 1 ? '' : 's'}';
-  } else if (minutes < 1440) {
-    final h = minutes ~/ 60;
-    final m = minutes % 60;
-    return m == 0 ? '$h hr${h == 1 ? '' : 's'}' : '${h}h ${m}m';
-  } else {
-    final d = minutes ~/ 1440;
-    final h = (minutes % 1440) ~/ 60;
-    return h == 0 ? '$d day${d == 1 ? '' : 's'}' : '${d}d ${h}h';
-  }
+/// Converts a real-world UTC/ISO date into an in-game simulated timestamp:
+/// Epoch start: 2026-01-01 00:00:00 UTC (1 real second = 1 game minute).
+String formatRealToGameDateTime(dynamic value) {
+  final parsed = DateTime.tryParse(value?.toString() ?? '');
+  if (parsed == null) return 'unknown';
+  final epochStart = DateTime.utc(2026, 1, 1, 0, 0, 0);
+  final diffMs = parsed.toUtc().millisecondsSinceEpoch - epochStart.millisecondsSinceEpoch;
+  final totalGameMinutes = diffMs > 0 ? (diffMs ~/ 1000) : 0;
+  final gameDay = (totalGameMinutes ~/ 1440) + 1;
+  final gameMinute = totalGameMinutes % 1440;
+  return formatGameDateTime(gameDay, gameMinute);
 }
+

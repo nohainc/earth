@@ -78,7 +78,6 @@ matching PostgreSQL service.
 | Businesses and finance | `business-postgres.ts`, `business-finance.ts`, `financial-postgres.ts`, `finance-postgres.ts` |
 | Cities and corporations | `institutions-postgres.ts`, `roles-postgres.ts` |
 | Communities | `communities-postgres.ts` |
-| Contracts and disputes | `contracts-postgres.ts`, `supply-contracts-postgres.ts`, `arbitration-postgres.ts` |
 | Dynasty and lineage | `dynasty-postgres.ts` |
 | Governance | `governance-postgres.ts` |
 | Lifecycle, succession, and death | `lifecycle-postgres.ts` |
@@ -133,7 +132,6 @@ subsystems. Start with the named engine before changing scheduler orchestration.
 | Command center | `earth_api_world.dart`, `earth_api_briefing.dart` | `features/command_center/` |
 | Communities | `earth_api_comm.dart` | `features/institutions/institutions_panels.dart`, `features/institutions/institutions_dialogs.dart`, and `features/communications/` where the surface is social/communication-oriented |
 | Corporations and cities | `earth_api_institutions.dart` | `features/institutions/` |
-| Contracts | `earth_api_contracts.dart`, `earth_api_supply_contracts.dart` | `features/contracts/` |
 | Dynasty | `earth_api_dynasty.dart` | `features/dynasty/` |
 | Finance | `earth_api_personal_finance.dart`, `earth_api_net_worth.dart` | `features/finance/` |
 | Governance | `earth_api_governance.dart` | `features/governance/` |

@@ -2,11 +2,9 @@ import 'package:flutter/material.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/earth_theme_context.dart';
-import '../../shared/widgets/format_helpers.dart';
 
 class Sidebar extends StatefulWidget {
   final EarthState state;
-  final Map<String, dynamic>? activeBusiness;
   final String selectedSection;
   final ValueChanged<String> onNavigate;
   final bool busy;
@@ -14,18 +12,19 @@ class Sidebar extends StatefulWidget {
   final VoidCallback? onSecurity;
   final int unreadNotifications;
   final int unreadCommMessages;
+  final bool isSlim;
 
   const Sidebar({
     super.key,
     required this.state,
     this.selectedSection = 'command',
     required this.onNavigate,
-    this.activeBusiness,
     this.busy = false,
     this.onLogout,
     this.onSecurity,
     this.unreadNotifications = 0,
     this.unreadCommMessages = 0,
+    this.isSlim = false,
   });
 
   @override
@@ -38,20 +37,27 @@ class _SidebarState extends State<Sidebar> {
   @override
   void initState() {
     super.initState();
-    _expandedGroup = _groupForSection(widget.selectedSection);
+    final group = _groupForSection(widget.selectedSection);
+    _expandedGroup = group != -1 ? group : 0;
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _expandedGroup = _groupForSection(widget.selectedSection);
+    final group = _groupForSection(widget.selectedSection);
+    if (group != -1) {
+      _expandedGroup = group;
+    }
   }
 
   @override
   void didUpdateWidget(covariant Sidebar oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.selectedSection != widget.selectedSection) {
-      _expandedGroup = _groupForSection(widget.selectedSection);
+      final group = _groupForSection(widget.selectedSection);
+      if (group != -1) {
+        _expandedGroup = group;
+      }
     }
   }
 
@@ -59,11 +65,9 @@ class _SidebarState extends State<Sidebar> {
     if (section.startsWith('my-community')) return 2;
     if (section == 'corporations') return 4;
     const groups = [
-      ['command', 'briefing', 'messages', 'notifications'],
+      ['command', 'briefing', 'news'],
       [
-        'business',
         'buildings',
-        'contracts',
         'market',
         'technology',
       ],
@@ -88,7 +92,7 @@ class _SidebarState extends State<Sidebar> {
     for (var index = 0; index < groups.length; index++) {
       if (groups[index].contains(section)) return index;
     }
-    return 0;
+    return -1;
   }
 
   void _toggleGroup(int groupIdx) {
@@ -120,7 +124,7 @@ class _SidebarState extends State<Sidebar> {
     final nameTokens = fullUserName.trim().split(RegExp(r'\s+'));
     final userName = nameTokens.first;
     final userSurname = nameTokens.length > 1 ? nameTokens.last : '';
-    
+
     final rawHouseName = (widget.state.life['houseName'] ??
             widget.state.life['dynastyName'] ??
             widget.state.human['house_name'] ??
@@ -131,17 +135,10 @@ class _SidebarState extends State<Sidebar> {
 
     final houseName = rawHouseName != null && rawHouseName.isNotEmpty
         ? rawHouseName
-            .replaceFirst(RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
+            .replaceFirst(
+                RegExp(r'^house\s+(of\s+)?', caseSensitive: false), '')
             .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha')
         : (userSurname.isNotEmpty ? userSurname : 'House');
-
-    final unreadNotifs = widget.unreadNotifications > 0
-        ? widget.unreadNotifications
-        : asIntOr(widget.state.json['unreadNotifications'], 0);
-
-    final unreadMsgs = widget.unreadCommMessages > 0
-        ? widget.unreadCommMessages
-        : asIntOr(widget.state.json['unreadMessages'], 0);
 
     final groups = [
       (
@@ -161,16 +158,10 @@ class _SidebarState extends State<Sidebar> {
             null,
           ),
           (
-            'messages',
-            'Messages',
-            Icons.settings_input_antenna,
-            unreadMsgs > 0 ? '$unreadMsgs' : null,
-          ),
-          (
-            'notifications',
-            'Notifications',
-            Icons.notifications_none_outlined,
-            unreadNotifs > 0 ? '$unreadNotifs' : null,
+            'news',
+            'News',
+            Icons.newspaper_outlined,
+            null,
           ),
         ]
       ),
@@ -178,12 +169,6 @@ class _SidebarState extends State<Sidebar> {
         'ECONOMY',
         Icons.apartment_rounded,
         [
-          (
-            'business',
-            'Business',
-            Icons.storefront_outlined,
-            null,
-          ),
           (
             'buildings',
             'Buildings',
@@ -243,7 +228,7 @@ class _SidebarState extends State<Sidebar> {
         [
           (
             'life',
-            'Life',
+            userName.isNotEmpty && userName != 'Life' ? userName : 'Citizen',
             Icons.person_outline_rounded,
             null,
           ),
@@ -305,6 +290,10 @@ class _SidebarState extends State<Sidebar> {
       ),
     ];
 
+    if (widget.isSlim) {
+      return _buildSlimSidebar(context, groups);
+    }
+
     return Container(
       width: 236,
       decoration: BoxDecoration(
@@ -355,8 +344,7 @@ class _SidebarState extends State<Sidebar> {
                                 label: item.$2,
                                 icon: item.$3,
                                 badge: item.$4,
-                                isSelected:
-                                    item.$1 == widget.selectedSection,
+                                isSelected: item.$1 == widget.selectedSection,
                                 onSelect: () {
                                   EarthAudioEngine.instance.playClick();
                                   widget.onNavigate(item.$1);
@@ -393,7 +381,8 @@ class _SidebarState extends State<Sidebar> {
           style: TextButton.styleFrom(
             splashFactory: NoSplash.splashFactory,
             enableFeedback: false,
-            foregroundColor: isExpanded ? context.primaryColor : context.mutedColor,
+            foregroundColor:
+                isExpanded ? context.primaryColor : context.mutedColor,
             backgroundColor: Colors.transparent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(8),
@@ -418,9 +407,8 @@ class _SidebarState extends State<Sidebar> {
                     fontSize: 10.5,
                     fontWeight: FontWeight.w800,
                     letterSpacing: 1.5,
-                    color: isExpanded
-                        ? context.primaryColor
-                        : context.mutedColor,
+                    color:
+                        isExpanded ? context.primaryColor : context.mutedColor,
                   ),
                 ),
               ),
@@ -525,7 +513,8 @@ class _SidebarState extends State<Sidebar> {
                     overflow: TextOverflow.ellipsis,
                     style: TextStyle(
                       fontSize: 13,
-                      fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                      fontWeight:
+                          isSelected ? FontWeight.w700 : FontWeight.w500,
                       color: isSelected ? context.inkColor : context.mutedColor,
                       letterSpacing: isSelected ? 0.2 : 0.0,
                     ),
@@ -533,8 +522,8 @@ class _SidebarState extends State<Sidebar> {
                 ),
                 if (badge != null)
                   Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 6, vertical: 2),
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                     decoration: BoxDecoration(
                       color: context.primaryColor.withValues(alpha: 0.16),
                       borderRadius: BorderRadius.circular(10),
@@ -549,6 +538,132 @@ class _SidebarState extends State<Sidebar> {
                     ),
                   ),
               ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSlimSidebar(BuildContext context, List<(String, IconData, List<(String, String, IconData, String?)>)> groups) {
+    return Container(
+      width: 60,
+      decoration: BoxDecoration(
+        color: Color.alphaBlend(
+          context.primaryColor.withValues(alpha: 0.04),
+          context.canvasColor,
+        ),
+        border: Border(
+          right: BorderSide(
+            color: context.primaryColor.withValues(alpha: 0.14),
+            width: 1.0,
+          ),
+        ),
+      ),
+      child: Column(
+        children: [
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Column(
+                children: [
+                  for (int g = 0; g < groups.length; g++) ...[
+                    if (g > 0)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                        child: Divider(
+                          height: 1,
+                          thickness: 1,
+                          color: context.primaryColor.withValues(alpha: 0.1),
+                        ),
+                      ),
+                    for (final item in groups[g].$3)
+                      _buildSlimNavItem(
+                        context,
+                        sectionKey: item.$1,
+                        label: item.$2,
+                        icon: item.$3,
+                        badge: item.$4,
+                        isSelected: item.$1 == widget.selectedSection,
+                        onSelect: () {
+                          EarthAudioEngine.instance.playClick();
+                          widget.onNavigate(item.$1);
+                        },
+                      ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSlimNavItem(
+    BuildContext context, {
+    required String sectionKey,
+    required String label,
+    required IconData icon,
+    required String? badge,
+    required bool isSelected,
+    required VoidCallback onSelect,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      child: Tooltip(
+        message: label,
+        waitDuration: const Duration(milliseconds: 300),
+        child: Semantics(
+          button: true,
+          label: label,
+          selected: isSelected,
+          child: Material(
+            color: isSelected
+                ? context.primaryColor.withValues(alpha: 0.14)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: onSelect,
+              child: Container(
+                width: 44,
+                height: 40,
+                alignment: Alignment.center,
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(8),
+                  border: isSelected
+                      ? Border.all(
+                          color: context.primaryColor.withValues(alpha: 0.4),
+                          width: 1.0,
+                        )
+                      : null,
+                ),
+                child: Stack(
+                  alignment: Alignment.center,
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      icon,
+                      size: 20,
+                      color: isSelected ? context.primaryColor : context.mutedColor,
+                    ),
+                    if (badge != null)
+                      Positioned(
+                        top: -4,
+                        right: -4,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: BoxDecoration(
+                            color: context.primaryColor,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ),
           ),
         ),

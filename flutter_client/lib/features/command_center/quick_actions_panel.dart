@@ -27,8 +27,8 @@ class QuickActionsPanel extends StatelessWidget {
     })>[
       (
         label: 'RUN THE BUSINESS',
-        detail: '${state.businesses.length} active operations',
-        section: 'business',
+        detail: '${state.buildings.length} owned buildings',
+        section: 'buildings',
         icon: Icons.storefront_outlined,
         color: context.primaryColor,
       ),

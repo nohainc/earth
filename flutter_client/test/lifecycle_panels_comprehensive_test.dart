@@ -141,15 +141,6 @@ void main() {
       },
     ];
 
-    final authorityEvents = [
-      {
-        'id': 'auth-1',
-        'authority': 'Public Works Commission',
-        'action': 'APPOINTED',
-        'timestamp': 'Day 120',
-      },
-    ];
-
     final feedEvents = [
       {
         'id': 'feed-1',
@@ -197,7 +188,6 @@ void main() {
                 SuccessionPanel(state: state, busy: false, action: (cb) async {}),
                 LegacyPersonalFinancePanel(state: state, busy: false, action: (cb) async {}),
                 InstitutionSolvencyPanel(state: state, busy: false, action: (cb) async {}),
-                NegotiatedContractsPanel(state: state, busy: false, action: (cb) async {}),
                 const WorldIntegrityPanel(state: state),
                 const MacroLiquidityPanel(state: state),
                 const HumanServicesPanel(state: state),
@@ -206,7 +196,6 @@ void main() {
                 NotificationsPanel(state: state, notifications: notifications, unreadNotifications: 1, busy: false, action: (cb) async {}),
                 OwnershipTimelinePanel(ownershipEvents: ownershipEvents),
                 CivicMembershipHistoryPanel(membershipEvents: membershipEvents),
-                AuthorityHistoryPanel(authorityEvents: authorityEvents),
                 const WorldRankingsPanel(state: state),
                 const HistoryArchivePanel(state: state),
                 PantheonPanel(pantheon: pantheonData),

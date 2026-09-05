@@ -44,7 +44,7 @@ void main() {
     expect(find.text('NOW'), findsOneWidget);
     expect(find.widgetWithText(TextButton, 'Command Center'), findsOneWidget);
     expect(find.text('Daily Priorities'), findsOneWidget);
-    expect(find.text('Messages'), findsOneWidget);
+    expect(find.text('News'), findsOneWidget);
     expect(find.text('Trade & Supplies'), findsNothing);
 
     await tester.tap(find.text('ECONOMY'));
@@ -377,5 +377,56 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(licensed, true);
+  });
+
+  testWidgets('Sidebar renders in slim rail mode when isSlim is true',
+      (tester) async {
+    const state = EarthState({
+      'clock': {'day': 185, 'minute': 720},
+      'human': {'name': 'Amara Vance'},
+      'membership': {'city_id': 'CITY-001'},
+      'institutions': {
+        'city': {'name': 'New Kyoto'}
+      },
+      'business': {'name': 'Aether Dynamics'},
+      'technology': {'research': {}},
+      'technologyRegistry': {'activeProject': 'Quantum Grid'},
+    });
+
+    String? navigatedTo;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SizedBox(
+            height: 900,
+            width: 60,
+            child: Sidebar(
+              state: state,
+              selectedSection: 'messages',
+              isSlim: true,
+              onNavigate: (section) {
+                navigatedTo = section;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Group text headers should NOT be present in slim mode
+    expect(find.text('NOW'), findsNothing);
+    expect(find.text('ECONOMY'), findsNothing);
+
+    // Tooltips with labels should be present
+    expect(find.byTooltip('Command Center'), findsOneWidget);
+    expect(find.byTooltip('Market'), findsOneWidget);
+
+    // Tapping a slim icon triggers navigation
+    await tester.tap(find.byTooltip('Market'));
+    await tester.pumpAndSettle();
+
+    expect(navigatedTo, 'market');
   });
 }

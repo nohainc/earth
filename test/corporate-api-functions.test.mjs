@@ -44,7 +44,7 @@ test('Corporate API qualification requires membership, city, treasury, constitut
   const db = new Db({
     'FROM corporations WHERE id': { rows: [{ id: 'CORP-01', institution_id: 'CORP-01', member_count: 30, treasury: 1000, constitution_version: 1 }], rowCount: 1 },
     'FROM memberships WHERE corporation_id': { rows: [{ city_id: 'CITY-01' }], rowCount: 1 },
-    'FROM institution_roles': { rows: [{ id: 'ROLE-01' }], rowCount: 1 },
+    'FROM governance_rules': { rows: [{ id: 'RULE-01' }], rowCount: 1 },
     'FROM cities WHERE id': { rows: [{ id: 'CITY-01' }], rowCount: 1 },
   });
   const result = await corporationQualification(new PostgresRepository(db), 'CORP-01');

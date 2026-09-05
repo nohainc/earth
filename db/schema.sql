@@ -111,7 +111,7 @@ CREATE TABLE IF NOT EXISTS house_lineage_records (
   cause_of_death TEXT,
   epitaph TEXT,
   lifetime_wealth NUMERIC(20,2) NOT NULL DEFAULT 0,
-  businesses_founded INTEGER NOT NULL DEFAULT 0,
+  operations_completed INTEGER NOT NULL DEFAULT 0,
   proposals_authored INTEGER NOT NULL DEFAULT 0,
   legacy_score INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -264,6 +264,9 @@ CREATE TABLE IF NOT EXISTS account_balances (
   balance NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (balance >= 0),
   currency TEXT NOT NULL DEFAULT 'CREDIT'
 );
+INSERT INTO account_balances (account_id, owner_id, balance, currency)
+VALUES ('account-global-corporate-bank', 'GLOBAL-CORPORATE-BANK', 0, 'CREDIT')
+ON CONFLICT (account_id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS ledger_entries (
   id UUID PRIMARY KEY,
@@ -283,7 +286,7 @@ CREATE INDEX IF NOT EXISTS ledger_entries_correlation_idx ON ledger_entries(corr
 
 CREATE TABLE IF NOT EXISTS financial_states (
   institution_id TEXT PRIMARY KEY,
-  institution_kind TEXT NOT NULL CHECK (institution_kind IN ('BUSINESS','CITY','CORPORATION')),
+  institution_kind TEXT NOT NULL CHECK (institution_kind IN ('CITY','CORPORATION')),
   status TEXT NOT NULL CHECK (status IN ('active','distressed','insolvent','bankrupt','dissolved')),
   since_game_day BIGINT NOT NULL,
   recovery_game_day BIGINT,
@@ -495,9 +498,10 @@ CREATE INDEX IF NOT EXISTS daily_settlement_profile_runs_day_idx
 
 CREATE TABLE IF NOT EXISTS institutions (
   id TEXT PRIMARY KEY,
-  kind TEXT NOT NULL CHECK (kind IN ('OUC','CORPORATION','CITY','BUSINESS')),
+  kind TEXT NOT NULL CHECK (kind IN ('OUC','CORPORATION','CITY')),
   name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active'
+  status TEXT NOT NULL DEFAULT 'active',
+  administrator_human_id TEXT REFERENCES humans(id)
 );
 
 CREATE TABLE IF NOT EXISTS cities (
@@ -514,28 +518,16 @@ CREATE TABLE IF NOT EXISTS cities (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE IF NOT EXISTS businesses (
-  id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES humans(id),
-  name TEXT NOT NULL,
-  policy TEXT NOT NULL DEFAULT 'reliability',
-  condition NUMERIC(5,2) NOT NULL DEFAULT 100,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','distressed','bankrupt')),
-  sector TEXT NOT NULL DEFAULT 'maintenance',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS buildings (
   id TEXT PRIMARY KEY,
   city_id TEXT REFERENCES cities(id),
-  owner_id TEXT NOT NULL REFERENCES humans(id),
-  business_id TEXT REFERENCES businesses(id),
+  owner_id TEXT REFERENCES humans(id),
   building_type TEXT NOT NULL,
   name TEXT NOT NULL,
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier >= 1),
   condition NUMERIC(10,4) NOT NULL DEFAULT 100.0 CHECK (condition >= 0.0 AND condition <= 100.0),
   slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint >= 0),
-  ownership_class TEXT NOT NULL CHECK (ownership_class IN ('private','civic','public_investment')),
+  ownership_class TEXT NOT NULL CHECK (ownership_class IN ('private','civic')),
   operating_policy TEXT NOT NULL DEFAULT 'balanced' CHECK (operating_policy IN ('balanced','high_output','eco_reserve','overclock')),
   auto_repair_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   daily_operating_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (daily_operating_credits >= 0),
@@ -548,23 +540,13 @@ CREATE TABLE IF NOT EXISTS buildings (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_settled_game_day BIGINT
 );
+ALTER TABLE buildings DROP CONSTRAINT IF EXISTS buildings_ownership_scope_check;
+ALTER TABLE buildings ADD CONSTRAINT buildings_ownership_scope_check CHECK (
+  (ownership_class = 'private' AND owner_id IS NOT NULL)
+  OR (ownership_class = 'civic' AND city_id IS NOT NULL)
+);
 CREATE INDEX IF NOT EXISTS idx_buildings_city ON buildings(city_id, status);
 CREATE INDEX IF NOT EXISTS idx_buildings_owner ON buildings(owner_id, status);
-CREATE INDEX IF NOT EXISTS idx_buildings_business ON buildings(business_id);
-
-CREATE TABLE IF NOT EXISTS building_investment_shares (
-  id UUID PRIMARY KEY,
-  building_id TEXT NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
-  investor_id TEXT NOT NULL REFERENCES humans(id),
-  shares_owned INTEGER NOT NULL CHECK (shares_owned > 0),
-  total_shares_issued INTEGER NOT NULL CHECK (total_shares_issued > 0),
-  invested_credits NUMERIC(20,2) NOT NULL DEFAULT 0,
-  accumulated_dividends_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (building_id, investor_id)
-);
-CREATE INDEX IF NOT EXISTS idx_bldg_invest_investor ON building_investment_shares(investor_id);
-CREATE INDEX IF NOT EXISTS idx_building_invest_building ON building_investment_shares(building_id);
 
 CREATE TABLE IF NOT EXISTS building_settlement_journals (
   id UUID PRIMARY KEY,
@@ -582,84 +564,6 @@ CREATE TABLE IF NOT EXISTS building_settlement_journals (
   UNIQUE (building_id, day)
 );
 CREATE INDEX IF NOT EXISTS idx_bldg_journal_city_day ON building_settlement_journals(city_id, day DESC);
-
--- -----------------------------------------------------------------------------
--- 7. Business Operations & Employees
--- -----------------------------------------------------------------------------
-
-CREATE TABLE IF NOT EXISTS business_shares (
-  business_id TEXT NOT NULL REFERENCES businesses(id),
-  holder_id TEXT NOT NULL REFERENCES humans(id),
-  shares BIGINT NOT NULL CHECK (shares > 0),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (business_id, holder_id)
-);
-CREATE INDEX IF NOT EXISTS business_shares_holder_idx ON business_shares(holder_id);
-CREATE INDEX IF NOT EXISTS idx_business_shares_biz ON business_shares(business_id);
-
-CREATE TABLE IF NOT EXISTS business_constitutions (
-  business_id TEXT PRIMARY KEY REFERENCES businesses(id),
-  version INTEGER NOT NULL DEFAULT 1,
-  shareholder_vote_threshold NUMERIC(10,6) NOT NULL DEFAULT 0.5 CHECK (shareholder_vote_threshold > 0 AND shareholder_vote_threshold <= 1),
-  board_approval_threshold NUMERIC(10,6) NOT NULL DEFAULT 0.5 CHECK (board_approval_threshold > 0 AND board_approval_threshold <= 1),
-  dilution_notice_days INTEGER NOT NULL DEFAULT 3 CHECK (dilution_notice_days BETWEEN 0 AND 30),
-  updated_by TEXT NOT NULL REFERENCES humans(id),
-  updated_game_day BIGINT NOT NULL DEFAULT 0,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS business_constitutions_version_idx ON business_constitutions(version, updated_game_day);
-
-CREATE TABLE IF NOT EXISTS business_management (
-  business_id TEXT PRIMARY KEY REFERENCES businesses(id),
-  manager_id TEXT NOT NULL REFERENCES humans(id),
-  appointed_by TEXT NOT NULL REFERENCES humans(id),
-  appointed_game_day BIGINT NOT NULL DEFAULT 0,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS business_financials (
-  business_id TEXT PRIMARY KEY REFERENCES businesses(id),
-  revenue NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (revenue >= 0),
-  operating_costs NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (operating_costs >= 0),
-  profit NUMERIC(20,2) NOT NULL DEFAULT 0,
-  last_game_day BIGINT NOT NULL DEFAULT 0,
-  taxed_revenue NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (taxed_revenue >= 0),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS business_employees (
-  id TEXT PRIMARY KEY,
-  business_id TEXT NOT NULL REFERENCES businesses(id),
-  human_id TEXT NOT NULL REFERENCES humans(id),
-  role TEXT NOT NULL,
-  skill NUMERIC(10,4) NOT NULL DEFAULT 1.0,
-  morale NUMERIC(10,4) NOT NULL DEFAULT 100.0,
-  wage NUMERIC(20,2) NOT NULL DEFAULT 10.0,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','on_leave','terminated')),
-  joined_game_day BIGINT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_business_employees_biz ON business_employees(business_id, status);
-CREATE INDEX IF NOT EXISTS idx_business_employees_human ON business_employees(human_id);
-
-CREATE TABLE IF NOT EXISTS business_tax_allocation_rules (
-  id TEXT PRIMARY KEY,
-  city_share NUMERIC(10,4) NOT NULL DEFAULT 0.50,
-  corporation_share NUMERIC(10,4) NOT NULL DEFAULT 0.30,
-  earth_share NUMERIC(10,4) NOT NULL DEFAULT 0.20,
-  active BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS merger_contracts (
-  id TEXT PRIMARY KEY,
-  initiator_business_id TEXT NOT NULL REFERENCES businesses(id),
-  target_business_id TEXT NOT NULL REFERENCES businesses(id),
-  proposed_by TEXT NOT NULL REFERENCES humans(id),
-  share_exchange_ratio NUMERIC(10,4) NOT NULL,
-  status TEXT NOT NULL DEFAULT 'proposed' CHECK (status IN ('proposed','accepted','rejected','executed','cancelled')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
 
 -- -----------------------------------------------------------------------------
 -- 8. Corporations, Cities, Communities & Governance
@@ -732,6 +636,48 @@ CREATE TABLE IF NOT EXISTS civic_dividend_payouts (
 );
 CREATE INDEX IF NOT EXISTS idx_civic_div_city_day ON civic_dividend_payouts(city_id, day DESC);
 
+CREATE TABLE IF NOT EXISTS global_bank_deposits (
+  id TEXT PRIMARY KEY,
+  human_id TEXT NOT NULL REFERENCES humans(id),
+  principal NUMERIC(20,2) NOT NULL CHECK (principal > 0),
+  daily_rate NUMERIC(12,8) NOT NULL DEFAULT 0 CHECK (daily_rate >= 0),
+  accrued_interest NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (accrued_interest >= 0),
+  start_game_day BIGINT NOT NULL,
+  start_game_minute INTEGER NOT NULL DEFAULT 0 CHECK (start_game_minute BETWEEN 0 AND 1439),
+  maturity_game_day BIGINT NOT NULL CHECK (maturity_game_day >= start_game_day),
+  maturity_game_minute INTEGER NOT NULL DEFAULT 0 CHECK (maturity_game_minute BETWEEN 0 AND 1439),
+  last_settled_game_day BIGINT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','matured','withdrawn','cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS global_bank_deposits_human_idx ON global_bank_deposits(human_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS global_bank_loans (
+  id TEXT PRIMARY KEY,
+  corporation_id TEXT NOT NULL REFERENCES corporations(id),
+  principal NUMERIC(20,2) NOT NULL CHECK (principal > 0),
+  outstanding_principal NUMERIC(20,2) NOT NULL CHECK (outstanding_principal >= 0),
+  daily_rate NUMERIC(12,8) NOT NULL DEFAULT 0 CHECK (daily_rate >= 0),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','repaid','defaulted','cancelled')),
+  started_game_day BIGINT NOT NULL,
+  due_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS global_bank_loans_corporation_idx ON global_bank_loans(corporation_id, status, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS global_bank_settlement_journals (
+  id UUID PRIMARY KEY,
+  game_day BIGINT NOT NULL UNIQUE,
+  loan_income NUMERIC(20,2) NOT NULL DEFAULT 0,
+  operating_costs NUMERIC(20,2) NOT NULL DEFAULT 0,
+  reserve_contribution NUMERIC(20,2) NOT NULL DEFAULT 0,
+  interest_pool NUMERIC(20,2) NOT NULL DEFAULT 0,
+  interest_paid NUMERIC(20,2) NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS civic_rankings (
   id TEXT PRIMARY KEY,
   entity_id TEXT NOT NULL,
@@ -749,7 +695,6 @@ CREATE TABLE IF NOT EXISTS communities (
   name TEXT NOT NULL,
   founder_id TEXT NOT NULL REFERENCES humans(id),
   status TEXT NOT NULL DEFAULT 'active',
-  shared_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (shared_credits >= 0),
   description TEXT NOT NULL DEFAULT '',
   admission_policy TEXT NOT NULL DEFAULT 'open' CHECK (admission_policy IN ('open','application','approval','closed')),
   open_membership BOOLEAN NOT NULL DEFAULT TRUE,
@@ -830,58 +775,6 @@ CREATE TABLE IF NOT EXISTS governance_rules (
 );
 CREATE INDEX IF NOT EXISTS idx_gov_rules_inst_cat ON governance_rules(institution_id, category, status);
 
-CREATE TABLE IF NOT EXISTS institution_roles (
-  id TEXT PRIMARY KEY,
-  institution_id TEXT NOT NULL REFERENCES institutions(id),
-  name TEXT NOT NULL,
-  authority_json JSONB NOT NULL DEFAULT '{}',
-  term_days INTEGER NOT NULL DEFAULT 30,
-  eligibility TEXT NOT NULL DEFAULT 'member',
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','retired')),
-  UNIQUE (institution_id, name)
-);
-
-CREATE TABLE IF NOT EXISTS role_assignments (
-  id TEXT PRIMARY KEY,
-  role_id TEXT NOT NULL REFERENCES institution_roles(id),
-  institution_id TEXT NOT NULL REFERENCES institutions(id),
-  human_id TEXT NOT NULL REFERENCES humans(id),
-  started_game_day BIGINT NOT NULL,
-  ends_game_day BIGINT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','expired','resigned')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS active_role_assignment_idx ON role_assignments(role_id) WHERE status = 'active';
-
-CREATE TABLE IF NOT EXISTS authority_delegations (
-  id TEXT PRIMARY KEY,
-  institution_id TEXT NOT NULL REFERENCES institutions(id),
-  role_id TEXT NOT NULL REFERENCES institution_roles(id),
-  delegator_id TEXT NOT NULL REFERENCES humans(id),
-  delegate_id TEXT NOT NULL REFERENCES humans(id),
-  starts_game_day BIGINT NOT NULL,
-  ends_game_day BIGINT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked','expired')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  CHECK (delegator_id <> delegate_id)
-);
-CREATE UNIQUE INDEX IF NOT EXISTS active_role_delegation_idx ON authority_delegations(role_id) WHERE status = 'active';
-CREATE INDEX IF NOT EXISTS authority_delegation_delegate_idx ON authority_delegations(delegate_id, institution_id, status);
-
-CREATE TABLE IF NOT EXISTS authority_events (
-  id TEXT PRIMARY KEY,
-  human_id TEXT NOT NULL REFERENCES humans(id),
-  institution_id TEXT NOT NULL,
-  role_id TEXT NOT NULL,
-  action TEXT NOT NULL CHECK (action IN ('claimed','resigned','expired','released')),
-  game_day BIGINT NOT NULL,
-  reason TEXT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE UNIQUE INDEX IF NOT EXISTS authority_events_transition_idx ON authority_events(human_id, role_id, action, game_day);
-CREATE INDEX IF NOT EXISTS authority_events_human_idx ON authority_events(human_id, game_day DESC);
-CREATE INDEX IF NOT EXISTS authority_events_institution_idx ON authority_events(institution_id, game_day DESC);
-
 CREATE TABLE IF NOT EXISTS constitutional_rules (
   rule_key TEXT PRIMARY KEY,
   statute_title TEXT NOT NULL,
@@ -933,21 +826,39 @@ CREATE TABLE IF NOT EXISTS corporate_research_pools (
 CREATE INDEX IF NOT EXISTS corporate_research_corp_idx ON corporate_research_pools(corporation_id, status);
 CREATE INDEX IF NOT EXISTS idx_corp_research_corp_tech ON corporate_research_pools(corporation_id, technology_key);
 
-CREATE TABLE IF NOT EXISTS business_technology_adoptions (
-  business_id TEXT NOT NULL REFERENCES businesses(id),
+CREATE TABLE IF NOT EXISTS human_technology_adoptions (
+  human_id TEXT NOT NULL REFERENCES humans(id),
   technology_id TEXT NOT NULL REFERENCES technologies(id),
-  adopted_by TEXT NOT NULL REFERENCES humans(id),
   adopted_game_day BIGINT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','revoked')),
-  PRIMARY KEY (business_id, technology_id)
+  PRIMARY KEY (human_id, technology_id)
 );
-CREATE INDEX IF NOT EXISTS idx_biz_tech_biz ON business_technology_adoptions(business_id);
-CREATE INDEX IF NOT EXISTS idx_biz_tech_tech ON business_technology_adoptions(technology_id);
+CREATE INDEX IF NOT EXISTS human_technology_adoptions_human_idx ON human_technology_adoptions(human_id);
+CREATE INDEX IF NOT EXISTS human_technology_adoptions_technology_idx ON human_technology_adoptions(technology_id);
+
+CREATE TABLE IF NOT EXISTS human_technology_subscriptions (
+  human_id TEXT NOT NULL REFERENCES humans(id),
+  corporation_id TEXT NOT NULL REFERENCES corporations(id),
+  technology_key TEXT NOT NULL,
+  subscription_cost_credits NUMERIC(20,2) NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
+  subscribed_game_day BIGINT,
+  unsubscribed_game_day BIGINT,
+  last_billed_game_day BIGINT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (human_id, technology_key)
+);
+CREATE INDEX IF NOT EXISTS human_technology_subscriptions_human_idx
+  ON human_technology_subscriptions(human_id, status);
 
 -- -----------------------------------------------------------------------------
 -- 10. Contracts, Supply & Arbitration
 -- -----------------------------------------------------------------------------
 
+/* RETIRED: negotiated_contracts, contract_disputes, supply_contracts,
+   contract_escrow_vaults, and contract_delivery_ticks are removed by
+   migration 121. Market futures remain in commodity_futures_contracts. */
+/*
 CREATE TABLE IF NOT EXISTS negotiated_contracts (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('employment','intellectual_service','capacity','strategic')),
@@ -1020,6 +931,7 @@ CREATE TABLE IF NOT EXISTS contract_delivery_ticks (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_delivery_ticks_contract ON contract_delivery_ticks(contract_id, game_day DESC);
+*/
 
 -- -----------------------------------------------------------------------------
 -- 11. Communications & AI Advisory
@@ -1027,12 +939,25 @@ CREATE INDEX IF NOT EXISTS idx_delivery_ticks_contract ON contract_delivery_tick
 
 CREATE TABLE IF NOT EXISTS comm_channels (
   id TEXT PRIMARY KEY,
-  scope TEXT NOT NULL CHECK (scope IN ('global','direct','city','corporation','community')),
+  scope TEXT NOT NULL CHECK (scope IN ('global','city','corporation','community','direct')),
   scope_id TEXT,
   name TEXT NOT NULL,
+  description TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_comm_channels_scope ON comm_channels(scope, scope_id);
+
+CREATE TABLE IF NOT EXISTS comm_direct_conversations (
+  channel_id TEXT PRIMARY KEY REFERENCES comm_channels(id) ON DELETE CASCADE,
+  participant_low_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
+  participant_high_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  CHECK (participant_low_id <> participant_high_id),
+  CHECK (participant_low_id < participant_high_id),
+  UNIQUE (participant_low_id, participant_high_id)
+);
+CREATE INDEX IF NOT EXISTS comm_direct_low_idx ON comm_direct_conversations(participant_low_id);
+CREATE INDEX IF NOT EXISTS comm_direct_high_idx ON comm_direct_conversations(participant_high_id);
 
 CREATE TABLE IF NOT EXISTS comm_messages (
   id UUID PRIMARY KEY,
@@ -1043,28 +968,10 @@ CREATE TABLE IF NOT EXISTS comm_messages (
 );
 CREATE INDEX IF NOT EXISTS idx_comm_messages_channel ON comm_messages(channel_id, created_at DESC);
 
-CREATE TABLE IF NOT EXISTS diplomatic_dispatches (
-  id TEXT PRIMARY KEY,
-  sender_human_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
-  recipient_human_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
-  subject TEXT NOT NULL,
-  body TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'unread' CHECK (status IN ('unread', 'read', 'archived')),
-  game_day INTEGER NOT NULL DEFAULT 1,
-  game_minute INTEGER NOT NULL DEFAULT 0,
-  dispatch_type TEXT NOT NULL DEFAULT 'diplomatic' CHECK (dispatch_type IN ('diplomatic', 'contract_offer', 'patent_license', 'merger_tender', 'succession_notice')),
-  action_payload JSONB NOT NULL DEFAULT '{}',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  read_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS diplomatic_dispatches_recipient_idx ON diplomatic_dispatches (recipient_human_id, status, game_day DESC);
-CREATE INDEX IF NOT EXISTS diplomatic_dispatches_sender_idx ON diplomatic_dispatches (sender_human_id, created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_dispatch_recipient_status ON diplomatic_dispatches(recipient_human_id, status, created_at DESC);
-
 CREATE TABLE IF NOT EXISTS ai_assistants (
   id TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL REFERENCES humans(id),
-  tier TEXT NOT NULL CHECK (tier IN ('basic','business')),
+  tier TEXT NOT NULL CHECK (tier IN ('basic','advanced')),
   policy TEXT NOT NULL DEFAULT 'recommend',
   enabled BOOLEAN NOT NULL DEFAULT TRUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()

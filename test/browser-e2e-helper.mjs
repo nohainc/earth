@@ -241,15 +241,7 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
         });
         const vote = await voteRes.json();
 
-        // 7. Business Policy Modification
-        const policyRes = await fetch('/api/business/policy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'browser-policy-1' },
-          body: JSON.stringify({ policy: 'growth' })
-        });
-        const policy = await policyRes.json();
-
-        // 8. AI Assistant Policy Modification
+        // 7. AI Assistant Policy Modification
         const aiRes = await fetch('/api/ai/assistants/AI-01/policy', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'browser-ai-1' },
@@ -257,11 +249,11 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
         });
         const ai = await aiRes.json();
 
-        // 9. Notifications Center
+        // 8. Notifications Center
         const notifRes = await fetch('/api/notifications?limit=10');
         const notifs = await notifRes.json();
 
-        // 10. Security: Verify Unauthorized / Bad Request returns safe error
+        // 9. Security: Verify Unauthorized / Bad Request returns safe error
         const unauthRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -278,7 +270,6 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
           orderPlaced: order.ok === true || order.status === 'placed',
           voteAccepted: vote.ok === true,
           voteWeightServerAuthoritative: vote.weight !== 999999,
-          policyAccepted: policy.ok === true || policy.policy === 'growth',
           aiAccepted: ai.ok === true || ai.policy === 'maintenance',
           notificationsLoaded: Array.isArray(notifs.notifications || notifs),
           safeErrorReturned: unauth.ok === false && typeof unauth.error === 'string' && unauth.code !== undefined,
@@ -297,7 +288,6 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     assert.equal(results.orderPlaced, true, 'Market order should be accepted');
     assert.equal(results.voteAccepted, true, 'Governance vote should be accepted');
     assert.equal(results.voteWeightServerAuthoritative, true, 'Governance vote should reject client-forged weight');
-    assert.equal(results.policyAccepted, true, 'Business policy update should be accepted');
     assert.equal(results.aiAccepted, true, 'AI policy update should be accepted');
     assert.equal(results.notificationsLoaded, true, 'Notifications should load successfully');
     assert.equal(results.safeErrorReturned, true, 'Invalid login should return safe error envelope without account leakage');

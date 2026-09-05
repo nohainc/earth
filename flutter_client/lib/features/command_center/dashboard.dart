@@ -4,44 +4,44 @@ import '../../core/models/earth_state.dart';
 import '../../core/models/decision_queue_item.dart';
 import '../../core/models/live_connection_status.dart';
 import '../../shared/widgets/format_helpers.dart';
-import '../contracts/contracts_panel.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
+import '../../shared/design_system/design_system.dart';
 import '../finance/personal_finance_panel.dart';
 import '../governance/governance_panels.dart';
 import '../institutions/institutions_panels.dart';
 import '../lifecycle/lifecycle_panels.dart';
 import '../market/market_panels.dart';
-import '../operations/ai_panel.dart';
-import '../operations/business_panel.dart';
 import '../operations/technology_panel.dart';
 import '../operations/buildings_hub_screen.dart';
+import '../communications/news_panel.dart';
 import '../account/account_screen.dart';
+import '../activity/activity_panel.dart';
 import 'hero_card.dart';
 import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
 import '../house/house_tree_dialog.dart';
-import '../contracts/supply_contracts_dialog.dart';
 import '../market/derivatives_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
 import 'daily_briefing_dialog.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/player_objective.dart';
 import '../communications/comm_link_dialog.dart';
-import '../activity/activity_panel.dart';
 import '../lifecycle/historical_archive_panel.dart';
 import '../governance/constitution_panel.dart';
 import 'quick_actions_panel.dart';
 import 'command_executive_quadrant.dart';
 
-String dashboardSectionTitle(String section) => switch (section) {
+String dashboardSectionTitle(String section, [EarthState? state]) => switch (section) {
       'account' => 'ACCOUNT SETTINGS',
       'command' => 'COMMAND CENTER',
+      'business' => 'BUSINESS',
       'market' => 'MARKET',
       'derivatives' => 'FUTURES & DERIVATIVES',
       'net_worth' => 'NET WORTH ANALYTICS',
       'briefing' => 'EXECUTIVE BRIEFING',
       'messages' => 'MESSAGES',
+      String s when s.startsWith('messages:') => 'MESSAGES',
       'notifications' => 'NOTIFICATIONS',
-      'business' => 'BUSINESS',
       'buildings' => 'BUILDINGS & URBAN INFRASTRUCTURE',
       'real_estate' => 'BUILDINGS & DISTRICT',
       'civic' => 'PUBLIC',
@@ -51,6 +51,7 @@ String dashboardSectionTitle(String section) => switch (section) {
       'city' => 'MY CITY',
       String s when s.startsWith('my-community') => 'MY COMMUNITY',
       'communities' => 'COMMUNITIES',
+      'news' => 'NEWS',
       'house' => 'HOUSE',
       'dynasty' => 'HOUSE',
       'technology' => 'TECHNOLOGY',
@@ -58,10 +59,14 @@ String dashboardSectionTitle(String section) => switch (section) {
       'civic-rankings' => 'CIVIC RANKINGS',
       'history' => 'MEMORIAL',
       'memorial' => 'MEMORIAL',
-      'life' => 'LIFE',
+      'life' => () {
+        if (state == null) return 'LIFE';
+        final raw = (state.human['display_name'] ?? state.human['name'])?.toString().trim();
+        if (raw == null || raw.isEmpty) return 'CITIZEN';
+        return raw.split(RegExp(r'\s+')).first.toUpperCase();
+      }(),
       'pantheon' => 'MEMORIAL',
       'constitution' => 'CONSTITUTION',
-      'contracts' => 'CONTRACTS',
       'finance' => 'FINANCE',
       'activity' => 'ACTIVITY & EVENTS',
       _ => 'COMMAND CENTER',
@@ -69,27 +74,29 @@ String dashboardSectionTitle(String section) => switch (section) {
 
 class Dashboard extends StatelessWidget {
   final EarthState state;
+  // Retained as ignored constructor inputs so older widget harnesses can be
+  // migrated independently; no company data is read or rendered.
+  @Deprecated('Company entities were removed; use Human-owned operations.')
+  final Map<String, dynamic>? businessOwnership;
+  @Deprecated('Company entities were removed; use Human-owned operations.')
+  final Map<String, dynamic>? businessFinancials;
+  @Deprecated('Company entities were removed; use Human-owned operations.')
+  final Map<String, dynamic>? businessProfile;
   final bool busy;
   final List<dynamic> events;
   final List<dynamic> notifications;
   final List<dynamic> ownershipEvents;
-  final Map<String, dynamic> businessOwnership;
-  final Map<String, dynamic> businessFinancials;
-  final Map<String, dynamic> businessProfile;
-  final Map<String, dynamic>? activeBusiness;
-  final ValueChanged<String>? onSelectBusiness;
   final List<dynamic> membershipEvents;
-  final List<dynamic> authorityEvents;
   final Map<String, dynamic> marketHistory;
   final Map<String, dynamic> pantheon;
   final Map<String, dynamic> personalFinanceData;
-  final List<dynamic> contracts;
   final bool isLiveConnected;
   final bool isReconnecting;
   final LiveConnectionStatus? connectionStatus;
   final int unreadNotifications;
   final Map<String, Key> sectionKeys;
   final String selectedSection;
+  final String? previousSection;
   final ValueChanged<String>? onNavigate;
   final Future<void> Function(Future<EarthState> Function()) action;
   final VoidCallback? onRefreshEvents;
@@ -100,27 +107,24 @@ class Dashboard extends StatelessWidget {
   const Dashboard({
     super.key,
     required this.state,
+    this.businessOwnership,
+    this.businessFinancials,
+    this.businessProfile,
     required this.busy,
     required this.events,
     required this.notifications,
     required this.ownershipEvents,
-    required this.businessOwnership,
-    required this.businessFinancials,
-    required this.businessProfile,
-    this.activeBusiness,
-    this.onSelectBusiness,
     required this.membershipEvents,
-    required this.authorityEvents,
     this.marketHistory = const {},
     this.pantheon = const {},
     this.personalFinanceData = const {},
-    this.contracts = const [],
     this.isLiveConnected = true,
     this.isReconnecting = false,
     this.connectionStatus,
     required this.unreadNotifications,
     this.sectionKeys = const {},
     this.selectedSection = 'command',
+    this.previousSection,
     this.onNavigate,
     required this.action,
     this.onRefreshEvents,
@@ -137,7 +141,11 @@ class Dashboard extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (selectedSection == 'command') ...[
-          HeroCard(key: sectionKeys['command'], state: state),
+          HeroCard(
+            key: sectionKeys['command'],
+            state: state,
+            onNavigate: onNavigate,
+          ),
           const SizedBox(height: 34),
           Container(
             width: double.infinity,
@@ -286,7 +294,7 @@ class Dashboard extends StatelessWidget {
                     inflow: asDoubleOr(energyFlow['inflow'], 30),
                     outflow: asDoubleOr(energyFlow['outflow'], 18),
                     net: asDoubleOr(energyFlow['net'], 12),
-                    onTap: () => onNavigate?.call('business'),
+                    onTap: () => onNavigate?.call('buildings'),
                   ),
                 ],
               );
@@ -401,15 +409,18 @@ class Dashboard extends StatelessWidget {
             onNavigate: onNavigate ?? (_) {},
           ),
         ];
-      case 'messages':
+      case String s when s == 'messages' || s.startsWith('messages:'):
+        final initialChannelId = s.contains(':') ? s.substring(s.indexOf(':') + 1) : null;
         return [
           LayoutBuilder(
-            builder: (context, constraints) {
+            builder: (context, _) {
               final commLink = CommLinkDialog(
                 api: const EarthApi(),
                 state: state,
+                initialChannelId: initialChannelId,
                 isPageMode: true,
                 onNavigate: onNavigate,
+                onClose: () => onNavigate?.call(previousSection ?? 'command'),
               );
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -423,7 +434,7 @@ class Dashboard extends StatelessWidget {
       case 'notifications':
         return [
           ActivityPanel(
-            events: events,
+            panelKey: sectionKeys['notifications'],
             notifications: notifications,
             unreadCount: unreadNotifications,
             isLiveConnected: isLiveConnected,
@@ -432,6 +443,7 @@ class Dashboard extends StatelessWidget {
             onRefresh: onRefreshEvents ?? () {},
             onMarkRead: onMarkNotificationRead ?? (_) async {},
             onMarkAllRead: onMarkAllNotificationsRead ?? () async {},
+            onClose: () => onNavigate?.call(previousSection ?? 'command'),
           ),
         ];
       case 'house':
@@ -443,62 +455,6 @@ class Dashboard extends StatelessWidget {
             isPageMode: true,
             onNavigate: onNavigate,
             onRefresh: () => action(() => const EarthApi().world()),
-          ),
-        ];
-      case 'business':
-        return [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final business = BusinessPanel(
-                panelKey: sectionKeys['business'],
-                state: state,
-                busy: busy,
-                businessOwnership: businessOwnership,
-                businessFinancials: businessFinancials,
-                businessProfile: businessProfile,
-                activeBusiness: activeBusiness,
-                onSelectBusiness: onSelectBusiness,
-                onNavigate: onNavigate,
-                action: action,
-              );
-              final aiAssistant =
-                  AiAssistantPanel(state: state, busy: busy, action: action);
-              final recommendations = AiRecommendationsPanel(state: state);
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                        child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.stretch,
-                            children: [
-                          business,
-                        ])),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          aiAssistant,
-                          const SizedBox(height: 34),
-                          recommendations,
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  business,
-                  const SizedBox(height: 34),
-                  aiAssistant,
-                  const SizedBox(height: 34),
-                  recommendations,
-                ],
-              );
-            },
           ),
         ];
       case 'civic':
@@ -536,13 +492,6 @@ class Dashboard extends StatelessWidget {
               action: action,
               institutionId: corporationId,
               scopeLabel: 'CORPORATION',
-            ),
-            const SizedBox(height: 34),
-            RolesPanel(
-              state: state,
-              busy: busy,
-              action: action,
-              institutionId: corporationId,
             ),
           ],
         ];
@@ -600,15 +549,6 @@ class Dashboard extends StatelessWidget {
                     const SizedBox(height: 34),
                     cityProposal,
                   ],
-                  if (cityId != null) ...[
-                    const SizedBox(height: 34),
-                    RolesPanel(
-                      state: state,
-                      busy: busy,
-                      action: action,
-                      institutionId: cityId,
-                    ),
-                  ],
                 ],
               );
             },
@@ -645,40 +585,7 @@ class Dashboard extends StatelessWidget {
                 busy: busy,
                 action: action,
               );
-              final matrix = TechnologyOutcomePanel(state: state);
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          technology,
-                          const SizedBox(height: 34),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          matrix,
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  technology,
-                  const SizedBox(height: 34),
-                  matrix,
-                ],
-              );
+              return technology;
             },
           ),
         ];
@@ -691,9 +598,37 @@ class Dashboard extends StatelessWidget {
       case 'history':
       case 'pantheon':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
+      case 'news':
+        return [NewsPanel(events: events, notifications: notifications, onRefresh: onRefreshEvents)];
       case 'constitution':
         return [ConstitutionPanel(state: state)];
       case 'life':
+        final human = state.human;
+        final life = state.life;
+        final rawFullName =
+            (human['display_name'] ?? human['name'] ?? 'CITIZEN')
+                .toString()
+                .trim();
+        final health = asDouble(human['health'] ??
+                human['vitality'] ??
+                life['health'] ??
+                life['vitality']) ??
+            100.0;
+        final energy = asDouble(human['energy'] ??
+                human['stamina'] ??
+                life['energy'] ??
+                life['stamina']) ??
+            100.0;
+        final age =
+            asInt(human['age_years'] ?? human['age'] ?? life['ageYears']) ?? 31;
+        final houseName = (life['houseName'] ??
+                life['house_name'] ??
+                human['house_name'] ??
+                'Founding Lineage')
+            .toString();
+        final generation =
+            asIntOr(life['generation'] ?? human['generation'], 1);
+
         return [
           LayoutBuilder(
             builder: (context, constraints) {
@@ -704,82 +639,260 @@ class Dashboard extends StatelessWidget {
               );
               final lifeToday =
                   LifeTodayPanel(state: state, busy: busy, action: action);
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+
+              final epitaph = (human['epitaph'] ??
+                      life['epitaph'] ??
+                      'Pioneered civilization across the frontier of Earth.')
+                  .toString()
+                  .trim();
+
+              final cockpit = EarthPageCockpit(
+                status: health < 40 ? 'CRITICAL VITALITY' : 'ACTIVE CITIZEN',
+                statusColor:
+                    health < 40 ? context.warningColor : context.successColor,
+                infoTitle: 'CITIZEN BIOMETRICS & SUCCESSION ARCHITECTURE',
+                infoDescription:
+                    '• Vitality & Daily Energy: Physical health (100% base) and daily operational capacity for actions, work, and planetary decisions.\n\n• Dynastic Lineage: House heritage, generational continuity, and ancestral standing on Earth.\n\n• Estate Succession: Testamentary allocation, heirs, and asset preservation across generations.',
+                title: rawFullName.toUpperCase(),
+                titleWidget: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Expanded(child: lifeToday),
-                    const SizedBox(width: 40),
-                    Expanded(child: succession),
+                    Flexible(
+                      child: Text(
+                        rawFullName.toUpperCase(),
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.w800,
+                          letterSpacing: -0.5,
+                          color: context.inkColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Edit name',
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 18,
+                        color: context.primaryColor,
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              final initialName = rawFullName.contains(' ')
+                                  ? rawFullName.split(' ').first
+                                  : rawFullName;
+                              final controller =
+                                  TextEditingController(text: initialName);
+                              await showDialog<void>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  backgroundColor: context.panelColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        context.radiusPanel),
+                                    side: BorderSide(
+                                        color: context.primaryColor
+                                            .withValues(alpha: .35)),
+                                  ),
+                                  title: Text('Edit name',
+                                      style: context.topicTitleStyle
+                                          .copyWith(
+                                              color: context.primaryColor)),
+                                  content: TextField(
+                                    controller: controller,
+                                    autofocus: true,
+                                    maxLength: 80,
+                                    style: context.bodyStyle
+                                        .copyWith(color: context.inkColor),
+                                    decoration: InputDecoration(
+                                      labelText: 'Name',
+                                      labelStyle: context.widgetFooterStyle,
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext),
+                                      child: Text('CANCEL',
+                                          style: context.controlStyle
+                                              .copyWith(
+                                                  color: context.mutedColor)),
+                                    ),
+                                    EarthButton(
+                                      label: 'SAVE',
+                                      onPressed: busy
+                                          ? null
+                                          : () async {
+                                              final name =
+                                                  controller.text.trim();
+                                              if (name.length < 2) return;
+                                              Navigator.pop(dialogContext);
+                                              await action(
+                                                  () => const EarthApi()
+                                                      .updateDisplayName(name));
+                                            },
+                                    ),
+                                  ],
+                                ),
+                              );
+                              controller.dispose();
+                            },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
                   ],
-                );
-              }
-              return Column(
-                crossAxisAlignment: CrossAxisAlignment.stretch,
-                children: [
-                  lifeToday,
-                  const SizedBox(height: 34),
-                  succession,
+                ),
+                subtitleWidget: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Flexible(
+                      child: Text(
+                        epitaph,
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: context.mutedColor,
+                          fontSize: 12,
+                          letterSpacing: 0.5,
+                          fontWeight: FontWeight.w600,
+                          fontStyle: FontStyle.italic,
+                          height: 1.35,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      tooltip: 'Edit epitaph / motto',
+                      icon: Icon(
+                        Icons.edit_outlined,
+                        size: 16,
+                        color: context.primaryColor,
+                      ),
+                      onPressed: busy
+                          ? null
+                          : () async {
+                              final controller =
+                                  TextEditingController(text: epitaph);
+                              await showDialog<void>(
+                                context: context,
+                                builder: (dialogContext) => AlertDialog(
+                                  backgroundColor: context.panelColor,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(
+                                        context.radiusPanel),
+                                    side: BorderSide(
+                                        color: context.primaryColor
+                                            .withValues(alpha: .35)),
+                                  ),
+                                  title: Text('Edit citizen epitaph',
+                                      style: context.topicTitleStyle
+                                          .copyWith(
+                                              color: context.primaryColor)),
+                                  content: TextField(
+                                    controller: controller,
+                                    autofocus: true,
+                                    maxLength: 160,
+                                    maxLines: 2,
+                                    style: context.bodyStyle
+                                        .copyWith(color: context.inkColor),
+                                    decoration: InputDecoration(
+                                      labelText:
+                                          'Epitaph / Memorial Inscription',
+                                      labelStyle: context.widgetFooterStyle,
+                                    ),
+                                  ),
+                                  actions: [
+                                    TextButton(
+                                      onPressed: () =>
+                                          Navigator.pop(dialogContext),
+                                      child: Text('CANCEL',
+                                          style: context.controlStyle
+                                              .copyWith(
+                                                  color: context.mutedColor)),
+                                    ),
+                                    EarthButton(
+                                      label: 'SAVE',
+                                      onPressed: busy
+                                          ? null
+                                          : () async {
+                                              final text =
+                                                  controller.text.trim();
+                                              if (text.isEmpty) return;
+                                              Navigator.pop(dialogContext);
+                                              await action(
+                                                  () => const EarthApi()
+                                                      .updateEpitaph(text));
+                                            },
+                                    ),
+                                  ],
+                                ),
+                              );
+                              controller.dispose();
+                            },
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                    ),
+                  ],
+                ),
+                metrics: [
+                  CockpitMetric(
+                    label: 'Vitality',
+                    value: '${health.toStringAsFixed(0)}%',
+                    icon: Icons.favorite_outline,
+                    color: health < 40
+                        ? context.warningColor
+                        : context.successColor,
+                  ),
+                  CockpitMetric(
+                    label: 'Energy',
+                    value: '${energy.toStringAsFixed(0)}%',
+                    icon: Icons.bolt_outlined,
+                    color: context.primaryColor,
+                  ),
+                  CockpitMetric(
+                    label: 'Age',
+                    value: '$age',
+                    icon: Icons.hourglass_empty_outlined,
+                    color: context.goldColor,
+                  ),
+                  CockpitMetric(
+                    label: 'Generation',
+                    value: '$generation',
+                    icon: Icons.account_balance_outlined,
+                    color: context.secondaryColor,
+                  ),
                 ],
               );
-            },
-          ),
-        ];
-      case 'contracts':
-        return [
-          LayoutBuilder(
-            builder: (context, constraints) {
-              final supply = SupplyContractsDialog(
-                api: const EarthApi(),
-                state: state,
-                isPageMode: true,
-                onNavigate: onNavigate,
-              );
-              final revenueOverview = ContractRevenueOverviewPanel(
-                state: state,
-                contracts: contracts,
-              );
-              final contractsPanel = ContractsPanel(
-                panelKey: sectionKeys['contracts'],
-                state: state,
-                busy: busy,
-                contracts: contracts,
-                action: action,
-              );
-              if (constraints.maxWidth > 1000) {
-                return Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          revenueOverview,
-                          const SizedBox(height: 34),
-                          supply
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 56),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: [
-                          contractsPanel,
-                        ],
-                      ),
-                    ),
-                  ],
-                );
-              }
+
+              final content = constraints.maxWidth > 1000
+                  ? Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(child: lifeToday),
+                        const SizedBox(width: 40),
+                        Expanded(child: succession),
+                      ],
+                    )
+                  : Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        lifeToday,
+                        const SizedBox(height: 34),
+                        succession,
+                      ],
+                    );
+
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  revenueOverview,
-                  const SizedBox(height: 34),
-                  supply,
-                  const SizedBox(height: 34),
-                  contractsPanel,
+                  cockpit,
+                  const SizedBox(height: 28),
+                  content,
                 ],
               );
             },
@@ -829,14 +942,10 @@ class Dashboard extends StatelessWidget {
             builder: (context, constraints) {
               final quadrant = CommandExecutiveQuadrant(
                 state: state,
-                businessFinancials: businessFinancials,
-                contracts: contracts,
                 onNavigate: onNavigate,
               );
               final summary = ExecutiveCommandSummary(
                 state: state,
-                businessFinancials: businessFinancials,
-                contracts: contracts,
                 onNavigate: onNavigate,
                 onExecuteDecision: (item) {
                   if (onNavigate != null) {

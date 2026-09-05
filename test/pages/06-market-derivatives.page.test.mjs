@@ -75,7 +75,7 @@ test("Page 6: Commodity Exchange, Orderbook & Derivatives Market", async (t) => 
       commodity: "energy",
       size: 50,
       strikePrice: 2.50,
-      expiryGameDay: 14550,
+      durationGameMinutes: 14550,
       correlationId,
     });
 

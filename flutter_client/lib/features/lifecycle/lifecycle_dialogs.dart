@@ -333,95 +333,18 @@ Future<void> showRecoveryDialog(
             final parsed = double.tryParse(amount.text.trim());
             if (parsed == null || parsed <= 0) return;
             Navigator.pop(dialogContext);
-            await action(() => const EarthApi().recoverInstitution(
-                institutionId, parsed,
-                otp: otp.text.trim()));
+            await action(() async {
+              await const EarthApi().recoverInstitution(
+                institutionId,
+                parsed,
+                otp: otp.text.trim(),
+              );
+              return const EarthState({});
+            });
           },
           child: const Text('AUTHORIZE RECOVERY'),
         ),
       ],
     ),
   );
-}
-
-Future<void> showContractComposerDialog(BuildContext context,
-    Future<void> Function(Future<EarthState> Function()) action,
-    {List<dynamic> businesses = const []}) async {
-  final counterparty = TextEditingController();
-  final title = TextEditingController();
-  final amount = TextEditingController(text: '100');
-  var kind = 'intellectual_service';
-  String? businessId;
-  await showDialog<void>(
-      context: context,
-      builder: (dialogContext) => StatefulBuilder(
-          builder: (context, setState) => AlertDialog(
-                title: const Text('Propose agreement'),
-                content: Column(mainAxisSize: MainAxisSize.min, children: [
-                  DropdownButtonFormField<String>(
-                      initialValue: kind,
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'employment', child: Text('Employment')),
-                        DropdownMenuItem(
-                            value: 'intellectual_service',
-                            child: Text('Intellectual service')),
-                        DropdownMenuItem(
-                            value: 'capacity', child: Text('Capacity')),
-                        DropdownMenuItem(
-                            value: 'strategic', child: Text('Strategic')),
-                      ],
-                      onChanged: (value) =>
-                          setState(() => kind = value ?? kind)),
-                  if (businesses.isNotEmpty)
-                    DropdownButtonFormField<String>(
-                      initialValue: businessId,
-                      decoration: const InputDecoration(
-                          labelText: 'Charge from business (optional)'),
-                      items: businesses.whereType<Map>().map((raw) {
-                        final business = Map<String, dynamic>.from(raw);
-                        final id = business['id']?.toString() ?? '';
-                        final name = business['name']?.toString() ?? id;
-                        return DropdownMenuItem<String>(
-                            value: id, child: Text(name));
-                      }).where((item) => item.value!.isNotEmpty).toList(),
-                      onChanged: (value) => setState(() => businessId = value),
-                    ),
-                  TextField(
-                      controller: counterparty,
-                      decoration: const InputDecoration(
-                          labelText: 'Counterparty Human ID')),
-                  TextField(
-                      controller: title,
-                      decoration:
-                          const InputDecoration(labelText: 'Agreement title')),
-                  TextField(
-                      controller: amount,
-                      keyboardType:
-                          const TextInputType.numberWithOptions(decimal: true),
-                      decoration: const InputDecoration(labelText: 'Credits')),
-                ]),
-                actions: [
-                  TextButton(
-                      onPressed: () => Navigator.pop(dialogContext),
-                      child: const Text('Cancel')),
-                  FilledButton(
-                      onPressed: () async {
-                        final value = double.tryParse(amount.text.trim());
-                        if (counterparty.text.trim().isEmpty ||
-                            title.text.trim().length < 3 ||
-                            value == null ||
-                            value < 0) {
-                          return;
-                        }
-                        Navigator.pop(dialogContext);
-                        await action(() => const EarthApi().createContract(
-                            kind, counterparty.text, title.text, value,
-                            terms: businessId == null
-                                ? null
-                                : {'proposerBusinessId': businessId}));
-                      },
-                      child: const Text('Propose')),
-                ],
-              )));
 }

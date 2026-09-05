@@ -146,7 +146,6 @@ void main() {
               businessFinancials: const {},
               businessProfile: const {},
               membershipEvents: const [],
-              authorityEvents: const [],
               unreadNotifications: 0,
               sectionKeys: sectionKeys,
               selectedSection: selectedSection,

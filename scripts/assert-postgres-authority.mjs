@@ -16,12 +16,12 @@ if (!repository.includes('PostgreSQL persistence authority is required')) throw 
 if (!worker.includes('if (isDataRequest) authorityMode(env);')) throw new Error('Worker data boundary must fail closed before routing requests');
 if (!worker.includes('String(_event.scheduledTime)')) throw new Error('Scheduled world ticks must carry an idempotency key');
 if (!scheduler.includes('SCHEDULED-TICK-')) throw new Error('Scheduled world ticks must persist an atomic replay marker');
-if (!worker.includes('async function advanceWorldFromPostgres')) throw new Error('World-clock command must have a PostgreSQL-only handler');
-if (!worker.includes("if (url.pathname === '/api/day/advance' && request.method === 'POST') return advanceWorldFromPostgres(request, env);")) throw new Error('World-clock command must bypass legacy provider branches');
+if (worker.includes("/api/day/advance")) throw new Error('Manual world-clock advancement must not be exposed as an API route');
+if (!worker.includes('advanceWorldPostgres(repository, 60, String(_event.scheduledTime))')) throw new Error('Scheduled world advancement must use the PostgreSQL scheduler');
 if (!worker.includes('async function productionEventsFromPostgres')) throw new Error('Production history must have a PostgreSQL-only handler');
-if (!worker.includes("if (url.pathname === '/api/production/events' && request.method === 'GET') return productionEventsFromPostgres(request, env);")) throw new Error('Production history must bypass legacy provider branches');
+if (!worker.includes("url.pathname === '/api/production/events' && request.method === 'GET'")) throw new Error('Production history must bypass legacy provider branches');
 if (!worker.includes('async function servicesStatusFromPostgres')) throw new Error('Service status must have a PostgreSQL-only handler');
-if (!worker.includes("if (url.pathname === '/api/services/status' && request.method === 'GET') return servicesStatusFromPostgres(request, env);")) throw new Error('Service status must bypass legacy provider branches');
+if (!worker.includes("url.pathname === '/api/services/status' && request.method === 'GET'")) throw new Error('Service status must bypass legacy provider branches');
 if (!worker.includes('handleReadModelRoutes')) throw new Error('Read-model routes must be dispatched before legacy provider branches');
 for (const route of [
   "url.pathname === '/api/world/activity'",
@@ -33,7 +33,6 @@ for (const route of [
   "url.pathname === '/api/history'",
   "url.pathname === '/api/ownership/events'",
   "url.pathname === '/api/membership/events'",
-  "url.pathname === '/api/governance/authority/events'",
 ]) {
   if (!readModelRoutes.includes(route)) throw new Error(`${route} must bypass legacy provider branches through the PostgreSQL read-model router`);
 }

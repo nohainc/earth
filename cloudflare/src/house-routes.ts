@@ -11,8 +11,7 @@ import {
 } from './house-postgres.ts';
 
 /**
- * Routes for /api/house/* and /api/dynasty/* (legacy alias kept for compatibility).
- * "House" and "dynasty" refer to the same generational lineage system.
+ * Canonical routes for the generational house system.
  */
 export async function handleHouseRoutes(
   request: Request,
@@ -20,23 +19,26 @@ export async function handleHouseRoutes(
   url: URL,
 ): Promise<Response | null> {
 
-  const isHousePath = url.pathname.startsWith('/api/house') || url.pathname.startsWith('/api/dynasty');
+  const isHousePath = url.pathname.startsWith('/api/house');
   if (!isHousePath) return null;
 
   // GET /api/house — overview of lineage, perks, and heirlooms
-  if ((url.pathname === '/api/house' || url.pathname === '/api/dynasty') && request.method === 'GET') {
+  if (url.pathname === '/api/house' && request.method === 'GET') {
     const viewer = await currentHuman(request, env);
-    const email = viewer?.email || 'amara@earth.local';
-    const humanId = viewer?.id || 'H-0044';
-    const humanName = viewer?.name || 'Amara Vance';
-    const result = await withRepository(env, (repository) => getHouseOverview(repository, email, humanId, humanName));
-    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    try {
+      const result = await withRepository(env, (repository) => getHouseOverview(repository, viewer.email, viewer.id, viewer.display_name));
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'House overview could not be loaded';
+      return Response.json({ ok: false, error: message }, { status: /not found|account/i.test(message) ? 404 : 400 });
+    }
   }
 
   // POST /api/house/perks/unlock
   if (
-    (url.pathname === '/api/house/perks/unlock' || url.pathname === '/api/dynasty/perks/unlock') &&
+    url.pathname === '/api/house/perks/unlock' &&
     request.method === 'POST'
   ) {
     const viewer = await currentHuman(request, env);
@@ -59,7 +61,7 @@ export async function handleHouseRoutes(
 
   // POST /api/house/heirlooms/equip
   if (
-    (url.pathname === '/api/house/heirlooms/equip' || url.pathname === '/api/dynasty/heirlooms/equip') &&
+    url.pathname === '/api/house/heirlooms/equip' &&
     request.method === 'POST'
   ) {
     const viewer = await currentHuman(request, env);
@@ -88,7 +90,7 @@ export async function handleHouseRoutes(
 
   // POST /api/house/heirlooms/forge
   if (
-    (url.pathname === '/api/house/heirlooms/forge' || url.pathname === '/api/dynasty/heirlooms/forge') &&
+    url.pathname === '/api/house/heirlooms/forge' &&
     request.method === 'POST'
   ) {
     const viewer = await currentHuman(request, env);
@@ -128,7 +130,7 @@ export async function handleHouseRoutes(
 
   // POST /api/house/motto
   if (
-    (url.pathname === '/api/house/motto' || url.pathname === '/api/dynasty/motto') &&
+    url.pathname === '/api/house/motto' &&
     request.method === 'POST'
   ) {
     const viewer = await currentHuman(request, env);

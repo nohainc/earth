@@ -1,24 +1,25 @@
+import 'dart:math';
 import 'earth_api_transport.dart';
 import '../auth_storage.dart';
 import '../models/earth_state.dart';
 
 part 'earth_api_auth.dart';
 part 'earth_api_world.dart';
-part 'earth_api_business.dart';
 part 'earth_api_technology.dart';
 part 'earth_api_market.dart';
 part 'earth_api_lifecycle.dart';
 part 'earth_api_governance.dart';
 part 'earth_api_institutions.dart';
-part 'earth_api_contracts.dart';
-part 'earth_api_supply_contracts.dart';
 part 'earth_api_personal_finance.dart';
 part 'earth_api_comm.dart';
 part 'earth_api_house.dart';
-part 'earth_api_derivatives.dart';
 part 'earth_api_net_worth.dart';
 part 'earth_api_briefing.dart';
 part 'earth_api_real_estate.dart';
+part 'earth_api_derivatives.dart';
+
+String newClientCorrelationId(String prefix) =>
+    '$prefix-${Random.secure().nextInt(0x7fffffff)}';
 
 class EarthApi {
   final String baseUrl;

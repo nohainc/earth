@@ -61,7 +61,7 @@ test('cityQualification evaluates active population, housing, and health capacit
       }],
       rowCount: 1,
     },
-    'SELECT id FROM institution_roles WHERE institution_id = $1': {
+    'SELECT id FROM governance_rules WHERE institution_id = $1': {
       rows: [{ id: 'ROLE-01' }],
       rowCount: 1,
     },
@@ -158,8 +158,8 @@ test('corporation members cannot retain a corporation while moving outside its c
 
 test('leaving a corporation also clears the affiliated city', async () => {
   const client = new MockDbClient({
-    'SELECT id, capital_city_id, admission_policy FROM corporations': { rows: [{ id: 'CORP-01', capital_city_id: 'CITY-01', admission_policy: 'open' }], rowCount: 1 },
-    "SELECT id FROM humans": { rows: [{ id: 'H-01' }], rowCount: 1 },
+    'SELECT c.id, i.name, c.capital_city_id': { rows: [{ id: 'CORP-01', name: 'Aether Dynamics', capital_city_id: 'CITY-01', admission_policy: 'open' }], rowCount: 1 },
+    "SELECT id, display_name FROM humans": { rows: [{ id: 'H-01', display_name: 'Test Human' }], rowCount: 1 },
     'SELECT corporation_id, city_id FROM memberships': { rows: [{ corporation_id: 'CORP-01', city_id: 'CITY-01' }], rowCount: 1 },
     'SELECT COALESCE(MAX(game_day), 1) AS game_day': { rows: [{ game_day: 100 }], rowCount: 1 },
     'UPDATE memberships SET corporation_id = NULL, city_id = NULL': { rows: [], rowCount: 1 },
@@ -176,7 +176,7 @@ test('leaving a corporation also clears the affiliated city', async () => {
 
 test('corporation executives can update the corporation tax charter', async () => {
   const client = new MockDbClient({
-    'SELECT role_assignments.id': { rows: [{ id: 'ROLE-ASSIGNMENT-01' }], rowCount: 1 },
+    'SELECT id FROM institutions': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
     'UPDATE institutions SET charter_rules': { rows: [], rowCount: 1 },
@@ -193,7 +193,7 @@ test('corporation executives can update the corporation tax charter', async () =
 
 test('corporation executives can adopt an unclaimed city', async () => {
   const client = new MockDbClient({
-    'SELECT role_assignments.id': { rows: [{ id: 'ROLE-ASSIGNMENT-01' }], rowCount: 1 },
+    'SELECT id FROM institutions': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT cities.id, cities.corporation_id, corporations.admission_policy FROM cities': { rows: [{ id: 'CITY-02', corporation_id: null }], rowCount: 1 },
     'SELECT human_id FROM memberships WHERE city_id': { rows: [], rowCount: 0 },

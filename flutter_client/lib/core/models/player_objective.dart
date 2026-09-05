@@ -152,7 +152,7 @@ class PlayerObjective {
     final biz = rawBiz is Map ? rawBiz : const {};
     final profit = _toDouble(biz['profit'], 0.0);
     final businessCount = _toDouble(
-        biz['business_count'] ?? (state.businesses.isNotEmpty ? state.businesses.length : null),
+        biz['private_building_count'] ?? state.buildings.length,
         biz['id'] != null ? 1.0 : 0.0);
     final serviceBusinessCount = _toDouble(biz['service_business_count'], 0.0);
     final rawResources = state.json['resources'];

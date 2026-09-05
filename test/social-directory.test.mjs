@@ -15,7 +15,7 @@ test('neutral social directory only queries active people and entities', async (
   const directory = await listSocialDirectory(repository, 'H-1', 'Ada');
 
   assert.deepEqual(directory, { humans: [], businesses: [], cities: [], corporations: [], communities: [] });
-  assert.equal(calls.length, 5);
+  assert.equal(calls.length, 4);
   assert.ok(calls.every(({ sql }) => !/social_initiatives|social_relationships|social_initiative_members/i.test(sql)));
   assert.match(calls[0].sql, /h\.life_status = 'active'/);
 });

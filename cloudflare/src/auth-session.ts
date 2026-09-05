@@ -5,7 +5,8 @@ import {
   SESSION_DAYS,
   validTotp,
 } from './auth-crypto.ts';
-
+export { cookieValue, extractToken } from './auth-token.ts';
+import { extractTokens } from './auth-token.ts';
 export interface AuthenticatedHuman {
   id: string;
   display_name: string;
@@ -13,25 +14,6 @@ export interface AuthenticatedHuman {
   life_status: string;
 }
 
-export function cookieValue(request: Request, name: string): string | null {
-  const cookies =
-    request.headers
-      .get('Cookie')
-      ?.split(';')
-      .map((part) => part.trim()) ?? [];
-  const value = cookies.find((part) => part.startsWith(`${name}=`));
-  return value ? decodeURIComponent(value.slice(name.length + 1)) : null;
-}
-
-export function extractToken(request: Request): string | null {
-  const cookieTok = cookieValue(request, 'earth_session');
-  if (cookieTok) return cookieTok;
-  const authHeader = request.headers.get('Authorization') ?? request.headers.get('authorization');
-  if (authHeader && /^Bearer\s+/i.test(authHeader)) {
-    return authHeader.replace(/^Bearer\s+/i, '').trim();
-  }
-  return null;
-}
 
 export function sessionCookie(token: string, maxAge: number): string {
   return `earth_session=${encodeURIComponent(
@@ -44,24 +26,25 @@ export async function currentHuman(
   env: Env,
   allowEstate = false,
 ): Promise<AuthenticatedHuman | null> {
-  const token = extractToken(request);
-  if (!token) return null;
-  const tokenHash = await digest(token);
-  const result = await withRepository(env, (repository) =>
-    repository.query<AuthenticatedHuman>(
-      `SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email
-       FROM auth_sessions
-       JOIN humans ON humans.id = auth_sessions.human_id
-       JOIN auth_credentials ON auth_credentials.human_id = humans.id
-       WHERE auth_sessions.token_hash = $1
-         AND auth_sessions.revoked_at IS NULL
-         AND auth_sessions.expires_at > CURRENT_TIMESTAMP
-         AND humans.account_status = 'active'
-         AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status IN ('estate', 'deceased')) )`,
-      [tokenHash, allowEstate ? 1 : 0],
-    ),
-  );
-  return result?.rows[0] ?? null;
+  for (const token of extractTokens(request)) {
+    const tokenHash = await digest(token);
+    const result = await withRepository(env, (repository) =>
+      repository.query<AuthenticatedHuman>(
+        `SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email
+         FROM auth_sessions
+         JOIN humans ON humans.id = auth_sessions.human_id
+         JOIN auth_credentials ON auth_credentials.human_id = humans.id
+         WHERE auth_sessions.token_hash = $1
+           AND auth_sessions.revoked_at IS NULL
+           AND auth_sessions.expires_at > CURRENT_TIMESTAMP
+           AND humans.account_status = 'active'
+           AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status IN ('estate', 'deceased')) )`,
+        [tokenHash, allowEstate ? 1 : 0],
+      ),
+    );
+    if (result?.rows[0]) return result.rows[0];
+  }
+  return null;
 }
 
 export async function sensitiveActionAllowed(

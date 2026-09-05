@@ -75,6 +75,7 @@ void main() {
             child: TechnologyPanel(
               state: state,
               busy: false,
+              initialTab: 1,
               action: (cb) async {
                 fundTriggered = true;
               },
@@ -84,7 +85,6 @@ void main() {
       ),
     );
 
-    expect(find.text('RESEARCH / CURRENT BREAKTHROUGH'), findsOneWidget);
     expect(find.text('ADAPTIVE MAINTENANCE AI'), findsOneWidget);
     expect(find.text('72%'), findsOneWidget);
     expect(find.textContaining('PROJECT ID: TECH-001  ·  FOCUS: efficiency'),
@@ -99,6 +99,7 @@ void main() {
     await tester.tap(find.text('CLOSE'));
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('FUND 240 C · +4% MAX'));
     await tester.tap(find.text('FUND 240 C · +4% MAX'));
     await tester.pumpAndSettle();
 
@@ -218,30 +219,6 @@ void main() {
     expect(find.text('24-year statutory term'), findsOneWidget);
   });
 
-  testWidgets('TechnologyPortfolioPanel separates research from adoption',
-      (tester) async {
-    const state = EarthState({
-      'technology': {
-        'research': {'name': 'Food Systems AI', 'progress': 100},
-        'adoptedTechnologies': ['Adaptive Irrigation'],
-        'availableTechnologies': [
-          {'name': 'Urban Vertical Farming'},
-        ],
-      },
-      'human': {},
-      'institutions': {},
-      'life': {},
-    });
-
-    await tester.pumpWidget(const MaterialApp(
-      home: Scaffold(body: TechnologyPortfolioPanel(state: state)),
-    ));
-
-    expect(find.text('TECHNOLOGY PORTFOLIO'), findsOneWidget);
-    expect(find.text('Food Systems AI'), findsWidgets);
-    expect(find.text('Adaptive Irrigation'), findsOneWidget);
-    expect(find.text('Urban Vertical Farming'), findsOneWidget);
-  });
 }
 
 Future<void> _dummyAction(Future<EarthState> Function() fn) async {}

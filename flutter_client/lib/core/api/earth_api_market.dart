@@ -11,7 +11,7 @@ extension EarthApiMarket on EarthApi {
       'limitPrice': limitPrice,
       'side': side,
       'correlationId':
-          'market-order-$product-${DateTime.now().microsecondsSinceEpoch}',
+        newClientCorrelationId('market-order-$product'),
     });
     return world();
   }

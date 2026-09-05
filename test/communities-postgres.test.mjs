@@ -126,25 +126,10 @@ test('changeCommunityMembership handles approval admission policy by creating a 
   assert.equal(res.pendingApproval, true);
 });
 
-test('disbandCommunity succeeds when treasury is zero and fails when treasury > 0', async () => {
-  // Case 1: Treasury > 0 (should fail)
-  const clientWithFunds = new MockDbClient({
-    'SELECT id, founder_id, shared_credits FROM communities WHERE id = $1 FOR UPDATE': {
-      rows: [{ id: 'COMM-001', founder_id: 'H-001', shared_credits: '500.00' }],
-      rowCount: 1,
-    },
-  });
-  const repoWithFunds = new PostgresRepository(clientWithFunds);
-
-  await assert.rejects(
-    () => disbandCommunity(repoWithFunds, { communityId: 'COMM-001', humanId: 'H-001' }),
-    /Cannot disband community with remaining shared treasury/i,
-  );
-
-  // Case 2: Treasury == 0 (should succeed)
-  const clientEmpty = new MockDbClient({
-    'SELECT id, founder_id, shared_credits FROM communities WHERE id = $1 FOR UPDATE': {
-      rows: [{ id: 'COMM-001', founder_id: 'H-001', shared_credits: '0' }],
+test('disbandCommunity succeeds for founder and deletes community records', async () => {
+  const client = new MockDbClient({
+    'SELECT id, founder_id FROM communities WHERE id = $1 FOR UPDATE': {
+      rows: [{ id: 'COMM-001', founder_id: 'H-001' }],
       rowCount: 1,
     },
     'DELETE FROM community_membership_requests': { rows: [], rowCount: 0 },
@@ -153,9 +138,9 @@ test('disbandCommunity succeeds when treasury is zero and fails when treasury > 
     'SELECT game_day FROM world_state': { rows: [{ game_day: 184 }], rowCount: 1 },
     'INSERT INTO notifications': { rows: [], rowCount: 1 },
   });
-  const repoEmpty = new PostgresRepository(clientEmpty);
+  const repo = new PostgresRepository(client);
 
-  const res = await disbandCommunity(repoEmpty, { communityId: 'COMM-001', humanId: 'H-001' });
+  const res = await disbandCommunity(repo, { communityId: 'COMM-001', humanId: 'H-001' });
   assert.equal(res.ok, true);
   assert.equal(res.disbanded, true);
 });

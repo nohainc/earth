@@ -34,8 +34,8 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes("SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h")) {
       return { rows: [{ game_day: 100, political_eligibility_game_day: 0 }] };
     }
-    if (sql.includes('SELECT 1 FROM role_assignments')) {
-      return { rows: [{ id: 'ROLE-ASSIGN' }] };
+    if (sql.includes('SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2')) {
+      return { rows: [{ id: 'INST-ADMIN' }] };
     }
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };
@@ -82,8 +82,8 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
     if (sql.includes("SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h")) {
       return { rows: [{ game_day: 100, political_eligibility_game_day: 0 }] };
     }
-    if (sql.includes('SELECT 1 FROM role_assignments')) {
-      return { rows: [{ id: 'ROLE-JURIST' }] };
+    if (sql.includes('SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2')) {
+      return { rows: [{ id: 'INST-ADMIN' }] };
     }
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };

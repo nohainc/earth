@@ -4,6 +4,7 @@ import '../../core/api/earth_api.dart';
 import '../../core/audio/earth_audio_engine.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/earth_theme_context.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
 import '../auth/security_dialog.dart';
 
@@ -294,49 +295,36 @@ class _AccountScreenState extends State<AccountScreen> {
     final cityName = city is Map ? city['name']?.toString() ?? 'Neo Tokyo' : 'Neo Tokyo';
     final standing = human['standing']?.toString() ?? '100';
 
-    return SingleChildScrollView(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.stretch,
-        children: [
-          // Section Title
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'ACCOUNT & SECURITY',
-                      style: TextStyle(
-                        color: context.inkColor,
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.8,
-                      ),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Manage citizen credentials, multi-factor authentication, active sessions, and account lifecycle.',
-                      style: TextStyle(
-                        color: context.mutedColor,
-                        fontSize: 12,
-                        letterSpacing: 0.2,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(width: 12),
-              IconButton(
-                icon: const Icon(Icons.refresh, size: 18),
-                tooltip: 'Refresh Account Info',
-                onPressed: _loading ? null : _loadAccountData,
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+    final cockpit = EarthPageCockpit(
+      status: _mfaEnabled ? 'CREDENTIAL INTEGRITY' : 'MFA RECOMMENDED',
+      statusColor: _mfaEnabled ? context.successColor : context.warningColor,
+      infoTitle: 'CITIZEN SECURITY & ENCLAVE CREDENTIALS',
+      infoDescription:
+          '• Cryptographic MFA: Time-based One-Time Password (TOTP) enforcement securing citizen credentials against identity compromise.\n\n• Session Telemetry: Active device tokens and hardware sessions with instant revocation capabilities.\n\n• Civic Standing: Registered citizen charter and civil standing under planetary constitutional law.',
+      title: 'ACCOUNT & SECURITY',
+      subtitle:
+          'Citizen credentials, multi-factor authentication, and active session telemetry',
+      metrics: [
+        CockpitMetric(
+          label: 'Security',
+          value: _mfaEnabled ? 'MFA Protected' : 'MFA Disabled',
+          icon: _mfaEnabled ? Icons.shield_outlined : Icons.gpp_maybe_outlined,
+          color: _mfaEnabled ? context.successColor : context.warningColor,
+        ),
+        CockpitMetric(
+          label: 'Sessions',
+          value: '${_sessions.length}',
+          icon: Icons.devices_outlined,
+          color: context.primaryColor,
+        ),
+      ],
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        cockpit,
+        const SizedBox(height: 24),
 
           if (_errorMessage != null) ...[
             Container(
@@ -627,7 +615,7 @@ class _AccountScreenState extends State<AccountScreen> {
                                 ),
                                 const SizedBox(height: 3),
                                 Text(
-                                  'Created: ${formatSecurityDate(session['created_at'])} · Expires: ${formatSecurityDate(session['expires_at'])}',
+                                  'Created: ${formatSecurityDate(session['created_at'])}',
                                   style: TextStyle(
                                     color: context.mutedColor,
                                     fontSize: 10.5,
@@ -709,8 +697,7 @@ class _AccountScreenState extends State<AccountScreen> {
           ),
           const SizedBox(height: 32),
         ],
-      ),
-    );
+      );
   }
 
   Widget _buildCard(

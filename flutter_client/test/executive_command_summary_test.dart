@@ -132,7 +132,6 @@ void main() {
                 personalFinanceData: const {},
                 pantheon: const {},
                 contracts: const [],
-                authorityEvents: const [],
                 membershipEvents: const [],
                 marketHistory: const {},
                 unreadNotifications: 0,

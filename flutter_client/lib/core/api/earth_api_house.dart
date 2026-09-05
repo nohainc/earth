@@ -73,25 +73,4 @@ extension EarthApiHouse on EarthApi {
     return <String, dynamic>{'ok': true};
   }
 
-  // Backwards compatibility aliases
-  Future<Map<String, dynamic>> dynastyOverview() => houseOverview();
-  Future<Map<String, dynamic>> unlockDynastyPerk(String perkKey) => unlockHousePerk(perkKey);
-  Future<Map<String, dynamic>> equipDynastyHeirloom(String heirloomId) => equipHouseHeirloom(heirloomId);
-  Future<Map<String, dynamic>> forgeDynastyHeirloom({
-    required String name,
-    required String heirloomType,
-    required String inscription,
-    required String statBuff,
-  }) =>
-      forgeHouseHeirloom(
-        name: name,
-        heirloomType: heirloomType,
-        inscription: inscription,
-        statBuff: statBuff,
-      );
-  Future<Map<String, dynamic>> updateDynastyMotto({
-    required String motto,
-    String? dynastyName,
-  }) =>
-      updateHouseMotto(motto: motto, houseName: dynastyName);
 }

@@ -19,7 +19,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const starter = calculateStarterPackage(world.rows[0]?.living_cost_index ?? 1, economicStartIndex(referencePrice.rows[0]?.reference_price ?? 50));
     const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const accountId = `account-${humanId.toLowerCase()}`;
-    const businessId = `B-${humanId.slice(2)}`;
     const technologyId = `TECH-${humanId.slice(2)}`;
     const researchId = `R-${humanId.slice(2)}`;
     const assistantId = `AI-${humanId.slice(2)}-01`;
@@ -58,24 +57,16 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email WHERE email = $1", [input.email]);
     await tx.query('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,0,0)', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', humanId]);
     await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
-    await tx.query("INSERT INTO institutions (id, kind, name, status) VALUES ($1, 'BUSINESS', $2, 'active')", [businessId, `${displayName} Works`]);
-    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, humanId, `${displayName} Works`]);
-    await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
-    await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,100)', [businessId, humanId]);
-    await tx.query('INSERT INTO business_constitutions (business_id, updated_by, updated_game_day) VALUES ($1,$2,$3)', [businessId, humanId, worldDay]);
-    await tx.query('INSERT INTO business_management (business_id, manager_id, appointed_by, appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, humanId, worldDay]);
-    await tx.query("INSERT INTO financial_states (institution_id, institution_kind, status, since_game_day, last_reason) VALUES ($1, 'BUSINESS', 'active', $2, 'starter-package')", [businessId, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
     await tx.query('INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,$2,$3,0)', [technologyId, 'Automated Assembly', humanId]);
     await tx.query("INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,status,started_game_day) VALUES ($1,$2,$3,0,0,'active',$4)", [researchId, technologyId, humanId, worldDay]);
     await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
-    await tx.query("INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,'BUSINESS',$2,NULL,$3,1,'starter_package',$3,$4),($5,'BUSINESS_SHARES',$2,NULL,$3,100,'starter_package',$3,$4)", [crypto.randomUUID(), businessId, humanId, worldDay, crypto.randomUUID()]);
     await enqueueOutbox(tx, {
       eventKey: `starter-package:${humanId}`,
       topic: 'world_activity',
       aggregateType: 'human',
       aggregateId: humanId,
-      payload: { type: 'world_activity', category: 'identity', action: 'starter_package_created', humanId, businessId, gameDay: worldDay },
+      payload: { type: 'world_activity', category: 'identity', action: 'starter_package_created', humanId, gameDay: worldDay },
     });
     return { ok: true, human: { id: humanId, displayName, personName: input.personName, houseSurname: input.houseSurname, houseName, email: input.email }, starterPackage: starter };
   });
@@ -135,7 +126,6 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
 
     const newHumanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const newAccountId = `account-${newHumanId.toLowerCase()}`;
-    const businessId = `B-${newHumanId.slice(2)}`;
     const technologyId = `TECH-${newHumanId.slice(2)}`;
     const researchId = `R-${newHumanId.slice(2)}`;
     const cityId = input.startingCityId ?? 'CITY-0084';
@@ -173,15 +163,8 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\'');
     await tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = $1', [`account-${cityId}-treasury`]).catch(() => tx.query('UPDATE account_balances SET balance = balance + 250 WHERE account_id = \'account-ouc-treasury\''));
 
-    // 3. Setup starter business, resources, and technology.
-    await tx.query("INSERT INTO institutions (id,kind,name,status) VALUES ($1,'BUSINESS',$2,'active')", [businessId, `${input.displayName} Enterprise`]);
-    await tx.query("INSERT INTO businesses (id,owner_id,name,policy,condition,sector) VALUES ($1,$2,$3,'reliability',100,'maintenance')", [businessId, newHumanId, `${input.displayName} Enterprise`]);
-    await tx.query('INSERT INTO business_financials (business_id,last_game_day) VALUES ($1,$2)', [businessId, worldDay]);
-    await tx.query('INSERT INTO business_constitutions (business_id,updated_by,updated_game_day) VALUES ($1,$2,$3)', [businessId, newHumanId, worldDay]);
-    await tx.query('INSERT INTO business_management (business_id,manager_id,appointed_by,appointed_game_day) VALUES ($1,$2,$2,$3)', [businessId, newHumanId, worldDay]);
-    await tx.query("INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,last_reason) VALUES ($1,'BUSINESS','active',$2,'rebirth')", [businessId, worldDay]);
+    // 3. Setup resources and technology.
     await tx.query("INSERT INTO personal_financial_states (human_id,status,since_game_day,protected_credits,last_reason) VALUES ($1,'active',$2,100,'rebirth')", [newHumanId, worldDay]);
-    await tx.query('INSERT INTO business_shares (business_id,holder_id,shares) VALUES ($1,$2,1000)', [businessId, newHumanId]);
     for (const [res, amt] of Object.entries(starter.resources)) {
       await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [newHumanId, res, amt]);
     }

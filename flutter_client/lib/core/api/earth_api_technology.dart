@@ -7,7 +7,7 @@ extension EarthApiTechnology on EarthApi {
     await _request('/api/technology/me/fund', method: 'POST', body: {
       'amount': 240,
       'correlationId':
-          'research-funding-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('research-funding'),
     });
     return world();
   }
@@ -19,7 +19,7 @@ extension EarthApiTechnology on EarthApi {
       'budget': budget,
       'focus': focus,
       'correlationId':
-          'research-project-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('research-project'),
     });
     return world();
   }
@@ -28,7 +28,7 @@ extension EarthApiTechnology on EarthApi {
     await _request('/api/corporation/building-research', method: 'POST', body: {
       'buildingType': buildingType,
       'correlationId':
-          'corporation-building-research-${DateTime.now().microsecondsSinceEpoch}',
+          newClientCorrelationId('corporation-building-research'),
     });
     return world();
   }
@@ -38,10 +38,18 @@ extension EarthApiTechnology on EarthApi {
     return world();
   }
 
-  Future<EarthState> adoptTechnology(String businessId, String technologyId) async {
+  Future<EarthState> adoptTechnology(String technologyId) async {
     await _request('/api/technology/adopt', method: 'POST', body: {
-      'businessId': businessId,
       'technologyId': technologyId,
+    });
+    return world();
+  }
+
+  Future<EarthState> setTechnologySubscription(String technologyKey, {required bool active}) async {
+    await _request('/api/technology/subscription', method: 'POST', body: {
+      'technologyKey': technologyKey,
+      'status': active ? 'active' : 'inactive',
+      'correlationId': newClientCorrelationId('technology-subscription-$technologyKey-${active ? 'on' : 'off'}'),
     });
     return world();
   }

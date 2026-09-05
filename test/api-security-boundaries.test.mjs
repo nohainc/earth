@@ -68,15 +68,15 @@ test('API Security Boundaries and Request Hardening', async () => {
     assert.equal(voteJson.ok, true);
     assert.notEqual(voteJson.weight, 1000000, 'Server must never accept client-supplied vote weight');
 
-    // 3. Client-supplied actorId in business policy must not allow unauthorized mutation
+    // 3. Retired business entities must not be writable through stale clients.
     const policyRes = await fetch(`${baseUrl}/api/businesses/B-1048/policy`, {
       method: 'POST',
       headers: { ...authHeaders, 'Idempotency-Key': 'sec-policy-test-1' },
       body: JSON.stringify({ policy: 'margin', ownerId: 'H-9999' }),
     });
     const policyJson = await policyRes.json();
-    assert.equal(policyRes.status, 200);
-    assert.equal(policyJson.ok, true);
+    assert.equal(policyRes.status, 410);
+    assert.equal(policyJson.ok, false);
 
     // 4. Oversized request body must be rejected safely
     const hugePayload = 'x'.repeat(1024 * 1024 + 100);

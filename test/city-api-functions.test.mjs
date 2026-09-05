@@ -23,7 +23,7 @@ test('City API lists city capacity with corporation names', async () => {
 test('City API qualification reports every capacity and governance requirement', async () => {
   const db = new Db({
     'SELECT * FROM cities WHERE id': { rows: [{ id: 'CITY-01', institution_id: 'CITY-01', residents: 20, housing_capacity: 20, energy_capacity: 25, connectivity_capacity: 20, health_capacity: 60, treasury: 100 }], rowCount: 1 },
-    'FROM institution_roles': { rows: [{ id: 'ROLE-01' }], rowCount: 1 },
+    'FROM governance_rules': { rows: [{ id: 'RULE-01' }], rowCount: 1 },
   });
   const result = await cityQualification(new PostgresRepository(db), 'CITY-01');
   assert.equal(result.qualified, true);

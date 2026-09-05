@@ -2,17 +2,17 @@ import type { Env } from './index.ts';
 import { withRepository } from './repository.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
 import {
-  listCommunitiesPostgres,
-  createCommunityPostgres,
-  updateCommunityPostgres,
-  disbandCommunityPostgres,
-  listCommunityMembershipRequestsPostgres,
-  decideCommunityMembershipRequestPostgres,
-  setCommunityMemberRolePostgres,
-  listCommunityMembersPostgres,
-  changeCommunityMembershipPostgres,
-  listCommunityContributionsPostgres,
-  contributeToCommunityPostgres,
+  listCommunities,
+  createCommunity,
+  updateCommunity,
+  disbandCommunity,
+  listCommunityMembershipRequests,
+  decideCommunityMembershipRequest,
+  setCommunityMemberRole,
+  listCommunityMembers,
+  changeCommunityMembership,
+  listCommunityContributions,
+  contributeToCommunity,
 } from './communities-postgres.ts';
 
 export async function handleCommunityRoutes(
@@ -22,7 +22,7 @@ export async function handleCommunityRoutes(
   viewer: { id: string },
 ): Promise<Response | null> {
   if (url.pathname === '/api/communities' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => listCommunitiesPostgres(repository));
+    const result = await withRepository(env, (repository) => listCommunities(repository));
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
@@ -48,7 +48,7 @@ export async function handleCommunityRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        createCommunityPostgres(repository, {
+        createCommunity(repository, {
           founderId,
           name,
           description: body.description,
@@ -72,7 +72,7 @@ export async function handleCommunityRoutes(
     if (!parsed.ok) return parsed.response;
     try {
       const result = await withRepository(env, (repository) =>
-        updateCommunityPostgres(repository, {
+        updateCommunity(repository, {
           communityId,
           humanId: viewer.id,
           description: parsed.value.description,
@@ -91,7 +91,7 @@ export async function handleCommunityRoutes(
     const communityId = communityMatch[1];
     try {
       const result = await withRepository(env, (repository) =>
-        disbandCommunityPostgres(repository, { communityId, humanId: viewer.id }),
+        disbandCommunity(repository, { communityId, humanId: viewer.id }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -105,7 +105,7 @@ export async function handleCommunityRoutes(
     const communityId = communityRequestsMatch[1];
     try {
       const result = await withRepository(env, (repository) =>
-        listCommunityMembershipRequestsPostgres(repository, communityId, viewer.id),
+        listCommunityMembershipRequests(repository, communityId, viewer.id),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -127,7 +127,7 @@ export async function handleCommunityRoutes(
     const rejectionReason = parsed.value.rejectionReason;
     try {
       const result = await withRepository(env, (repository) =>
-        decideCommunityMembershipRequestPostgres(repository, { communityId, deciderId: viewer.id, requestId, action, rejectionReason }),
+        decideCommunityMembershipRequest(repository, { communityId, deciderId: viewer.id, requestId, action, rejectionReason }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -148,7 +148,7 @@ export async function handleCommunityRoutes(
     const role = parsed.value.role;
     try {
       const result = await withRepository(env, (repository) =>
-        setCommunityMemberRolePostgres(repository, { communityId, actorId: viewer.id, targetHumanId, role }),
+        setCommunityMemberRole(repository, { communityId, actorId: viewer.id, targetHumanId, role }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -161,7 +161,7 @@ export async function handleCommunityRoutes(
   if (communityMembersMatch && request.method === 'GET') {
     const communityId = communityMembersMatch[1];
     try {
-      const result = await withRepository(env, (repository) => listCommunityMembersPostgres(repository, communityId));
+      const result = await withRepository(env, (repository) => listCommunityMembers(repository, communityId));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -181,7 +181,7 @@ export async function handleCommunityRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        changeCommunityMembershipPostgres(repository, {
+        changeCommunityMembership(repository, {
           communityId,
           humanId,
           action: request.method === 'POST' ? 'join' : 'leave',
@@ -200,7 +200,7 @@ export async function handleCommunityRoutes(
   if (communityContributionMatch && request.method === 'GET') {
     const communityId = communityContributionMatch[1];
     try {
-      const result = await withRepository(env, (repository) => listCommunityContributionsPostgres(repository, communityId));
+      const result = await withRepository(env, (repository) => listCommunityContributions(repository, communityId));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -227,7 +227,7 @@ export async function handleCommunityRoutes(
     }
     try {
       const result = await withRepository(env, (repository) =>
-        contributeToCommunityPostgres(repository, { communityId, humanId, amount, correlationId }),
+        contributeToCommunity(repository, { communityId, humanId, amount, correlationId }),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });

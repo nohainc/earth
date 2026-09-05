@@ -48,9 +48,9 @@ test('listNotifications queries user notifications and counts unread', async () 
   assert.equal(result.unread, 1);
 });
 
-test('listTechnology scopes private records to the current human', async () => {
+test('listTechnology scopes corporation research to the current human', async () => {
   const client = new MockDbClient({
-    'FROM research_projects WHERE owner_id': { rows: [{ id: 'PROJECT-1', owner_id: 'H-001' }], rowCount: 1 },
+    'FROM corporation_technology_projects': { rows: [{ id: 'PROJECT-1', corporation_id: 'CORP-001' }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 

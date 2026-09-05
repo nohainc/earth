@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
 import 'governance_dialogs.dart';
 
@@ -159,11 +160,7 @@ class CivicInfluencePanel extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final heldRoles = state.roles
-        .where((raw) =>
-            raw is Map &&
-            raw['human_id']?.toString() == state.human['id']?.toString())
-        .length;
+    const heldRoles = 0;
     final proposals =
         (state.governance['proposals'] as List<dynamic>?)?.length ?? 0;
     final communities = state.communities.length;
@@ -302,11 +299,15 @@ class _ProposalPanelState extends State<ProposalPanel> {
     final scopeLabel = widget.scopeLabel;
     final proposals =
         ((state.governance['proposals'] as List<dynamic>?) ?? const [])
-            .where((raw) =>
-                raw is Map &&
-                (raw['institution_id'] ?? raw['institutionId'] ?? institutionId)
-                        ?.toString() ==
-                    institutionId)
+            .where((raw) {
+              if (raw is! Map) return false;
+              final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
+              // Global/Universal proposals (institutionId null or empty or matching) belong to planetary / UC governance
+              if (institutionId == 'OUC-001' || scopeLabel == 'UC') {
+                return pInst == null || pInst.isEmpty || pInst == 'OUC-001';
+              }
+              return pInst == institutionId;
+            })
             .toList();
     final rules = ((state.governance['rules'] as List<dynamic>?) ?? const [])
         .where((raw) =>
@@ -319,18 +320,6 @@ class _ProposalPanelState extends State<ProposalPanel> {
     final ruleSummary = currentRule == null
         ? 'Common governance defaults apply: 25% quorum · 50% approval · 3-day voting period.'
         : 'Current rule: ${asIntOr(asDoubleOr(currentRule['quorum_threshold'], .25) * 100, 25)}% quorum · ${asIntOr(asDoubleOr(currentRule['approval_threshold'], .5) * 100, 50)}% approval · ${currentRule['voting_period_days'] ?? '—'}-day vote · ${currentRule['implementation_delay_days'] ?? '—'}-day delay.';
-
-    final createProposalButton = scopeLabel == 'CITY'
-        ? null
-        : EarthButton(
-            label: 'CREATE $scopeLabel PROPOSAL',
-            icon: Icons.note_add_outlined,
-            variant: EarthButtonVariant.primary,
-            onPressed: busy
-                ? null
-                : () => showProposalComposer(context, action,
-                    institutionId: institutionId, scopeLabel: scopeLabel),
-          );
 
     if (proposals.isEmpty) {
       return EarthSection(
@@ -348,8 +337,6 @@ class _ProposalPanelState extends State<ProposalPanel> {
           children: [
             _buildRuleSummary(context, ruleSummary),
             const SizedBox(height: 12),
-            if (createProposalButton != null) createProposalButton,
-            if (createProposalButton != null) const SizedBox(height: 14),
             const EarthEmptyState(
               message: 'No active legislation is currently on the ballot.',
               icon: Icons.how_to_vote_outlined,
@@ -378,8 +365,6 @@ class _ProposalPanelState extends State<ProposalPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          if (createProposalButton != null) createProposalButton,
-          if (createProposalButton != null) const SizedBox(height: 14),
           _buildRuleSummary(context, ruleSummary),
           const SizedBox(height: 12),
           for (final entry in proposals.asMap().entries) ...[
@@ -460,16 +445,7 @@ class _ProposalPanelState extends State<ProposalPanel> {
     final uncastCount = asIntOr(votes['uncast'], 0);
     final totalVotes = supportCount + opposeCount + uncastCount;
 
-    final hasJudicialAuthority = state.roles.any((raw) {
-      if (raw is! Map<String, dynamic>) return false;
-      final role = raw;
-      final holder = role['human_id']?.toString();
-      final name = role['name']?.toString().toLowerCase() ?? '';
-      return holder == state.human['id'] &&
-          (name.contains('court') ||
-              name.contains('judge') ||
-              name.contains('jurist'));
-    });
+    const hasJudicialAuthority = false;
 
     Color statusColor = context.primaryColor;
     if (isChallenged) statusColor = context.warningColor;
@@ -701,6 +677,7 @@ class _ProposalPanelState extends State<ProposalPanel> {
   }
 }
 
+/*
 class RolesPanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -825,6 +802,8 @@ class RolesPanel extends StatelessWidget {
         }).toList();
 }
 
+*/
+
 class PublicFinanceGovernancePanel extends StatelessWidget {
   final EarthState state;
   final bool busy;
@@ -841,10 +820,49 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
   Widget build(BuildContext context) {
     final taxRules =
         ((state.finance['taxRules'] as List<dynamic>?) ?? const []);
+    final publicProposals =
+        ((state.governance['proposals'] as List<dynamic>?) ?? const [])
+            .where((raw) {
+              if (raw is! Map) return false;
+              final institutionId =
+                  (raw['institution_id'] ?? raw['institutionId'])?.toString();
+              return institutionId == null ||
+                  institutionId.isEmpty ||
+                  institutionId == 'OUC-001';
+            })
+            .toList();
+    final openProposals = publicProposals.length;
+    const heldRoles = 0;
+
+    final cockpit = EarthPageCockpit(
+      status: 'LEGISLATIVE COMMONS',
+      statusColor: context.goldColor,
+      infoTitle: 'PUBLIC GOVERNANCE & STATUTES ARCHITECTURE',
+      infoDescription:
+          '• Active Tax & Public Law: Planetary and municipal statutes governing basic income, sales tax, corporate profit levies, and property rules.\n\n• Democratic Proposals: Citizen-sponsored referendums, rule changes, municipal charter amendments, and budgetary authorizations.\n\n• Civic Offices & Influence: Public offices held, voting rights, and constitutional democratic ratification.',
+      title: 'PUBLIC GOVERNANCE',
+      subtitle:
+          'Active civic statutes, planetary tax rules, democratic proposals, and public budgets across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Tax Laws',
+          value: '${taxRules.length}',
+          icon: Icons.receipt_long_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Proposals',
+          value: '$openProposals',
+          icon: Icons.gavel_outlined,
+          color: context.secondaryColor,
+        ),
+      ],
+    );
 
     return EarthSection(
       title: 'LAWS IN FORCE / TAXES & PUBLIC SERVICES',
       showSurface: false,
+      showHeader: false,
       infoBulletPoints: const [
         'These are the rules currently shaping taxes and public services.',
         'Review what you pay, what public systems receive, and how the rules affect your work, business, and residency.',
@@ -853,6 +871,8 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          cockpit,
+          const SizedBox(height: 28),
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(context.cardPadding),
@@ -898,19 +918,62 @@ class PublicFinanceGovernancePanel extends StatelessWidget {
                 final raw = indexed.$2;
                 final isLast = indexed.$1 == taxRules.length - 1;
                 final rule = raw as Map<String, dynamic>;
+                final category = rule['category']?.toString().toLowerCase() ?? '';
+                final scope = rule['scope']?.toString().toUpperCase() ?? 'GLOBAL';
+                final ratePct = NumberFormatHelper.percent(rule['rate']);
+                final version = rule['version'] ?? 1;
+
+                String formattedTitle;
+                String description;
+                IconData taxIcon;
+
+                switch (category) {
+                  case 'basic_income':
+                  case 'basic-levy':
+                    formattedTitle = 'Basic Income Tax';
+                    description = 'Planetary baseline levy on daily citizen income and dividends';
+                    taxIcon = Icons.person_outline;
+                    break;
+                  case 'business':
+                  case 'revenue-tax':
+                  case 'corporate':
+                    formattedTitle = 'Corporate & Business Revenue Tax';
+                    description = 'Operating levy on commercial enterprises and productive facilities';
+                    taxIcon = Icons.domain_outlined;
+                    break;
+                  case 'market':
+                  case 'sales':
+                    formattedTitle = 'Market Exchange & Sales Fee';
+                    description = 'Transaction fee applied to commodity exchange trades and orders';
+                    taxIcon = Icons.swap_horiz_rounded;
+                    break;
+                  case 'property':
+                    formattedTitle = 'Municipal Property Tax';
+                    description = 'Assessment on real estate plots and operational buildings';
+                    taxIcon = Icons.apartment_outlined;
+                    break;
+                  default:
+                    formattedTitle = category
+                        .replaceAll('_', ' ')
+                        .replaceAll('-', ' ')
+                        .split(' ')
+                        .map((w) => w.isNotEmpty ? '${w[0].toUpperCase()}${w.substring(1)}' : '')
+                        .join(' ');
+                    description = 'Statutory tax rule under $scope jurisdiction';
+                    taxIcon = Icons.receipt_long_outlined;
+                }
 
                 return EarthDataRow(
-                  title: '${rule['scope']} / ${rule['category']}',
-                  subtitle:
-                      'Rate: ${NumberFormatHelper.percent(rule['rate'])} · Version ${rule['version']}',
+                  title: formattedTitle,
+                  subtitle: '$description · Scope: $scope · Rate: $ratePct · v$version',
                   leading: Icon(
-                    Icons.receipt_long_outlined,
+                    taxIcon,
                     size: context.iconSize,
                     color: context.primaryColor,
                   ),
                   trailing: EarthStatusPill(
                     label: 'RATE',
-                    value: NumberFormatHelper.percent(rule['rate']),
+                    value: ratePct,
                     color: context.primaryColor,
                   ),
                   showDivider: !isLast,

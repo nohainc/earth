@@ -5,7 +5,6 @@ extension EarthApiRealEstate on EarthApi {
     required String buildingType,
     required String name,
     String? cityId,
-    String? businessId,
   }) async {
     final res = await _request(
       '/api/real-estate/purchase',
@@ -14,8 +13,7 @@ extension EarthApiRealEstate on EarthApi {
         'buildingType': buildingType,
         'name': name,
         if (cityId != null) 'cityId': cityId,
-        if (businessId != null) 'businessId': businessId,
-        'correlationId': 'PURCHASE-BLD-${DateTime.now().millisecondsSinceEpoch}',
+        'correlationId': newClientCorrelationId('PURCHASE-BLD'),
       },
     );
     return EarthState(res as Map<String, dynamic>);
@@ -29,7 +27,7 @@ extension EarthApiRealEstate on EarthApi {
       method: 'POST',
       body: {
         'buildingId': buildingId,
-        'correlationId': 'UPGRADE-BLD-${DateTime.now().millisecondsSinceEpoch}',
+        'correlationId': newClientCorrelationId('UPGRADE-BLD'),
       },
     );
     return EarthState(res as Map<String, dynamic>);
@@ -87,36 +85,6 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<EarthState> investInPublicBuilding({
-    required String buildingId,
-    required int sharesCount,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/invest',
-      method: 'POST',
-      body: {
-        'buildingId': buildingId,
-        'sharesCount': sharesCount,
-        'correlationId': 'INVEST-BLD-${DateTime.now().millisecondsSinceEpoch}',
-      },
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
-
-  Future<EarthState> openPublicInvestmentOffering({
-    required String cityId,
-    required String buildingType,
-    required String name,
-  }) async {
-    final res = await _request('/api/real-estate/public-offering', method: 'POST', body: {
-      'cityId': cityId,
-      'buildingType': buildingType,
-      'name': name,
-      'correlationId': 'PUBLIC-OFFER-${DateTime.now().millisecondsSinceEpoch}',
-    });
-    return EarthState(res as Map<String, dynamic>);
-  }
-
   Future<EarthState> demolishBuilding({
     required String buildingId,
   }) async {
@@ -140,45 +108,10 @@ extension EarthApiRealEstate on EarthApi {
         'poolId': poolId,
         'credits': credits,
         'compute': compute,
-        'correlationId': 'CORP-RD-${DateTime.now().millisecondsSinceEpoch}',
+        'correlationId': newClientCorrelationId('CORP-RD'),
       },
     );
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<EarthState> acquireBuildingPatentLicense({
-    required String patentId,
-    String licenseType = 'private_building',
-    String? buildingId,
-    String? cityId,
-    bool isPermanent = false,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/license/acquire',
-      method: 'POST',
-      body: {
-        'patentId': patentId,
-        'licenseType': licenseType,
-        if (buildingId != null) 'buildingId': buildingId,
-        if (cityId != null) 'cityId': cityId,
-        'isPermanent': isPermanent,
-        'correlationId': 'ACQ-LIC-${DateTime.now().millisecondsSinceEpoch}',
-      },
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
-
-  Future<EarthState> renewBuildingPatentLicense({
-    required String licenseId,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/license/renew',
-      method: 'POST',
-      body: {
-        'licenseId': licenseId,
-        'correlationId': 'RENEW-LIC-${DateTime.now().millisecondsSinceEpoch}',
-      },
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
 }

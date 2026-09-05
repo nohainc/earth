@@ -47,8 +47,7 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
          AND table_name IN (
            'humans', 'ledger_entries', 'market_orders', 'market_trades',
            'auth_credentials', 'auth_sessions', 'life_events',
-           'ownership_events', 'authority_events', 'business_financials',
-           'negotiated_contracts', 'contract_disputes',
+           'ownership_events',
            'earth_schema_migrations'
          )`,
       );

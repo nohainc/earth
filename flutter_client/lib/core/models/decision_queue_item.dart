@@ -61,8 +61,6 @@ class DecisionQueueItem {
     switch (category.toLowerCase()) {
       case 'business':
         return Icons.business_center_outlined;
-      case 'contracts':
-        return Icons.description_outlined;
       case 'governance':
       case 'civic':
         return Icons.how_to_vote_outlined;
@@ -184,37 +182,7 @@ class DecisionQueueItem {
       ));
     }
 
-    // 2. Contracts expiring
-    final rawContracts = state.json['contracts'];
-    final contracts = rawContracts is List ? rawContracts : const [];
-    if (contracts.isNotEmpty) {
-      final active = contracts
-          .where((c) =>
-              c is Map &&
-              (c['status'] == 'active' ||
-                  c['status'] == 'pending' ||
-                  c['status'] == 'open'))
-          .toList();
-      if (active.isNotEmpty) {
-        final c = Map<String, dynamic>.from(active.first as Map);
-        items.add(DecisionQueueItem(
-          id: 'decision-contract-expiry-${c['id'] ?? 'c1'}',
-          category: 'contracts',
-          title: 'A contract expires in 2 days',
-          whyItMatters:
-              'Unfulfilled supply obligations risk forfeiture of escrow collateral and damage commercial reliability standing.',
-          deadline: 'In 2 Game Days',
-          expectedImpact:
-              'Fulfill shipment to unlock full credit payout and improve corporate credit score.',
-          riskLevel: 'high',
-          primaryActionLabel: 'Review Contract',
-          targetSection: 'contracts',
-          urgencyScore: 85.0,
-        ));
-      }
-    }
-
-    // 3. Unresolved governance votes
+    // 2. Unresolved governance votes
     final rawGov = state.json['governance'];
     final governance = rawGov is Map ? rawGov : const {};
     final proposals = (governance['proposals'] as List<dynamic>?) ?? const [];

@@ -32,7 +32,6 @@ export interface DailyBriefingData {
     activeBusinesses: number;
     totalDailyOutput: number;
     activeBuildings: number;
-    pendingContractsCount: number;
   };
   civicSummary: {
     activeProposals: number;
@@ -103,12 +102,6 @@ export async function getDailyBriefing(
     { commodity: 'FOOD', currentPrice: 19.8, previousPrice: 19.5, deltaPct: 1.54, trend: 'up' as const, volume24h: 18900 },
   ];
 
-  const busRes = await client.query<{ count: string }>(
-    `select count(*) from businesses b left join business_management bm on bm.business_id = b.id where b.owner_id = $1 or bm.manager_id = $1`,
-    [humanId]
-  );
-  const activeBusinesses = parseInt(busRes.rows[0]?.count ?? '2', 10);
-
   const bldRes = await client.query<{ count: string }>(
     `select count(*) from buildings b where b.owner_id = $1`,
     [humanId]
@@ -162,10 +155,9 @@ export async function getDailyBriefing(
     },
     marketMovements: commodities,
     businessSummary: {
-      activeBusinesses: Math.max(1, activeBusinesses),
+      activeBusinesses: 0,
       totalDailyOutput: 3840,
       activeBuildings,
-      pendingContractsCount: 2,
     },
     civicSummary: {
       activeProposals,

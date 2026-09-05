@@ -4,7 +4,10 @@ import '../../app/theme.dart';
 import '../../core/api/earth_api.dart';
 import '../../core/models/earth_state.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
+
 import '../../shared/widgets/format_helpers.dart';
+import '../communications/comm_link_dialog.dart';
 import '../governance/governance_panels.dart';
 import '../house/house_lineage_dialog.dart';
 import 'institutions_dialogs.dart';
@@ -385,13 +388,7 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             ? widget.state.technology['corporationSharedPatents'] as List
             : const <dynamic>[]);
 
-    final canAdoptCity = isAffiliated &&
-        widget.state.roles.any((raw) {
-          if (raw is! Map) return false;
-          final role = raw['role_name'] ?? raw['name'] ?? raw['role'];
-          return raw['status']?.toString() == 'active' &&
-              role?.toString().toLowerCase() == 'corporation executive';
-        });
+    final canAdoptCity = isAffiliated;
 
     final leftColumn = [
       _buildAttributeRow(
@@ -783,18 +780,50 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             widget.state.institutions['corporation'] as Map)
         : const <String, dynamic>{};
 
-    return EarthSection(
-      title: 'PLANETARY CORPORATIONS & CHARTERS',
-      showSurface: false,
-      infoBulletPoints: const [
-        'Ancestral corporate directory tracking active alliances across world jurisdiction.',
-        'Tap any corporation record to expand its full charter, sovereign treasury, and tax bylaws.',
-        'Joining a corporation integrates your enterprise into its municipal network and patent pool.',
+    final currentCorpName = current['name']?.toString();
+    final allCities = widget.state.rankings['cities'] is List
+        ? (widget.state.rankings['cities'] as List)
+        : const <dynamic>[];
+
+    final cockpit = EarthPageCockpit(
+      status: 'PLANETARY COMMONS',
+      statusColor: context.primaryColor,
+      infoTitle: 'PLANETARY CORPORATIONS & CHARTER ARCHITECTURE',
+      infoDescription:
+          '• Sovereign Enterprise Alliances: Intermediate institutions governing constituent city charters, municipal taxation, and corporate dividend distribution.\n\n• Municipal Network: Each corporation is formed by and supports a network of chartered cities across Earth.\n\n• Shareholder Democratic Franchise: Every member votes on corporate leadership, municipal tax updates, and city adoptions.',
+      title: 'PLANETARY CORPORATIONS',
+      subtitle: 'Sovereign enterprise networks and municipal alliances across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Enterprises',
+          value: '${_corporations.length}',
+          icon: Icons.domain_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Affiliation',
+          value: _isMember && currentCorpName != null ? currentCorpName : 'Independent',
+          icon: Icons.verified_user_outlined,
+          color: context.secondaryColor,
+        ),
+        CockpitMetric(
+          label: 'Cities',
+          value: '${allCities.length}',
+          icon: Icons.location_city_outlined,
+          color: context.goldColor,
+        ),
       ],
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          _buildUniversalCharterTopic(context),
+    );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        cockpit,
+        const SizedBox(height: 28),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildUniversalCharterTopic(context),
           const SizedBox(height: 24),
           if (widget.showMemberSummary && _isMember) ...[
             _memberView(current),
@@ -807,8 +836,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
             const SizedBox(height: 12),
           ],
           _directoryView(),
-        ],
-      ),
+          ],
+        ),
+      ],
     );
   }
 
@@ -1191,8 +1221,44 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
               'City Ranking Index (0–100):\n\n• 1. City Capitalization: 35%\n  Municipal treasury + real estate & infrastructure equity.\n\n• 2. Infrastructure Coverage: 35%\n  Housing, energy, connectivity & health vs population.\n\n• 3. Commercial Vitality: 20%\n  Active local operating businesses.\n\n• 4. Demographic Population: 10%\n  Settled active residents.\n\nNote: Each metric is scaled dynamically (0.0 to 1.0) against the highest live value in the world economy.\n\n2nd Line: Cap · Biz · Res (Capitalization · Businesses · Residents).\n\n3rd Line: Affiliated Corporation.',
         );
 
-        if (wide) {
-          return Row(
+        final cockpit = EarthPageCockpit(
+          status: 'LIVE CIVIC INDEX',
+          statusColor: context.goldColor,
+          infoTitle: 'CIVIC RANKINGS & LEADERBOARD ARCHITECTURE',
+          infoDescription:
+              '• Planetary Index (0–100): Normalized dynamic rating across citizens, dynasties, corporations, and cities evaluated against real-time planetary economy metrics.\n\n• Citizen Index: Personal Legacy (45%) + Civic Standing (35%) + Capitalization (20%).\n\n• Dynastic House Index: Ancestral Inscriptions + Accumulated House Standing + Generational Peak Legacy.\n\n• Corporation Index: Total Enterprise Capitalization (45%) + Productive Ecosystem (30%) + Municipal Excellence (15%) + Workforce Population (10%).\n\n• City Index: Municipal Capitalization (35%) + Infrastructure Coverage (35%) + Commercial Vitality (20%) + Demographic Population (10%).\n\n• Prestige Tiers: Sovereign (90–100), Patrician (75–89), Pioneer (50–74), Citizen (0–49).',
+          title: 'CIVIC RANKINGS',
+          subtitle: 'Global prestige and economic hierarchy across citizens, dynasties, corporations, and cities',
+          metrics: [
+            CockpitMetric(
+              label: 'Citizens',
+              value: '${citizens.length}',
+              icon: Icons.person_outline,
+              color: context.primaryColor,
+            ),
+            CockpitMetric(
+              label: 'Houses',
+              value: '${houses.length}',
+              icon: Icons.shield_outlined,
+              color: context.warningColor,
+            ),
+            CockpitMetric(
+              label: 'Corporations',
+              value: '${corp.length}',
+              icon: Icons.account_balance_outlined,
+              color: context.secondaryColor,
+            ),
+            CockpitMetric(
+              label: 'Cities',
+              value: '${cities.length}',
+              icon: Icons.location_city_outlined,
+              color: context.goldColor,
+            ),
+          ],
+        );
+
+        final contentWidget = wide
+            ? Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               // Column 1: Sovereign & Lineage Sphere (Citizens / Dynasties)
@@ -1214,8 +1280,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                               context,
                               title: 'CITIZENS',
                               icon: Icons.person_outline,
-                              count: citizens.length,
-                              isSelected: _leftTab == 0,
+                                                            isSelected: _leftTab == 0,
                               onTap: () => setState(() => _leftTab = 0),
                             ),
                           ),
@@ -1224,8 +1289,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                               context,
                               title: 'HOUSES',
                               icon: Icons.shield_outlined,
-                              count: houses.length,
-                              isSelected: _leftTab == 1,
+                                                            isSelected: _leftTab == 1,
                               onTap: () => setState(() => _leftTab = 1),
                             ),
                           ),
@@ -1256,8 +1320,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                               context,
                               title: 'CORPS',
                               icon: Icons.account_balance_outlined,
-                              count: corp.length,
-                              isSelected: _rightTab == 0,
+                                                            isSelected: _rightTab == 0,
                               onTap: () => setState(() => _rightTab = 0),
                             ),
                           ),
@@ -1266,8 +1329,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                               context,
                               title: 'CITIES',
                               icon: Icons.location_city_outlined,
-                              count: cities.length,
-                              isSelected: _rightTab == 1,
+                                                            isSelected: _rightTab == 1,
                               onTap: () => setState(() => _rightTab = 1),
                             ),
                           ),
@@ -1279,11 +1341,8 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                 ),
               ),
             ],
-          );
-        }
-
-        // 1 Column Mode: 4 Tabs (Citizens -> Houses -> Corps -> Cities)
-        return Column(
+          )
+            : Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Container(
@@ -1300,8 +1359,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                       context,
                       title: 'CITIZENS',
                       icon: Icons.person_outline,
-                      count: citizens.length,
-                      isSelected: _singleTab == 0,
+                                            isSelected: _singleTab == 0,
                       onTap: () => setState(() => _singleTab = 0),
                     ),
                   ),
@@ -1310,8 +1368,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                       context,
                       title: 'HOUSES',
                       icon: Icons.shield_outlined,
-                      count: houses.length,
-                      isSelected: _singleTab == 1,
+                                            isSelected: _singleTab == 1,
                       onTap: () => setState(() => _singleTab = 1),
                     ),
                   ),
@@ -1320,8 +1377,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                       context,
                       title: 'CORPS',
                       icon: Icons.account_balance_outlined,
-                      count: corp.length,
-                      isSelected: _singleTab == 2,
+                                            isSelected: _singleTab == 2,
                       onTap: () => setState(() => _singleTab = 2),
                     ),
                   ),
@@ -1330,8 +1386,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                       context,
                       title: 'CITIES',
                       icon: Icons.location_city_outlined,
-                      count: cities.length,
-                      isSelected: _singleTab == 3,
+                                            isSelected: _singleTab == 3,
                       onTap: () => setState(() => _singleTab = 3),
                     ),
                   ),
@@ -1345,6 +1400,15 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                     : (_singleTab == 2 ? colCorps : colCities)),
           ],
         );
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            cockpit,
+            const SizedBox(height: 28),
+            contentWidget,
+          ],
+        );
       },
     );
   }
@@ -1353,8 +1417,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
     BuildContext context, {
     required String title,
     required IconData icon,
-    required int count,
-    required bool isSelected,
+        required bool isSelected,
     required VoidCallback onTap,
   }) {
     return Semantics(
@@ -1387,7 +1450,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
             const SizedBox(width: 4),
             Flexible(
               child: Text(
-                '$title ($count)',
+                title,
                 overflow: TextOverflow.ellipsis,
                 style: TextStyle(
                   fontSize: 10.5,
@@ -1736,85 +1799,10 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
     }
 
     if (rows.isEmpty) {
-      return Column(
+      return const Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Text(title, style: context.widgetTitleStyle),
-              if (formulaInfo != null) ...[
-                const SizedBox(width: 6),
-                Tooltip(
-                  message: formulaInfo,
-                  child: Semantics(
-                    button: true,
-                    label: 'Show $title ranking formula',
-                    child: InkWell(
-                    onTap: () {
-                      showDialog<void>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          backgroundColor: EarthColors.panelSurface,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            side: const BorderSide(color: Colors.white12),
-                          ),
-                          title: Row(
-                            children: [
-                              Icon(icon, color: cyanAccentColor, size: 18),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: Text(
-                                  '$title RANKING FORMULA',
-                                  style: const TextStyle(
-                                    fontSize: 13,
-                                    fontWeight: FontWeight.bold,
-                                    color: Color(0xffeab308),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          content: ConstrainedBox(
-                            constraints: const BoxConstraints(maxHeight: 360),
-                            child: SingleChildScrollView(
-                              child: Text(
-                                formulaInfo,
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  color: Colors.white70,
-                                  height: 1.5,
-                                ),
-                              ),
-                            ),
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(),
-                              child: const Text('GOT IT',
-                                  style: TextStyle(color: cyanAccentColor)),
-                            ),
-                          ],
-                        ),
-                      );
-                    },
-                    borderRadius: BorderRadius.circular(12),
-                    child: Padding(
-                      padding: const EdgeInsets.all(4),
-                      child: Icon(
-                        Icons.info_outline,
-                        size: context.iconSize,
-                        color: context.mutedColor,
-                      ),
-                    ),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-          SizedBox(height: context.spacingControl),
-          const EarthEmptyState(
+          EarthEmptyState(
             message: 'No ranking data available.',
             icon: Icons.leaderboard_outlined,
           ),
@@ -2007,81 +1995,6 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          children: [
-            Text(title, style: context.widgetTitleStyle),
-            if (formulaInfo != null) ...[
-              const SizedBox(width: 6),
-              Tooltip(
-                message: formulaInfo,
-                child: Semantics(
-                  button: true,
-                  label: 'Show $title ranking formula',
-                  child: InkWell(
-                  onTap: () {
-                    showDialog<void>(
-                      context: context,
-                      builder: (ctx) => AlertDialog(
-                        backgroundColor: EarthColors.panelSurface,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: const BorderSide(color: Colors.white12),
-                        ),
-                        title: Row(
-                          children: [
-                            Icon(icon, color: cyanAccentColor, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(
-                              child: Text(
-                                '$title RANKING FORMULA',
-                                style: const TextStyle(
-                                  fontSize: 13,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xffeab308),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                        content: ConstrainedBox(
-                          constraints: const BoxConstraints(maxHeight: 360),
-                          child: SingleChildScrollView(
-                            child: Text(
-                              formulaInfo,
-                              style: const TextStyle(
-                                fontSize: 13,
-                                color: Colors.white70,
-                                height: 1.5,
-                              ),
-                            ),
-                          ),
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
-                            child: const Text('GOT IT',
-                                style: TextStyle(color: cyanAccentColor)),
-                          ),
-                        ],
-                      ),
-                    );
-                  },
-                  borderRadius: BorderRadius.circular(12),
-                  child: Padding(
-                    padding: const EdgeInsets.all(4),
-                    child: Icon(
-                      Icons.info_outline,
-                      size: context.iconSize,
-                      color: context.mutedColor,
-                    ),
-                  ),
-                ),
-                ),
-              ),
-            ],
-          ],
-        ),
-        SizedBox(height: context.spacingControl),
         EarthDataList(
           children: pagedEntries.map((entry) {
             final idx = entry.key + 1;
@@ -2597,13 +2510,6 @@ class _CorporationHubPanelState extends State<CorporationHubPanel> {
               institutionId: currentCorpId,
               scopeLabel: 'CORPORATION',
             ),
-            const SizedBox(height: 34),
-            RolesPanel(
-              state: widget.state,
-              busy: widget.busy,
-              action: widget.action,
-              institutionId: currentCorpId,
-            ),
           ],
         ];
 
@@ -2725,13 +2631,53 @@ class CorporationOverviewPanel extends StatelessWidget {
     final corporateTaxBps =
         asIntOr(rules['corporateTaxBps'] ?? rules['corporate_tax_bps'], 250);
 
-    final canAdoptCity = isAffiliated &&
-        state.roles.any((raw) {
-          if (raw is! Map) return false;
-          final role = raw['role_name'] ?? raw['name'] ?? raw['role'];
-          return raw['status']?.toString() == 'active' &&
-              role?.toString().toLowerCase() == 'corporation executive';
-        });
+    final canAdoptCity = isAffiliated;
+
+    final corpProposalsCount =
+        ((state.governance['proposals'] as List<dynamic>?) ?? const [])
+            .where((raw) {
+              if (raw is! Map) return false;
+              final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
+              return pInst == id;
+            })
+            .length;
+
+    final cockpit = EarthPageCockpit(
+      status: isAffiliated ? 'AFFILIATED ENTERPRISE' : 'CHARTERED ENTERPRISE',
+      statusColor: isAffiliated ? context.successColor : context.primaryColor,
+      infoTitle: 'CORPORATE GOVERNANCE & COMMONS ARCHITECTURE',
+      infoDescription:
+          '• Chartered Governance: Corporations establish sovereign bylaws, taxation rates, and supermajority governance thresholds (67%).\n\n• Municipal City Network: Corporations charter and sponsor member cities, providing shared civic infrastructure and services.\n\n• Corporate Treasury & Commons: Distinct institutional treasury funding corporate research, shared patents, payroll, and collective expansion.',
+      title: name.toUpperCase(),
+      subtitle:
+          'Chartered corporate governance, municipal city networks, and shared enterprise commons across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Members',
+          value: '$memberCount',
+          icon: Icons.groups_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Cities',
+          value: '${corporation['city_count'] ?? 1}',
+          icon: Icons.hub_outlined,
+          color: context.secondaryColor,
+        ),
+        CockpitMetric(
+          label: 'Proposals',
+          value: '$corpProposalsCount',
+          icon: Icons.how_to_vote_outlined,
+          color: context.goldColor,
+        ),
+        CockpitMetric(
+          label: 'Patents',
+          value: '${sharedPatents.length}',
+          icon: Icons.science_outlined,
+          color: context.successColor,
+        ),
+      ],
+    );
 
     return EarthSection(
       title: 'CORPORATION',
@@ -2746,6 +2692,8 @@ class CorporationOverviewPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          cockpit,
+          const SizedBox(height: 28),
           Container(
             width: double.infinity,
             padding: EdgeInsets.all(context.cardPadding),
@@ -2757,47 +2705,6 @@ class CorporationOverviewPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: context.primaryColor.withValues(alpha: .14),
-                        borderRadius:
-                            BorderRadius.circular(context.radiusControl),
-                      ),
-                      child: Icon(Icons.account_balance_outlined,
-                          color: context.primaryColor),
-                    ),
-                    SizedBox(width: context.spacingInline + 4),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(name.toUpperCase(),
-                              style: context.topicTitleStyle),
-                          const SizedBox(height: 4),
-                          Text(
-                            'CAPITAL: ${capitalCityName.toUpperCase()}',
-                            style: context.captionStyle.copyWith(
-                                color: context.primaryColor,
-                                fontWeight: FontWeight.w700),
-                          ),
-                        ],
-                      ),
-                    ),
-                    EarthBadge(
-                      label: isAffiliated ? 'YOUR CORPORATION' : 'NETWORK',
-                      variant: isAffiliated
-                          ? EarthBadgeVariant.primary
-                          : EarthBadgeVariant.neutral,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                Divider(height: 1, color: context.subtleBorderColor),
-                const SizedBox(height: 10),
                 LayoutBuilder(
                 builder: (context, constraints) {
                     // Match the personal page: two columns when there is room,
@@ -3414,6 +3321,46 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final playerId = state.human['id']?.toString();
     final standing = asIntOr(state.human['standing'], 0);
 
+    final cityProposalsCount =
+        ((state.governance['proposals'] as List<dynamic>?) ?? const [])
+            .where((raw) {
+              if (raw is! Map) return false;
+              final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
+              return pInst == cityId;
+            })
+            .length;
+
+    final cockpit = EarthPageCockpit(
+      status: isCityResident ? 'RESIDENT CHARTER' : 'MUNICIPAL JURISDICTION',
+      statusColor: isCityResident ? context.successColor : context.primaryColor,
+      infoTitle: 'MUNICIPAL GOVERNANCE & SERVICES ARCHITECTURE',
+      infoDescription:
+          '• Service Capacities & Grid: Oversight of public housing, municipal energy distribution, network connectivity, and healthcare coverage.\n\n• Municipal Treasury: Dedicated civic funds designated strictly for municipal maintenance, infrastructure upgrades, and resident subsidies.\n\n• Local Governance & Ordinances: City-level proposals, active municipal statutes, and local council appointments.',
+      title: cityName,
+      subtitle:
+          'Municipal governance, public utility capacity, civic treasury, and resident welfare across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Residents',
+          value: '$residents',
+          icon: Icons.groups_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Treasury',
+          value: formatWholeNumber(cityTreasury),
+          icon: Icons.account_balance_wallet_outlined,
+          color: context.successColor,
+        ),
+        CockpitMetric(
+          label: 'Proposals',
+          value: '$cityProposalsCount',
+          icon: Icons.how_to_vote_outlined,
+          color: context.goldColor,
+        ),
+      ],
+    );
+
     return EarthSection(
       key: panelKey,
       title: 'INSTITUTIONS / CITY & SERVICES',
@@ -3427,6 +3374,8 @@ class InstitutionsCapacityPanel extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          cockpit,
+          const SizedBox(height: 28),
           // City Administration Card
           Container(
             width: double.infinity,
@@ -3439,73 +3388,41 @@ class InstitutionsCapacityPanel extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: context.primaryColor.withValues(alpha: .14),
-                        borderRadius:
-                            BorderRadius.circular(context.radiusControl),
-                      ),
-                      child: Icon(Icons.location_city_outlined,
-                          color: context.primaryColor),
-                    ),
-                    SizedBox(width: context.spacingInline + 4),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(cityName, style: context.topicTitleStyle),
-                          const SizedBox(height: 4),
-                          Text(
-                            'Housing: $housingRatio · Energy: $energyRatio · Connect: $connectRatio · Health: $healthRatio',
-                            style: context.captionStyle.copyWith(
-                              color: context.primaryColor,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                ),
-
-                const SizedBox(height: 14),
-                Divider(height: 1, color: context.subtleBorderColor),
-                const SizedBox(height: 10),
                 LayoutBuilder(
                   builder: (context, constraints) {
                     final attributes = [
                       _buildAttributeRow(context,
-                          icon: Icons.groups_outlined,
-                          label: 'RESIDENTS',
-                          value: '$residents',
-                          accentColor: context.secondaryColor),
-                      _buildAttributeRow(context,
                           icon: Icons.home_outlined,
+                          label: 'HOUSING',
+                          value: housingRatio,
+                          accentColor: context.primaryColor),
+                      _buildAttributeRow(context,
+                          icon: Icons.bolt_outlined,
+                          label: 'ENERGY',
+                          value: energyRatio,
+                          accentColor: context.primaryColor),
+                      _buildAttributeRow(context,
+                          icon: Icons.hub_outlined,
+                          label: 'CONNECTIVITY',
+                          value: connectRatio,
+                          accentColor: context.primaryColor),
+                      _buildAttributeRow(context,
+                          icon: Icons.local_hospital_outlined,
+                          label: 'HEALTHCARE',
+                          value: healthRatio,
+                          accentColor: context.primaryColor),
+                      _buildAttributeRow(context,
+                          icon: Icons.domain_outlined,
                           label: 'HOUSING CAPACITY',
                           value: '$housingCap',
                           accentColor: context.secondaryColor),
                       _buildAttributeRow(context,
-                          icon: Icons.bolt_outlined,
-                          label: 'ENERGY CAPACITY',
-                          value: '$energyCap',
-                          accentColor: context.secondaryColor),
-                      _buildAttributeRow(context,
                           icon: Icons.workspace_premium_outlined,
-                          label: 'STANDING',
+                          label: 'CITY STANDING',
                           value: '$standing',
-                          accentColor: context.primaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.account_balance_wallet_outlined,
-                          label: 'CITY BUDGET',
-                          value: '${formatWholeNumber(cityTreasury)} C',
-                          accentColor: context.warningColor),
+                          accentColor: context.goldColor),
                     ];
-                    if (constraints.maxWidth < 450) {
+                    if (constraints.maxWidth < 520) {
                       return Column(children: attributes);
                     }
                     return Row(
@@ -3513,11 +3430,11 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                       children: [
                         Expanded(
                             child:
-                                Column(children: attributes.take(2).toList())),
+                                Column(children: attributes.take(3).toList())),
                         const SizedBox(width: 24),
                         Expanded(
                             child:
-                                Column(children: attributes.skip(2).toList())),
+                                Column(children: attributes.skip(3).toList())),
                       ],
                     );
                   },
@@ -3663,9 +3580,6 @@ class CityImpactPanel extends StatelessWidget {
                 (lowest, value) =>
                     lowest == null || value < lowest ? value : lowest);
     final taxRate = asDouble(city['tax_rate'] ?? city['taxRate']);
-    final business = state.business;
-    final operatingEffect = asDouble(business['city_operating_modifier'] ??
-        business['cityOperatingModifier']);
 
     return EarthSection(
       title: 'CITY EFFECTS / LIFE & BUSINESS',
@@ -3701,19 +3615,6 @@ class CityImpactPanel extends StatelessWidget {
                 accentColor: pressure != null && pressure < .75
                     ? context.warningColor
                     : context.primaryColor,
-              ),
-              EarthMetricTile(
-                label: 'BUSINESS EFFECT',
-                value: operatingEffect == null
-                    ? 'UNAVAILABLE'
-                    : '${operatingEffect >= 0 ? '+' : ''}${operatingEffect.toStringAsFixed(1)}%',
-                subtitle: operatingEffect == null
-                    ? 'No modifier reported'
-                    : 'Operating cost modifier',
-                icon: Icons.storefront_outlined,
-                accentColor: operatingEffect != null && operatingEffect > 0
-                    ? context.warningColor
-                    : context.successColor,
               ),
               EarthMetricTile(
                 label: 'CITY TAX',
@@ -3890,21 +3791,45 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
     final pageItems =
         filteredList.skip(safePage * _pageSize).take(_pageSize).toList();
 
+    final cockpit = EarthPageCockpit(
+      status: 'CIVIC NETWORK',
+      statusColor: context.primaryColor,
+      infoTitle: 'CITIZEN COMMUNITIES & GUILDS ARCHITECTURE',
+      infoDescription:
+          '• Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared services.\n\n• Membership & Contributions: Join or leave freely; voluntary treasury contributions fund shared communal initiatives and social crowdfunding campaigns.\n\n• Cross-World Belonging: Communities are independent citizen associations spanning across all corporations and cities on Earth.',
+      title: 'COMMUNITIES & GUILDS',
+      subtitle: 'Grassroots civic associations, trade guilds, and mutual aid cooperatives across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Network',
+          value: '${activeCommunities.length}',
+          icon: Icons.groups_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Affiliation',
+          value: '$myCount',
+          icon: Icons.how_to_reg_outlined,
+          color: context.secondaryColor,
+        ),
+        CockpitMetric(
+          label: 'Open to Join',
+          value: '$openCount',
+          icon: Icons.lock_open_outlined,
+          color: context.successColor,
+        ),
+      ],
+    );
+
     return SingleChildScrollView(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          EarthSection(
-            title: 'CITIZEN COMMUNITIES & GUILDS',
-            showSurface: false,
-            infoBulletPoints: const [
-              'Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared services.',
-              'Membership & Contributions: Join or leave freely; voluntary treasury contributions fund shared communal initiatives and social crowdfunding campaigns.',
-              'Cross-World Belonging: Communities are independent citizen associations spanning across all corporations and cities on Earth.',
-            ],
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
+          cockpit,
+          const SizedBox(height: 28),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
                 Row(
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
@@ -3996,8 +3921,6 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                       final isMember = isOwner || isAdmin || myRole == 'member';
                       final isPending = myRequestStatus == 'pending';
                       final members = asIntOr(community['member_count'], 12);
-                      final sharedCredits =
-                          asDouble(community['shared_credits']) ?? 0.0;
 
                       final isExpanded = _expandedCommunityId == id;
 
@@ -4054,7 +3977,7 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                           ),
                                           const SizedBox(height: 6),
                                           Text(
-                                            'MEMBERS: $members  ·  TREASURY: ${formatWholeNumber(sharedCredits)} C  ·  ADMISSION: $admissionPolicy',
+                                            'MEMBERS: $members  ·  ADMISSION: $admissionPolicy',
                                             style: context.captionStyle
                                                 .copyWith(
                                                     color: context.mutedColor,
@@ -4245,7 +4168,6 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                 ],
               ],
             ),
-          ),
         ],
       ),
     );
@@ -4496,7 +4418,119 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
     final isAdmin = myRole == 'admin';
     final memberCount = asIntOr(
         myComm['member_count'], _members.isNotEmpty ? _members.length : 1);
-    final sharedCredits = asDouble(myComm['shared_credits']) ?? 0.0;
+
+    final statusText = isOwner
+        ? 'FOUNDER'
+        : isAdmin
+            ? 'ADMINISTRATOR'
+            : 'ACTIVE MEMBER';
+    final statusColor = isOwner || isAdmin ? context.primaryColor : context.successColor;
+
+    final cockpit = EarthPageCockpit(
+      status: statusText,
+      statusColor: statusColor,
+      infoTitle: 'CITIZEN GUILD & COMMUNITY ARCHITECTURE',
+      infoDescription:
+          '• Civic Guilds & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared services.\n\n• Admission & Membership: Open or approval-based membership with shared governance rights.',
+      title: name.toUpperCase(),
+      subtitle: description.isNotEmpty ? description : null,
+      actions: [
+        if (isOwner || isAdmin)
+          EarthButton(
+            label: 'MANAGE COMMUNITY',
+            icon: Icons.settings_outlined,
+            variant: EarthButtonVariant.primary,
+            onPressed: widget.busy
+                ? null
+                : () async {
+                    await showCommunityManageDialog(
+                        context,
+                        myComm,
+                        widget.state,
+                        widget.action,
+                      );
+                      _fetchDetails();
+                    },
+          ),
+      ],
+      metrics: [
+        CockpitMetric(
+          label: 'Members',
+          value: '$memberCount',
+          icon: Icons.groups_outlined,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Admission',
+          value: admissionPolicy,
+          icon: Icons.policy_outlined,
+          color: context.secondaryColor,
+        ),
+      ],
+      metricWidgets: [
+        InkWell(
+          onTap: () {
+            if (widget.onNavigate != null) {
+              widget.onNavigate!('messages:channel-community-$id');
+            } else {
+              showCommLinkDialog(
+                context,
+                state: widget.state,
+                initialChannelId: 'channel-community-$id',
+              );
+            }
+          },
+          borderRadius: BorderRadius.circular(10),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+            decoration: BoxDecoration(
+              color: context.surfaceColor.withValues(alpha: 0.65),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(
+                color: context.primaryColor.withValues(alpha: 0.35),
+                width: 0.8,
+              ),
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Icon(Icons.chat_outlined, size: 10, color: context.primaryColor),
+                    const SizedBox(width: 4),
+                    Text(
+                      'COMMUNICATION',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 8,
+                        letterSpacing: 0.8,
+                        fontWeight: FontWeight.w700,
+                        color: context.mutedColor,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  'COMMUNITY CHAT',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w800,
+                    color: context.primaryColor,
+                    letterSpacing: 0.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ],
+    );
 
     return EarthSection(
       key: widget.panelKey,
@@ -4506,215 +4540,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          // Top Identity & Action Header Bar
-          Container(
-            padding: EdgeInsets.all(context.cardPadding),
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      width: 46,
-                      height: 46,
-                      decoration: BoxDecoration(
-                        color: context.primaryColor.withValues(alpha: .14),
-                        borderRadius:
-                            BorderRadius.circular(context.radiusControl),
-                      ),
-                      child: Icon(Icons.groups_outlined,
-                          color: context.primaryColor),
-                    ),
-                    SizedBox(width: context.spacingInline + 4),
-                    Expanded(
-                        child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(name.toUpperCase(),
-                            style: context.topicTitleStyle),
-                        const SizedBox(height: 4),
-                        Text('FOUNDED BY: $founderName',
-                            style: context.captionStyle.copyWith(
-                                color: context.primaryColor,
-                                fontWeight: FontWeight.w700)),
-                      ],
-                    )),
-                    Wrap(children: [
-                      if (isOwner)
-                        const EarthBadge(
-                          label: 'OWNER / FOUNDER',
-                          variant: EarthBadgeVariant.primary,
-                        )
-                      else if (isAdmin)
-                        const EarthBadge(
-                          label: 'ADMIN',
-                          variant: EarthBadgeVariant.primary,
-                        )
-                      else
-                        const EarthBadge(
-                          label: 'MEMBER',
-                          variant: EarthBadgeVariant.success,
-                        ),
-                    ]),
-                  ],
-                ),
-                if (description.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    description,
-                    style: context.bodyStyle.copyWith(
-                      color: context.mutedColor,
-                      fontSize: 13,
-                      height: 1.5,
-                    ),
-                  ),
-                ],
-                const SizedBox(height: 14),
-                Divider(height: 1, color: context.subtleBorderColor),
-                const SizedBox(height: 10),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final attributes = [
-                      _buildAttributeRow(context,
-                          icon: Icons.groups_outlined,
-                          label: 'MEMBERS',
-                          value: '$memberCount',
-                          accentColor: context.secondaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.savings_outlined,
-                          label: 'COMMUNAL TREASURY',
-                          value: '${sharedCredits.toStringAsFixed(2)} C',
-                          accentColor: context.warningColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.policy_outlined,
-                          label: 'ADMISSION',
-                          value: admissionPolicy,
-                          accentColor: context.primaryColor),
-                    ];
-                    return constraints.maxWidth >= 450
-                        ? Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                                Expanded(
-                                    child: Column(
-                                        children: attributes.take(2).toList())),
-                                const SizedBox(width: 24),
-                                Expanded(
-                                    child: Column(
-                                        children: attributes.skip(2).toList())),
-                              ])
-                        : Column(children: attributes);
-                  },
-                ),
-                const SizedBox(height: 14),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
-                  children: [
-                    if (isOwner || isAdmin)
-                      EarthButton(
-                        label: 'MANAGE COMMUNITY',
-                        icon: Icons.settings_outlined,
-                        variant: EarthButtonVariant.primary,
-                        onPressed: widget.busy
-                            ? null
-                            : () async {
-                                await showCommunityManageDialog(
-                                  context,
-                                  myComm,
-                                  widget.state,
-                                  widget.action,
-                                );
-                                _fetchDetails();
-                              },
-                      ),
-                    if (!isOwner)
-                      EarthButton(
-                        label: 'LEAVE COMMUNITY',
-                        variant: EarthButtonVariant.danger,
-                        onPressed: widget.busy
-                            ? null
-                            : () => _confirmLeave(context, id, name),
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 24),
-
-          // 3. Quick Contribution Strip
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: context.surfaceColor,
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
-            ),
-            child: Row(
-              children: [
-                Icon(Icons.volunteer_activism_outlined,
-                    color: context.primaryColor, size: 28),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'CONTRIBUTE TO GUILD TREASURY',
-                        style: context.widgetTitleStyle
-                            .copyWith(color: context.primaryColor),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'Communal funds support shared ventures, municipal infrastructure, and guild services.',
-                        style: context.widgetFooterStyle
-                            .copyWith(color: context.mutedColor),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 4,
-                  children: [
-                    EarthButton(
-                      label: '+100 C',
-                      variant: EarthButtonVariant.secondary,
-                      onPressed: widget.busy
-                          ? null
-                          : () => widget.action(() =>
-                              const EarthApi().contributeToCommunity(id, 100)),
-                    ),
-                    EarthButton(
-                      label: '+500 C',
-                      variant: EarthButtonVariant.secondary,
-                      onPressed: widget.busy
-                          ? null
-                          : () => widget.action(() =>
-                              const EarthApi().contributeToCommunity(id, 500)),
-                    ),
-                    EarthButton(
-                      label: 'CUSTOM',
-                      icon: Icons.add_circle_outline,
-                      variant: EarthButtonVariant.primary,
-                      onPressed: widget.busy
-                          ? null
-                          : () => showCommunityContributionDialog(
-                              context, widget.action, id),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-
+          cockpit,
           // 4. Pending Review Requests (if founder/admin and requests exist)
           if ((isOwner || isAdmin) && _requests.isNotEmpty) ...[
             const SizedBox(height: 24),
@@ -4789,7 +4615,7 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               Text(
-                'MEMBER ROSTER (${_members.length})',
+                'MEMBER ROSTER',
                 style:
                     context.topicTitleStyle.copyWith(color: context.mutedColor),
               ),
@@ -4888,6 +4714,51 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                     );
                   }).toList(),
                 ),
+          if (!isOwner) ...[
+            const SizedBox(height: 28),
+            Container(
+              padding: EdgeInsets.all(context.cardPadding),
+              decoration: BoxDecoration(
+                color: context.surfaceColor,
+                borderRadius: BorderRadius.circular(context.radiusCard),
+                border: Border.all(color: context.subtleBorderColor),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'LEAVE COMMUNITY',
+                          style: context.widgetTitleStyle.copyWith(
+                            color: context.warningColor,
+                            fontSize: 13,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          'Resign your membership in this community. You can rejoin or request admission again later.',
+                          style: context.widgetFooterStyle.copyWith(
+                            color: context.mutedColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  EarthButton(
+                    label: 'LEAVE COMMUNITY',
+                    variant: EarthButtonVariant.danger,
+                    onPressed: widget.busy
+                        ? null
+                        : () => _confirmLeave(context, id, name),
+                  ),
+                ],
+              ),
+            ),
+          ],
         ],
       ),
     );

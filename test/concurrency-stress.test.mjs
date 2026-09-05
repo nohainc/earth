@@ -69,20 +69,7 @@ test('Concurrency and Idempotency Stress Tests', async () => {
     const voteResults = await Promise.all(votePromises);
     assert.ok(voteResults.some((r) => r.ok === true || r.ok === false));
 
-    // 3. Concurrent business policy modification
-    const policyPromises = ['reliability', 'margin', 'growth', 'reliability'].map((policy, i) =>
-      fetch(`${baseUrl}/api/businesses/B-1048/policy`, {
-        method: 'POST',
-        headers: { ...authHeaders, 'Idempotency-Key': `policy-stress-${i}` },
-        body: JSON.stringify({ policy }),
-      }).then((r) => r.json())
-    );
-    const policyResults = await Promise.all(policyPromises);
-    for (const res of policyResults) {
-      assert.equal(res.ok, true);
-    }
-
-    // 4. Invariant check after concurrent mutations: balances non-negative
+    // 3. Invariant check after concurrent mutations: balances non-negative
     const worldRes = await fetch(`${baseUrl}/api/world`);
     const world = await worldRes.json();
     assert.ok(world.human.credits >= 0, 'Human credits must remain non-negative');

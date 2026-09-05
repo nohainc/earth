@@ -6,6 +6,7 @@ import '../../core/models/earth_state.dart';
 import '../../core/ui_style_tokens.dart';
 import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/format_helpers.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
 
 void showHouseTreeDialog(
   BuildContext context, {
@@ -328,6 +329,102 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         .replaceAll(RegExp(r'\bNoga\b', caseSensitive: false), 'Noha');
     final legacyPoints = _parseInt(_house['legacy_points'], fallback: 0);
 
+    final legacy = _parseNum(_house['legacy_points'] ??
+        _house['total_legacy'] ??
+        widget.state?.json['legacy_score'] ??
+        legacyPoints);
+    final standing = _parseNum(_house['standing'] ??
+        _house['civic_standing'] ??
+        _house['peak_standing'] ??
+        widget.state?.human['civic_standing'] ??
+        widget.state?.json['civic_standing']);
+    final rawScore = _house['house_score'] ?? _house['score'] ?? _house['dynasty_score'];
+    final houseScore = (rawScore != null && _parseNum(rawScore) > 0)
+        ? _parseNum(rawScore)
+        : (legacy * 50 + standing * 10);
+    final successor = widget.state?.life['successor'];
+    final successorName = successor is Map
+        ? (successor['successor_name'] ?? successor['name'])?.toString()
+        : null;
+    final activeHeir = (_house['active_heir'] ??
+            _house['heir_name'] ??
+            successorName ??
+            'Undesignated')
+        .toString();
+    final generation = _lineage.isNotEmpty ? _lineage.length : 1;
+
+    final cockpit = EarthPageCockpit(
+      status: 'ANCESTRAL HERITAGE',
+      statusColor: context.goldColor,
+      infoTitle: 'DYNASTY HERITAGE & SUCCESSION ARCHITECTURE',
+      infoDescription:
+          '• Generational Continuity: Preserves your family lineage across biological successions, retaining ancestral standing and dynastic achievements.\n\n• Legacy Points & Perks: Measured in permanent influence (LP) passed down to empower ancestral perks and unlock heirloom technologies.\n\n• House Score: Aggregates total generational achievements, civic contributions, and economic standing across all ancestors.',
+      title: 'HOUSE OF ${houseName.toUpperCase()}',
+      titleWidget: Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          Text(
+            'HOUSE OF ',
+            style: TextStyle(
+              fontSize: 24,
+              fontWeight: FontWeight.w800,
+              letterSpacing: -0.5,
+              color: context.mutedColor,
+            ),
+          ),
+          Flexible(
+            child: Text(
+              houseName.toUpperCase(),
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                letterSpacing: -0.5,
+                color: context.inkColor,
+              ),
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          const SizedBox(width: 8),
+          IconButton(
+            key: const Key('btn-edit-motto-dialog'),
+            tooltip: 'Edit house name',
+            icon: Icon(
+              Icons.edit_outlined,
+              size: 18,
+              color: context.primaryColor,
+            ),
+            onPressed: _showEditMottoDialog,
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
+          ),
+        ],
+      ),
+      subtitle:
+          'Dynastic lineage, ancestral heirlooms, generational perks, and house succession across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Legacy',
+          value: formatWholeNumber(legacy),
+          icon: Icons.auto_awesome_outlined,
+          color: context.secondaryColor,
+        ),
+        CockpitMetric(
+          label: 'Prestige',
+          value: formatWholeNumber(houseScore),
+          icon: Icons.emoji_events_outlined,
+          color: context.goldColor,
+        ),
+        CockpitMetric(
+          label: 'Succession',
+          value: activeHeir,
+          icon: Icons.how_to_reg_outlined,
+          color: context.successColor,
+        ),
+      ],
+    );
+
     Widget topicsList = LayoutBuilder(
       builder: (context, constraints) {
         final isWide = constraints.maxWidth >= 840;
@@ -420,7 +517,14 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                       child: CircularProgressIndicator(
                           color: themeColor)))
             else if (widget.isPageMode)
-              topicsList
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  cockpit,
+                  const SizedBox(height: 28),
+                  topicsList,
+                ],
+              )
             else
               Expanded(
                 child: SingleChildScrollView(
@@ -528,72 +632,11 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         decoration: BoxDecoration(
           color: context.surfaceColor.withValues(alpha: .75),
           borderRadius: BorderRadius.circular(context.radiusCard),
-          border: Border.all(color: context.subtleBorderColor),
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.center,
-              children: [
-                CircleAvatar(
-                  radius: 24,
-                  backgroundColor: context.primaryColor.withValues(alpha: .15),
-                  child: Text(
-                    initials,
-                    style: context.widgetTitleStyle.copyWith(
-                      color: context.primaryColor,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 14),
-                Expanded(
-                  child: Row(
-                    children: [
-                      Flexible(
-                        child: Text(
-                          houseName,
-                          style: context.topicTitleStyle.copyWith(
-                            color: context.inkColor,
-                            fontWeight: FontWeight.w700,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      Text(
-                        'HOUSE',
-                        style: TextStyle(
-                          color: context.mutedColor,
-                          fontWeight: FontWeight.w700,
-                          fontSize: tokens.number('typography.widgetTitle.size', 10),
-                          letterSpacing: 1.4,
-                        ),
-                      ),
-                      const SizedBox(width: 6),
-                      IconButton(
-                        key: const Key('btn-edit-motto-dialog'),
-                        tooltip: 'Edit house name',
-                        icon: Icon(
-                          Icons.edit_outlined,
-                          size: 16,
-                          color: context.primaryColor,
-                        ),
-                        onPressed: _showEditMottoDialog,
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 14),
-            Divider(height: 1, color: context.subtleBorderColor),
-            const SizedBox(height: 10),
-            // 2-Column Key-Value Attribute Table (3x2 symmetrical)
+            // 2-Column Key-Value Attribute Table (4 attributes, 2x2)
             LayoutBuilder(
               builder: (context, constraints) {
                 final isWide = constraints.maxWidth >= 450;
@@ -612,6 +655,9 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     value: foundedText,
                     accentColor: context.primaryColor,
                   ),
+                ];
+
+                final rightColumn = [
                   _buildAttributeRow(
                     context,
                     icon: Icons.emoji_events_outlined,
@@ -619,29 +665,12 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
                     value: '${formatWholeNumber(houseScore)} PTS',
                     accentColor: context.secondaryColor,
                   ),
-                ];
-
-                final rightColumn = [
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.auto_awesome_outlined,
-                    label: 'LEGACY',
-                    value: '${formatWholeNumber(legacy)} LP',
-                    accentColor: context.secondaryColor,
-                  ),
                   _buildAttributeRow(
                     context,
                     icon: Icons.verified_user_outlined,
-                    label: 'STANDING',
+                    label: 'HOUSE STANDING',
                     value: '${formatWholeNumber(standing)} Std',
                     accentColor: context.primaryColor,
-                  ),
-                  _buildAttributeRow(
-                    context,
-                    icon: Icons.how_to_reg_outlined,
-                    label: 'ACTIVE HEIR',
-                    value: activeHeir,
-                    accentColor: context.successColor,
                   ),
                 ];
 
@@ -1058,7 +1087,7 @@ class _HouseTreeDialogState extends State<HouseTreeDialog>
         ? rawCorp.toString().replaceAll('corp-', '').replaceAll('-', ' ').toUpperCase()
         : 'INDEPENDENT';
 
-    final businesses = member['businesses_founded'] ?? 0;
+    final businesses = member['operations_completed'] ?? 0;
     final proposals = member['proposals_authored'] ?? 0;
 
     return Column(

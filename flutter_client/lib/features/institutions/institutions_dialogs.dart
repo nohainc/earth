@@ -484,7 +484,6 @@ Future<void> showCommunityDetailsDialog(
   final admissionPolicy = (community['admission_policy']?.toString() ?? 'open').toUpperCase();
   final myRole = community['my_role']?.toString();
   final isPending = community['my_request_status'] == 'pending';
-  final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
   final members = asIntOr(community['member_count'], 12);
   final isOwner = myRole == 'founder';
   final isAdmin = myRole == 'admin';
@@ -550,10 +549,10 @@ Future<void> showCommunityDetailsDialog(
                     icon: Icons.groups_outlined,
                   ),
                   EarthMetricTile(
-                    label: 'SHARED TREASURY',
-                    value: '${sharedCredits.toStringAsFixed(0)} C',
-                    subtitle: 'Voluntary pool',
-                    icon: Icons.savings_outlined,
+                    label: 'ADMISSION',
+                    value: admissionPolicy,
+                    subtitle: 'Entry policy',
+                    icon: Icons.policy_outlined,
                   ),
                 ],
               ),
@@ -634,7 +633,6 @@ Future<void> showCommunityManageDialog(
   final descController = TextEditingController(text: community['description']?.toString() ?? '');
   final questionController = TextEditingController(text: community['application_question']?.toString() ?? '');
   String admissionPolicy = community['admission_policy']?.toString() ?? 'open';
-  final sharedCredits = asDouble(community['shared_credits']) ?? 0.0;
 
   List<dynamic> members = [];
   List<dynamic> requests = [];
@@ -1114,9 +1112,7 @@ Future<void> showCommunityManageDialog(
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  sharedCredits > 0
-                                      ? 'Treasury contains ${sharedCredits.toStringAsFixed(2)} Credits. You cannot delete a community with existing funds. Disburse or transfer funds first.'
-                                      : 'Disbanding is irreversible. All community records and memberships will be dissolved permanently.',
+                                  'Disbanding is irreversible. All community records and memberships will be dissolved permanently.',
                                   textAlign: TextAlign.center,
                                   style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
                                 ),
@@ -1124,12 +1120,10 @@ Future<void> showCommunityManageDialog(
                                 EarthButton(
                                   label: 'DISBAND COMMUNITY',
                                   variant: EarthButtonVariant.danger,
-                                  onPressed: sharedCredits > 0
-                                      ? null
-                                      : () async {
-                                          Navigator.pop(dialogContext);
-                                          await action(() => const EarthApi().disbandCommunity(id));
-                                        },
+                                  onPressed: () async {
+                                    Navigator.pop(dialogContext);
+                                    await action(() => const EarthApi().disbandCommunity(id));
+                                  },
                                 ),
                               ],
                             ),
@@ -1146,53 +1140,6 @@ Future<void> showCommunityManageDialog(
           ),
         );
       },
-    ),
-  );
-}
-
-Future<void> showCommunityContributionDialog(
-  BuildContext context,
-  Future<void> Function(Future<EarthState> Function()) action,
-  String communityId,
-) async {
-  final amount = TextEditingController(text: '50');
-  await showDialog<void>(
-    context: context,
-    builder: (dialogContext) => AlertDialog(
-      backgroundColor: context.panelColor,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(context.radiusPanel),
-        side: BorderSide(color: context.primaryColor.withValues(alpha: .35)),
-      ),
-      title: Text(
-        'Contribute to Community',
-        style: context.topicTitleStyle.copyWith(color: context.primaryColor),
-      ),
-      content: TextField(
-        controller: amount,
-        autofocus: true,
-        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        style: context.bodyStyle.copyWith(color: context.inkColor),
-        decoration: InputDecoration(
-          labelText: 'Amount (Credits)',
-          labelStyle: context.widgetFooterStyle,
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(dialogContext),
-          child: Text('CANCEL', style: context.controlStyle.copyWith(color: context.mutedColor)),
-        ),
-        EarthButton(
-          label: 'Contribute',
-          onPressed: () async {
-            final val = double.tryParse(amount.text.trim());
-            if (val == null || val <= 0) return;
-            Navigator.pop(dialogContext);
-            await action(() => const EarthApi().contributeToCommunity(communityId, val));
-          },
-        ),
-      ],
     ),
   );
 }

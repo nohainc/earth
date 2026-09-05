@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../shared/design_system/design_system.dart';
+import '../../shared/widgets/earth_page_cockpit.dart';
+
 import '../house/house_lineage_dialog.dart';
 
 class HistoricalArchivePanel extends StatefulWidget {
@@ -54,60 +56,89 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     final deceasedCol = _buildDeceasedSection(context, deceased, rawHouses);
     final housesCol = _buildHousesSection(context, houses);
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final wide = constraints.maxWidth >= 840;
+    final cockpit = EarthPageCockpit(
+      status: 'ETERNAL RECORD',
+      statusColor: context.goldColor,
+      infoTitle: 'MEMORIAL & PANTHEON ARCHIVE',
+      infoDescription:
+          '• Eternal Ledger: Preserves the permanent lifetime record and achievements of deceased citizens and concluded noble houses.\n\n• Citizen Composite Score (1 : 5 : 25 ratio):\n  - Personal Legacy (25x relative weight)\n  - Civic Standing (5x relative weight)\n  - Lifespan Age (1x base weight)\n\n• House Prestige Score:\n  - House Legacy (25x) + House Standing (5x) + Ancestral Inscriptions (10x bonus) + House Lifespan (1x base)\n\n• Dynastic Extinction: Registry of inactive houses whose lineage concluded without surviving designated heirs.',
+      title: 'MEMORIAL & PANTHEON',
+      subtitle: 'Planetary historical ledger of concluded lives and noble houses across Earth',
+      metrics: [
+        CockpitMetric(
+          label: 'Archived Citizens',
+          value: '${deceased.length}',
+          icon: Icons.people_outline,
+          color: context.primaryColor,
+        ),
+        CockpitMetric(
+          label: 'Extinct Houses',
+          value: '${houses.length}',
+          icon: Icons.shield_outlined,
+          color: context.warningColor,
+        ),
+      ],
+    );
 
-        if (wide) {
-          return Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(child: deceasedCol),
-              const SizedBox(width: 40),
-              Expanded(child: housesCol),
-            ],
-          );
-        }
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        cockpit,
+        const SizedBox(height: 28),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final wide = constraints.maxWidth >= 840;
 
-        return Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              margin: EdgeInsets.only(bottom: context.spacingControl),
-              decoration: BoxDecoration(
-                color: context.surfaceColor.withValues(alpha: .6),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: context.subtleBorderColor),
-              ),
-              child: Row(
+            if (wide) {
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'CITIZENS',
-                      icon: Icons.account_box_outlined,
-                      count: deceased.length,
-                      isSelected: _selectedTab == 0,
-                      onTap: () => setState(() => _selectedTab = 0),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'HOUSES',
-                      icon: Icons.shield_outlined,
-                      count: houses.length,
-                      isSelected: _selectedTab == 1,
-                      onTap: () => setState(() => _selectedTab = 1),
-                    ),
-                  ),
+                  Expanded(child: deceasedCol),
+                  const SizedBox(width: 40),
+                  Expanded(child: housesCol),
                 ],
-              ),
-            ),
-            _selectedTab == 0 ? deceasedCol : housesCol,
-          ],
-        );
-      },
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Container(
+                  margin: EdgeInsets.only(bottom: context.spacingControl),
+                  decoration: BoxDecoration(
+                    color: context.surfaceColor.withValues(alpha: .6),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: context.subtleBorderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: _buildNarrowTabButton(
+                          context,
+                          title: 'CITIZENS',
+                          icon: Icons.account_box_outlined,
+                          isSelected: _selectedTab == 0,
+                          onTap: () => setState(() => _selectedTab = 0),
+                        ),
+                      ),
+                      Expanded(
+                        child: _buildNarrowTabButton(
+                          context,
+                          title: 'HOUSES',
+                          icon: Icons.shield_outlined,
+                          isSelected: _selectedTab == 1,
+                          onTap: () => setState(() => _selectedTab = 1),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                _selectedTab == 0 ? deceasedCol : housesCol,
+              ],
+            );
+          },
+        ),
+      ],
     );
   }
 
@@ -161,8 +192,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
     BuildContext context, {
     required String title,
     required IconData icon,
-    required int count,
-    required bool isSelected,
+        required bool isSelected,
     required VoidCallback onTap,
   }) {
     return InkWell(
@@ -187,7 +217,7 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
             const SizedBox(width: 6),
             Flexible(
               child: Text(
-                '$title ($count)',
+                title,
                 overflow: TextOverflow.ellipsis,
                 style: context.controlStyle.copyWith(
                   color: isSelected ? context.primaryColor : context.mutedColor,
@@ -241,25 +271,11 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
 
     return EarthSection(
       title: 'MEMORIAL CITIZENS',
+      showHeader: false,
       showSurface: false,
-      infoDescription:
-          'The Composite Score permanently records the historical impact of a deceased citizen across their lifetime on Earth based on a 1 : 5 : 25 weighting ratio:',
-      infoBulletPoints: const [
-        'Personal Legacy (25x relative weight): Historical milestones & lifetime achievements.',
-        'Civic Standing (5x relative weight): Political influence & civic reputation at passing.',
-        'Lifespan Age (1x base weight): Total full years lived on Earth.',
-        'Relative Ratio: 1 Legacy Pt = 5 Civic Standing Pts = 25 Age Years.',
-      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.only(bottom: context.spacingControl),
-            child: Text(
-              'Historical registry of deceased citizens who have completed their life cycle on Earth.',
-              style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
-            ),
-          ),
           if (deceased.isNotEmpty)
             _buildSearchBar(
               context: context,
@@ -487,26 +503,11 @@ class _HistoricalArchivePanelState extends State<HistoricalArchivePanel> {
 
     return EarthSection(
       title: 'HISTORICAL HOUSES',
+      showHeader: false,
       showSurface: false,
-      infoDescription:
-          'The House Prestige Score permanently records the generational prominence and survival of a noble house across Earth\'s history based on a 1 : 5 : 25 weighting ratio:',
-      infoBulletPoints: const [
-        'House Legacy (25x relative weight): Cumulative milestones and achievements earned across all generations.',
-        'House Standing (5x relative weight): Accumulated civic reputation and governance trust.',
-        'Ancestral Inscriptions (10x bonus): Total passed ancestors permanently recorded.',
-        'House Lifespan (1x base weight): Total full years the house has existed on Earth.',
-        'Relative Ratio: 1 Legacy Pt = 5 House Standing Pts = 25 Lifespan Years.',
-      ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Padding(
-            padding: EdgeInsets.only(bottom: context.spacingControl),
-            child: Text(
-              'Planetary registry and memorial of concluded, extinct, and inactive noble house lineages across Earth.',
-              style: context.widgetFooterStyle.copyWith(color: context.mutedColor),
-            ),
-          ),
           if (houses.isNotEmpty)
             _buildSearchBar(
               context: context,
