@@ -45,23 +45,23 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
   String _buildingImageAsset(String buildingType) {
     const assets = <String, String>{
-      'restaurant': 'molecular-bistro',
-      'retail-store': 'retail-tools-boutique',
-      'commercial-mall': 'commercial-galleria',
-      'fabrication-plant': 'cnc-fabrication-plant',
-      'chemical-foundry': 'polymer-foundry',
-      'solar-array-complex': 'solar-array',
-      'geothermal-grid': 'geothermal-core',
-      'vertical-farm': 'aeroponic-farm',
-      'server-farm': 'neural-data-center',
-      'medical-clinic': 'bionic-medical-center',
-      'transit-hyperloop': 'hyperloop-terminal',
-      'orbital-spaceport': 'orbital-spaceport',
-      'transit-terminus': 'transit-hub',
-      'urban-district-module': 'urban-district-module',
-      'private-estate-plot': 'private-estate-plot',
+      'restaurant': 'molecular-bistro-31f39f',
+      'retail-store': 'retail-tools-boutique-643968',
+      'commercial-mall': 'commercial-galleria-900cac',
+      'fabrication-plant': 'cnc-fabrication-plant-239181',
+      'chemical-foundry': 'polymer-foundry-d8b334',
+      'solar-array-complex': 'solar-array-d83bb7',
+      'geothermal-grid': 'geothermal-core-af4193',
+      'vertical-farm': 'aeroponic-farm-8f93ff',
+      'server-farm': 'neural-data-center-1d0462',
+      'medical-clinic': 'bionic-medical-center-94fca3',
+      'transit-hyperloop': 'hyperloop-terminal-bc225d',
+      'orbital-spaceport': 'orbital-spaceport-8203a5',
+      'transit-terminus': 'transit-hub-bde804',
+      'urban-district-module': 'urban-district-module-6fa134',
+      'private-estate-plot': 'private-estate-plot-a87690',
     };
-    return 'assets/buildings/${assets[buildingType] ?? 'urban-district-module'}.png';
+    return 'assets/buildings/${assets[buildingType] ?? 'urban-district-module-6fa134'}.png';
   }
 
   Widget _buildingImage(BuildContext context, String buildingType) {
