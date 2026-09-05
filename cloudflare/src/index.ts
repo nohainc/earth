@@ -1001,12 +1001,27 @@ export default {
       });
     }
     const url = new URL(request.url);
+    if (url.pathname.startsWith('/media/')) {
+      const key = url.pathname.slice('/media/'.length);
+      if (!key || key.includes('..') || key.includes('\\')) {
+        return new Response('Not found', { status: 404 });
+      }
+      const mediaBucket = (env as any).MEDIA ?? (env as any).BUILDING_ASSETS;
+      const object = mediaBucket ? await mediaBucket.get(key) : null;
+      if (!object) return new Response('Not found', { status: 404 });
+      const headers = new Headers();
+      object.writeHttpMetadata(headers);
+      headers.set('cache-control', 'public, max-age=31536000, immutable');
+      headers.set('etag', object.httpEtag);
+      return new Response(object.body, { headers });
+    }
     if (url.pathname.startsWith('/building-assets/')) {
       const key = url.pathname.slice('/building-assets/'.length);
       if (!key || key.includes('..') || key.includes('\\')) {
         return new Response('Not found', { status: 404 });
       }
-      const object = await env.BUILDING_ASSETS.get(key);
+      const mediaBucket = (env as any).MEDIA ?? (env as any).BUILDING_ASSETS;
+      const object = mediaBucket ? (await mediaBucket.get(key) ?? await mediaBucket.get(`buildings/${key}`)) : null;
       if (!object) return new Response('Not found', { status: 404 });
       const headers = new Headers();
       object.writeHttpMetadata(headers);
