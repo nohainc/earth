@@ -200,9 +200,9 @@ class SuppliesTodayPanel extends StatelessWidget {
                 fontSize: 12,
                 fontWeight: FontWeight.w700)),
         const SizedBox(height: 4),
-        Text(
+        const Text(
             'Reserved stock is excluded from available quantities.',
-            style: const TextStyle(color: mutedColor, fontSize: 10.5)),
+            style: TextStyle(color: mutedColor, fontSize: 10.5)),
         const SizedBox(height: 12),
         Wrap(spacing: 10, runSpacing: 10, children: cards),
         const SizedBox(height: 12),

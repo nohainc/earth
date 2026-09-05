@@ -120,46 +120,4 @@ void main() {
 
     expect(recovered, true);
   });
-
-  testWidgets('showContractComposerDialog proposes contract agreement',
-      (tester) async {
-    bool proposed = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => showContractComposerDialog(
-                context,
-                (fn) async {
-                  proposed = true;
-                },
-              ),
-              child: const Text('Open Contract Dialog'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open Contract Dialog'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Propose agreement'), findsOneWidget);
-    expect(find.text('Propose'), findsOneWidget);
-
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Counterparty Human ID'), 'H-0042');
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Agreement title'), 'Energy Delivery Service');
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Credits'), '800');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Propose'));
-    await tester.pumpAndSettle();
-
-    expect(proposed, true);
-  });
 }

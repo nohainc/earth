@@ -69,8 +69,6 @@ void main() {
     expect(state.history['events'], isEmpty);
     expect(state.financeStatus.length, 1);
     expect(state.personalFinance['tax'], 10);
-    expect(state.contracts.length, 1);
-    expect(state.roles.first, 'founder');
     expect(state.membership?['city_id'], 'CITY-1');
   });
 }

@@ -131,7 +131,6 @@ void main() {
                 businessProfile: const {},
                 personalFinanceData: const {},
                 pantheon: const {},
-                contracts: const [],
                 membershipEvents: const [],
                 marketHistory: const {},
                 unreadNotifications: 0,

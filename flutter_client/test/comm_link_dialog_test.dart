@@ -246,7 +246,7 @@ void main() {
     });
     final api = EarthApi(transport: EarthApiTransport(baseUrl: 'http://mock.test', client: client));
 
-    final earthState = EarthState({
+    const earthState = EarthState({
       'human': {
         'id': 'H-0044',
         'display_name': 'Alex Sterling',
@@ -435,7 +435,7 @@ void main() {
     });
     final api = EarthApi(transport: EarthApiTransport(baseUrl: 'http://mock.test', client: client));
 
-    final earthState = EarthState({
+    const earthState = EarthState({
       'human': {
         'id': 'H-ME',
         'display_name': 'My Pilot',
