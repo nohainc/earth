@@ -67,6 +67,7 @@ String dashboardSectionTitle(String section, [EarthState? state]) => switch (sec
       }(),
       'pantheon' => 'MEMORIAL',
       'constitution' => 'CONSTITUTION',
+      'contracts' => 'CONTRACTS',
       'finance' => 'FINANCE',
       'activity' => 'ACTIVITY & EVENTS',
       _ => 'COMMAND CENTER',

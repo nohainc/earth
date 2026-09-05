@@ -207,6 +207,30 @@ class DecisionQueueItem {
       ));
     }
 
+    // 3. Expiring contracts
+    final rawContracts = state.json['contracts'];
+    final contracts = rawContracts is List ? rawContracts : const [];
+    final activeContracts = contracts
+        .where((c) => c is Map && (c['status'] == 'active' || c['status'] == null))
+        .toList();
+    if (activeContracts.isNotEmpty) {
+      final c = Map<String, dynamic>.from(activeContracts.first as Map);
+      items.add(DecisionQueueItem(
+        id: 'decision-contract-expiring-${c['id'] ?? 'c1'}',
+        category: 'business',
+        title: 'A contract expires in 2 days',
+        whyItMatters:
+            'Unfulfilled supply obligations risk penalty fees and client relationship suspension.',
+        deadline: 'In 2 Game Days',
+        expectedImpact:
+            'Complete deliveries and renew the commercial partnership.',
+        riskLevel: 'medium',
+        primaryActionLabel: 'View Contracts',
+        targetSection: 'market',
+        urgencyScore: 60.0,
+      ));
+    }
+
     // 4. Machine maintenance
     final rawMachines = state.json['machines'];
     final machines = rawMachines is List ? rawMachines : const [];

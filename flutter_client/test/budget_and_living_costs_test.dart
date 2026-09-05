@@ -66,7 +66,8 @@ void main() {
       // Section Headings
       expect(find.text('PERSONAL FINANCE'), findsOneWidget);
       expect(find.text('DAILY INCOME'), findsOneWidget);
-      expect(find.text('YOUR DAILY RESULT'), findsOneWidget);
+      expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
+      expect(find.text('NET CREDIT INCOME'), findsOneWidget);
 
       // Unpaid alert and status pill
       expect(find.text('NEEDS ATTENTION'), findsOneWidget);
@@ -124,11 +125,18 @@ void main() {
 
       // City Name & Service Ratios Header
       expect(find.text('NEW CARTHAGE'), findsWidgets);
-      expect(find.textContaining('Housing: 78% · Energy: 92% · Connect: 85% · Health: 64%'), findsOneWidget);
+      expect(find.text('HOUSING'), findsOneWidget);
+      expect(find.text('78%'), findsOneWidget);
+      expect(find.text('ENERGY'), findsOneWidget);
+      expect(find.text('92%'), findsOneWidget);
+      expect(find.text('CONNECTIVITY'), findsOneWidget);
+      expect(find.text('85%'), findsOneWidget);
+      expect(find.text('HEALTHCARE'), findsOneWidget);
+      expect(find.text('64%'), findsOneWidget);
 
       // Explicit CITY BUDGET Card and Amount
-      expect(find.text('CITY BUDGET'), findsNWidgets(2)); // Attribute label + dedicated card header
-      expect(find.text('450000 C'), findsNWidgets(2));
+      expect(find.text('CITY BUDGET'), findsOneWidget);
+      expect(find.text('450000 C'), findsOneWidget);
       expect(
         find.textContaining('Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies.'),
         findsOneWidget,

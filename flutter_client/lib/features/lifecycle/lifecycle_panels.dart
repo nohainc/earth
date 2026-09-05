@@ -233,14 +233,42 @@ class LifeTodayPanel extends StatelessWidget {
             final leftColumn = [
               _buildAttributeRow(
                 context,
+                icon: Icons.person_outline,
+                label: 'AGE',
+                value: '$age',
+                accentColor: context.primaryColor,
+              ),
+              _buildAttributeRow(
+                context,
                 icon: Icons.cake_outlined,
                 label: 'BIRTH DAY',
                 value: birthDayFormatted,
                 accentColor: context.primaryColor,
               ),
+              _buildAttributeRow(
+                context,
+                icon: Icons.location_city_outlined,
+                label: 'RESIDENCE',
+                value: cityName ?? 'INDEPENDENT',
+                accentColor: context.secondaryColor,
+              ),
             ];
 
             final rightColumn = [
+              _buildAttributeRow(
+                context,
+                icon: Icons.favorite_outline,
+                label: 'BIOMETRIC HEALTH',
+                value: '${health.toStringAsFixed(0)}%',
+                accentColor: healthColor,
+              ),
+              _buildAttributeRow(
+                context,
+                icon: Icons.bolt_outlined,
+                label: 'LIFE ENERGY',
+                value: '${energy.toStringAsFixed(0)}%',
+                accentColor: context.warningColor,
+              ),
               _buildAttributeRow(
                 context,
                 icon: Icons.verified_user_outlined,
