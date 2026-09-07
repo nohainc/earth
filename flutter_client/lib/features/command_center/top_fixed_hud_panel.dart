@@ -376,6 +376,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   // --- BRAND HEADER ---
   Widget _buildBrandHeader(BuildContext context, bool isMobile, bool isTablet,
       {bool hideTitle = false}) {
+    if (isMobile || hideTitle) {
+      return const SizedBox.shrink();
+    }
     return InkWell(
       onTap: () {
         EarthAudioEngine.instance.playClick();

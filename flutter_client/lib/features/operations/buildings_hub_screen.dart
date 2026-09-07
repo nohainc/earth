@@ -56,8 +56,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       'server-farm': 'neural-data-center-1d0462',
       'medical-clinic': 'bionic-medical-center-94fca3',
       'transit-hyperloop': 'hyperloop-terminal-46187b',
-      'orbital-spaceport': 'orbital-spaceport-8203a5',
-      'transit-terminus': 'transit-hub-bde804',
+      'orbital-spaceport': 'orbital-spaceport-a3f0cf',
+      'transit-terminus': 'transit-hub-d310dd',
       'urban-district-module': 'urban-district-module-6fa134',
       'private-estate-plot': 'private-estate-plot-a87690',
     };
