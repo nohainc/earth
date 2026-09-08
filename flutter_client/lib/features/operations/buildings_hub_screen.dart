@@ -1544,7 +1544,15 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       return ownership == 'private' &&
           tier == 1 &&
           (prevId == null || prevId.toString().isEmpty);
-    }).toList();
+    }).toList()
+      ..sort((a, b) {
+        final aCost = asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 0);
+        final bCost = asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 0);
+        final costCompare = aCost.compareTo(bCost);
+        if (costCompare != 0) return costCompare;
+        return (a['name']?.toString() ?? 'Blueprint')
+            .compareTo(b['name']?.toString() ?? 'Blueprint');
+      });
     if (blueprints.isEmpty) {
       return const EarthEmptyState(
         message: 'No blueprints available for planning.',
@@ -2431,9 +2439,10 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         widget.state.resources['material']);
 
     rootBlueprints.sort((a, b) {
-      final categoryCompare = (a['category']?.toString() ?? 'commercial')
-          .compareTo(b['category']?.toString() ?? 'commercial');
-      if (categoryCompare != 0) return categoryCompare;
+      final aCost = asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 0);
+      final bCost = asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 0);
+      final costCompare = aCost.compareTo(bCost);
+      if (costCompare != 0) return costCompare;
       return (a['name']?.toString() ?? 'Blueprint')
           .compareTo(b['name']?.toString() ?? 'Blueprint');
     });

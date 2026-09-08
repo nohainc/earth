@@ -500,6 +500,22 @@ class _CorporateBuildingResearchPanelState
       return true;
     }).toList();
 
+    filteredBlueprints.sort((a, b) {
+      final aType = a['building_type']?.toString() ?? '';
+      final bType = b['building_type']?.toString() ?? '';
+      final aTier = (unlockedTiers[aType] ?? 1) + 1;
+      final bTier = (unlockedTiers[bType] ?? 1) + 1;
+      final aBaseCost = asDoubleOr(a['cost_credits'] ?? a['baseCreditCost'], 35000);
+      final bBaseCost = asDoubleOr(b['cost_credits'] ?? b['baseCreditCost'], 35000);
+      final aOwnership = a['ownership_class']?.toString() ?? 'private';
+      final bOwnership = b['ownership_class']?.toString() ?? 'private';
+      final aCost = _calculateResearchCost(aBaseCost, aTier, ownership: aOwnership);
+      final bCost = _calculateResearchCost(bBaseCost, bTier, ownership: bOwnership);
+      final costCmp = aCost.compareTo(bCost);
+      if (costCmp != 0) return costCmp;
+      return (a['name']?.toString() ?? '').compareTo(b['name']?.toString() ?? '');
+    });
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1738,9 +1754,28 @@ class _TechnologyOutcomePanelState extends State<TechnologyOutcomePanel> {
       final branch = _branchFor(item);
       if (!branches.contains(branch)) branches.add(branch);
     }
-    final visibleItems = _selectedBranch == 'ALL'
+    final visibleItems = (_selectedBranch == 'ALL'
         ? items
-        : items.where((item) => _branchFor(item) == _selectedBranch).toList();
+        : items.where((item) => _branchFor(item) == _selectedBranch).toList())
+      ..sort((a, b) {
+        final aCost = asDoubleOr(
+            a['researchCost'] ??
+                a['research_cost'] ??
+                a['cost'] ??
+                a['cost_credits'],
+            0);
+        final bCost = asDoubleOr(
+            b['researchCost'] ??
+                b['research_cost'] ??
+                b['cost'] ??
+                b['cost_credits'],
+            0);
+        final costCmp = aCost.compareTo(bCost);
+        if (costCmp != 0) return costCmp;
+        return (a['name'] ?? a['title'] ?? '')
+            .toString()
+            .compareTo((b['name'] ?? b['title'] ?? '').toString());
+      });
     final adoptedNames = _names(widget.state.technologyRegistry['adopted'] ??
         widget.state.technologyRegistry['adoptedTechnologies'] ??
         widget.state.technologyRegistry['capabilities']);
