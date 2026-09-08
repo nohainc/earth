@@ -345,7 +345,7 @@ void main() {
           if (i.isEven) {
             await tester.tap(find.textContaining('Bistro').first);
             await tester.pumpAndSettle();
-            expect(find.textContaining('spaces'), findsWidgets);
+            expect(find.textContaining(RegExp(r'space', caseSensitive: false)), findsWidgets);
           }
         } else if (i <= 20) {
           await pumpWithAction(

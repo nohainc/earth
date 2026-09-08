@@ -15,8 +15,33 @@ async function corporationForHuman(tx: PostgresRepository, humanId: string): Pro
   return corporationId;
 }
 
-function researchCost(baseCost: number, tier: number): number {
-  return Math.max(1000, Math.round(Math.max(1000, baseCost) * 0.35 * Math.pow(1.7, Math.max(0, tier - 2)) * 100) / 100);
+function getScopeMultiplier(ownershipClass?: string): number {
+  if (ownershipClass === 'public_investment') return 3.5;
+  if (ownershipClass === 'civic') return 2.5;
+  return 2.0;
+}
+
+function getBaseDurationDays(constructionDays: number, ownershipClass?: string): number {
+  const days = Math.max(1, constructionDays);
+  if (ownershipClass === 'public_investment') {
+    return Math.max(14, Math.round(6 + days * 3.0));
+  }
+  if (ownershipClass === 'civic') {
+    return Math.max(8, Math.round(5 + days * 2.2));
+  }
+  return Math.max(5, Math.round(3 + days * 1.8));
+}
+
+function researchCost(baseCost: number, tier: number, ownershipClass?: string): number {
+  const scopeMul = getScopeMultiplier(ownershipClass);
+  const tierMul = Math.pow(2.0, Math.max(0, tier - 2));
+  return Math.max(1000, Math.round(Math.max(1000, baseCost) * scopeMul * tierMul));
+}
+
+function researchDurationMinutes(slotFootprint: number, tier: number, _ownershipClass?: string): number {
+  const slots = Math.max(1, slotFootprint || 1);
+  const days = (tier + 3) * slots;
+  return days * 1440;
 }
 
 export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
@@ -39,8 +64,8 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
       [corporationId, input.buildingType],
     );
     const priorTier = Number(unlocked.rows[0]?.tier ?? 1);
-    const previous = await tx.query<{ id: string; tier: number; cost_credits: string; construction_days: number }>(
-      'SELECT id, tier, cost_credits, construction_days FROM building_catalog WHERE building_type = $1 AND tier = $2 LIMIT 1',
+    const previous = await tx.query<{ id: string; tier: number; cost_credits: string; construction_days: number; slot_footprint: number; ownership_class: string }>(
+      'SELECT id, tier, cost_credits, construction_days, slot_footprint, ownership_class FROM building_catalog WHERE building_type = $1 AND tier = $2 LIMIT 1',
       [input.buildingType, priorTier],
     );
     if (!previous.rows[0]) throw new Error('Building blueprint not found');
@@ -58,8 +83,8 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
     if (existingProject.rows[0]) {
       throw new Error(`Your corporation has already researched or is researching Tier ${targetTier} for this building`);
     }
-    const cost = researchCost(Number(previous.rows[0].cost_credits), targetTier);
-    const durationMinutes = Math.max(3 * 1440, Math.round(Number(previous.rows[0].construction_days ?? 1) * 1440 * 1.5));
+    const cost = researchCost(Number(previous.rows[0].cost_credits), targetTier, previous.rows[0].ownership_class);
+    const durationMinutes = researchDurationMinutes(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_class);
     const world = await tx.query<{ genesis_at: string | null; simulated_day_offset: number | null }>("SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
     const time = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
     const projectId = `CBR-${crypto.randomUUID().slice(0, 10).toUpperCase()}`;
@@ -85,7 +110,7 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
           output_credits * 1.25, output_energy * 1.25, output_food * 1.25, output_materials * 1.25, output_components * 1.25, output_compute * 1.25,
           upkeep_credits * 1.12, upkeep_energy * 1.12, upkeep_food * 1.12, upkeep_materials * 1.12, upkeep_components * 1.12, upkeep_compute * 1.12,
           operating_credits * 1.12, operating_energy * 1.12, operating_food * 1.12, operating_materials * 1.12, operating_components * 1.12, operating_compute * 1.12,
-          COALESCE(description, '') || ' Researched Tier ' || $2 || ' generation.', GREATEST(1, CEIL(construction_days * 1.15)), GREATEST(1440, CEIL(COALESCE(construction_minutes, construction_days * 1440) * 1.15)), false, $3
+          COALESCE(description, '') || ' Researched Tier ' || $2 || ' generation.', GREATEST(1, slot_footprint * $2), GREATEST(1440, slot_footprint * $2 * 1440), false, $3
         FROM building_catalog WHERE id = $4`,
         [targetCatalogId, targetTier, projectId, previous.rows[0].id],
       );

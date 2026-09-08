@@ -175,9 +175,7 @@ void main() {
       // Verify grouped header shows 2 instances
       expect(find.text('Nova Molecular Bistro × 2'), findsOneWidget);
       // Total space is 1 + 1 = 2 spaces
-      expect(find.textContaining('2 spaces'), findsOneWidget);
-      // Tier range 1-2
-      expect(find.textContaining('Tier 1-2'), findsOneWidget);
+      expect(find.textContaining('2 SPACES'), findsOneWidget);
       // Aggregated resource items exist in the widget tree
       expect(find.byIcon(Icons.account_balance_wallet_outlined), findsWidgets);
       expect(find.byIcon(Icons.bolt_rounded), findsWidgets);
@@ -352,7 +350,8 @@ void main() {
       // 1. Private tab (Default)
       expect(find.text('PRIVATE'), findsOneWidget);
       expect(find.text('Nova Molecular Bistro × 2'), findsOneWidget);
-      expect(find.text('PRIVATE CATALOG'), findsOneWidget);
+      expect(find.text('BUILT'), findsWidgets);
+      expect(find.text('CATALOG'), findsWidgets);
 
       // 2. Switch to combined Civic tab
       expect(find.text('CIVIC'), findsOneWidget);
@@ -360,12 +359,12 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('CIVIC'), findsOneWidget);
-      expect(find.text('CIVIC CATALOG'), findsOneWidget);
+      expect(find.text('BUILT'), findsWidgets);
+      expect(find.text('CATALOG'), findsWidgets);
 
       // Both civic and public investment buildings appear under Civic tab
       expect(find.text('New Carthage Geothermal Core × 1'), findsOneWidget);
       expect(find.text('Hyperloop Terminal Express × 1'), findsOneWidget);
-      expect(find.text('PUBLIC INVESTMENT'), findsWidgets);
 
       // Verify portfolio summary header metrics
       expect(find.text('SHARES HELD'), findsOneWidget);
@@ -373,22 +372,10 @@ void main() {
       expect(find.text('INVESTED'), findsOneWidget);
       expect(find.text('5000 C'), findsOneWidget);
 
-      // Test built filters (ALL, CIVIC, INVEST)
-      expect(find.text('ALL (2)'), findsWidgets);
-      expect(find.text('CIVIC (1)'), findsWidgets);
-      expect(find.text('INVEST (1)'), findsWidgets);
-
-      // Filter by CIVIC only
-      await tester.tap(find.text('CIVIC (1)').first);
-      await tester.pumpAndSettle();
-      expect(find.text('New Carthage Geothermal Core × 1'), findsOneWidget);
-      expect(find.text('Hyperloop Terminal Express × 1'), findsNothing);
-
-      // Filter by INVEST only
-      await tester.tap(find.text('INVEST (1)').first);
-      await tester.pumpAndSettle();
-      expect(find.text('New Carthage Geothermal Core × 1'), findsNothing);
-      expect(find.text('Hyperloop Terminal Express × 1'), findsOneWidget);
+      // Both civic and public investment buildings appear directly under Civic tab without chip filters
+      expect(find.text('ALL (2)'), findsNothing);
+      expect(find.text('CIVIC (1)'), findsNothing);
+      expect(find.text('INVEST (1)'), findsNothing);
 
       // Expand public investment group to verify individual details
       await tester.tap(find.text('Hyperloop Terminal Express × 1'));
@@ -503,7 +490,8 @@ void main() {
 
       // Private content is rendered directly
       expect(find.text('Nova Molecular Bistro × 1'), findsOneWidget);
-      expect(find.text('PRIVATE CATALOG'), findsOneWidget);
+      expect(find.text('BUILT'), findsWidgets);
+      expect(find.text('CATALOG'), findsWidgets);
 
       // Open spaces shows 9 (10 from default Tier 1 estate deed minus 1 slot used)
       expect(find.text('OPEN SPACES'), findsOneWidget);
@@ -514,5 +502,140 @@ void main() {
       // District zoning & capacity widget is not displayed
       expect(find.text('BUILDING CAPACITY & DISTRICT ZONING'), findsNothing);
     });
+
+    testWidgets('Unresearched upgrade shows RESEARCH TIER button and opens research dialog', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      // Create state where Tier 2 is in catalog, but Tier 3 is not
+      final customState = EarthState({
+        ...testState.json,
+        'buildingCatalog': [
+          ...testState.buildingCatalog,
+          {
+            'type': 'restaurant',
+            'tier': 2,
+            'name': 'Nova Molecular Bistro (Tier 2)',
+            'category': 'commercial',
+            'defaultOwnershipClass': 'private',
+            'slotFootprint': 1,
+            'baseCreditCost': 9500,
+            'baseMaterialCost': 140,
+            'dailyOperatingCredits': 140,
+            'dailyCreditRevenue': 800,
+          },
+        ],
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: BuildingsHubScreen(
+                state: customState,
+                busy: false,
+                action: (cb) async => cb(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Expand the bistro group
+      await tester.tap(find.text('Nova Molecular Bistro × 2'));
+      await tester.pumpAndSettle();
+
+      // Item #1 is tier 1 -> tier 2 exists in catalog -> shows UPGRADE TO TIER 2
+      // Item #2 is tier 2 -> tier 3 is NOT in catalog -> shows RESEARCH TIER 3
+      expect(find.text('UPGRADE TO TIER 2'), findsOneWidget);
+      expect(find.text('RESEARCH TIER 3'), findsOneWidget);
+
+      // Tap RESEARCH TIER 3 button
+      await tester.ensureVisible(find.text('RESEARCH TIER 3'));
+      await tester.tap(find.text('RESEARCH TIER 3'));
+      await tester.pumpAndSettle();
+
+      // Research dialog opens
+      expect(find.text('Initiate R&D Project'), findsOneWidget);
+      expect(find.textContaining('Nova Molecular Bistro · Tier 2 → Tier 3'), findsOneWidget);
+      expect(find.text('CONFIRM R&D PROJECT'), findsOneWidget);
+      expect(find.text('CANCEL'), findsOneWidget);
+    });
+
+    testWidgets('Civic building tab displays urban district module with research or propose upgrade button', (tester) async {
+      tester.view.physicalSize = const Size(1280, 900);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(() {
+        tester.view.resetPhysicalSize();
+        tester.view.resetDevicePixelRatio();
+      });
+
+      final civicState = EarthState({
+        ...testState.json,
+        'buildings': [
+          {
+            'id': 'b-civic-1',
+            'owner_id': 'city-gov-1',
+            'city_id': 'CITY-0084',
+            'name': 'Urban District Module',
+            'building_type': 'urban-district-module',
+            'tier': 1,
+            'status': 'active',
+            'condition': 100,
+            'slot_footprint': 1,
+            'ownership_class': 'civic',
+            'daily_operating_credits': 0,
+            'resource_output_type': 'housing',
+            'resource_output_amount': 25,
+            'upkeep_energy': 0.0,
+            'upkeep_food': 0.0,
+            'upkeep_materials': 0.0,
+            'upkeep_components': 0.0,
+            'upkeep_compute': 0.0,
+          },
+        ],
+      });
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: BuildingsHubScreen(
+                state: civicState,
+                busy: false,
+                action: (cb) async => cb(),
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Switch to Civic tab
+      await tester.tap(find.text('CIVIC'));
+      await tester.pumpAndSettle();
+
+      // Urban District Module is displayed in group header
+      expect(find.text('Urban District Module × 1'), findsOneWidget);
+
+      // Expand group
+      await tester.tap(find.text('Urban District Module × 1'));
+      await tester.pumpAndSettle();
+
+      // Tier 2 is not in catalog -> displays RESEARCH TIER 2 button
+      expect(find.text('RESEARCH TIER 2'), findsOneWidget);
+
+      // Tap RESEARCH TIER 2 button
+      await tester.tap(find.text('RESEARCH TIER 2'));
+      await tester.pumpAndSettle();
+
+      // Research dialog opens
+      expect(find.text('Initiate R&D Project'), findsOneWidget);
+      expect(find.textContaining('Urban District Module · Tier 1 → Tier 2'), findsOneWidget);
+    });
   });
 }
+

@@ -87,9 +87,13 @@ class EarthButton extends StatelessWidget {
           Icon(icon, size: context.iconSize - 2, color: fg),
           SizedBox(width: context.spacingInline),
         ],
-        Text(
-          label,
-          style: context.controlStyle.copyWith(color: fg),
+        Flexible(
+          child: Text(
+            label,
+            style: context.controlStyle.copyWith(color: fg),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 1,
+          ),
         ),
       ],
     );

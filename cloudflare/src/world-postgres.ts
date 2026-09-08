@@ -246,7 +246,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         COALESCE(bc.operating_components, 0) AS operating_components,
         COALESCE(bc.operating_compute, 0) AS operating_compute,
         COALESCE(bc.unlocked_perks, '{}') AS unlocked_perks,
-        COALESCE(bc.description, '') AS catalog_description
+        COALESCE(bc.description, '') AS catalog_description,
+        COALESCE(bc.primary_economic_purpose, '') AS primary_economic_purpose
       FROM buildings b
       LEFT JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
       WHERE b.owner_id = $1 OR b.city_id = COALESCE((SELECT city_id FROM memberships WHERE human_id = $1 LIMIT 1), 'CITY-0084')
@@ -273,13 +274,29 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
       personalUsedSlots: 1,
       personalAvailableSlots: 9,
     })),
-    repository.query('SELECT * FROM building_catalog WHERE is_active = true ORDER BY category, building_type, tier').catch(() => ({ rows: [] })),
+    repository.query('SELECT *, primary_economic_purpose AS "primaryEconomicPurpose" FROM building_catalog WHERE is_active = true ORDER BY category, building_type, tier').catch(() => ({ rows: [] })),
   ]);
-  const buildingsRows = buildings?.rows ?? [];
-  const investmentSharesRows = investmentShares?.rows ?? [];
-  const buildingCatalogRows = (buildingCatalog?.rows && buildingCatalog.rows.length > 0)
+  const rawCatalogRows = (buildingCatalog?.rows && buildingCatalog.rows.length > 0)
     ? buildingCatalog.rows
     : Object.values(BUILDING_CATALOG);
+  const buildingCatalogRows = rawCatalogRows.map((row: any) => {
+    const spec = BUILDING_CATALOG[row.building_type] || BUILDING_CATALOG[row.id] || BUILDING_CATALOG[row.type];
+    return {
+      ...row,
+      primary_economic_purpose: row.primary_economic_purpose || spec?.primaryEconomicPurpose,
+      primaryEconomicPurpose: row.primary_economic_purpose || spec?.primaryEconomicPurpose,
+      civicBenefit: row.civic_benefit || spec?.civicBenefit,
+    };
+  });
+  const buildingsRows = (buildings?.rows ?? []).map((row: any) => {
+    const spec = BUILDING_CATALOG[row.building_type] || BUILDING_CATALOG[row.catalog_id];
+    return {
+      ...row,
+      primary_economic_purpose: row.primary_economic_purpose || spec?.primaryEconomicPurpose,
+      primaryEconomicPurpose: row.primary_economic_purpose || spec?.primaryEconomicPurpose,
+    };
+  });
+  const investmentSharesRows = investmentShares?.rows ?? [];
   const civicDividendsRows = civicDividends?.rows ?? [];
   const corporateResearchRows = corporateResearch?.rows ?? [];
   const districtZoningData = districtZoning ?? {

@@ -1036,9 +1036,9 @@ export const BUILDING_CATALOG: Record<string, BuildingCatalogItem> = {
     estimatedPaybackDays: 0,
     resourceSensitivity: 'low',
     maintenanceRisk: 'low',
-    primaryEconomicPurpose: 'Municipal 2D Horizontal Land and Citizen Capacity Expansion',
+    primaryEconomicPurpose: 'Municipal Land & Citizen Capacity Expansion',
     civicBenefit: 'Grants +10 Citizen capacity, +100 Private plots, and +20 Civic reserve slots.',
-    description: 'Autonomous urban sector grid expanding city borders, power lines, and infrastructure.',
+    description: 'Expands city borders, infrastructure, and citizen capacity.',
     tiers: [{
       tier: 1,
       name: 'Urban District Module',

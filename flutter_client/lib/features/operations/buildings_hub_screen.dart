@@ -33,8 +33,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   int _narrowSubTab = 0; // 0 = BUILT/ACTIVE, 1 = CATALOG
   final String _selectedCategory = 'all';
   String _catalogFilter = 'all';
-  String _civicBuiltFilter = 'all'; // 'all' | 'civic' | 'invest'
-  String _civicCatalogFilter = 'all'; // 'all' | 'civic' | 'invest'
   final String _sortMode = 'default';
   String _plannerSelectedBlueprint = 'restaurant';
   Set<String>? _expandedBuildingGroups;
@@ -44,24 +42,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   final Set<String> _constructionCompletionRequests = <String>{};
 
   String _buildingImageAsset(String buildingType) {
-    const assets = <String, String>{
-      'restaurant': 'molecular-bistro-31f39f',
-      'retail-store': 'retail-tools-boutique-643968',
-      'commercial-mall': 'commercial-galleria-8fa86c',
-      'fabrication-plant': 'cnc-fabrication-plant-239181',
-      'chemical-foundry': 'polymer-foundry-d8b334',
-      'solar-array-complex': 'solar-array-d83bb7',
-      'geothermal-grid': 'geothermal-core-0d10ce',
-      'vertical-farm': 'aeroponic-farm-8f93ff',
-      'server-farm': 'neural-data-center-1d0462',
-      'medical-clinic': 'bionic-medical-center-94fca3',
-      'transit-hyperloop': 'hyperloop-terminal-46187b',
-      'orbital-spaceport': 'orbital-spaceport-a3f0cf',
-      'transit-terminus': 'transit-hub-d310dd',
-      'urban-district-module': 'urban-district-module-6fa134',
-      'private-estate-plot': 'private-estate-plot-a87690',
-    };
-    return 'assets/buildings/${assets[buildingType] ?? 'urban-district-module-6fa134'}.png';
+    return EarthBuildingMeta.getAssetPath(buildingType);
   }
 
   Widget _buildingImage(BuildContext context, String buildingType) {
@@ -71,6 +52,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         _buildingImageAsset(buildingType),
         width: 92,
         height: 92,
+        cacheWidth: 256,
+        cacheHeight: 256,
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) => Container(
           width: 92,
@@ -255,75 +238,212 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required int footprint,
     bool publicInvestment = false,
   }) async {
+    EarthAudioEngine.instance.playClick();
     final title = TextEditingController(
         text: publicInvestment
             ? 'Open investment project: $buildingName'
             : 'Build $buildingName');
     final body = TextEditingController(
         text: publicInvestment
-            ? 'City proposal to construct $buildingName as a public investment project. Construction cost: ${formatWholeNumber(creditCost)} Credits and $materialCost Materials; footprint: $footprint spaces. After construction is active, citizens can purchase shares.'
-            : 'City proposal to procure $buildingName for municipal service. Construction cost: ${formatWholeNumber(creditCost)} Credits and $materialCost Materials; footprint: $footprint spaces.');
+            ? 'City proposal to construct $buildingName as a public investment project. Construction cost: ${formatWholeNumber(creditCost)} C and $materialCost Materials; footprint: $footprint spaces. After construction is active, citizens can purchase shares.'
+            : 'City proposal to procure $buildingName for municipal service. Construction cost: ${formatWholeNumber(creditCost)} C and $materialCost Materials; footprint: $footprint spaces.');
+    final iconColor = publicInvestment ? Colors.lightBlueAccent : Colors.purpleAccent;
+
     await showDialog<void>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text(
-            publicInvestment
-                ? 'PROPOSE INVESTMENT PROJECT'
-                : 'PROPOSE CIVIC BUILDING',
-            style:
-                context.topicTitleStyle.copyWith(color: context.primaryColor)),
-        content: SizedBox(
-          width: 440,
-          child: Column(mainAxisSize: MainAxisSize.min, children: [
-            Text(
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: iconColor.withValues(alpha: .15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: iconColor.withValues(alpha: .4)),
+              ),
+              child: Icon(
                 publicInvestment
-                    ? 'The city will vote before construction begins. Shares become available only after the project is active.'
-                    : 'The city will vote on this proposal before construction begins.',
-                style: context.widgetFooterStyle),
-            const SizedBox(height: 12),
-            TextField(
+                    ? Icons.account_balance_outlined
+                    : Icons.how_to_vote_outlined,
+                size: 20,
+                color: iconColor,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    publicInvestment
+                        ? 'Propose Public Investment'
+                        : 'Propose Civic Building',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: context.inkColor,
+                    ),
+                  ),
+                  Text(
+                    '$buildingName · $footprint ${footprint == 1 ? "Space" : "Spaces"}',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.mutedColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                publicInvestment
+                    ? 'The city will vote before construction begins. Shares become available once the project is active.'
+                    : 'The city council will vote on this municipal proposal before construction begins.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: context.inkColor,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Overview Grid
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Text('Estimated CapEx Cost:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.account_balance_wallet_outlined,
+                            size: 14, color: EarthResourceColors.credits),
+                        const SizedBox(width: 4),
+                        Text('${formatWholeNumber(creditCost)} C',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: context.inkColor,
+                            )),
+                        if (materialCost > 0) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.terrain_outlined,
+                              size: 14, color: EarthResourceColors.materials),
+                          const SizedBox(width: 3),
+                          Text('${formatWholeNumber(materialCost)} Mat',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: context.inkColor,
+                              )),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('District Footprint:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        Icon(Icons.layers_outlined,
+                            size: 14, color: iconColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$footprint ${footprint == 1 ? "Space" : "Spaces"}',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: context.inkColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              TextField(
                 controller: title,
                 maxLength: 140,
-                decoration: const InputDecoration(labelText: 'Proposal title')),
-            const SizedBox(height: 8),
-            TextField(
+                decoration: InputDecoration(
+                  labelText: 'Proposal Title',
+                  labelStyle: TextStyle(fontSize: 12, color: context.mutedColor),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(context.radiusControl),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
                 controller: body,
-                minLines: 4,
-                maxLines: 7,
+                minLines: 3,
+                maxLines: 5,
                 maxLength: 4000,
-                decoration:
-                    const InputDecoration(labelText: 'Proposal details')),
-          ]),
+                decoration: InputDecoration(
+                  labelText: 'Proposal Details & Rationale',
+                  labelStyle: TextStyle(fontSize: 12, color: context.mutedColor),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(context.radiusControl),
+                  ),
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
-              child: const Text('CANCEL')),
           EarthButton(
-              label: 'SUBMIT PROPOSAL',
-              onPressed: () async {
-                if (title.text.trim().length < 8 ||
-                    body.text.trim().length < 20) {
-                  return;
-                }
-                try {
-                  await widget.action(() => const EarthApi().createProposal(
-                        title.text.trim(),
-                        body.text.trim(),
-                        institutionId: cityId,
-                        targetCategory: 'megaproject_procurement',
-                        targetValue: {
-                          'buildingType': buildingType,
-                          if (publicInvestment)
-                            'ownershipClass': 'public_investment',
-                        },
-                      ));
-                  if (dialogContext.mounted) Navigator.pop(dialogContext);
-                } catch (error) {
-                  _showBuildingFeedback(
-                      error.toString().replaceFirst('Exception: ', ''));
-                }
-              }),
+            label: 'CANCEL',
+            variant: EarthButtonVariant.neutral,
+            onPressed: () => Navigator.pop(dialogContext),
+          ),
+          EarthButton(
+            label: 'SUBMIT PROPOSAL',
+            icon: Icons.how_to_vote_outlined,
+            variant: EarthButtonVariant.primary,
+            onPressed: () async {
+              if (title.text.trim().length < 8 ||
+                  body.text.trim().length < 20) {
+                return;
+              }
+              try {
+                await widget.action(() => const EarthApi().createProposal(
+                      title.text.trim(),
+                      body.text.trim(),
+                      institutionId: cityId,
+                      targetCategory: 'megaproject_procurement',
+                      targetValue: {
+                        'buildingType': buildingType,
+                        if (publicInvestment)
+                          'ownershipClass': 'public_investment',
+                      },
+                    ));
+                if (dialogContext.mounted) Navigator.pop(dialogContext);
+              } catch (error) {
+                _showBuildingFeedback(
+                    error.toString().replaceFirst('Exception: ', ''));
+              }
+            },
+          ),
         ],
       ),
     );
@@ -460,16 +580,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           final mainTabs = isIndependent
               ? const SizedBox.shrink()
               : _buildMainOwnershipTabs(context);
-          final ownershipDescription = isIndependent
-              ? const SizedBox.shrink()
-              : _buildOwnershipDescription(context, effectiveTab);
 
           final cockpit = EarthPageCockpit(
             status: isIndependent ? 'INDEPENDENT HOLDINGS' : 'REAL ESTATE & INFRASTRUCTURE',
             statusColor: isIndependent ? context.warningColor : context.primaryColor,
             infoTitle: 'REAL ESTATE & INFRASTRUCTURE ARCHITECTURE',
             infoDescription:
-                '• Private Assets: Commercial, industrial, and residential buildings owned personally or assigned to your operating businesses.\n\n• Civic Assets: Municipal infrastructure and shared public investment projects that return dividends and UBI to residents.',
+                '• Private Buildings: Belong to you. Their output goes to your account, while upkeep and operating costs are paid by you.\n\n• Civic Buildings: Belong to the city or are co-funded by citizens through public shares. They expand municipal capacity and services, while surplus is distributed as daily dividends.',
             title: 'BUILDINGS & REAL ESTATE',
             subtitle:
                 'Productive property assets, personal estate capacity, and municipal civic zoning across Earth',
@@ -489,37 +606,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             ],
           );
 
-          // Wide and medium: one ownership context, two content columns.
-          if (isWide || isMedium) {
-            return Column(children: [
-              cockpit,
-              const SizedBox(height: 24),
-              mainTabs,
-              ownershipDescription,
-              Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Expanded(child: selectedBuilt),
-                const SizedBox(width: 16),
-                Expanded(
-                    child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                      Text('${effectiveTab == 0 ? 'PRIVATE' : 'CIVIC'} CATALOG',
-                          style: context.topicTitleStyle),
-                      SizedBox(height: context.spacingControl),
-                      selectedCatalog,
-                    ])),
-              ]),
-            ]);
-          }
-
-          // Narrow: one ownership context with BUILT/ACTIVE and CATALOG subtabs.
+          // Unified panel layout (both wide and narrow use active subtab: BUILT vs CATALOG)
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               cockpit,
               const SizedBox(height: 24),
               mainTabs,
-              ownershipDescription,
               effectiveTab == 0
                   ? _buildPrivatePanel(context,
                       privateBuildings: privateBuildings,
@@ -581,16 +674,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 isSelected: _mainTab == 1,
                 onTap: () => setState(() => _mainTab = 1))),
       ]),
-    );
-  }
-
-  Widget _buildOwnershipDescription(BuildContext context, int tab) {
-    final text = tab == 0
-        ? 'Private buildings belong to you. Their output goes to your account, while upkeep and operating costs are paid by you.'
-        : 'Civic buildings belong to the city or are co-funded by citizens through public shares. They expand municipal capacity and services, while surplus from public investment offerings is distributed to shareholding citizens as daily dividends.';
-    return Padding(
-      padding: EdgeInsets.only(bottom: context.spacingControl),
-      child: Text(text, style: context.widgetFooterStyle),
     );
   }
 
@@ -668,8 +751,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         if (showPanelTitle)
           Text('PRIVATE BUILDINGS', style: context.topicTitleStyle),
         SizedBox(height: context.spacingControl),
-        _buildBuildingsResourceLine(context, privateBuildings),
-        SizedBox(height: context.spacingControl),
         // Private stat header
         _buildAttributeGrid(
           context,
@@ -691,19 +772,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ],
         ),
         SizedBox(height: context.spacingControl),
+        _buildBuildingsResourceLine(context, privateBuildings),
+        SizedBox(height: context.spacingControl),
         if (showSubTabs)
           _buildOwnershipSubTabs(context,
               labels: ['BUILT', 'CATALOG'],
               selected: contentTab,
               onChanged: (value) => setState(() => _narrowSubTab = value)),
         if (!showSubTabs || contentTab == 0) ...[
-          _buildBuildingRecommendation(
-            context,
-            privateBuildings: privateBuildings,
-            availablePrivateSlots: availablePrivateSlots,
-          ),
-          SizedBox(height: context.spacingControl),
-          SizedBox(height: context.spacingTopic),
           _buildEstatesTab(
             context,
             privateBuildings: privateBuildings,
@@ -741,28 +817,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   }) {
     final allCivicBuildings = [...civicBuildings, ...publicBuildings];
 
-    final filteredBuiltBuildings = allCivicBuildings.where((b) {
-      if (_civicBuiltFilter == 'civic') {
-        return b['ownership_class'] == 'civic';
-      }
-      if (_civicBuiltFilter == 'invest') {
-        return b['ownership_class'] == 'public_investment';
-      }
-      return true;
-    }).toList();
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         if (showPanelTitle)
           Text('CIVIC BUILDINGS', style: context.topicTitleStyle),
-        SizedBox(height: context.spacingControl),
-        _buildBuildingsResourceLine(context, allCivicBuildings),
-        if (publicBuildings.isNotEmpty) ...[
-          SizedBox(height: context.spacingControl),
-          _buildInvestmentPortfolioSummary(
-              context, publicBuildings, shares, totalMyShares),
-        ],
         SizedBox(height: context.spacingControl),
         // Civic stat header
         _buildAttributeGrid(
@@ -785,46 +844,33 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ],
         ),
         SizedBox(height: context.spacingControl),
+        _buildBuildingsResourceLine(context, allCivicBuildings),
+        if (publicBuildings.isNotEmpty) ...[
+          SizedBox(height: context.spacingControl),
+          _buildInvestmentPortfolioSummary(
+              context, publicBuildings, shares, totalMyShares),
+        ],
+        SizedBox(height: context.spacingControl),
         if (showSubTabs)
           _buildOwnershipSubTabs(context,
               labels: ['BUILT', 'CATALOG'],
               selected: contentTab,
               onChanged: (value) => setState(() => _narrowSubTab = value)),
         if (!showSubTabs || contentTab == 0) ...[
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildFilterChip(
-                context,
-                label: 'ALL (${allCivicBuildings.length})',
-                isSelected: _civicBuiltFilter == 'all',
-                onTap: () => setState(() => _civicBuiltFilter = 'all'),
-              ),
-              _buildFilterChip(
-                context,
-                label: 'CIVIC (${civicBuildings.length})',
-                isSelected: _civicBuiltFilter == 'civic',
-                onTap: () => setState(() => _civicBuiltFilter = 'civic'),
-              ),
-              _buildFilterChip(
-                context,
-                label: 'INVEST (${publicBuildings.length})',
-                isSelected: _civicBuiltFilter == 'invest',
-                onTap: () => setState(() => _civicBuiltFilter = 'invest'),
-              ),
-            ],
-          ),
-          SizedBox(height: context.spacingControl),
-          filteredBuiltBuildings.isEmpty
+          allCivicBuildings.isEmpty
               ? const EarthEmptyState(
                   message:
-                      'No civic or public investment buildings match filter.',
+                      'No civic or public investment buildings built.',
                   icon: Icons.account_balance_outlined)
-              : Column(
-                  children: _buildGroupedBuildingCards(
-                      context, filteredBuiltBuildings, viewerId, catalog,
-                      investmentShares: shares)),
+              : LayoutBuilder(
+                  builder: (context, constraints) {
+                    final cards = _buildGroupedBuildingCards(
+                        context, allCivicBuildings, viewerId, catalog,
+                        investmentShares: shares);
+                    return _buildResponsiveBuildingCards(
+                        cards, constraints.maxWidth);
+                  },
+                ),
         ] else
           _buildCatalogTab(context, catalog: catalog, ownershipFilter: 'civic'),
         SizedBox(height: context.spacingTopic),
@@ -1075,12 +1121,46 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             ],
           )
         else
-          Column(
-              children: _buildGroupedBuildingCards(
-                  context, filteredBuildings, viewerId, catalog)),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final cards = _buildGroupedBuildingCards(
+                  context, filteredBuildings, viewerId, catalog);
+              return _buildResponsiveBuildingCards(
+                  cards, constraints.maxWidth);
+            },
+          ),
 
         SizedBox(height: context.spacingTopic),
         _buildRecentBuildingActivity(context),
+      ],
+    );
+  }
+
+  Widget _buildResponsiveBuildingCards(
+      List<Widget> cards, double maxWidth) {
+    final columnsCount = maxWidth >= 1150 ? 3 : (maxWidth >= 700 ? 2 : 1);
+    if (columnsCount <= 1 || cards.isEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: cards,
+      );
+    }
+    final columns = List.generate(columnsCount, (_) => <Widget>[]);
+    for (var i = 0; i < cards.length; i++) {
+      columns[i % columnsCount].add(cards[i]);
+    }
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        for (var c = 0; c < columnsCount; c++) ...[
+          if (c > 0) const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: columns[c],
+            ),
+          ),
+        ],
       ],
     );
   }
@@ -1101,6 +1181,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     }
     return groups.values.map((items) {
       final first = items.first;
+      final bType = first['building_type']?.toString() ?? '';
       final totalSpace =
           items.fold<int>(0, (sum, b) => sum + asIntOr(b['slot_footprint'], 1));
       final tiers = items.map((b) => asIntOr(b['tier'], 1)).toList()..sort();
@@ -1144,12 +1225,36 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         aggregate[field] =
             items.fold<double>(0, (sum, b) => sum + asDoubleOr(b[field], 0));
       }
+
+      // Lookup catalog spec for description and economic purpose
+      final catalogMatch = catalog.whereType<Map>().firstWhere(
+            (c) => (c['building_type'] ?? c['type']) == bType,
+            orElse: () => <String, dynamic>{},
+          );
+      final desc = (first['description'] ??
+              first['catalog_description'] ??
+              catalogMatch['description'] ??
+              '')
+          .toString();
+      final isCivic = first['ownership_class'] == 'civic' ||
+          first['ownership_class'] == 'public_investment';
+      final category = (first['category'] ?? catalogMatch['category'] ?? 'facility')
+          .toString()
+          .toUpperCase();
+      final purpose = (first['primary_economic_purpose'] ??
+              first['primaryEconomicPurpose'] ??
+              catalogMatch['primary_economic_purpose'] ??
+              catalogMatch['primaryEconomicPurpose'] ??
+              EarthBuildingMeta.getEconomicPurpose(
+                first,
+                ownership: first['ownership_class']?.toString(),
+                category: category,
+              ))
+          .toString();
+
       final name = first['name']?.toString() ?? 'Building';
-      final groupKey = '${first['building_type'] ?? ''}|$name';
+      final groupKey = '$bType|$name';
       final isExpanded = expandedGroups.contains(groupKey);
-      final tierLabel = tiers.first == tiers.last
-          ? 'TIER ${tiers.first}'
-          : 'TIER ${tiers.first}-${tiers.last}';
       final policies = items
           .map((b) => b['operating_policy']?.toString() ?? 'balanced')
           .toSet();
@@ -1176,71 +1281,90 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               borderRadius: BorderRadius.circular(context.radiusControl),
               onTap: toggleGroup,
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      _buildingImage(context, bType),
+                      const SizedBox(width: 12),
                       Expanded(
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Flexible(
-                              child: Text(
-                                '$name × ${items.length}',
-                                style: context.widgetTitleStyle.copyWith(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w700,
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
+                                Flexible(
+                                  child: Text(
+                                    '$name × ${items.length}',
+                                    style: context.widgetTitleStyle.copyWith(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14.5,
+                                    ),
+                                    maxLines: 2,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
                                 ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
+                                const SizedBox(width: 6),
+                                Icon(
+                                  isExpanded
+                                      ? Icons.keyboard_arrow_up
+                                      : Icons.keyboard_arrow_down,
+                                  color: context.primaryColor,
+                                ),
+                              ],
                             ),
-                            if (first['ownership_class'] ==
-                                'public_investment') ...[
-                              const SizedBox(width: 8),
-                              const EarthBadge(
-                                label: 'PUBLIC INVESTMENT',
-                                variant: EarthBadgeVariant.primary,
+                            const SizedBox(height: 4),
+                            Wrap(
+                              spacing: 4,
+                              runSpacing: 4,
+                              children: [
+                                EarthBadge(
+                                  label: '$totalSpace ${totalSpace == 1 ? "SPACE" : "SPACES"}',
+                                  variant: EarthBadgeVariant.neutral,
+                                ),
+                                EarthBadge(
+                                  label: category,
+                                  variant: EarthBadgeVariant.neutral,
+                                ),
+                              ],
+                            ),
+                            if (desc.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                desc,
+                                style: context.bodyStyle.copyWith(
+                                  fontSize: 12,
+                                  height: 1.25,
+                                ),
+                              ),
+                            ],
+                            const SizedBox(height: 6),
+                            Text(
+                              'Economic Purpose: $purpose',
+                              style: context.widgetFooterStyle,
+                            ),
+                            if (hasConstruction) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Construction in progress ${avgProgress.toStringAsFixed(0)}% complete',
+                                style: context.widgetFooterStyle.copyWith(
+                                    color: context.warningColor, fontSize: 12),
+                              ),
+                            ],
+                            if (hasIssue) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Building issue detected',
+                                style: context.widgetFooterStyle.copyWith(
+                                    color: context.errorColor, fontSize: 12),
                               ),
                             ],
                           ],
                         ),
                       ),
-                      InkWell(
-                        onTap: toggleGroup,
-                        child: Icon(
-                            isExpanded
-                                ? Icons.keyboard_arrow_up
-                                : Icons.keyboard_arrow_down,
-                            color: context.primaryColor),
-                      ),
                     ],
-                  ),
-                  const SizedBox(height: 4),
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (hasConstruction)
-                          Text(
-                            'Construction in progress ${avgProgress.toStringAsFixed(0)}% complete',
-                            style: context.widgetFooterStyle.copyWith(
-                                color: context.warningColor, fontSize: 12),
-                          ),
-                        if (hasConstruction) const SizedBox(height: 2),
-                        Text(
-                          '$totalSpace space${totalSpace == 1 ? '' : 's'}  ·  ${tierLabel.replaceFirst('TIER', 'Tier')}',
-                          style: context.widgetFooterStyle.copyWith(
-                              color: context.mutedColor, fontSize: 12),
-                        ),
-                        if (hasIssue)
-                          Text(
-                            'Building issue detected',
-                            style: context.widgetFooterStyle.copyWith(
-                                color: context.errorColor, fontSize: 12),
-                          ),
-                      ],
-                    ),
                   ),
                   const SizedBox(height: 12),
                   InkWell(
@@ -1325,7 +1449,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                           color:
                                               commonPolicy == policyOption['id']
                                                   ? context.primaryColor
-                                                      .withValues(alpha: .15)
+                                                  .withValues(alpha: .15)
                                                   : Colors.transparent,
                                           borderRadius:
                                               BorderRadius.circular(6),
@@ -1384,7 +1508,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   }) {
     final blueprints = catalog.whereType<Map>().where((b) {
       final bType = b['building_type'] ?? b['type'];
-      if (bType == 'private-estate-plot') return false;
+      if (bType == 'private-estate-plot' || bType == 'urban-district-module') {
+        return false;
+      }
       final ownership = b['ownership_class'] ??
           b['defaultOwnershipClass'] ??
           b['ownershipClass'] ??
@@ -1765,38 +1891,180 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required int remainingCapacity,
     required double netDailyCredits,
   }) async {
+    EarthAudioEngine.instance.playClick();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (dialogContext) => AlertDialog(
-        title: Text('Build $buildingName', style: context.topicTitleStyle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
           children: [
-            Text('Review this investment before construction begins.',
-                style: context.bodyStyle),
-            const SizedBox(height: 12),
-            Text('Cost', style: context.captionStyle),
-            Text(
-                '${formatWholeNumber(creditCost)} Credits + $materialCost Materials',
-                style: context.bodyStyle),
-            const SizedBox(height: 8),
-            Text('Capacity', style: context.captionStyle),
-            Text(
-                '$capacityCost space${capacityCost > 1 ? 's' : ''} · $remainingCapacity private spaces remaining',
-                style: context.bodyStyle),
-            const SizedBox(height: 8),
-            Text('Expected result', style: context.captionStyle),
-            Text(
-              '${netDailyCredits >= 0 ? '+' : ''}${formatWholeNumber(netDailyCredits)} Credits/day',
-              style: context.bodyStyle.copyWith(
-                color: netDailyCredits >= 0
-                    ? context.successColor
-                    : context.dangerColor,
-                fontWeight: FontWeight.bold,
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: context.primaryColor.withValues(alpha: .15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: context.primaryColor.withValues(alpha: .4)),
+              ),
+              child: Icon(Icons.domain_add_outlined,
+                  size: 20, color: context.primaryColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Confirm Construction',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: context.inkColor,
+                    ),
+                  ),
+                  Text(
+                    '$buildingName · Tier 1 Blueprint',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.mutedColor,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Review this property investment before starting construction on your private district plot.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: context.inkColor,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Overview Grid
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Text('Construction Cost (CapEx):',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.account_balance_wallet_outlined,
+                            size: 14, color: EarthResourceColors.credits),
+                        const SizedBox(width: 4),
+                        Text('${formatWholeNumber(creditCost)} C',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: context.inkColor,
+                            )),
+                        if (materialCost > 0) ...[
+                          const SizedBox(width: 8),
+                          const Icon(Icons.terrain_outlined,
+                              size: 14, color: EarthResourceColors.materials),
+                          const SizedBox(width: 3),
+                          Text('${formatWholeNumber(materialCost)} Mat',
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w800,
+                                color: context.inkColor,
+                              )),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('Plot Capacity:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        Icon(Icons.layers_outlined,
+                            size: 14, color: context.primaryColor),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$capacityCost ${capacityCost == 1 ? "Space" : "Spaces"} ($remainingCapacity remaining)',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: context.inkColor,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Text(
+                'EXPECTED FINANCIAL YIELD',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8,
+                  color: context.mutedColor,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Row(
+                  children: [
+                    Text('Net Daily Yield:',
+                        style: TextStyle(
+                            fontSize: 12, color: context.mutedColor)),
+                    const Spacer(),
+                    Icon(
+                      netDailyCredits >= 0
+                          ? Icons.trending_up
+                          : Icons.trending_down,
+                      size: 14,
+                      color: netDailyCredits >= 0
+                          ? context.successColor
+                          : context.dangerColor,
+                    ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${netDailyCredits >= 0 ? '+' : ''}${formatWholeNumber(netDailyCredits)} C / day',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: netDailyCredits >= 0
+                            ? context.successColor
+                            : context.dangerColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
           EarthButton(
@@ -1896,22 +2164,21 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       {required List<String> labels,
       required int selected,
       required ValueChanged<int> onChanged}) {
-    return Container(
-      margin: EdgeInsets.only(bottom: context.spacingControl),
-      decoration: BoxDecoration(
-          color: context.surfaceColor.withValues(alpha: .55),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: context.subtleBorderColor)),
-      child: Row(children: [
-        for (var i = 0; i < labels.length; i++)
-          Expanded(
-              child: _buildTabButton(context,
-                  title: labels[i],
-                  icon:
-                      i == 0 ? Icons.domain_outlined : Icons.menu_book_outlined,
-                  isSelected: selected == i,
-                  onTap: () => onChanged(i))),
-      ]),
+    return Padding(
+      padding: EdgeInsets.only(bottom: context.spacingControl),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        children: [
+          for (var i = 0; i < labels.length; i++)
+            _buildFilterChip(
+              context,
+              label: labels[i],
+              isSelected: selected == i,
+              onTap: () => onChanged(i),
+            ),
+        ],
+      ),
     );
   }
 
@@ -1957,8 +2224,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final allCatalogMaps = catalog
         .whereType<Map>()
         .map((m) => Map<String, dynamic>.from(m))
-        .where((item) =>
-            (item['building_type'] ?? item['type']) != 'private-estate-plot')
+        .where((item) {
+          final bType = (item['building_type'] ?? item['type'])?.toString();
+          return bType != 'private-estate-plot' &&
+              bType != 'urban-district-module';
+        })
         .toList();
 
     // Only display root blueprints (tier 1 or prev_catalog_id is null) in the catalog blueprints view
@@ -1970,6 +2240,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
 
     final zoning = widget.state.districtZoning;
     final availablePrivateSlots = asIntOr(zoning['availablePrivateSlots'], 0);
+    final availableCivicSlots =
+        asIntOr(zoning['availableCivicSlots'] ?? zoning['civicSlotsRemaining'], 999);
     final cityId =
         widget.state.membership?['city_id']?.toString() ?? 'CITY-0084';
     final creditsAvailable = asDouble(widget.state.human['credits'] ??
@@ -2011,9 +2283,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         return ownership == 'private';
       }
       if (ownershipFilter == 'civic') {
-        if (_civicCatalogFilter == 'civic') {
-          return ownership == 'civic';
-        }
         return ownership == 'civic';
       }
 
@@ -2029,7 +2298,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (ownershipFilter == null)
+        if (ownershipFilter == null) ...[
           Wrap(
             spacing: 8,
             runSpacing: 8,
@@ -2041,426 +2310,654 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
               _catalogFilterChip(context,
                   label: 'CIVIC ($civicCount)', filter: 'civic'),
             ],
-          )
-        else if (ownershipFilter == 'civic')
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: [
-              _buildFilterChip(
-                context,
-                label: 'ALL ($civicCount)',
-                isSelected: _civicCatalogFilter == 'all',
-                onTap: () => setState(() => _civicCatalogFilter = 'all'),
-              ),
-              _buildFilterChip(
-                context,
-                label: 'CIVIC ($civicCount)',
-                isSelected: _civicCatalogFilter == 'civic',
-                onTap: () => setState(() => _civicCatalogFilter = 'civic'),
-              ),
-            ],
           ),
-        SizedBox(height: context.spacingControl),
+          SizedBox(height: context.spacingControl),
+        ],
 
         // Catalog List
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: filteredList.map<Widget>((item) {
-            final bType = item['building_type']?.toString() ??
-                item['type']?.toString() ??
-                '';
-            final name = item['name']?.toString() ?? 'Blueprint';
-            final category =
-                (item['category']?.toString() ?? 'commercial').toUpperCase();
-            final ownership = item['ownership_class']?.toString() ??
-                item['defaultOwnershipClass']?.toString() ??
-                item['ownershipClass']?.toString() ??
-                'private';
-            final footprint =
-                asIntOr(item['slot_footprint'] ?? item['slotFootprint'], 1);
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final columnsCount = constraints.maxWidth >= 1150
+                ? 3
+                : (constraints.maxWidth >= 700 ? 2 : 1);
+            final cards = filteredList.map<Widget Function({bool fillHeight})>((item) {
+              final bType = item['building_type']?.toString() ??
+                  item['type']?.toString() ??
+                  '';
+              final name = item['name']?.toString() ?? 'Blueprint';
+              final category =
+                  (item['category']?.toString() ?? 'commercial').toUpperCase();
+              final ownership = item['ownership_class']?.toString() ??
+                  item['defaultOwnershipClass']?.toString() ??
+                  item['ownershipClass']?.toString() ??
+                  'private';
+              final footprint =
+                  asIntOr(item['slot_footprint'] ?? item['slotFootprint'], 1);
 
-            // Group count: total upgrades/tiers available in the catalog for this building type
-            final groupBuildings = allCatalogMaps
-                .where((b) => (b['building_type'] ?? b['type']) == bType)
-                .toList();
-            final tierCount = math.max(1, groupBuildings.length);
+              // Group count: total upgrades/tiers available in the catalog for this building type
+              final groupBuildings = allCatalogMaps
+                  .where((b) => (b['building_type'] ?? b['type']) == bType)
+                  .toList();
+              final tierCount = math.max(1, groupBuildings.length);
 
-            // Costs (24-resource vector)
-            final creditCost =
-                asIntOr(item['cost_credits'] ?? item['baseCreditCost'], 8500);
-            final matCost = asIntOr(
-                item['cost_materials'] ?? item['baseMaterialCost'], 120);
-            final compCost = asIntOr(item['cost_components'], 0);
-            final computeCost = asIntOr(item['cost_compute'], 0);
+              // Costs (24-resource vector)
+              final creditCost =
+                  asIntOr(item['cost_credits'] ?? item['baseCreditCost'], 8500);
+              final matCost = asIntOr(
+                  item['cost_materials'] ?? item['baseMaterialCost'], 120);
+              final compCost = asIntOr(item['cost_components'], 0);
+              final computeCost = asIntOr(item['cost_compute'], 0);
 
-            final purpose = item['primaryEconomicPurpose']?.toString() ??
-                (ownership == 'civic'
-                    ? 'Municipal Public Utility'
-                    : 'Economic Production');
-            final desc = item['description']?.toString() ?? '';
-            final civicBenefit = item['civicBenefit']?.toString();
+              final purpose = (item['primary_economic_purpose'] ??
+                      item['primaryEconomicPurpose'] ??
+                      EarthBuildingMeta.getEconomicPurpose(
+                        item,
+                        ownership: ownership,
+                        category: category,
+                      ))
+                  .toString();
+              final desc = (item['description'] ??
+                      item['catalog_description'] ??
+                      '')
+                  .toString();
+              final civicBenefit = item['civicBenefit']?.toString();
 
-            // Outputs (24-resource vector)
-            final outputs = <(IconData, Color, String)>[];
-            void addOutput(
-                String key, String label, IconData icon, Color color) {
-              final val = asDoubleOr(item['output_$key'], 0);
-              if (val > 0) {
-                outputs.add((
-                  icon,
-                  color,
-                  key == 'credits'
-                      ? '${formatWholeNumber(val)} CRD / DAY'
-                      : '${val.toStringAsFixed(1)} $label / DAY'
-                ));
+              // Outputs (24-resource vector)
+              final outputs = <(IconData, Color, String)>[];
+              void addOutput(
+                  String key, String label, IconData icon, Color color) {
+                final val = asDoubleOr(item['output_$key'], 0);
+                if (val > 0) {
+                  outputs.add((
+                    icon,
+                    color,
+                    key == 'credits'
+                        ? '${formatWholeNumber(val)} CRD / DAY'
+                        : '${val.toStringAsFixed(1)} $label / DAY'
+                  ));
+                }
               }
-            }
 
-            addOutput(
-                'credits',
-                'CREDITS',
-                Icons.account_balance_wallet_outlined,
-                EarthResourceColors.credits);
-            addOutput('energy', 'ENERGY', Icons.bolt_rounded,
-                EarthResourceColors.energy);
-            addOutput(
-                'food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
-            addOutput('materials', 'MATERIALS', Icons.terrain_outlined,
-                EarthResourceColors.materials);
-            addOutput(
-                'components',
-                'COMPONENTS',
-                Icons.precision_manufacturing_outlined,
-                EarthResourceColors.components);
-            addOutput('compute', 'COMPUTE', Icons.memory_rounded,
-                EarthResourceColors.compute);
-
-            // Legacy fallback if output_* was 0
-            if (outputs.isEmpty) {
-              final legacyOutType = item['resourceOutputType']?.toString() ??
-                  item['resource_output_type']?.toString();
-              final legacyOutAmount = asDoubleOr(
-                  item['resourceOutputAmount'] ??
-                      item['resource_output_amount'],
-                  0);
-              final legacyCreditRevenue = asDoubleOr(
-                  item['dailyCreditRevenue'] ?? item['daily_credit_revenue'],
-                  0);
-              if (legacyCreditRevenue > 0) {
-                outputs.add((
+              addOutput(
+                  'credits',
+                  'CREDITS',
                   Icons.account_balance_wallet_outlined,
-                  EarthResourceColors.credits,
-                  '${formatWholeNumber(legacyCreditRevenue)} CRD / DAY'
-                ));
+                  EarthResourceColors.credits);
+              addOutput('energy', 'ENERGY', Icons.bolt_rounded,
+                  EarthResourceColors.energy);
+              addOutput(
+                  'food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
+              addOutput('materials', 'MATERIALS', Icons.terrain_outlined,
+                  EarthResourceColors.materials);
+              addOutput(
+                  'components',
+                  'COMPONENTS',
+                  Icons.precision_manufacturing_outlined,
+                  EarthResourceColors.components);
+              addOutput('compute', 'COMPUTE', Icons.memory_rounded,
+                  EarthResourceColors.compute);
+
+              // Legacy fallback if output_* was 0
+              if (outputs.isEmpty) {
+                final legacyOutType = item['resourceOutputType']?.toString() ??
+                    item['resource_output_type']?.toString();
+                final legacyOutAmount = asDoubleOr(
+                    item['resourceOutputAmount'] ??
+                        item['resource_output_amount'],
+                    0);
+                final legacyCreditRevenue = asDoubleOr(
+                    item['dailyCreditRevenue'] ?? item['daily_credit_revenue'],
+                    0);
+                if (legacyCreditRevenue > 0) {
+                  outputs.add((
+                    Icons.account_balance_wallet_outlined,
+                    EarthResourceColors.credits,
+                    '${formatWholeNumber(legacyCreditRevenue)} CRD / DAY'
+                  ));
+                }
+                if (legacyOutType != null &&
+                    legacyOutType != 'credits' &&
+                    legacyOutAmount > 0) {
+                  outputs.add((
+                    EarthResourceMeta.forCommodity(legacyOutType).icon,
+                    EarthResourceMeta.forCommodity(legacyOutType).color,
+                    '${legacyOutAmount.toStringAsFixed(1)} ${legacyOutType.toUpperCase()} / DAY',
+                  ));
+                }
               }
-              if (legacyOutType != null &&
-                  legacyOutType != 'credits' &&
-                  legacyOutAmount > 0) {
-                outputs.add((
-                  EarthResourceMeta.forCommodity(legacyOutType).icon,
-                  EarthResourceMeta.forCommodity(legacyOutType).color,
-                  '${legacyOutAmount.toStringAsFixed(1)} ${legacyOutType.toUpperCase()} / DAY',
-                ));
+
+              // Inputs / Upkeep (24-resource vector)
+              final inputs = <(IconData, Color, String)>[];
+              void addInput(
+                  String key, String label, IconData icon, Color color) {
+                final val = asDoubleOr(item['input_$key'], 0);
+                if (val > 0) {
+                  inputs.add((
+                    icon,
+                    color,
+                    key == 'credits'
+                        ? '-${formatWholeNumber(val)} CRD'
+                        : '-${val.toStringAsFixed(1)} $label'
+                  ));
+                }
               }
-            }
 
-            // Upkeep Inputs (24-resource vector)
-            final inputs = <(IconData, Color, String)>[];
-            void addInput(
-                String key, String label, IconData icon, Color color) {
-              final amount = asDoubleOr(item['upkeep_$key'], 0);
-              if (amount > 0) {
-                inputs
-                    .add((icon, color, '${amount.toStringAsFixed(1)} $label'));
+              addInput(
+                  'credits',
+                  'CREDITS',
+                  Icons.account_balance_wallet_outlined,
+                  EarthResourceColors.credits);
+              addInput('energy', 'ENERGY', Icons.bolt_rounded,
+                  EarthResourceColors.energy);
+              addInput(
+                  'food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
+              addInput('materials', 'MATERIALS', Icons.terrain_outlined,
+                  EarthResourceColors.materials);
+              addInput(
+                  'components',
+                  'COMPONENTS',
+                  Icons.precision_manufacturing_outlined,
+                  EarthResourceColors.components);
+              addInput('compute', 'COMPUTE', Icons.memory_rounded,
+                  EarthResourceColors.compute);
+
+              // Legacy fallback if input_* was 0
+              if (inputs.isEmpty) {
+                final legacyInType = item['resourceInputType']?.toString() ??
+                    item['resource_input_type']?.toString();
+                final legacyInAmount = asDoubleOr(
+                    item['resourceInputAmount'] ??
+                        item['resource_input_amount'],
+                    0);
+                if (legacyInType != null && legacyInAmount > 0) {
+                  inputs.add((
+                    EarthResourceMeta.forCommodity(legacyInType).icon,
+                    EarthResourceMeta.forCommodity(legacyInType).color,
+                    '-${legacyInAmount.toStringAsFixed(1)} ${legacyInType.toUpperCase()}',
+                  ));
+                }
               }
-            }
 
-            addInput('energy', 'ENERGY', Icons.bolt_rounded,
-                EarthResourceColors.energy);
-            addInput(
-                'food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
-            addInput('materials', 'MATERIALS', Icons.terrain_outlined,
-                EarthResourceColors.materials);
-            addInput(
-                'components',
-                'COMPONENTS',
-                Icons.precision_manufacturing_outlined,
-                EarthResourceColors.components);
-            addInput('compute', 'COMPUTE', Icons.memory_rounded,
-                EarthResourceColors.compute);
+              final operatingCredits = asDoubleOr(
+                  item['operating_credits'] ??
+                      item['operatingCostCredits'] ??
+                      item['operating_cost_credits'] ??
+                      item['dailyOperatingCredits'] ??
+                      item['daily_operating_credits'] ??
+                      item['dailyStaffingCredits'],
+                  0);
+              final operatingEnergy = asDoubleOr(
+                  item['operating_energy'] ??
+                      item['operatingCostEnergy'] ??
+                      item['operating_cost_energy'],
+                  0);
+              final operatingFood = asDoubleOr(
+                  item['operating_food'] ??
+                      item['operatingCostFood'] ??
+                      item['operating_cost_food'],
+                  0);
+              final operatingMaterials = asDoubleOr(
+                  item['operating_materials'] ??
+                      item['operatingCostMaterials'] ??
+                      item['operating_cost_materials'],
+                  0);
+              final operatingComponents = asDoubleOr(
+                  item['operating_components'] ??
+                      item['operatingCostComponents'] ??
+                      item['operating_cost_components'],
+                  0);
+              final operatingCompute = asDoubleOr(
+                  item['operating_compute'] ??
+                      item['operatingCostCompute'] ??
+                      item['operating_cost_compute'],
+                  0);
 
-            // Operating Expenses (24-resource vector)
-            final operatingCredits = asDoubleOr(
-              item['operating_credits'] ??
-                  item['dailyOperatingCredits'] ??
-                  item['dailyStaffingCredits'] ??
-                  item['daily_operating_credits'],
-              0,
-            );
-            final operatingEnergy = asDoubleOr(item['operating_energy'], 0);
-            final operatingFood = asDoubleOr(item['operating_food'], 0);
-            final operatingMaterials =
-                asDoubleOr(item['operating_materials'], 0);
-            final operatingComponents =
-                asDoubleOr(item['operating_components'], 0);
-            final operatingCompute = asDoubleOr(item['operating_compute'], 0);
+              final outCreditsVal = asDoubleOr(
+                  item['output_credits'] ??
+                      item['dailyCreditRevenue'] ??
+                      item['daily_credit_revenue'],
+                  0);
 
-            final hasActiveProposal =
-                ownership == 'civic' &&
-                    _hasActiveProposalForBuilding(bType);
+              final isPublicInvest = ownership == 'public_investment';
+              final isCivicMunicipal = ownership == 'civic';
+              final canAfford = (creditsAvailable == null ||
+                      creditsAvailable >= creditCost) &&
+                  (materialsAvailable == null ||
+                      materialsAvailable >= matCost);
+              final hasSlots = isCivicMunicipal
+                  ? availableCivicSlots >= footprint
+                  : availablePrivateSlots >= footprint;
+              final canBuild = canAfford && hasSlots;
 
-            return Container(
-              margin: const EdgeInsets.only(bottom: 10),
-              padding: EdgeInsets.all(context.cardPadding),
-              decoration: BoxDecoration(
-                color: context.surfaceColor,
-                borderRadius: BorderRadius.circular(context.radiusCard),
-                border: Border.all(color: context.subtleBorderColor),
-              ),
-              child: Stack(
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Align(
-                        alignment: Alignment.centerLeft,
-                        child: _buildingImage(context, bType),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(name,
-                          maxLines: 3,
-                          overflow: TextOverflow.ellipsis,
-                          style: context.widgetTitleStyle
-                              .copyWith(color: context.primaryColor)),
-                      const SizedBox(height: 4),
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        children: [
-                          if (ownership == 'civic')
-                            const EarthBadge(
-                                label: 'CIVIC MUNICIPAL',
-                                variant: EarthBadgeVariant.secondary),
-                          if (hasActiveProposal)
-                            const EarthBadge(
-                                label: 'PROPOSAL ACTIVE',
-                                variant: EarthBadgeVariant.primary),
-                          EarthBadge(
-                              label:
-                                  '$footprint SPACE${footprint > 1 ? 'S' : ''}',
-                              variant: EarthBadgeVariant.primary),
-                          EarthBadge(
-                              label: '$tierCount TIERS',
-                              variant: EarthBadgeVariant.neutral),
-                          EarthBadge(
-                              label: category,
-                              variant: EarthBadgeVariant.neutral),
-                        ],
-                      ),
-                      const SizedBox(height: 6),
-                      Text(desc,
-                          style: context.bodyStyle
-                              .copyWith(color: context.mutedColor)),
-                      const SizedBox(height: 6),
-                      Text('Economic Purpose: $purpose',
-                          style: context.widgetFooterStyle),
-                      if (civicBenefit != null) ...[
-                        const SizedBox(height: 4),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: context.secondaryColor.withValues(alpha: .1),
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text('🏛️ Civic Benefit: $civicBenefit',
-                              style: TextStyle(
-                                  color: context.secondaryColor, fontSize: 11)),
-                        ),
-                      ],
-                      const SizedBox(height: 8),
-
-                      // Cost line
-                      Wrap(
-                        spacing: 6,
-                        runSpacing: 4,
-                        crossAxisAlignment: WrapCrossAlignment.center,
-                        children: [
-                          Text('COST', style: context.captionStyle),
-                          const SizedBox(width: 2),
-                          const Icon(Icons.account_balance_wallet_outlined,
-                              size: 14, color: EarthResourceColors.credits),
-                          Text(formatWholeNumber(creditCost),
-                              style: context.widgetFooterStyle),
-                          if (matCost > 0) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                                EarthResourceMeta.forCommodity('materials')
-                                    .icon,
-                                size: 14,
-                                color: EarthResourceColors.materials),
-                            Text('$matCost', style: context.widgetFooterStyle),
-                          ],
-                          if (compCost > 0) ...[
-                            const SizedBox(width: 4),
-                            Icon(
-                                EarthResourceMeta.forCommodity('components')
-                                    .icon,
-                                size: 14,
-                                color: EarthResourceColors.components),
-                            Text('$compCost', style: context.widgetFooterStyle),
-                          ],
-                          if (computeCost > 0) ...[
-                            const SizedBox(width: 4),
-                            Icon(EarthResourceMeta.forCommodity('compute').icon,
-                                size: 14, color: EarthResourceColors.compute),
-                            Text('$computeCost',
-                                style: context.widgetFooterStyle),
-                          ],
-                        ],
-                      ),
-
-                      // Upkeep line
-                      if (inputs.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text('DAILY UPKEEP', style: context.captionStyle),
-                            const SizedBox(width: 2),
-                            ...inputs.expand((input) => <Widget>[
-                                  Icon(input.$1, size: 14, color: input.$2),
-                                  Text(input.$3,
-                                      style: context.widgetFooterStyle),
-                                ]),
-                          ],
-                        ),
-                      ],
-
-                      // Output line
-                      if (outputs.isNotEmpty) ...[
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text('OUTPUT', style: context.captionStyle),
-                            const SizedBox(width: 2),
-                            ...outputs.expand((out) => <Widget>[
-                                  Icon(out.$1, size: 14, color: out.$2),
-                                  Text(out.$3,
-                                      style: context.widgetFooterStyle),
-                                ]),
-                          ],
-                        ),
-                      ],
-
-                      // Operating Cost line
-                      if (operatingCredits > 0 ||
-                          operatingEnergy > 0 ||
-                          operatingFood > 0 ||
-                          operatingMaterials > 0 ||
-                          operatingComponents > 0 ||
-                          operatingCompute > 0) ...[
-                        const SizedBox(height: 4),
-                        Wrap(
-                          spacing: 6,
-                          runSpacing: 4,
-                          crossAxisAlignment: WrapCrossAlignment.center,
-                          children: [
-                            Text('OPERATING', style: context.captionStyle),
-                            const SizedBox(width: 2),
-                            if (operatingCredits > 0) ...[
-                              const Icon(Icons.account_balance_wallet_outlined,
-                                  size: 14, color: EarthResourceColors.credits),
-                              Text(
-                                  '-${formatWholeNumber(operatingCredits)} CRD / DAY',
-                                  style: context.widgetFooterStyle),
-                            ],
-                            if (operatingEnergy > 0) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                  EarthResourceMeta.forCommodity('energy').icon,
-                                  size: 14,
-                                  color: EarthResourceColors.energy),
-                              Text(
-                                  '-${operatingEnergy.toStringAsFixed(1)} / DAY',
-                                  style: context.widgetFooterStyle),
-                            ],
-                            if (operatingComponents > 0) ...[
-                              const SizedBox(width: 4),
-                              Icon(
-                                  EarthResourceMeta.forCommodity('components')
-                                      .icon,
-                                  size: 14,
-                                  color: EarthResourceColors.components),
-                              Text(
-                                  '-${operatingComponents.toStringAsFixed(1)} / DAY',
-                                  style: context.widgetFooterStyle),
-                            ],
-                          ],
-                        ),
-                      ],
-                    ],
-                  ),
-                  Positioned(
-                    right: 0,
-                    bottom: 0,
-                    child: Builder(
-                      builder: (context) {
-                        final outCreditsVal = asDoubleOr(item['output_credits'],
-                            asDoubleOr(item['dailyCreditRevenue'], 0));
-                        final canBuild = ownership == 'private' &&
-                            !widget.busy &&
-                            availablePrivateSlots >= footprint &&
-                            (creditsAvailable == null ||
-                                creditsAvailable >= creditCost) &&
-                            (materialsAvailable == null ||
-                                materialsAvailable >= matCost);
-                        return IconButton(
-                          tooltip: ownership == 'civic'
-                              ? 'Create a civic procurement proposal'
-                              : canBuild
-                                  ? 'Build this building'
-                                  : 'Insufficient resources or capacity',
-                          icon: const Icon(Icons.domain_add_outlined),
-                          color: context.primaryColor,
-                          onPressed: ownership == 'civic'
-                              ? () => _showCivicProposalDialog(context,
-                                  buildingName: name.trim(),
-                                  buildingType: bType,
-                                  cityId: cityId,
-                                  creditCost: creditCost,
-                                  materialCost: matCost,
-                                  footprint: footprint)
-                              : canBuild
-                                      ? () => _confirmConstruction(
-                                            context,
-                                            buildingName: name,
-                                            buildingType: bType,
-                                            cityId: cityId,
-                                            creditCost: creditCost,
-                                            materialCost: matCost,
-                                            capacityCost: footprint,
-                                            remainingCapacity:
-                                                availablePrivateSlots -
-                                                    footprint,
-                                            netDailyCredits: outCreditsVal -
-                                                operatingCredits,
-                                          )
-                                      : null,
-                        );
-                      },
+              Widget buildCardBody({bool fillHeight = false}) {
+                return Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 12),
+                  decoration: BoxDecoration(
+                    color: context.surfaceColor,
+                    borderRadius: BorderRadius.circular(10),
+                    border: Border.all(
+                      color: context.subtleBorderColor,
                     ),
                   ),
-                ],
-              ),
+                  child: Stack(
+                    children: [
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 38, right: 38),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          mainAxisSize:
+                              fillHeight ? MainAxisSize.max : MainAxisSize.min,
+                          children: [
+                            // Header row: Image on left, Name/Badges/Desc/Purpose on right
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildingImage(context, bType),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        name,
+                                        style:
+                                            context.widgetTitleStyle.copyWith(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 14.5,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Wrap(
+                                        spacing: 4,
+                                        runSpacing: 4,
+                                        children: [
+                                          EarthBadge(
+                                            label:
+                                                '$footprint ${footprint == 1 ? "SPACE" : "SPACES"}',
+                                            variant: EarthBadgeVariant.neutral,
+                                          ),
+                                          EarthBadge(
+                                            label: category,
+                                            variant: EarthBadgeVariant.neutral,
+                                          ),
+                                        ],
+                                      ),
+                                      if (desc.isNotEmpty) ...[
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          desc,
+                                          style: context.bodyStyle.copyWith(
+                                            fontSize: 12,
+                                            height: 1.25,
+                                          ),
+                                        ),
+                                      ],
+                                      const SizedBox(height: 6),
+                                      Text(
+                                        'Economic Purpose: $purpose',
+                                        style: context.widgetFooterStyle,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+
+                            // Cost line
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: [
+                                Text('COST', style: context.captionStyle),
+                                const SizedBox(width: 2),
+                                const Icon(
+                                    Icons.account_balance_wallet_outlined,
+                                    size: 14,
+                                    color: EarthResourceColors.credits),
+                                Text(formatWholeNumber(creditCost),
+                                    style: context.widgetFooterStyle),
+                                if (matCost > 0) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                      EarthResourceMeta.forCommodity(
+                                              'materials')
+                                          .icon,
+                                      size: 14,
+                                      color: EarthResourceColors.materials),
+                                  Text('$matCost',
+                                      style: context.widgetFooterStyle),
+                                ],
+                                if (compCost > 0) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                      EarthResourceMeta.forCommodity(
+                                              'components')
+                                          .icon,
+                                      size: 14,
+                                      color: EarthResourceColors.components),
+                                  Text('$compCost',
+                                      style: context.widgetFooterStyle),
+                                ],
+                                if (computeCost > 0) ...[
+                                  const SizedBox(width: 4),
+                                  Icon(
+                                      EarthResourceMeta.forCommodity('compute')
+                                          .icon,
+                                      size: 14,
+                                      color: EarthResourceColors.compute),
+                                  Text('$computeCost',
+                                      style: context.widgetFooterStyle),
+                                ],
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.timer_outlined,
+                                  size: 14,
+                                  color: Colors.amber,
+                                ),
+                                Text(
+                                  '${math.max(1, asIntOr(item['construction_days'], footprint * asIntOr(item['tier'], 1)))}d',
+                                  style: context.widgetFooterStyle,
+                                ),
+                              ],
+                            ),
+
+                            // Upkeep line
+                            if (inputs.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text('DAILY UPKEEP',
+                                      style: context.captionStyle),
+                                  const SizedBox(width: 2),
+                                  ...inputs.expand((input) => <Widget>[
+                                        Icon(input.$1,
+                                            size: 14, color: input.$2),
+                                        Text(input.$3,
+                                            style: context.widgetFooterStyle),
+                                      ]),
+                                ],
+                              ),
+                            ],
+
+                            // Output line
+                            if (outputs.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text('OUTPUT', style: context.captionStyle),
+                                  const SizedBox(width: 2),
+                                  ...outputs.expand((out) => <Widget>[
+                                        Icon(out.$1, size: 14, color: out.$2),
+                                        Text(out.$3,
+                                            style: context.widgetFooterStyle),
+                                      ]),
+                                ],
+                              ),
+                            ],
+
+                            // Operating Cost line
+                            if (operatingCredits > 0 ||
+                                operatingEnergy > 0 ||
+                                operatingFood > 0 ||
+                                operatingMaterials > 0 ||
+                                operatingComponents > 0 ||
+                                operatingCompute > 0) ...[
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text('OPERATING COST',
+                                      style: context.captionStyle),
+                                  const SizedBox(width: 2),
+                                  if (operatingCredits > 0) ...[
+                                    const Icon(
+                                        Icons.account_balance_wallet_outlined,
+                                        size: 14,
+                                        color: EarthResourceColors.credits),
+                                    Text(
+                                        '-${operatingCredits.toStringAsFixed(0)} CRD / DAY',
+                                        style: context.widgetFooterStyle),
+                                  ],
+                                  if (operatingEnergy > 0) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                        EarthResourceMeta.forCommodity('energy')
+                                            .icon,
+                                        size: 14,
+                                        color: EarthResourceColors.energy),
+                                    Text(
+                                        '-${operatingEnergy.toStringAsFixed(1)} ENERGY / DAY',
+                                        style: context.widgetFooterStyle),
+                                  ],
+                                  if (operatingFood > 0) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                        EarthResourceMeta.forCommodity('food')
+                                            .icon,
+                                        size: 14,
+                                        color: EarthResourceColors.food),
+                                    Text(
+                                        '-${operatingFood.toStringAsFixed(1)} FOOD / DAY',
+                                        style: context.widgetFooterStyle),
+                                  ],
+                                  if (operatingMaterials > 0) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                        EarthResourceMeta.forCommodity(
+                                                'materials')
+                                            .icon,
+                                        size: 14,
+                                        color: EarthResourceColors.materials),
+                                    Text(
+                                        '-${operatingMaterials.toStringAsFixed(1)} MATERIALS / DAY',
+                                        style: context.widgetFooterStyle),
+                                  ],
+                                  if (operatingComponents > 0) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                        EarthResourceMeta.forCommodity(
+                                                'components')
+                                            .icon,
+                                        size: 14,
+                                        color: EarthResourceColors.components),
+                                    Text(
+                                        '-${operatingComponents.toStringAsFixed(1)} COMPONENTS / DAY',
+                                        style: context.widgetFooterStyle),
+                                  ],
+                                  if (operatingCompute > 0) ...[
+                                    const SizedBox(width: 4),
+                                    Icon(
+                                        EarthResourceMeta.forCommodity(
+                                                'compute')
+                                            .icon,
+                                        size: 14,
+                                        color: EarthResourceColors.compute),
+                                    Text(
+                                        '-${operatingCompute.toStringAsFixed(1)} COMPUTE / DAY',
+                                        style: context.widgetFooterStyle),
+                                  ],
+                                ],
+                              ),
+                            ],
+
+                            // Civic Benefit line
+                            if (civicBenefit != null &&
+                                civicBenefit.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 4,
+                                crossAxisAlignment: WrapCrossAlignment.center,
+                                children: [
+                                  Text('CIVIC BENEFIT',
+                                      style: context.captionStyle),
+                                  const SizedBox(width: 2),
+                                  const Icon(Icons.star_outline_rounded,
+                                      size: 14, color: Colors.purpleAccent),
+                                  Text(civicBenefit,
+                                      style: context.widgetFooterStyle.copyWith(
+                                        color: Colors.purpleAccent,
+                                      )),
+                                ],
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+
+                      // Floating big action icon on bottom right
+                      Positioned(
+                        right: 0,
+                        bottom: 0,
+                        child: Builder(
+                          builder: (context) {
+                            final isCivicOrInvest =
+                                isCivicMunicipal || isPublicInvest;
+                            final tooltip = isCivicOrInvest
+                                ? (isPublicInvest
+                                    ? 'Propose Public Project'
+                                    : 'Propose Civic Project')
+                                : canBuild
+                                    ? 'Construct $name'
+                                    : !hasSlots
+                                        ? 'Insufficient Capacity'
+                                        : 'Insufficient Resources';
+
+                            final isActionEnabled =
+                                canBuild || isCivicOrInvest;
+                            final buttonColor = isActionEnabled
+                                ? (isCivicMunicipal
+                                    ? Colors.purpleAccent
+                                    : isPublicInvest
+                                        ? Colors.lightBlueAccent
+                                        : context.primaryColor)
+                                : Colors.grey[700]!;
+
+                            return Tooltip(
+                              message: tooltip,
+                              child: Material(
+                                color: Colors.transparent,
+                                child: InkWell(
+                                  onTap: isCivicOrInvest
+                                      ? () => _showCivicProposalDialog(
+                                          context,
+                                          buildingName: name.trim(),
+                                          buildingType: bType,
+                                          cityId: cityId,
+                                          creditCost: creditCost,
+                                          materialCost: matCost,
+                                          footprint: footprint,
+                                          publicInvestment: isPublicInvest)
+                                      : canBuild
+                                          ? () => _confirmConstruction(
+                                                context,
+                                                buildingName: name,
+                                                buildingType: bType,
+                                                cityId: cityId,
+                                                creditCost: creditCost,
+                                                materialCost: matCost,
+                                                capacityCost: footprint,
+                                                remainingCapacity:
+                                                    availablePrivateSlots -
+                                                        footprint,
+                                                netDailyCredits:
+                                                    outCreditsVal -
+                                                        operatingCredits,
+                                              )
+                                          : null,
+                                  borderRadius: BorderRadius.circular(24),
+                                  child: Container(
+                                    width: 44,
+                                    height: 44,
+                                    decoration: BoxDecoration(
+                                      color: isActionEnabled
+                                          ? buttonColor.withValues(alpha: 0.18)
+                                          : Colors.white10,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(
+                                        color: isActionEnabled
+                                            ? buttonColor.withValues(alpha: 0.8)
+                                            : Colors.white24,
+                                        width: 1.5,
+                                      ),
+                                    ),
+                                    child: Icon(
+                                      isCivicOrInvest
+                                          ? Icons.how_to_vote_outlined
+                                          : Icons.construction_outlined,
+                                      size: 24,
+                                      color: isActionEnabled
+                                          ? buttonColor
+                                          : Colors.white38,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              }
+
+              return buildCardBody;
+            }).toList();
+
+            if (columnsCount <= 1) {
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: cards.map((c) => c(fillHeight: false)).toList(),
+              );
+            }
+
+            final rowWidgets = <Widget>[];
+            for (var i = 0; i < cards.length; i += columnsCount) {
+              final rowCards = <Widget>[];
+              for (var c = 0; c < columnsCount; c++) {
+                final idx = i + c;
+                if (idx < cards.length) {
+                  rowCards.add(Expanded(child: cards[idx](fillHeight: true)));
+                } else {
+                  rowCards.add(const Expanded(child: SizedBox.shrink()));
+                }
+              }
+              rowWidgets.add(
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 0),
+                  child: IntrinsicHeight(
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        for (var c = 0; c < rowCards.length; c++) ...[
+                          if (c > 0) const SizedBox(width: 12),
+                          rowCards[c],
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            }
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: rowWidgets,
             );
-          }).toList(),
+          },
         ),
       ],
     );
@@ -2600,11 +3097,6 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Align(
-            alignment: Alignment.centerLeft,
-            child: _buildingImage(context, bType),
-          ),
-          const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -2678,11 +3170,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           const SizedBox(height: 6),
 
           // Management actions
-          if (isOwner)
+          if (isOwner || isCivic || isPublicInvestment)
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                if (showOperatingPolicy && bType != 'private-estate-plot') ...[
+                if (isOwner && showOperatingPolicy && bType != 'private-estate-plot') ...[
                   Text(
                     'Operating policy tunes the daily trade-off: Balanced is standard, Frugal lowers upkeep and output, and High output increases both.',
                     style: context.widgetFooterStyle,
@@ -2740,31 +3232,110 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     spacing: 8,
                     runSpacing: 6,
                     children: [
-                      EarthButton(
-                        label: isUnderConstruction
-                            ? 'UNDER CONSTRUCTION'
-                            : 'UPGRADE TREE (TIER ${tier + 1})',
-                        icon: isUnderConstruction
-                            ? Icons.hourglass_top_outlined
-                            : Icons.account_tree_outlined,
-                        variant: isUnderConstruction
-                            ? EarthButtonVariant.secondary
-                            : EarthButtonVariant.primary,
-                        onPressed: widget.busy || isUnderConstruction
-                            ? null
-                            : () async {
-                                EarthAudioEngine.instance.playClick();
-                                await showBuildingDetailUpgradeDialog(
-                                  context,
-                                  widget.action,
-                                  b,
-                                  catalog,
-                                );
-                                _showBuildingFeedback(
-                                    '$name upgrade completed.');
-                              },
-                      ),
-                      if (bType != 'private-estate-plot' &&
+                      if (tier >= 4)
+                        const EarthButton(
+                          label: 'MAX TIER REACHED',
+                          icon: Icons.check_circle_outline,
+                          variant: EarthButtonVariant.secondary,
+                          onPressed: null,
+                        )
+                      else if (catalog.whereType<Map>().any((c) {
+                        final type = c['building_type'] ?? c['type'];
+                        return type?.toString() == bType &&
+                            asIntOr(c['tier'], 1) == tier + 1;
+                      }))
+                        EarthButton(
+                          label: isUnderConstruction
+                              ? 'UNDER CONSTRUCTION'
+                              : (isCivic || isPublicInvestment)
+                                  ? 'PROPOSE UPGRADE TIER ${tier + 1}'
+                                  : 'UPGRADE TO TIER ${tier + 1}',
+                          icon: isUnderConstruction
+                              ? Icons.hourglass_top_outlined
+                              : Icons.arrow_upward_outlined,
+                          variant: isUnderConstruction
+                              ? EarthButtonVariant.secondary
+                              : EarthButtonVariant.primary,
+                          onPressed: widget.busy || isUnderConstruction
+                              ? null
+                              : () async {
+                                  EarthAudioEngine.instance.playClick();
+                                  if (isCivic || isPublicInvestment) {
+                                    final cityId = b['city_id']?.toString() ??
+                                        widget.state.membership?['city_id']
+                                            ?.toString() ??
+                                        'CITY-0084';
+                                    final footprint =
+                                        asIntOr(b['slot_footprint'], 1);
+                                    final nextTierCatalog = catalog
+                                        .whereType<Map>()
+                                        .firstWhere(
+                                          (c) {
+                                            final type = c['building_type'] ??
+                                                c['type'];
+                                            return type?.toString() == bType &&
+                                                asIntOr(c['tier'], 1) ==
+                                                    tier + 1;
+                                          },
+                                          orElse: () => <String, dynamic>{},
+                                        );
+                                    final nextCreditCost = asIntOr(
+                                        nextTierCatalog['cost_credits'] ??
+                                            nextTierCatalog['baseCreditCost'],
+                                        0);
+                                    final nextMatCost = asIntOr(
+                                        nextTierCatalog['cost_materials'] ??
+                                            nextTierCatalog['baseMaterialCost'],
+                                        0);
+                                    final nextFootprint = asIntOr(
+                                        nextTierCatalog['slot_footprint'] ??
+                                            nextTierCatalog['footprint'],
+                                        footprint);
+                                    await _showCivicProposalDialog(
+                                      context,
+                                      buildingName:
+                                          '${nextTierCatalog['name'] ?? name} (Tier ${tier + 1})',
+                                      buildingType: bType,
+                                      cityId: cityId,
+                                      creditCost: nextCreditCost,
+                                      materialCost: nextMatCost,
+                                      footprint: nextFootprint,
+                                      publicInvestment: isPublicInvestment,
+                                    );
+                                  } else {
+                                    await showBuildingDetailUpgradeDialog(
+                                      context,
+                                      widget.action,
+                                      b,
+                                      catalog,
+                                    );
+                                    _showBuildingFeedback(
+                                        '$name upgrade completed.');
+                                  }
+                                },
+                        )
+                      else
+                        EarthButton(
+                          label: isUnderConstruction
+                              ? 'UNDER CONSTRUCTION'
+                              : 'RESEARCH TIER ${tier + 1}',
+                          icon: isUnderConstruction
+                              ? Icons.hourglass_top_outlined
+                              : Icons.science_outlined,
+                          variant: isUnderConstruction
+                              ? EarthButtonVariant.secondary
+                              : EarthButtonVariant.primary,
+                          onPressed: widget.busy || isUnderConstruction
+                              ? null
+                              : () => _showBuildingResearchDialog(
+                                    context,
+                                    building: b,
+                                    targetTier: tier + 1,
+                                    catalog: catalog,
+                                  ),
+                        ),
+                      if (isOwner &&
+                          bType != 'private-estate-plot' &&
                           bType != 'urban-district-module')
                         EarthButton(
                           label: 'DEMOLISH / RECYCLE',
@@ -2788,6 +3359,403 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         ],
       ),
     );
+  }
+
+  int _calculateResearchCost(dynamic baseCost, int targetTier,
+      {String ownership = 'private'}) {
+    final base = math.max(1000.0, asDoubleOr(baseCost, 1000.0));
+    final double scopeMul = ownership == 'public_investment'
+        ? 3.5
+        : (ownership == 'civic' ? 2.5 : 2.0);
+    final tierMul = math.pow(2.0, math.max(0, targetTier - 2)).toDouble();
+    return math.max(1000, (base * scopeMul * tierMul).round());
+  }
+
+  int _calculateDurationDays(dynamic slotFootprint, int targetTier,
+      {String ownership = 'private'}) {
+    final slots = math.max(1, asIntOr(slotFootprint, 1));
+    return (targetTier + 3) * slots;
+  }
+
+  Future<void> _showBuildingResearchDialog(
+    BuildContext context, {
+    required Map<String, dynamic> building,
+    required int targetTier,
+    required List<dynamic> catalog,
+  }) async {
+    final bType = building['building_type']?.toString() ?? '';
+    final bName = building['name']?.toString() ?? 'Facility';
+    final currentTier = asIntOr(building['tier'], 1);
+    final footprint = math.max(1, asIntOr(building['slot_footprint'], 1));
+    final ownership = building['ownership_class']?.toString() ?? 'private';
+
+    final match = catalog.whereType<Map>().firstWhere(
+      (c) => c['type'] == bType || c['building_type'] == bType,
+      orElse: () => <String, dynamic>{},
+    );
+    final baseCost =
+        asDoubleOr(match['cost_credits'] ?? match['baseCreditCost'], 35000);
+    final costCredits =
+        _calculateResearchCost(baseCost, targetTier, ownership: ownership);
+    final durationDays =
+        _calculateDurationDays(footprint, targetTier, ownership: ownership);
+
+    final isPrivate = ownership == 'private';
+    final fundingSource =
+        isPrivate ? 'your personal account' : 'your corporation treasury';
+
+    // Real CapEx values
+    final costCreditsCur = baseCost * math.pow(1.70, currentTier - 1);
+    final costCreditsNext = baseCost * math.pow(1.70, targetTier - 1);
+
+    // Outputs
+    final outputs = <(IconData, Color, String, double, double)>[];
+    void addOutput(String key, String label, IconData icon, Color color) {
+      final raw = asDoubleOr(match['output_$key'], 0);
+      if (raw > 0) {
+        final cur = raw * math.pow(1.25, currentTier - 1);
+        final next = raw * math.pow(1.25, targetTier - 1);
+        outputs.add((icon, color, label, cur, next));
+      }
+    }
+
+    addOutput('credits', 'CRD', Icons.account_balance_wallet_outlined,
+        EarthResourceColors.credits);
+    addOutput('energy', 'ENERGY', Icons.bolt_rounded, EarthResourceColors.energy);
+    addOutput('food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
+    addOutput('materials', 'MATERIALS', Icons.terrain_outlined,
+        EarthResourceColors.materials);
+    addOutput('components', 'COMPONENTS',
+        Icons.precision_manufacturing_outlined, EarthResourceColors.components);
+    addOutput('compute', 'COMPUTE', Icons.memory_rounded, EarthResourceColors.compute);
+
+    // Upkeeps
+    final upkeeps = <(IconData, Color, String, double, double)>[];
+    void addUpkeep(String key, String label, IconData icon, Color color) {
+      final raw = asDoubleOr(match['upkeep_$key'], 0);
+      if (raw > 0) {
+        final cur = raw * math.pow(1.12, currentTier - 1);
+        final next = raw * math.pow(1.12, targetTier - 1);
+        upkeeps.add((icon, color, label, cur, next));
+      }
+    }
+
+    addUpkeep('energy', 'ENERGY', Icons.bolt_rounded, EarthResourceColors.energy);
+    addUpkeep('food', 'FOOD', Icons.eco_outlined, EarthResourceColors.food);
+    addUpkeep('materials', 'MATERIALS', Icons.terrain_outlined,
+        EarthResourceColors.materials);
+    addUpkeep('components', 'COMPONENTS',
+        Icons.precision_manufacturing_outlined, EarthResourceColors.components);
+    addUpkeep('compute', 'COMPUTE', Icons.memory_rounded, EarthResourceColors.compute);
+
+    final opCreditsBase = asDoubleOr(
+      match['operating_credits'] ??
+          match['dailyOperatingCredits'] ??
+          match['dailyStaffingCredits'] ??
+          match['daily_operating_credits'],
+      0,
+    );
+
+    String formatVal(double val) {
+      if (val == val.roundToDouble()) return val.toInt().toString();
+      final fixed = val.toStringAsFixed(2);
+      if (fixed.endsWith('.00')) return fixed.substring(0, fixed.length - 3);
+      return fixed;
+    }
+
+    EarthAudioEngine.instance.playClick();
+    // Construction days
+    final tierDaysCurrent = math.max(1, (footprint * currentTier).toInt());
+    final tierDaysNext = math.max(1, (footprint * targetTier).toInt());
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
+        contentPadding: const EdgeInsets.fromLTRB(20, 14, 20, 16),
+        actionsPadding: const EdgeInsets.fromLTRB(20, 0, 20, 16),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(7),
+              decoration: BoxDecoration(
+                color: context.primaryColor.withValues(alpha: .15),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                    color: context.primaryColor.withValues(alpha: .4)),
+              ),
+              child: Icon(Icons.science_outlined,
+                  size: 20, color: context.primaryColor),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Initiate R&D Project',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w800,
+                      color: context.inkColor,
+                    ),
+                  ),
+                  Text(
+                    '$bName · Tier $currentTier → Tier $targetTier',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: context.mutedColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 480,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.',
+                style: TextStyle(
+                  fontSize: 13,
+                  height: 1.4,
+                  color: context.inkColor,
+                ),
+              ),
+              const SizedBox(height: 14),
+
+              // Overview Grid
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Column(
+                  children: [
+                    Row(
+                      children: [
+                        Text('Research Cost:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.account_balance_wallet_outlined,
+                            size: 14, color: EarthResourceColors.credits),
+                        const SizedBox(width: 4),
+                        Text('${formatWholeNumber(costCredits)} C',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: context.inkColor,
+                            )),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('Project Duration:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        Icon(Icons.timer_outlined,
+                            size: 14, color: context.secondaryColor),
+                        const SizedBox(width: 4),
+                        Text(
+                            '$durationDays ${durationDays == 1 ? "Day" : "Days"}',
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              fontWeight: FontWeight.w800,
+                              color: context.inkColor,
+                            )),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Real Upgraded Values Section
+              Text(
+                'BLUEPRINT EVOLUTION (REAL VALUES)',
+                style: TextStyle(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w800,
+                  letterSpacing: .8,
+                  color: context.mutedColor,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: context.surfaceColor,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: context.subtleBorderColor),
+                ),
+                child: Column(
+                  children: [
+                    // Construction Cost
+                    Row(
+                      children: [
+                        Text('Build Cost (CapEx):',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.account_balance_wallet_outlined,
+                            size: 13, color: EarthResourceColors.credits),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${formatWholeNumber(costCreditsCur)} → ${formatWholeNumber(costCreditsNext)}',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: context.mutedColor,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Construction Time
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Text('Construction Time:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.timer_outlined,
+                            size: 13, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          '$tierDaysCurrent d → $tierDaysNext d',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w500,
+                            color: context.mutedColor,
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    // Output
+                    if (outputs.isNotEmpty) ...[
+                      const SizedBox(height: 6),
+                      ...outputs.map((out) {
+                        final curStr = out.$3 == 'CRD' || out.$3 == 'CREDITS' || out.$3 == 'C'
+                            ? formatWholeNumber(out.$4)
+                            : formatVal(out.$4);
+                        final nextStr = out.$3 == 'CRD' || out.$3 == 'CREDITS' || out.$3 == 'C'
+                            ? formatWholeNumber(out.$5)
+                            : formatVal(out.$5);
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Text('Daily Output:',
+                                  style: TextStyle(
+                                      fontSize: 12, color: context.mutedColor)),
+                              const Spacer(),
+                              Icon(out.$1, size: 13, color: out.$2),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$curStr → $nextStr',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.mutedColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+
+                    // Upkeep
+                    if (upkeeps.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      ...upkeeps.map((input) {
+                        return Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            children: [
+                              Text('Daily Upkeep:',
+                                  style: TextStyle(
+                                      fontSize: 12, color: context.mutedColor)),
+                              const Spacer(),
+                              Icon(input.$1, size: 13, color: input.$2),
+                              const SizedBox(width: 4),
+                              Text(
+                                '${formatVal(input.$4)} → ${formatVal(input.$5)}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w500,
+                                  color: context.mutedColor,
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      }),
+                    ],
+
+                    // Operating expenses
+                    if (opCreditsBase > 0) ...[
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Text('Operating Expenses:',
+                              style: TextStyle(
+                                  fontSize: 12, color: context.mutedColor)),
+                          const Spacer(),
+                          const Icon(Icons.account_balance_wallet_outlined,
+                              size: 13, color: EarthResourceColors.credits),
+                          const SizedBox(width: 4),
+                          Text(
+                            '-${formatWholeNumber(opCreditsBase * math.pow(1.12, currentTier - 1))} → -${formatWholeNumber(opCreditsBase * math.pow(1.12, targetTier - 1))}',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: context.mutedColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          EarthButton(
+            label: 'CANCEL',
+            variant: EarthButtonVariant.neutral,
+            onPressed: () => Navigator.pop(dialogContext, false),
+          ),
+          EarthButton(
+            label: 'CONFIRM R&D PROJECT',
+            icon: Icons.science_outlined,
+            variant: EarthButtonVariant.primary,
+            onPressed: () => Navigator.pop(dialogContext, true),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      await widget.action(
+          () => const EarthApi().startCorporationBuildingResearch(bType));
+      _showBuildingFeedback(
+          '$bName Tier $targetTier research project initiated.');
+    }
   }
 
   Widget _buildBuildingsResourceLine(
