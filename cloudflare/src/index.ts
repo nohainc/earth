@@ -31,6 +31,7 @@ import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
 import { handleCommunityRoutes } from './community-routes.ts';
 import { handleInstitutionRoutes } from './institutions-routes.ts';
+import { handleRealEstateRoutes } from './real-estate-routes.ts';
 import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
 import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 
@@ -337,6 +338,12 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const response = await handleInstitutionRoutes(request, env, url, viewer);
+      if (response) return response;
+    }
+    if (url.pathname.startsWith('/api/real-estate') || url.pathname.startsWith('/api/corporate-research')) {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const response = await handleRealEstateRoutes(request, env, url, viewer);
       if (response) return response;
     }
     if (url.pathname.startsWith('/api/comm/')) {
