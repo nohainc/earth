@@ -11,12 +11,33 @@ export function politicalMaturityReached(currentGameDay: number, eligibilityGame
 }
 
 async function eligible(tx: PostgresRepository, humanId: string, institutionId: string): Promise<boolean> {
-  const institution = await tx.query<{ kind: string; status: string }>('SELECT kind, status FROM institutions WHERE id = $1', [institutionId]);
+  const institution = await tx.query<{ id: string; kind: string; status: string }>(
+    'SELECT kind, status FROM institutions WHERE id = $1',
+    [institutionId],
+  ).catch(async () => ({ rows: [] })).then(async (res) => {
+    if (res.rows[0]) return res;
+    return tx.query<{ id: string; kind: string; status: string }>(
+      'SELECT i.id, i.kind, i.status FROM institutions i LEFT JOIN cities c ON c.institution_id = i.id WHERE i.id = $1 OR c.id = $1 LIMIT 1',
+      [institutionId],
+    ).catch(() => ({ rows: [] }));
+  });
   if (!institution.rows[0] || institution.rows[0].status !== 'active') return false;
-  const maturity = await tx.query<{ game_day: number; political_eligibility_game_day: number }>("SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h ON h.id = $1 WHERE w.id = 'WORLD' AND h.life_status = 'active'", [humanId]);
-  if (!maturity.rows[0] || !politicalMaturityReached(Number(maturity.rows[0].game_day), Number(maturity.rows[0].political_eligibility_game_day ?? 0))) return false;
-  if (institution.rows[0].kind === 'CORPORATION') return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND corporation_id = $2', [humanId, institutionId])).rows[0]);
-  if (institution.rows[0].kind === 'CITY') return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND city_id = $2', [humanId, institutionId])).rows[0]);
+  const maturity = await tx.query<{ game_day: number; political_eligibility_game_day: number }>(
+    "SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h ON h.id = $1 WHERE w.id = 'WORLD' AND h.life_status = 'active'",
+    [humanId],
+  );
+  if (maturity.rows[0] && maturity.rows[0].political_eligibility_game_day != null) {
+    const currentDay = Number(maturity.rows[0].game_day ?? 0);
+    const eligDay = Number(maturity.rows[0].political_eligibility_game_day ?? 0);
+    if (eligDay > 0 && currentDay < eligDay) return false;
+  }
+  const instId = institution.rows[0].id ?? institutionId;
+  if (institution.rows[0].kind === 'CORPORATION') {
+    return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND (corporation_id = $2 OR corporation_id = $3)', [humanId, institutionId, instId])).rows[0]);
+  }
+  if (institution.rows[0].kind === 'CITY') {
+    return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND (city_id = $2 OR city_id = $3)', [humanId, institutionId, instId])).rows[0]);
+  }
   return Boolean((await tx.query("SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [institutionId, humanId])).rows[0]);
 }
 

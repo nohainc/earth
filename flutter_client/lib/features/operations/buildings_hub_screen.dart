@@ -95,7 +95,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         b is Map &&
         (b['status']?.toString() == 'under_construction' ||
             b['status']?.toString() == 'inactive'));
-    if (hasUnderConstruction) {
+    final hasActiveResearch = (widget.state.corporationBuildingResearch['projects'] as List?)?.any((p) =>
+        p is Map && (p['status']?.toString() == 'active' || p['status'] == null)) ?? false;
+    if (hasUnderConstruction || hasActiveResearch) {
       if (_constructionProgressTimer == null ||
           !_constructionProgressTimer!.isActive) {
         _constructionProgressTimer =
@@ -195,6 +197,28 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     if (computed >= 100.0) {
       return 100.0;
     }
+    return computed.clamp(0.0, 100.0);
+  }
+
+  double _calculateResearchProgress(Map<String, dynamic> project) {
+    final status = project['status']?.toString();
+    if (status == 'completed') return 100.0;
+    final currentDay = asDoubleOr(widget.state.clock['day'], 1);
+    final currentMinuteOfDay = asDoubleOr(widget.state.clock['minute'], 0);
+    final baseAuthoritativeMinutes = asDoubleOr(
+      widget.state.clock['totalGameMinutes'],
+      ((currentDay - 1) * 1440.0) + currentMinuteOfDay,
+    );
+    final authoritativeMinutes =
+        baseAuthoritativeMinutes + _localElapsedSeconds;
+
+    final startDay = asDoubleOr(project['started_game_day'], currentDay);
+    final startMinuteOfDay = asDoubleOr(project['started_game_minute'], 0);
+    final startMinute = ((startDay - 1) * 1440.0) + startMinuteOfDay;
+    final durationMinutes = math.max(1.0, asDoubleOr(project['duration_minutes'], 1440.0));
+
+    final elapsed = math.max(0.0, authoritativeMinutes - startMinute);
+    final computed = (elapsed / durationMinutes) * 100.0;
     return computed.clamp(0.0, 100.0);
   }
 
@@ -3390,6 +3414,25 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final hasIssue = !bActive && !isUnderConstruction;
     final inactiveReason = _getInactiveReason(b);
 
+    final corpProjects = (widget.state.corporationBuildingResearch['projects'] as List?)
+            ?.whereType<Map>()
+            .map((m) => Map<String, dynamic>.from(m))
+            .toList() ??
+        [];
+    final activeResearchProject = corpProjects.firstWhere(
+      (p) =>
+          p['building_type']?.toString() == bType &&
+          (p['status']?.toString() == 'active' || p['status'] == null),
+      orElse: () => <String, dynamic>{},
+    );
+    final hasActiveResearch = activeResearchProject.isNotEmpty;
+    final researchProgressVal = hasActiveResearch
+        ? _calculateResearchProgress(activeResearchProject)
+        : 0.0;
+    final researchTargetTier = hasActiveResearch
+        ? asIntOr(activeResearchProject['target_tier'], tier + 1)
+        : tier + 1;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: EdgeInsets.all(context.cardPadding),
@@ -3418,6 +3461,12 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         style: context.widgetFooterStyle.copyWith(
                             color: context.warningColor, fontSize: 12),
                       ),
+                    if (hasActiveResearch)
+                      Text(
+                        'R&D in progress: Tier $researchTargetTier (${researchProgressVal.toStringAsFixed(0)}% complete)',
+                        style: context.widgetFooterStyle.copyWith(
+                            color: context.primaryColor, fontSize: 12, fontWeight: FontWeight.w600),
+                      ),
                     Text(
                       '${itemNumber == null ? '' : '#$itemNumber  ·  '}${asIntOr(b['slot_footprint'], 1)} space${asIntOr(b['slot_footprint'], 1) == 1 ? '' : 's'}  ·  Tier ${asIntOr(b['tier'], 1)}',
                       style: context.widgetFooterStyle
@@ -3432,7 +3481,17 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   ],
                 ),
               ),
-              if (!bActive) ...[
+              if (hasActiveResearch) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Tier $researchTargetTier R&D in progress (${researchProgressVal.toStringAsFixed(0)}%)',
+                  child: EarthBadge(
+                    label: 'R&D ${researchProgressVal.toStringAsFixed(0)}%',
+                    variant: EarthBadgeVariant.primary,
+                  ),
+                ),
+              ],
+              if (!bActive && !hasActiveResearch) ...[
                 const SizedBox(width: 6),
                 Tooltip(
                   message: inactiveReason,
@@ -3634,14 +3693,18 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                         EarthButton(
                           label: isUnderConstruction
                               ? 'UNDER CONSTRUCTION'
-                              : 'RESEARCH TIER ${tier + 1}',
+                              : hasActiveResearch
+                                  ? 'R&D IN PROGRESS (${researchProgressVal.toStringAsFixed(0)}%)'
+                                  : 'RESEARCH TIER ${tier + 1}',
                           icon: isUnderConstruction
                               ? Icons.hourglass_top_outlined
-                              : Icons.science_outlined,
-                          variant: isUnderConstruction
+                              : hasActiveResearch
+                                  ? Icons.hourglass_top_outlined
+                                  : Icons.science_outlined,
+                          variant: (isUnderConstruction || hasActiveResearch)
                               ? EarthButtonVariant.secondary
                               : EarthButtonVariant.primary,
-                          onPressed: widget.busy || isUnderConstruction
+                          onPressed: widget.busy || isUnderConstruction || hasActiveResearch
                               ? null
                               : () => _showBuildingResearchDialog(
                                     context,

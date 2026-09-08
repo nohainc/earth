@@ -11,6 +11,10 @@ import {
   demolishBuilding,
   contributeCorporateResearch,
 } from './real-estate-postgres.ts';
+import {
+  startCorporationBuildingResearch,
+  listCorporationBuildingResearch,
+} from './corporation-building-research-postgres.ts';
 
 export async function handleRealEstateRoutes(
   request: Request,
@@ -219,6 +223,49 @@ export async function handleRealEstateRoutes(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Contribution failed';
       return Response.json({ ok: false, error: message }, { status: /insufficient|not found|not a member/i.test(message) ? 409 : 400 });
+    }
+  }
+
+  if ((url.pathname === '/api/corporation/building-research' || url.pathname === '/api/corporations/building-research') && request.method === 'POST') {
+    const parsed = await parseJsonBody<{
+      buildingType?: string;
+      correlationId?: string;
+    }>(request);
+    if (!parsed.ok) return parsed.response;
+    const buildingType = parsed.value.buildingType?.trim();
+    if (!buildingType) {
+      return Response.json({ ok: false, error: 'Building type is required' }, { status: 400 });
+    }
+    const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
+    if (!correlationId) {
+      return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
+    }
+    try {
+      const result = await withRepository(env, (repository) =>
+        startCorporationBuildingResearch(repository, {
+          humanId: viewer.id,
+          buildingType,
+          correlationId,
+        }),
+      );
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Building research initiation failed';
+      return Response.json({ ok: false, error: message }, { status: /insufficient|already|not found|only to corporation/i.test(message) ? 409 : 400 });
+    }
+  }
+
+  if ((url.pathname === '/api/corporation/building-research' || url.pathname === '/api/corporations/building-research') && request.method === 'GET') {
+    try {
+      const result = await withRepository(env, (repository) =>
+        listCorporationBuildingResearch(repository, viewer.id),
+      );
+      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+      return Response.json({ ...result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Building research list failed';
+      return Response.json({ ok: false, error: message }, { status: 400 });
     }
   }
 
