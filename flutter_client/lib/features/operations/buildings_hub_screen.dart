@@ -510,10 +510,14 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
         .toList();
     final catalog = widget.state.buildingCatalog;
     final zoning = widget.state.districtZoning;
-    final rawCityId = widget.state.membership?['city_id']?.toString();
+    final rawCityId = widget.state.membership?['city_id']?.toString() ??
+        widget.state.institutions['city']?['id']?.toString() ??
+        widget.state.districtZoning['cityId']?.toString();
     final isIndependent =
         rawCityId == null || rawCityId.isEmpty || rawCityId == 'Independent';
-    final cityId = rawCityId ?? 'CITY-0084';
+    final cityId = (rawCityId == null || rawCityId.isEmpty || rawCityId == 'Independent')
+        ? 'CITY-0084'
+        : rawCityId;
     final viewerId = widget.state.human['id']?.toString();
 
     final privateBuildings = buildings

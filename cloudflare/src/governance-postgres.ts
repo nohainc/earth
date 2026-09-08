@@ -22,21 +22,27 @@ async function eligible(tx: PostgresRepository, humanId: string, institutionId: 
     ).catch(() => ({ rows: [] }));
   });
   if (!institution.rows[0] || institution.rows[0].status !== 'active') return false;
-  const maturity = await tx.query<{ game_day: number; political_eligibility_game_day: number }>(
-    "SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h ON h.id = $1 WHERE w.id = 'WORLD' AND h.life_status = 'active'",
+
+  const human = await tx.query<{ id: string; life_status: string }>(
+    "SELECT id, life_status FROM humans WHERE id = $1 AND life_status = 'active' AND account_status = 'active'",
     [humanId],
   );
-  if (maturity.rows[0] && maturity.rows[0].political_eligibility_game_day != null) {
-    const currentDay = Number(maturity.rows[0].game_day ?? 0);
-    const eligDay = Number(maturity.rows[0].political_eligibility_game_day ?? 0);
-    if (eligDay > 0 && currentDay < eligDay) return false;
-  }
+  if (!human.rows[0]) return false;
+
   const instId = institution.rows[0].id ?? institutionId;
   if (institution.rows[0].kind === 'CORPORATION') {
     return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND (corporation_id = $2 OR corporation_id = $3)', [humanId, institutionId, instId])).rows[0]);
   }
   if (institution.rows[0].kind === 'CITY') {
-    return Boolean((await tx.query('SELECT 1 FROM memberships WHERE human_id = $1 AND (city_id = $2 OR city_id = $3)', [humanId, institutionId, instId])).rows[0]);
+    const membership = await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1', [humanId]);
+    if (membership.rows[0]?.city_id) {
+      return membership.rows[0].city_id === institutionId || membership.rows[0].city_id === instId;
+    }
+    await tx.query(
+      'INSERT INTO memberships (human_id, city_id) VALUES ($1, $2) ON CONFLICT (human_id) DO UPDATE SET city_id = COALESCE(memberships.city_id, EXCLUDED.city_id)',
+      [humanId, instId],
+    );
+    return true;
   }
   return Boolean((await tx.query("SELECT 1 FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [institutionId, humanId])).rows[0]);
 }

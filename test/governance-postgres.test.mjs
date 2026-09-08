@@ -41,7 +41,8 @@ test('challengeProposal files constitutional challenge for passed proposal', asy
       rowCount: 1,
     },
     'SELECT kind, status FROM institutions': { rows: [{ kind: 'CITY', status: 'active' }], rowCount: 1 },
-    'SELECT w.game_day, h.political_eligibility_game_day': { rows: [{ game_day: 100, political_eligibility_game_day: 50 }], rowCount: 1 },
+    'SELECT id, life_status FROM humans': { rows: [{ id: 'H-01', life_status: 'active' }], rowCount: 1 },
+    'SELECT city_id FROM memberships': { rows: [{ city_id: 'INST-01' }], rowCount: 1 },
     'SELECT 1 FROM memberships': { rows: [{ '1': 1 }], rowCount: 1 },
     'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
   });
@@ -66,7 +67,8 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
       rowCount: 1,
     },
     'SELECT kind, status FROM institutions': { rows: [{ kind: 'CITY', status: 'active' }], rowCount: 1 },
-    'SELECT w.game_day, h.political_eligibility_game_day': { rows: [{ game_day: 100, political_eligibility_game_day: 50 }], rowCount: 1 },
+    'SELECT id, life_status FROM humans': { rows: [{ id: 'H-01', life_status: 'active' }], rowCount: 1 },
+    'SELECT city_id FROM memberships': { rows: [{ city_id: 'INST-01' }], rowCount: 1 },
     'SELECT 1 FROM memberships': { rows: [{ '1': 1 }], rowCount: 1 },
     'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
   });
