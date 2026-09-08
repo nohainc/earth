@@ -89,11 +89,28 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
     const time = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
     const projectId = `CBR-${crypto.randomUUID().slice(0, 10).toUpperCase()}`;
 
-    const corporation = await tx.query<{ account_id: string; balance: string }>(
-      "SELECT account_id, balance FROM account_balances WHERE account_id = $1 AND currency = 'CREDIT' FOR UPDATE",
-      [`account-corporation-${corporationId}`],
-    );
-    if (!corporation.rows[0] || moneyToCents(corporation.rows[0].balance) < moneyToCents(cost)) throw new Error(`Corporation Treasury requires ${cost} Credits for this research`);
+    const isPrivate = previous.rows[0].ownership_class === 'private';
+    let debitAccountId: string;
+
+    if (isPrivate) {
+      const personalAccount = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [input.humanId],
+      );
+      if (!personalAccount.rows[0] || moneyToCents(personalAccount.rows[0].balance) < moneyToCents(cost)) {
+        throw new Error(`Personal account requires ${cost} Credits for this research`);
+      }
+      debitAccountId = personalAccount.rows[0].account_id;
+    } else {
+      const corporation = await tx.query<{ account_id: string; balance: string }>(
+        "SELECT account_id, balance FROM account_balances WHERE account_id = $1 AND currency = 'CREDIT' FOR UPDATE",
+        [`account-corporation-${corporationId}`],
+      );
+      if (!corporation.rows[0] || moneyToCents(corporation.rows[0].balance) < moneyToCents(cost)) {
+        throw new Error(`Corporation Treasury requires ${cost} Credits for this research`);
+      }
+      debitAccountId = corporation.rows[0].account_id;
+    }
 
     if (!existingCatalog.rows[0]) {
       await tx.query(
@@ -117,7 +134,7 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
       await tx.query('UPDATE building_catalog SET next_catalog_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [targetCatalogId, previous.rows[0].id]);
     }
 
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: time.gameDay, debitAccount: corporation.rows[0].account_id, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: time.gameDay, debitAccount: debitAccountId, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
     await tx.query(
       `INSERT INTO corporation_building_research_projects (id, corporation_id, building_type, catalog_id, target_tier, research_cost_credits, duration_minutes, started_game_day, started_game_minute, correlation_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
