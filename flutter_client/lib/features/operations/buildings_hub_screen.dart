@@ -1888,22 +1888,75 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           ? null
                           : () async {
                               EarthAudioEngine.instance.playClick();
-                              final pOutputs = <(IconData, Color, String)>[];
-                              if (dailyYield > 0) {
-                                pOutputs.add((
-                                  Icons.account_balance_wallet_outlined,
-                                  EarthResourceColors.credits,
-                                  '+${formatWholeNumber(dailyYield)} C / day',
+                              final pNetYields =
+                                  <(IconData, Color, String, bool)>[];
+                              pNetYields.add((
+                                netDailyProfit >= 0
+                                    ? Icons.trending_up
+                                    : Icons.trending_down,
+                                netDailyProfit >= 0
+                                    ? context.successColor
+                                    : context.dangerColor,
+                                '${netDailyProfit >= 0 ? '+' : ''}${formatWholeNumber(netDailyProfit)} C',
+                                netDailyProfit >= 0,
+                              ));
+
+                              void addPlannerNet(String key, String label,
+                                  IconData icon, Color color) {
+                                final outVal =
+                                    asDoubleOr(currentSpec['output_$key'], 0);
+                                final inVal =
+                                    asDoubleOr(currentSpec['input_$key'], 0);
+                                final net = outVal - inVal;
+                                if (net != 0) {
+                                  pNetYields.add((
+                                    icon,
+                                    color,
+                                    '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)} $label',
+                                    net > 0,
+                                  ));
+                                }
+                              }
+
+                              addPlannerNet('energy', 'Energy', Icons.bolt_rounded,
+                                  EarthResourceColors.energy);
+                              addPlannerNet('food', 'Food', Icons.eco_outlined,
+                                  EarthResourceColors.food);
+                              addPlannerNet('materials', 'Mat',
+                                  Icons.terrain_outlined,
+                                  EarthResourceColors.materials);
+                              addPlannerNet('components', 'Comp',
+                                  Icons.precision_manufacturing_outlined,
+                                  EarthResourceColors.components);
+                              addPlannerNet('compute', 'Compute',
+                                  Icons.memory_rounded,
+                                  EarthResourceColors.compute);
+
+                              final resType = (currentSpec[
+                                          'resource_output_type'] ??
+                                      currentSpec['dailyOutputResourceType'])
+                                  ?.toString();
+                              final resAmount = asDoubleOr(
+                                currentSpec['output_energy'] ??
+                                    currentSpec['output_food'] ??
+                                    currentSpec['output_materials'] ??
+                                    currentSpec['output_components'] ??
+                                    currentSpec['output_compute'] ??
+                                    currentSpec['dailyOutputResourceAmount'],
+                                0,
+                              );
+                              if (resType != null &&
+                                  resType != 'credits' &&
+                                  resAmount > 0 &&
+                                  pNetYields.length == 1) {
+                                pNetYields.add((
+                                  EarthResourceMeta.forCommodity(resType).icon,
+                                  EarthResourceMeta.forCommodity(resType).color,
+                                  '+${resAmount.toStringAsFixed(1)} ${resType.toUpperCase()}',
+                                  true,
                                 ));
                               }
-                              final pUpkeep = <(IconData, Color, String)>[];
-                              if (opCost > 0) {
-                                pUpkeep.add((
-                                  Icons.account_balance_wallet_outlined,
-                                  EarthResourceColors.credits,
-                                  '-${formatWholeNumber(opCost)} C / day',
-                                ));
-                              }
+
                               final pDays = math.max(
                                 1,
                                 asIntOr(
@@ -1923,9 +1976,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 remainingCapacity:
                                     availablePrivateSlots - footprint,
                                 constructionDays: pDays,
-                                outputs: pOutputs,
-                                upkeep: pUpkeep,
-                                netDailyCredits: netDailyProfit,
+                                netYields: pNetYields,
                               );
                             },
                     ),
@@ -1949,9 +2000,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required int capacityCost,
     required int remainingCapacity,
     int constructionDays = 1,
-    List<(IconData, Color, String)> outputs = const [],
-    List<(IconData, Color, String)> upkeep = const [],
-    required double netDailyCredits,
+    required List<(IconData, Color, String, bool)> netYields,
   }) async {
     EarthAudioEngine.instance.playClick();
     final confirmed = await showDialog<bool>(
@@ -2116,111 +2165,41 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: context.subtleBorderColor),
                 ),
-                child: Column(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    if (outputs.isNotEmpty) ...[
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Resource Output:',
-                              style: TextStyle(
-                                  fontSize: 12, color: context.mutedColor)),
-                          const Spacer(),
-                          Flexible(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              alignment: WrapAlignment.end,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: outputs
-                                  .map((out) => Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(out.$1,
-                                              size: 13, color: out.$2),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            out.$3,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: context.inkColor,
-                                            ),
-                                          ),
-                                        ],
-                                      ))
-                                  .toList(),
-                            ),
-                          ),
-                        ],
+                    Text('Net Daily Yield:',
+                        style: TextStyle(
+                            fontSize: 12, color: context.mutedColor)),
+                    const Spacer(),
+                    Flexible(
+                      child: Wrap(
+                        spacing: 8,
+                        runSpacing: 4,
+                        alignment: WrapAlignment.end,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: netYields
+                            .map((y) => Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Icon(y.$1, size: 13, color: y.$2),
+                                    const SizedBox(width: 3),
+                                    Text(
+                                      y.$3,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        fontWeight: FontWeight.w700,
+                                        color: y.$4
+                                            ? (y.$1 == Icons.trending_up
+                                                ? context.successColor
+                                                : context.inkColor)
+                                            : context.dangerColor,
+                                      ),
+                                    ),
+                                  ],
+                                ))
+                            .toList(),
                       ),
-                      const SizedBox(height: 8),
-                    ],
-                    if (upkeep.isNotEmpty) ...[
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Daily Upkeep & Costs:',
-                              style: TextStyle(
-                                  fontSize: 12, color: context.mutedColor)),
-                          const Spacer(),
-                          Flexible(
-                            child: Wrap(
-                              spacing: 6,
-                              runSpacing: 4,
-                              alignment: WrapAlignment.end,
-                              crossAxisAlignment: WrapCrossAlignment.center,
-                              children: upkeep
-                                  .map((item) => Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          Icon(item.$1,
-                                              size: 13, color: item.$2),
-                                          const SizedBox(width: 3),
-                                          Text(
-                                            item.$3,
-                                            style: TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.w600,
-                                              color: context.inkColor,
-                                            ),
-                                          ),
-                                        ],
-                                      ))
-                                  .toList(),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 8),
-                    ],
-                    Row(
-                      children: [
-                        Text('Net Daily Yield:',
-                            style: TextStyle(
-                                fontSize: 12, color: context.mutedColor)),
-                        const Spacer(),
-                        Icon(
-                          netDailyCredits >= 0
-                              ? Icons.trending_up
-                              : Icons.trending_down,
-                          size: 14,
-                          color: netDailyCredits >= 0
-                              ? context.successColor
-                              : context.dangerColor,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          '${netDailyCredits >= 0 ? '+' : ''}${formatWholeNumber(netDailyCredits)} C / day',
-                          style: TextStyle(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w700,
-                            color: netDailyCredits >= 0
-                                ? context.successColor
-                                : context.dangerColor,
-                          ),
-                        ),
-                      ],
                     ),
                   ],
                 ),
@@ -3071,66 +3050,123 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                                       asIntOr(item['tier'], 1),
                                                 ),
                                               );
-                                              final cUpkeep =
-                                                  <(IconData, Color, String)>[
-                                                ...inputs,
-                                              ];
-                                              if (operatingCredits > 0) {
-                                                cUpkeep.insert(
-                                                  0,
-                                                  (
-                                                    Icons
-                                                        .account_balance_wallet_outlined,
-                                                    EarthResourceColors.credits,
-                                                    '-${operatingCredits.toStringAsFixed(0)} CRD / day',
-                                                  ),
-                                                );
+                                              final cNetYields =
+                                                  <(IconData, Color, String, bool)>[];
+                                              final netCredits = outCreditsVal -
+                                                  (asDoubleOr(item['input_credits'], 0) +
+                                                      operatingCredits);
+                                              cNetYields.add((
+                                                netCredits >= 0
+                                                    ? Icons.trending_up
+                                                    : Icons.trending_down,
+                                                netCredits >= 0
+                                                    ? context.successColor
+                                                    : context.dangerColor,
+                                                '${netCredits >= 0 ? '+' : ''}${formatWholeNumber(netCredits)} C',
+                                                netCredits >= 0,
+                                              ));
+
+                                              void addCatalogNet(
+                                                  String key,
+                                                  String label,
+                                                  IconData icon,
+                                                  Color color,
+                                                  double operatingVal) {
+                                                final outVal = asDoubleOr(
+                                                    item['output_$key'], 0);
+                                                final inVal = asDoubleOr(
+                                                        item['input_$key'], 0) +
+                                                    operatingVal;
+                                                final net = outVal - inVal;
+                                                if (net != 0) {
+                                                  cNetYields.add((
+                                                    icon,
+                                                    color,
+                                                    '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)} $label',
+                                                    net > 0,
+                                                  ));
+                                                }
                                               }
-                                              if (operatingEnergy > 0) {
-                                                cUpkeep.add((
-                                                  EarthResourceMeta.forCommodity(
-                                                          'energy')
-                                                      .icon,
+
+                                              addCatalogNet(
+                                                  'energy',
+                                                  'Energy',
+                                                  Icons.bolt_rounded,
                                                   EarthResourceColors.energy,
-                                                  '-${operatingEnergy.toStringAsFixed(1)} ENERGY / day',
-                                                ));
-                                              }
-                                              if (operatingFood > 0) {
-                                                cUpkeep.add((
-                                                  EarthResourceMeta.forCommodity(
-                                                          'food')
-                                                      .icon,
+                                                  operatingEnergy);
+                                              addCatalogNet(
+                                                  'food',
+                                                  'Food',
+                                                  Icons.eco_outlined,
                                                   EarthResourceColors.food,
-                                                  '-${operatingFood.toStringAsFixed(1)} FOOD / day',
-                                                ));
-                                              }
-                                              if (operatingMaterials > 0) {
-                                                cUpkeep.add((
-                                                  EarthResourceMeta.forCommodity(
-                                                          'materials')
-                                                      .icon,
+                                                  operatingFood);
+                                              addCatalogNet(
+                                                  'materials',
+                                                  'Mat',
+                                                  Icons.terrain_outlined,
                                                   EarthResourceColors.materials,
-                                                  '-${operatingMaterials.toStringAsFixed(1)} MAT / day',
-                                                ));
-                                              }
-                                              if (operatingComponents > 0) {
-                                                cUpkeep.add((
-                                                  EarthResourceMeta.forCommodity(
-                                                          'components')
-                                                      .icon,
-                                                  EarthResourceColors
-                                                      .components,
-                                                  '-${operatingComponents.toStringAsFixed(1)} COMP / day',
-                                                ));
-                                              }
-                                              if (operatingCompute > 0) {
-                                                cUpkeep.add((
-                                                  EarthResourceMeta.forCommodity(
-                                                          'compute')
-                                                      .icon,
+                                                  operatingMaterials);
+                                              addCatalogNet(
+                                                  'components',
+                                                  'Comp',
+                                                  Icons.precision_manufacturing_outlined,
+                                                  EarthResourceColors.components,
+                                                  operatingComponents);
+                                              addCatalogNet(
+                                                  'compute',
+                                                  'Compute',
+                                                  Icons.memory_rounded,
                                                   EarthResourceColors.compute,
-                                                  '-${operatingCompute.toStringAsFixed(1)} CMP / day',
-                                                ));
+                                                  operatingCompute);
+
+                                              if (cNetYields.length == 1) {
+                                                final legacyOutType =
+                                                    item['resourceOutputType']?.toString() ??
+                                                        item['resource_output_type']
+                                                            ?.toString();
+                                                final legacyOutAmount = asDoubleOr(
+                                                    item['resourceOutputAmount'] ??
+                                                        item['resource_output_amount'],
+                                                    0);
+                                                final legacyInType =
+                                                    item['resourceInputType']?.toString() ??
+                                                        item['resource_input_type']
+                                                            ?.toString();
+                                                final legacyInAmount = asDoubleOr(
+                                                    item['resourceInputAmount'] ??
+                                                        item['resource_input_amount'],
+                                                    0);
+                                                if (legacyOutType != null &&
+                                                    legacyOutType != 'credits' &&
+                                                    legacyOutAmount > 0) {
+                                                  final net = legacyOutAmount -
+                                                      (legacyInType == legacyOutType
+                                                          ? legacyInAmount
+                                                          : 0);
+                                                  cNetYields.add((
+                                                    EarthResourceMeta.forCommodity(
+                                                            legacyOutType)
+                                                        .icon,
+                                                    EarthResourceMeta.forCommodity(
+                                                            legacyOutType)
+                                                        .color,
+                                                    '${net > 0 ? '+' : ''}${net.toStringAsFixed(1)} ${legacyOutType.toUpperCase()}',
+                                                    net > 0,
+                                                  ));
+                                                } else if (legacyInType != null &&
+                                                    legacyInType != 'credits' &&
+                                                    legacyInAmount > 0) {
+                                                  cNetYields.add((
+                                                    EarthResourceMeta.forCommodity(
+                                                            legacyInType)
+                                                        .icon,
+                                                    EarthResourceMeta.forCommodity(
+                                                            legacyInType)
+                                                        .color,
+                                                    '-${legacyInAmount.toStringAsFixed(1)} ${legacyInType.toUpperCase()}',
+                                                    false,
+                                                  ));
+                                                }
                                               }
 
                                               _confirmConstruction(
@@ -3145,11 +3181,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                                     effAvailablePrivateSlots -
                                                         footprint,
                                                 constructionDays: cDays,
-                                                outputs: outputs,
-                                                upkeep: cUpkeep,
-                                                netDailyCredits:
-                                                    outCreditsVal -
-                                                        operatingCredits,
+                                                netYields: cNetYields,
                                               );
                                             }
                                           : null,
