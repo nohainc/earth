@@ -1515,7 +1515,7 @@ class _CorporateBuildingResearchPanelState
                     // Construction Cost
                     Row(
                       children: [
-                        Text('Build Cost (CapEx):',
+                        Text('Build Cost:',
                             style: TextStyle(
                                 fontSize: 12, color: context.mutedColor)),
                         const Spacer(),

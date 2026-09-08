@@ -236,6 +236,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required int creditCost,
     required int materialCost,
     required int footprint,
+    int constructionDays = 1,
     bool publicInvestment = false,
   }) async {
     EarthAudioEngine.instance.playClick();
@@ -330,7 +331,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   children: [
                     Row(
                       children: [
-                        Text('Estimated CapEx Cost:',
+                        Text('Estimated Cost:',
                             style: TextStyle(
                                 fontSize: 12, color: context.mutedColor)),
                         const Spacer(),
@@ -355,6 +356,26 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 color: context.inkColor,
                               )),
                         ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('Construction Time:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.timer_outlined,
+                            size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${constructionDays}d',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: context.inkColor,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -575,6 +596,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           final selectedBuilt = effectiveTab == 0 ? privatePanel : civicPanel;
           final selectedCatalog = _buildCatalogTab(context,
               catalog: catalog,
+              availablePrivateSlots: personalAvailableSlots,
               ownershipFilter: effectiveTab == 0 ? 'private' : 'civic');
           final civicBuildingsCount = civicBuildings.length;
           final mainTabs = isIndependent
@@ -793,7 +815,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
           ),
         ] else
           _buildCatalogTab(context,
-              catalog: catalog, ownershipFilter: 'private'),
+              catalog: catalog,
+              availablePrivateSlots: availablePrivateSlots,
+              ownershipFilter: 'private'),
       ],
     );
   }
@@ -1856,6 +1880,30 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                           ? null
                           : () async {
                               EarthAudioEngine.instance.playClick();
+                              final pOutputs = <(IconData, Color, String)>[];
+                              if (dailyYield > 0) {
+                                pOutputs.add((
+                                  Icons.account_balance_wallet_outlined,
+                                  EarthResourceColors.credits,
+                                  '+${formatWholeNumber(dailyYield)} C / day',
+                                ));
+                              }
+                              final pUpkeep = <(IconData, Color, String)>[];
+                              if (opCost > 0) {
+                                pUpkeep.add((
+                                  Icons.account_balance_wallet_outlined,
+                                  EarthResourceColors.credits,
+                                  '-${formatWholeNumber(opCost)} C / day',
+                                ));
+                              }
+                              final pDays = math.max(
+                                1,
+                                asIntOr(
+                                  currentSpec['construction_days'],
+                                  footprint * asIntOr(currentSpec['tier'], 1),
+                                ),
+                              );
+
                               await _confirmConstruction(
                                 context,
                                 buildingName: name,
@@ -1866,6 +1914,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 capacityCost: footprint,
                                 remainingCapacity:
                                     availablePrivateSlots - footprint,
+                                constructionDays: pDays,
+                                outputs: pOutputs,
+                                upkeep: pUpkeep,
                                 netDailyCredits: netDailyProfit,
                               );
                             },
@@ -1889,6 +1940,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     required int materialCost,
     required int capacityCost,
     required int remainingCapacity,
+    int constructionDays = 1,
+    List<(IconData, Color, String)> outputs = const [],
+    List<(IconData, Color, String)> upkeep = const [],
     required double netDailyCredits,
   }) async {
     EarthAudioEngine.instance.playClick();
@@ -1965,7 +2019,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   children: [
                     Row(
                       children: [
-                        Text('Construction Cost (CapEx):',
+                        Text('Construction Cost:',
                             style: TextStyle(
                                 fontSize: 12, color: context.mutedColor)),
                         const Spacer(),
@@ -1990,6 +2044,26 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 color: context.inkColor,
                               )),
                         ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text('Construction Time:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        const Icon(Icons.timer_outlined,
+                            size: 14, color: Colors.amber),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${constructionDays}d',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: context.inkColor,
+                          ),
+                        ),
                       ],
                     ),
                     const SizedBox(height: 8),
@@ -2034,31 +2108,111 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   borderRadius: BorderRadius.circular(10),
                   border: Border.all(color: context.subtleBorderColor),
                 ),
-                child: Row(
+                child: Column(
                   children: [
-                    Text('Net Daily Yield:',
-                        style: TextStyle(
-                            fontSize: 12, color: context.mutedColor)),
-                    const Spacer(),
-                    Icon(
-                      netDailyCredits >= 0
-                          ? Icons.trending_up
-                          : Icons.trending_down,
-                      size: 14,
-                      color: netDailyCredits >= 0
-                          ? context.successColor
-                          : context.dangerColor,
-                    ),
-                    const SizedBox(width: 4),
-                    Text(
-                      '${netDailyCredits >= 0 ? '+' : ''}${formatWholeNumber(netDailyCredits)} C / day',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w500,
-                        color: netDailyCredits >= 0
-                            ? context.successColor
-                            : context.dangerColor,
+                    if (outputs.isNotEmpty) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Resource Output:',
+                              style: TextStyle(
+                                  fontSize: 12, color: context.mutedColor)),
+                          const Spacer(),
+                          Flexible(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              alignment: WrapAlignment.end,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: outputs
+                                  .map((out) => Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(out.$1,
+                                              size: 13, color: out.$2),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            out.$3,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: context.inkColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ))
+                                  .toList(),
+                            ),
+                          ),
+                        ],
                       ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (upkeep.isNotEmpty) ...[
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Daily Upkeep & Costs:',
+                              style: TextStyle(
+                                  fontSize: 12, color: context.mutedColor)),
+                          const Spacer(),
+                          Flexible(
+                            child: Wrap(
+                              spacing: 6,
+                              runSpacing: 4,
+                              alignment: WrapAlignment.end,
+                              crossAxisAlignment: WrapCrossAlignment.center,
+                              children: upkeep
+                                  .map((item) => Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          Icon(item.$1,
+                                              size: 13, color: item.$2),
+                                          const SizedBox(width: 3),
+                                          Text(
+                                            item.$3,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w600,
+                                              color: context.inkColor,
+                                            ),
+                                          ),
+                                        ],
+                                      ))
+                                  .toList(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    Row(
+                      children: [
+                        Text('Net Daily Yield:',
+                            style: TextStyle(
+                                fontSize: 12, color: context.mutedColor)),
+                        const Spacer(),
+                        Icon(
+                          netDailyCredits >= 0
+                              ? Icons.trending_up
+                              : Icons.trending_down,
+                          size: 14,
+                          color: netDailyCredits >= 0
+                              ? context.successColor
+                              : context.dangerColor,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          '${netDailyCredits >= 0 ? '+' : ''}${formatWholeNumber(netDailyCredits)} C / day',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                            color: netDailyCredits >= 0
+                                ? context.successColor
+                                : context.dangerColor,
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -2219,6 +2373,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
   Widget _buildCatalogTab(
     BuildContext context, {
     required List<dynamic> catalog,
+    int? availablePrivateSlots,
     String? ownershipFilter,
   }) {
     final allCatalogMaps = catalog
@@ -2238,8 +2393,33 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
       return (prevId == null || prevId.toString().isEmpty) && tier == 1;
     }).toList();
 
+    final privateBuildings = widget.state.buildings
+        .whereType<Map>()
+        .where((b) =>
+            b['owner_id'] == widget.state.human['id']?.toString() &&
+            b['status'] != 'closed')
+        .toList();
+    final estateBuilding =
+        privateBuildings.cast<Map<String, dynamic>?>().firstWhere(
+              (b) => b?['building_type'] == 'private-estate-plot',
+              orElse: () => null,
+            );
+    final estateTier = asIntOr(estateBuilding?['tier'], 1);
+    final personalTotalSlots = estateTier * 10;
+    final personalUsedSlots = privateBuildings.fold<int>(
+      0,
+      (sum, b) =>
+          sum +
+          (b['building_type'] == 'private-estate-plot'
+              ? 0
+              : asIntOr(b['slot_footprint'], 1)),
+    );
+    final personalAvailableSlots =
+        math.max(0, personalTotalSlots - personalUsedSlots);
+
     final zoning = widget.state.districtZoning;
-    final availablePrivateSlots = asIntOr(zoning['availablePrivateSlots'], 0);
+    final effAvailablePrivateSlots =
+        availablePrivateSlots ?? personalAvailableSlots;
     final availableCivicSlots =
         asIntOr(zoning['availableCivicSlots'] ?? zoning['civicSlotsRemaining'], 999);
     final cityId =
@@ -2526,7 +2706,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                       materialsAvailable >= matCost);
               final hasSlots = isCivicMunicipal
                   ? availableCivicSlots >= footprint
-                  : availablePrivateSlots >= footprint;
+                  : effAvailablePrivateSlots >= footprint;
               final canBuild = canAfford && hasSlots;
 
               Widget buildCardBody({bool fillHeight = false}) {
@@ -2851,17 +3031,100 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                 color: Colors.transparent,
                                 child: InkWell(
                                   onTap: isCivicOrInvest
-                                      ? () => _showCivicProposalDialog(
-                                          context,
-                                          buildingName: name.trim(),
-                                          buildingType: bType,
-                                          cityId: cityId,
-                                          creditCost: creditCost,
-                                          materialCost: matCost,
-                                          footprint: footprint,
-                                          publicInvestment: isPublicInvest)
+                                      ? () {
+                                          final cDays = math.max(
+                                            1,
+                                            asIntOr(
+                                              item['construction_days'],
+                                              footprint *
+                                                  asIntOr(item['tier'], 1),
+                                            ),
+                                          );
+                                          _showCivicProposalDialog(
+                                            context,
+                                            buildingName: name.trim(),
+                                            buildingType: bType,
+                                            cityId: cityId,
+                                            creditCost: creditCost,
+                                            materialCost: matCost,
+                                            footprint: footprint,
+                                            constructionDays: cDays,
+                                            publicInvestment: isPublicInvest,
+                                          );
+                                        }
                                       : canBuild
-                                          ? () => _confirmConstruction(
+                                          ? () {
+                                              final cDays = math.max(
+                                                1,
+                                                asIntOr(
+                                                  item['construction_days'],
+                                                  footprint *
+                                                      asIntOr(item['tier'], 1),
+                                                ),
+                                              );
+                                              final cUpkeep =
+                                                  <(IconData, Color, String)>[
+                                                ...inputs,
+                                              ];
+                                              if (operatingCredits > 0) {
+                                                cUpkeep.insert(
+                                                  0,
+                                                  (
+                                                    Icons
+                                                        .account_balance_wallet_outlined,
+                                                    EarthResourceColors.credits,
+                                                    '-${operatingCredits.toStringAsFixed(0)} CRD / day',
+                                                  ),
+                                                );
+                                              }
+                                              if (operatingEnergy > 0) {
+                                                cUpkeep.add((
+                                                  EarthResourceMeta.forCommodity(
+                                                          'energy')
+                                                      .icon,
+                                                  EarthResourceColors.energy,
+                                                  '-${operatingEnergy.toStringAsFixed(1)} ENERGY / day',
+                                                ));
+                                              }
+                                              if (operatingFood > 0) {
+                                                cUpkeep.add((
+                                                  EarthResourceMeta.forCommodity(
+                                                          'food')
+                                                      .icon,
+                                                  EarthResourceColors.food,
+                                                  '-${operatingFood.toStringAsFixed(1)} FOOD / day',
+                                                ));
+                                              }
+                                              if (operatingMaterials > 0) {
+                                                cUpkeep.add((
+                                                  EarthResourceMeta.forCommodity(
+                                                          'materials')
+                                                      .icon,
+                                                  EarthResourceColors.materials,
+                                                  '-${operatingMaterials.toStringAsFixed(1)} MAT / day',
+                                                ));
+                                              }
+                                              if (operatingComponents > 0) {
+                                                cUpkeep.add((
+                                                  EarthResourceMeta.forCommodity(
+                                                          'components')
+                                                      .icon,
+                                                  EarthResourceColors
+                                                      .components,
+                                                  '-${operatingComponents.toStringAsFixed(1)} COMP / day',
+                                                ));
+                                              }
+                                              if (operatingCompute > 0) {
+                                                cUpkeep.add((
+                                                  EarthResourceMeta.forCommodity(
+                                                          'compute')
+                                                      .icon,
+                                                  EarthResourceColors.compute,
+                                                  '-${operatingCompute.toStringAsFixed(1)} CMP / day',
+                                                ));
+                                              }
+
+                                              _confirmConstruction(
                                                 context,
                                                 buildingName: name,
                                                 buildingType: bType,
@@ -2870,12 +3133,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                                 materialCost: matCost,
                                                 capacityCost: footprint,
                                                 remainingCapacity:
-                                                    availablePrivateSlots -
+                                                    effAvailablePrivateSlots -
                                                         footprint,
+                                                constructionDays: cDays,
+                                                outputs: outputs,
+                                                upkeep: cUpkeep,
                                                 netDailyCredits:
                                                     outCreditsVal -
                                                         operatingCredits,
-                                              )
+                                              );
+                                            }
                                           : null,
                                   borderRadius: BorderRadius.circular(24),
                                   child: Container(
@@ -3291,6 +3558,13 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                         nextTierCatalog['slot_footprint'] ??
                                             nextTierCatalog['footprint'],
                                         footprint);
+                                    final nextConstructionDays = math.max(
+                                      1,
+                                      asIntOr(
+                                        nextTierCatalog['construction_days'],
+                                        nextFootprint * (tier + 1),
+                                      ),
+                                    );
                                     await _showCivicProposalDialog(
                                       context,
                                       buildingName:
@@ -3300,6 +3574,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                                       creditCost: nextCreditCost,
                                       materialCost: nextMatCost,
                                       footprint: nextFootprint,
+                                      constructionDays: nextConstructionDays,
                                       publicInvestment: isPublicInvestment,
                                     );
                                   } else {
@@ -3603,7 +3878,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                     // Construction Cost
                     Row(
                       children: [
-                        Text('Build Cost (CapEx):',
+                        Text('Build Cost:',
                             style: TextStyle(
                                 fontSize: 12, color: context.mutedColor)),
                         const Spacer(),
