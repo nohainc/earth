@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../app/theme.dart';
@@ -257,11 +258,76 @@ class _CorporateBuildingResearchPanelState
   int _selectedScope = 0; // 0 = ALL, 1 = PRIVATE, 2 = CIVIC & UTILITIES
   final _searchController = TextEditingController();
   String _searchQuery = '';
+  Timer? _researchProgressTimer;
+  int _localElapsedSeconds = 0;
+  int? _serverClockTotalMinutes;
+
+  @override
+  void initState() {
+    super.initState();
+    _startResearchProgressTimer();
+  }
+
+  @override
+  void didUpdateWidget(covariant CorporateBuildingResearchPanel oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final serverTotalMinutes =
+        asIntOr(widget.state.clock['totalGameMinutes'], 0);
+    if (_serverClockTotalMinutes != null &&
+        serverTotalMinutes != _serverClockTotalMinutes) {
+      _localElapsedSeconds = 0;
+    }
+    _serverClockTotalMinutes = serverTotalMinutes;
+    _startResearchProgressTimer();
+  }
 
   @override
   void dispose() {
+    _researchProgressTimer?.cancel();
     _searchController.dispose();
     super.dispose();
+  }
+
+  void _startResearchProgressTimer() {
+    final projects = widget.state.corporationBuildingResearch['projects'];
+    final hasActiveResearch = projects is List && projects.any((project) =>
+        project is Map && project['status']?.toString() == 'active');
+    if (!hasActiveResearch) {
+      _researchProgressTimer?.cancel();
+      _researchProgressTimer = null;
+      return;
+    }
+    if (_researchProgressTimer?.isActive ?? false) return;
+    _researchProgressTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        return;
+      }
+      setState(() => _localElapsedSeconds++);
+    });
+  }
+
+  double _calculateResearchProgress(Map<String, dynamic> project) {
+    if (project['status']?.toString() == 'completed') return 100.0;
+    final currentDay = asDoubleOr(widget.state.clock['day'], 1);
+    final currentMinuteOfDay = asDoubleOr(widget.state.clock['minute'], 0);
+    final baseAuthoritativeMinutes = asDoubleOr(
+      widget.state.clock['totalGameMinutes'],
+      ((currentDay - 1) * 1440.0) + currentMinuteOfDay,
+    );
+    final startDay = asDoubleOr(project['started_game_day'], currentDay);
+    final startMinuteOfDay = asDoubleOr(project['started_game_minute'], 0);
+    final startMinute = ((startDay - 1) * 1440.0) + startMinuteOfDay;
+    final durationMinutes =
+        math.max(1.0, asDoubleOr(project['duration_minutes'], 1440.0));
+    final elapsed = math.max(
+        0.0, baseAuthoritativeMinutes + _localElapsedSeconds - startMinute);
+    // The stored value is authoritative at the last scheduler update. The
+    // projection only fills the gap until the next database refresh, so it
+    // must never move the displayed progress backwards.
+    final persisted = asDoubleOr(project['progress'], 0.0);
+    final projected = (elapsed / durationMinutes) * 100.0;
+    return math.max(persisted, projected).clamp(0.0, 100.0);
   }
 
   int _calculateResearchCost(dynamic baseCost, int targetTier, {String ownership = 'private'}) {
@@ -519,109 +585,6 @@ class _CorporateBuildingResearchPanelState
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        if (activeProjects.isNotEmpty) ...[
-          Container(
-            width: double.infinity,
-            padding: const EdgeInsets.all(14),
-            decoration: BoxDecoration(
-              color: context.surfaceColor.withValues(alpha: .9),
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: cyanAccentColor.withValues(alpha: .4)),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(6),
-                      decoration: BoxDecoration(
-                        color: cyanAccentColor.withValues(alpha: .15),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Icon(Icons.science_outlined,
-                          size: 16, color: cyanAccentColor),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'ACTIVE R&D PIPELINES (${activeProjects.length})',
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 1.0,
-                        color: cyanAccentColor,
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                ...activeProjects.map((item) {
-                  final progress = asDoubleOr(item['progress'], 0)
-                      .clamp(0, 100)
-                      .toDouble();
-                  final type = item['building_type']?.toString() ?? '';
-                  final name = (item['catalog_name'] ??
-                          item['name'] ??
-                          blueprintCatalogMap[type]?['name'] ??
-                          type)
-                      .toString();
-                  final targetTier = item['target_tier']?.toString() ?? '2';
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 8),
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: context.panelColor,
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(color: context.subtleBorderColor),
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Text(
-                                '$name · Tier $targetTier Progression',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: context.inkColor,
-                                ),
-                              ),
-                            ),
-                            Text(
-                              '${progress.toStringAsFixed(0)}%',
-                              style: const TextStyle(
-                                color: cyanAccentColor,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w800,
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 6),
-                        ClipRRect(
-                          borderRadius: BorderRadius.circular(3),
-                          child: LinearProgressIndicator(
-                            value: progress / 100,
-                            minHeight: 6,
-                            backgroundColor:
-                                context.inkColor.withValues(alpha: .1),
-                            valueColor: const AlwaysStoppedAnimation(
-                                cyanAccentColor),
-                          ),
-                        ),
-                      ],
-                    ),
-                  );
-                }),
-              ],
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
-
         Wrap(
           spacing: 8,
           runSpacing: 8,
@@ -699,9 +662,7 @@ class _CorporateBuildingResearchPanelState
                 final activeProject = activeProjectMap[type];
                 final isResearching = activeProject != null;
                 final projectProgress = isResearching
-                    ? asDoubleOr(activeProject['progress'], 0)
-                        .clamp(0, 100)
-                        .toDouble()
+                    ? _calculateResearchProgress(activeProject)
                     : 0.0;
                 final category =
                     (bp['category']?.toString() ?? 'commercial').toUpperCase();
@@ -1193,8 +1154,12 @@ class _CorporateBuildingResearchPanelState
                                     child: SizedBox(
                                       width: double.infinity,
                                       child: EarthButton(
-                                        label: 'RESEARCH TIER $targetTier',
-                                        icon: Icons.science_outlined,
+                                        label: isPrivate
+                                            ? 'RESEARCH TIER $targetTier'
+                                            : 'PROPOSE CIVIC RESEARCH TIER $targetTier',
+                                        icon: isPrivate
+                                            ? Icons.science_outlined
+                                            : Icons.how_to_vote_outlined,
                                         variant: isButtonDisabled
                                             ? EarthButtonVariant.neutral
                                             : EarthButtonVariant.primary,
@@ -1412,8 +1377,11 @@ class _CorporateBuildingResearchPanelState
                 border:
                     Border.all(color: cyanAccentColor.withValues(alpha: .4)),
               ),
-              child: const Icon(Icons.science_outlined,
-                  size: 20, color: cyanAccentColor),
+              child: Icon(
+                isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
+                size: 20,
+                color: cyanAccentColor,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -1421,7 +1389,7 @@ class _CorporateBuildingResearchPanelState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Initiate R&D Project',
+                    isPrivate ? 'Initiate R&D Project' : 'Propose Civic Research',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -1448,7 +1416,9 @@ class _CorporateBuildingResearchPanelState
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.',
+                isPrivate
+                    ? 'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.'
+                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for all member cities.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -1669,8 +1639,8 @@ class _CorporateBuildingResearchPanelState
             onPressed: () => Navigator.pop(dialogContext, false),
           ),
           EarthButton(
-            label: 'CONFIRM R&D PROJECT',
-            icon: Icons.science_outlined,
+            label: isPrivate ? 'CONFIRM R&D PROJECT' : 'SUBMIT CIVIC PROPOSAL',
+            icon: isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
             variant: EarthButtonVariant.primary,
             onPressed: () => Navigator.pop(dialogContext, true),
           ),
@@ -1679,8 +1649,25 @@ class _CorporateBuildingResearchPanelState
     );
 
     if (confirmed == true && mounted) {
-      await widget.action(
-          () => const EarthApi().startCorporationBuildingResearch(type));
+      if (isPrivate) {
+        await widget.action(
+            () => const EarthApi().startCorporationBuildingResearch(type));
+      } else {
+        final corpId = widget.state.membership?['corporation_id']?.toString() ??
+            widget.state.human['corporation_id']?.toString() ??
+            'CORP-0001';
+        await widget.action(() => const EarthApi().createProposal(
+              'Research $name (Tier $targetTier)',
+              'Corporation proposal to research and unlock blueprints for $name Tier $targetTier. Duration: $durationDays days, Estimated R&D funding: ${formatWholeNumber(costCredits)} C from corporation treasury.',
+              institutionId: corpId,
+              targetCategory: 'technology',
+              targetValue: {
+                'buildingType': type,
+                'targetTier': targetTier,
+                'ownershipClass': ownership,
+              },
+            ));
+      }
     }
   }
 }

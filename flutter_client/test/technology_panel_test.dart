@@ -284,10 +284,9 @@ void main() {
     expect(find.textContaining('PRIVATE SECTOR'), findsWidgets);
     expect(find.textContaining('CIVIC & UTILITY'), findsOneWidget);
 
-    // Verify active R&D pipeline hero banner
-    expect(find.text('ACTIVE R&D PIPELINES (1)'), findsOneWidget);
-    expect(find.text('Molecular Bistro · Tier 2 Progression'), findsOneWidget);
-    expect(find.text('65%'), findsWidgets);
+    // Active research is shown on its matching blueprint card.
+    expect(find.text('R&D IN PROGRESS'), findsOneWidget);
+    expect(find.textContaining('65%'), findsWidgets);
 
 
     // Filter to CIVIC & UTILITY

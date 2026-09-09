@@ -31,7 +31,8 @@ import '../governance/constitution_panel.dart';
 import 'quick_actions_panel.dart';
 import 'command_executive_quadrant.dart';
 
-String dashboardSectionTitle(String section, [EarthState? state]) => switch (section) {
+String dashboardSectionTitle(String section, [EarthState? state]) =>
+    switch (section) {
       'account' => 'ACCOUNT SETTINGS',
       'command' => 'COMMAND CENTER',
       'business' => 'BUSINESS',
@@ -60,11 +61,13 @@ String dashboardSectionTitle(String section, [EarthState? state]) => switch (sec
       'history' => 'MEMORIAL',
       'memorial' => 'MEMORIAL',
       'life' => () {
-        if (state == null) return 'LIFE';
-        final raw = (state.human['display_name'] ?? state.human['name'])?.toString().trim();
-        if (raw == null || raw.isEmpty) return 'CITIZEN';
-        return raw.split(RegExp(r'\s+')).first.toUpperCase();
-      }(),
+          if (state == null) return 'LIFE';
+          final raw = (state.human['display_name'] ?? state.human['name'])
+              ?.toString()
+              .trim();
+          if (raw == null || raw.isEmpty) return 'CITIZEN';
+          return raw.split(RegExp(r'\s+')).first.toUpperCase();
+        }(),
       'pantheon' => 'MEMORIAL',
       'constitution' => 'CONSTITUTION',
       'contracts' => 'CONTRACTS',
@@ -411,7 +414,8 @@ class Dashboard extends StatelessWidget {
           ),
         ];
       case String s when s == 'messages' || s.startsWith('messages:'):
-        final initialChannelId = s.contains(':') ? s.substring(s.indexOf(':') + 1) : null;
+        final initialChannelId =
+            s.contains(':') ? s.substring(s.indexOf(':') + 1) : null;
         return [
           LayoutBuilder(
             builder: (context, _) {
@@ -460,41 +464,24 @@ class Dashboard extends StatelessWidget {
         ];
       case 'civic':
       case 'governance':
-        if (state.membership?['city_id']?.toString().isNotEmpty != true) {
-          return [
-            const AffiliationRequiredPanel(
-              title: 'PUBLIC GOVERNANCE',
-              icon: Icons.public_outlined,
-              message:
-                  'Public Governance explains the common rules of Earth and how cities are managed. You are currently independent, so city proposals, municipal budgets, and local voting are not available yet. Join a city to participate in its governance.',
-            ),
-          ];
-        }
         return [
           PublicFinanceGovernancePanel(
               state: state, busy: busy, action: action),
           const SizedBox(height: 34),
-          ProposalPanel(state: state, busy: busy, action: action),
+          TabbedProposalPanel(
+            state: state,
+            busy: busy,
+            action: action,
+          ),
         ];
       case 'corporation':
       case 'my-corporation':
-        final corporationId = state.membership?['corporation_id']?.toString();
         return [
           CorporationOverviewPanel(
             state: state,
             busy: busy,
             action: action,
           ),
-          if (corporationId != null && corporationId.isNotEmpty) ...[
-            const SizedBox(height: 34),
-            ProposalPanel(
-              state: state,
-              busy: busy,
-              action: action,
-              institutionId: corporationId,
-              scopeLabel: 'CORPORATION',
-            ),
-          ],
         ];
       case 'corporations':
         return [
@@ -527,14 +514,6 @@ class Dashboard extends StatelessWidget {
                 action: action,
               );
               final cityId = state.membership?['city_id']?.toString();
-              final cityProposal = cityId == null
-                  ? null
-                  : ProposalPanel(
-                      state: state,
-                      busy: busy,
-                      action: action,
-                      institutionId: cityId,
-                      scopeLabel: 'CITY');
               final cityImpact = CityImpactPanel(state: state);
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -546,10 +525,6 @@ class Dashboard extends StatelessWidget {
                         state: state, institutionId: cityId),
                   const SizedBox(height: 34),
                   cityImpact,
-                  if (cityProposal != null) ...[
-                    const SizedBox(height: 34),
-                    cityProposal,
-                  ],
                 ],
               );
             },
@@ -600,7 +575,12 @@ class Dashboard extends StatelessWidget {
       case 'pantheon':
         return [HistoricalArchivePanel(pantheon: pantheon, events: events)];
       case 'news':
-        return [NewsPanel(events: events, notifications: notifications, onRefresh: onRefreshEvents)];
+        return [
+          NewsPanel(
+              events: events,
+              notifications: notifications,
+              onRefresh: onRefreshEvents)
+        ];
       case 'constitution':
         return [ConstitutionPanel(state: state)];
       case 'life':
@@ -700,9 +680,8 @@ class Dashboard extends StatelessWidget {
                                             .withValues(alpha: .35)),
                                   ),
                                   title: Text('Edit name',
-                                      style: context.topicTitleStyle
-                                          .copyWith(
-                                              color: context.primaryColor)),
+                                      style: context.topicTitleStyle.copyWith(
+                                          color: context.primaryColor)),
                                   content: TextField(
                                     controller: controller,
                                     autofocus: true,
@@ -719,9 +698,8 @@ class Dashboard extends StatelessWidget {
                                       onPressed: () =>
                                           Navigator.pop(dialogContext),
                                       child: Text('CANCEL',
-                                          style: context.controlStyle
-                                              .copyWith(
-                                                  color: context.mutedColor)),
+                                          style: context.controlStyle.copyWith(
+                                              color: context.mutedColor)),
                                     ),
                                     EarthButton(
                                       label: 'SAVE',
@@ -732,8 +710,8 @@ class Dashboard extends StatelessWidget {
                                                   controller.text.trim();
                                               if (name.length < 2) return;
                                               Navigator.pop(dialogContext);
-                                              await action(
-                                                  () => const EarthApi()
+                                              await action(() =>
+                                                  const EarthApi()
                                                       .updateDisplayName(name));
                                             },
                                     ),
@@ -791,9 +769,8 @@ class Dashboard extends StatelessWidget {
                                             .withValues(alpha: .35)),
                                   ),
                                   title: Text('Edit citizen epitaph',
-                                      style: context.topicTitleStyle
-                                          .copyWith(
-                                              color: context.primaryColor)),
+                                      style: context.topicTitleStyle.copyWith(
+                                          color: context.primaryColor)),
                                   content: TextField(
                                     controller: controller,
                                     autofocus: true,
@@ -812,9 +789,8 @@ class Dashboard extends StatelessWidget {
                                       onPressed: () =>
                                           Navigator.pop(dialogContext),
                                       child: Text('CANCEL',
-                                          style: context.controlStyle
-                                              .copyWith(
-                                                  color: context.mutedColor)),
+                                          style: context.controlStyle.copyWith(
+                                              color: context.mutedColor)),
                                     ),
                                     EarthButton(
                                       label: 'SAVE',
@@ -825,8 +801,8 @@ class Dashboard extends StatelessWidget {
                                                   controller.text.trim();
                                               if (text.isEmpty) return;
                                               Navigator.pop(dialogContext);
-                                              await action(
-                                                  () => const EarthApi()
+                                              await action(() =>
+                                                  const EarthApi()
                                                       .updateEpitaph(text));
                                             },
                                     ),

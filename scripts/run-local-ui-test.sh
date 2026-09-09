@@ -5,6 +5,10 @@ ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 API_PORT="${EARTH_LOCAL_API_PORT:-8788}"
 WEB_PORT="${EARTH_LOCAL_WEB_PORT:-50553}"
 API_ORIGIN="http://localhost:${WEB_PORT}"
+# The local timer exercises Wrangler's scheduled-event endpoint, which is the
+# same Worker entry point used by Cloudflare Cron. Set this to false when a
+# manual, completely static local session is needed.
+LOCAL_SCHEDULER_ENABLED="${EARTH_LOCAL_SCHEDULER:-true}"
 
 # Default to local PostgreSQL if DATABASE_URL is not set
 DEFAULT_LOCAL_DB="postgres://earth:earth_dev_only@localhost:5432/earth"
@@ -69,7 +73,25 @@ if ! command -v osascript >/dev/null 2>&1; then
   exit 1
 fi
 
-api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=${(q)DATABASE_URL} CORS_ORIGIN=${(q)API_ORIGIN} npx wrangler dev --test-scheduled --config wrangler.api.jsonc --port ${API_PORT} --ip 127.0.0.1"
+api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CONNECTION_STRING=${(q)DATABASE_URL} CLOUDFLARE_HYPERDRIVE_LOCAL_CONNECTION_STRING_HYPERDRIVE=${(q)DATABASE_URL} CORS_ORIGIN=${(q)API_ORIGIN} EARTH_LOCAL_SCHEDULER=${(q)LOCAL_SCHEDULER_ENABLED} zsh -c '
+  set -u
+  scheduler_pid=\"\"
+  stop_scheduler() { [[ -n \"\${scheduler_pid}\" ]] && kill \"\${scheduler_pid}\" 2>/dev/null || true; }
+  trap stop_scheduler EXIT INT TERM
+  if [[ \"\${EARTH_LOCAL_SCHEDULER}\" == \"true\" ]]; then
+    (
+      # Give Wrangler a moment to bind before the first one-minute check.
+      sleep 60
+      while true; do
+        curl --fail --silent --show-error http://127.0.0.1:${API_PORT}/__scheduled >/dev/null || print -u2 \"Local scheduled tick failed; retrying next minute.\"
+        sleep 60
+      done
+    ) &
+    scheduler_pid=\$!
+    print \"Local scheduler enabled: invoking the Worker scheduled handler every 60 seconds.\"
+  fi
+  npx wrangler dev --test-scheduled --config wrangler.api.jsonc --port ${API_PORT} --ip 127.0.0.1
+'"
 web_command="cd ${(q)ROOT_DIR}/flutter_client && flutter run -d chrome --web-port ${WEB_PORT} --dart-define=EARTH_API_URL=http://localhost:${API_PORT}"
 
 osascript - "$api_command" "$web_command" <<'APPLESCRIPT'
@@ -83,5 +105,9 @@ end run
 APPLESCRIPT
 
 print "Started local PostgreSQL server, Wrangler Worker API on port ${API_PORT}, and Flutter Chrome client on port ${WEB_PORT}."
-print "Run ./scripts/run-local-game-tick.sh to invoke the same scheduled settlement path locally."
+if [[ "${LOCAL_SCHEDULER_ENABLED}" == "true" ]]; then
+  print "The local Worker scheduled handler will run every 60 seconds. Set EARTH_LOCAL_SCHEDULER=false to disable it."
+else
+  print "Local scheduled ticks are disabled. Set EARTH_LOCAL_SCHEDULER=true to enable the one-minute Worker timer."
+fi
 print "Open http://localhost:${WEB_PORT} or static prototype at file://${ROOT_DIR}/prototype3.html"

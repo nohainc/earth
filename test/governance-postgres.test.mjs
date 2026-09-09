@@ -7,6 +7,7 @@ import {
   castVote,
   challengeProposal,
   resolveConstitutionalAppeal,
+  resolveProposalsInTransaction,
 } from '../cloudflare/src/governance-postgres.ts';
 
 class MockDbClient {
@@ -31,6 +32,40 @@ test('politicalMaturityReached evaluates game day threshold correctly', () => {
   assert.equal(politicalMaturityReached(100, 100), true);
   assert.equal(politicalMaturityReached(80, 90), false);
   assert.equal(politicalMaturityReached(NaN, 90), false);
+});
+
+test('proposal resolution counts only active members of its own institution', async () => {
+  const client = new MockDbClient({
+    "SELECT genesis_at, simulated_day_offset FROM world_state": {
+      rows: [{ genesis_at: new Date(Date.now() - 20 * 86400000).toISOString(), simulated_day_offset: 0 }],
+      rowCount: 1,
+    },
+    "SELECT id, institution_id, quorum, approval_threshold FROM proposals": {
+      rows: [{ id: 'CITY-VOTE-1', institution_id: 'CITY-1', quorum: '0.25', approval_threshold: '0.5' }],
+      rowCount: 1,
+    },
+    'SELECT choice, COALESCE(SUM(weight), 0) AS weight FROM ballots': {
+      rows: [{ choice: 'support', weight: '1' }],
+      rowCount: 1,
+    },
+    'JOIN institutions i ON i.id = $1': {
+      rows: [{ count: '1' }],
+      rowCount: 1,
+    },
+  });
+  const repo = new PostgresRepository(client);
+
+  const resolved = await resolveProposalsInTransaction(repo);
+
+  assert.equal(resolved, 1);
+  const electorateQuery = client.calls.find((call) =>
+    call.sql.includes('JOIN institutions i ON i.id = $1'));
+  assert.ok(electorateQuery);
+  assert.match(electorateQuery.sql, /i\.kind = 'CITY' AND m\.city_id = \$1/);
+  assert.match(electorateQuery.sql, /i\.kind = 'CORPORATION' AND m\.corporation_id = \$1/);
+  const resolution = client.calls.find((call) =>
+    call.sql.startsWith('UPDATE proposals SET outcome'));
+  assert.equal(resolution.params[0], 'passed');
 });
 
 test('challengeProposal files constitutional challenge for passed proposal', async () => {
@@ -85,3 +120,50 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
   assert.equal(result.ok, true);
   assert.equal(result.executionStatus, 'voided');
 });
+
+test('createProposal associates typed building_catalog target', async () => {
+  const client = new MockDbClient({
+    'SELECT * FROM proposals WHERE institution_id = $1 AND correlation_id = $2': { rows: [], rowCount: 0 },
+    'SELECT id, quorum_threshold': {
+      rows: [{ id: 'GOV-C1-v1', quorum_threshold: '0.25', approval_threshold: '0.5', voting_period_days: 7, implementation_delay_days: 1 }],
+      rowCount: 1,
+    },
+    'SELECT game_day, game_minute': {
+      rows: [{ game_day: 10, game_minute: 100, genesis_at: new Date(Date.now() - 10 * 86400000).toISOString(), simulated_day_offset: 0 }],
+      rowCount: 1,
+    },
+    'SELECT id FROM building_catalog': {
+      rows: [{ id: 'fusion-plant-t1' }],
+      rowCount: 1,
+    },
+    'SELECT id, life_status FROM humans': { rows: [{ id: 'H-01', life_status: 'active' }], rowCount: 1 },
+    'SELECT city_id FROM memberships': { rows: [{ city_id: 'CITY-1' }], rowCount: 1 },
+    'SELECT 1 FROM memberships': { rows: [{ '1': 1 }], rowCount: 1 },
+    'SELECT * FROM proposals WHERE id = $1': {
+      rows: [{ id: 'PROP-01', target_kind: 'building_catalog', building_catalog_id: 'fusion-plant-t1' }],
+      rowCount: 1,
+    },
+  });
+  const repo = new PostgresRepository(client);
+
+  const res = await createProposal(repo, {
+    humanId: 'H-01',
+    institutionId: 'CITY-1',
+    title: 'Commission Fusion Plant',
+    body: 'Increase energy capacity.',
+    targetCategory: 'megaproject_procurement',
+    targetValue: { buildingType: 'fusion-plant' },
+    correlationId: 'corr-fusion-1',
+  });
+
+  assert.equal(res.ok, true);
+  const insertCall = client.calls.find((c) => c.sql.startsWith('INSERT INTO proposals'));
+  assert.ok(insertCall);
+  // targetKind should be 'building_catalog'
+  assert.equal(insertCall.params[14], 'building_catalog');
+  // building_catalog_id should be 'fusion-plant-t1'
+  assert.equal(insertCall.params[15], 'fusion-plant-t1');
+  // research_project_id should be null
+  assert.equal(insertCall.params[16], null);
+});
+

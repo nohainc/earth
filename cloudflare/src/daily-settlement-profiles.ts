@@ -79,7 +79,8 @@ export async function recordDailySettlementProfileShadow(repository: PostgresRep
 export async function applyPreparedResourceProfiles(repository: PostgresRepository, gameDay: number): Promise<number> {
   const dueOwners = await repository.query<{ owner_id: string }>(
     `SELECT owner_id FROM daily_settlement_profiles
-     WHERE status = 'clean' AND last_settled_game_day < $1 AND owner_kind IN ('human', 'city')`,
+     WHERE status = 'clean' AND last_settled_game_day < $1
+       AND owner_kind IN ('human', 'city', 'corporation', 'earth')`,
     [gameDay],
   );
   let appliedCount = 0;

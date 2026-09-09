@@ -265,7 +265,12 @@ export async function listTechnology(repository: PostgresRepository, humanId: st
 
 export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {
   const [proposals, ballots] = await Promise.all([
-    repository.query('SELECT * FROM proposals ORDER BY closes_game_day ASC NULLS LAST, closes_game_minute ASC NULLS LAST, closes_at ASC'),
+    repository.query(`
+      SELECT p.*, COALESCE(h.display_name, 'Citizen') AS creator_name
+      FROM proposals p
+      LEFT JOIN humans h ON h.id = p.created_by_human_id
+      ORDER BY p.closes_game_day ASC NULLS LAST, p.closes_game_minute ASC NULLS LAST, p.closes_at ASC
+    `),
     repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
   ]);
   return { proposals: proposals.rows, voteCounts: ballots.rows };

@@ -83,12 +83,10 @@ test('market order settles at the canonical market price and writes a ledger ent
   assert.equal(settlement.body.state.resources.components, 98);
 });
 
-test('governance rejects a duplicate ballot', async () => {
+test('governance starts without an implicit seed proposal', async () => {
   const first = await request('/api/governance/proposals/042/vote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vote: 'support' }) });
-  assert.equal(first.status, 200);
-  const duplicate = await request('/api/governance/proposals/042/vote', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ vote: 'oppose' }) });
-  assert.equal(duplicate.status, 400);
-  assert.match(duplicate.body.error, /already recorded/);
+  assert.equal(first.status, 404);
+  assert.match(first.body.error, /proposal not found/i);
 });
 
 test('successor registration is explicit and auditable in world state', async () => {

@@ -7,8 +7,8 @@ import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 
 import '../../shared/widgets/format_helpers.dart';
+import '../../shared/widgets/credit_income_summary_card.dart';
 import '../communications/comm_link_dialog.dart';
-import '../governance/governance_panels.dart';
 import '../house/house_lineage_dialog.dart';
 import 'institutions_dialogs.dart';
 
@@ -40,8 +40,10 @@ Widget _institutionBudgetCard(
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(title, style: context.captionStyle.copyWith(color: accent)),
-                  Text(amount, style: context.widgetValueStyle.copyWith(color: accent)),
+                  Text(title,
+                      style: context.captionStyle.copyWith(color: accent)),
+                  Text(amount,
+                      style: context.widgetValueStyle.copyWith(color: accent)),
                 ],
               ),
               const SizedBox(height: 4),
@@ -164,7 +166,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
     } catch (_) {
       if (mounted && generation == _searchGeneration) {
         setState(() {
-          if (_corporations.isEmpty && _search.text.trim().isEmpty && fallback.isNotEmpty) {
+          if (_corporations.isEmpty &&
+              _search.text.trim().isEmpty &&
+              fallback.isNotEmpty) {
             _corporations = fallback;
             _selected = _corporations.first;
             widget.onSelectCorporation?.call(_selected!);
@@ -792,7 +796,8 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
       infoDescription:
           '• Sovereign Enterprise Alliances: Intermediate institutions governing constituent city charters, municipal taxation, and corporate dividend distribution.\n\n• Municipal Network: Each corporation is formed by and supports a network of chartered cities across Earth.\n\n• Shareholder Democratic Franchise: Every member votes on corporate leadership, municipal tax updates, and city adoptions.',
       title: 'PLANETARY CORPORATIONS',
-      subtitle: 'Sovereign enterprise networks and municipal alliances across Earth',
+      subtitle:
+          'Sovereign enterprise networks and municipal alliances across Earth',
       metrics: [
         CockpitMetric(
           label: 'Enterprises',
@@ -802,7 +807,9 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
         ),
         CockpitMetric(
           label: 'Affiliation',
-          value: _isMember && currentCorpName != null ? currentCorpName : 'Independent',
+          value: _isMember && currentCorpName != null
+              ? currentCorpName
+              : 'Independent',
           icon: Icons.verified_user_outlined,
           color: context.secondaryColor,
         ),
@@ -824,18 +831,18 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _buildUniversalCharterTopic(context),
-          const SizedBox(height: 24),
-          if (widget.showMemberSummary && _isMember) ...[
-            _memberView(current),
-            const SizedBox(height: 32),
-            Text(
-              'ALL PLANETARY CORPORATIONS',
-              style:
-                  context.topicTitleStyle.copyWith(color: context.mutedColor),
-            ),
-            const SizedBox(height: 12),
-          ],
-          _directoryView(),
+            const SizedBox(height: 24),
+            if (widget.showMemberSummary && _isMember) ...[
+              _memberView(current),
+              const SizedBox(height: 32),
+              Text(
+                'ALL PLANETARY CORPORATIONS',
+                style:
+                    context.topicTitleStyle.copyWith(color: context.mutedColor),
+              ),
+              const SizedBox(height: 12),
+            ],
+            _directoryView(),
           ],
         ),
       ],
@@ -982,14 +989,14 @@ class _CorporationDirectoryPanelState extends State<CorporationDirectoryPanel> {
                   child: InkWell(
                     borderRadius: BorderRadius.circular(context.radiusCard),
                     onTap: () {
-                    setState(() {
-                      _selected = row;
-                      if (widget.isExpandable) {
-                        _expandedId = _expandedId == id ? null : id;
-                      }
-                    });
-                    widget.onSelectCorporation?.call(row);
-                  },
+                      setState(() {
+                        _selected = row;
+                        if (widget.isExpandable) {
+                          _expandedId = _expandedId == id ? null : id;
+                        }
+                      });
+                      widget.onSelectCorporation?.call(row);
+                    },
                     child: _buildCorporationNodeCard(
                       context,
                       row,
@@ -1228,7 +1235,8 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
           infoDescription:
               '• Planetary Index (0–100): Normalized dynamic rating across citizens, dynasties, corporations, and cities evaluated against real-time planetary economy metrics.\n\n• Citizen Index: Personal Legacy (45%) + Civic Standing (35%) + Capitalization (20%).\n\n• Dynastic House Index: Ancestral Inscriptions + Accumulated House Standing + Generational Peak Legacy.\n\n• Corporation Index: Total Enterprise Capitalization (45%) + Productive Ecosystem (30%) + Municipal Excellence (15%) + Workforce Population (10%).\n\n• City Index: Municipal Capitalization (35%) + Infrastructure Coverage (35%) + Commercial Vitality (20%) + Demographic Population (10%).\n\n• Prestige Tiers: Sovereign (90–100), Patrician (75–89), Pioneer (50–74), Citizen (0–49).',
           title: 'CIVIC RANKINGS',
-          subtitle: 'Global prestige and economic hierarchy across citizens, dynasties, corporations, and cities',
+          subtitle:
+              'Global prestige and economic hierarchy across citizens, dynasties, corporations, and cities',
           metrics: [
             CockpitMetric(
               label: 'Citizens',
@@ -1259,147 +1267,149 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
 
         final contentWidget = wide
             ? Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Column 1: Sovereign & Lineage Sphere (Citizens / Dynasties)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      margin: EdgeInsets.only(bottom: context.spacingControl),
-                      decoration: BoxDecoration(
-                        color: surfaceColor.withValues(alpha: .6),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildNarrowTabButton(
-                              context,
-                              title: 'CITIZENS',
-                              icon: Icons.person_outline,
-                                                            isSelected: _leftTab == 0,
-                              onTap: () => setState(() => _leftTab = 0),
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildNarrowTabButton(
-                              context,
-                              title: 'HOUSES',
-                              icon: Icons.shield_outlined,
-                                                            isSelected: _leftTab == 1,
-                              onTap: () => setState(() => _leftTab = 1),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _leftTab == 0 ? colCitizens : colHouses,
-                  ],
-                ),
-              ),
-              const SizedBox(width: 40),
-              // Column 2: Institutional & Municipal Sphere (Corps / Cities)
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    Container(
-                      margin: EdgeInsets.only(bottom: context.spacingControl),
-                      decoration: BoxDecoration(
-                        color: surfaceColor.withValues(alpha: .6),
-                        borderRadius: BorderRadius.circular(8),
-                        border: Border.all(color: Colors.white12),
-                      ),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: _buildNarrowTabButton(
-                              context,
-                              title: 'CORPS',
-                              icon: Icons.account_balance_outlined,
-                                                            isSelected: _rightTab == 0,
-                              onTap: () => setState(() => _rightTab = 0),
-                            ),
-                          ),
-                          Expanded(
-                            child: _buildNarrowTabButton(
-                              context,
-                              title: 'CITIES',
-                              icon: Icons.location_city_outlined,
-                                                            isSelected: _rightTab == 1,
-                              onTap: () => setState(() => _rightTab = 1),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _rightTab == 0 ? colCorps : colCities,
-                  ],
-                ),
-              ),
-            ],
-          )
-            : Column(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            Container(
-              margin: EdgeInsets.only(bottom: context.spacingControl),
-              decoration: BoxDecoration(
-                color: surfaceColor.withValues(alpha: .6),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: Colors.white12),
-              ),
-              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Column 1: Sovereign & Lineage Sphere (Citizens / Dynasties)
                   Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'CITIZENS',
-                      icon: Icons.person_outline,
-                                            isSelected: _singleTab == 0,
-                      onTap: () => setState(() => _singleTab = 0),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          margin:
+                              EdgeInsets.only(bottom: context.spacingControl),
+                          decoration: BoxDecoration(
+                            color: surfaceColor.withValues(alpha: .6),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildNarrowTabButton(
+                                  context,
+                                  title: 'CITIZENS',
+                                  icon: Icons.person_outline,
+                                  isSelected: _leftTab == 0,
+                                  onTap: () => setState(() => _leftTab = 0),
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildNarrowTabButton(
+                                  context,
+                                  title: 'HOUSES',
+                                  icon: Icons.shield_outlined,
+                                  isSelected: _leftTab == 1,
+                                  onTap: () => setState(() => _leftTab = 1),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        _leftTab == 0 ? colCitizens : colHouses,
+                      ],
                     ),
                   ),
+                  const SizedBox(width: 40),
+                  // Column 2: Institutional & Municipal Sphere (Corps / Cities)
                   Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'HOUSES',
-                      icon: Icons.shield_outlined,
-                                            isSelected: _singleTab == 1,
-                      onTap: () => setState(() => _singleTab = 1),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'CORPS',
-                      icon: Icons.account_balance_outlined,
-                                            isSelected: _singleTab == 2,
-                      onTap: () => setState(() => _singleTab = 2),
-                    ),
-                  ),
-                  Expanded(
-                    child: _buildNarrowTabButton(
-                      context,
-                      title: 'CITIES',
-                      icon: Icons.location_city_outlined,
-                                            isSelected: _singleTab == 3,
-                      onTap: () => setState(() => _singleTab = 3),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        Container(
+                          margin:
+                              EdgeInsets.only(bottom: context.spacingControl),
+                          decoration: BoxDecoration(
+                            color: surfaceColor.withValues(alpha: .6),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(color: Colors.white12),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: _buildNarrowTabButton(
+                                  context,
+                                  title: 'CORPS',
+                                  icon: Icons.account_balance_outlined,
+                                  isSelected: _rightTab == 0,
+                                  onTap: () => setState(() => _rightTab = 0),
+                                ),
+                              ),
+                              Expanded(
+                                child: _buildNarrowTabButton(
+                                  context,
+                                  title: 'CITIES',
+                                  icon: Icons.location_city_outlined,
+                                  isSelected: _rightTab == 1,
+                                  onTap: () => setState(() => _rightTab = 1),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        _rightTab == 0 ? colCorps : colCities,
+                      ],
                     ),
                   ),
                 ],
-              ),
-            ),
-            _singleTab == 0
-                ? colCitizens
-                : (_singleTab == 1
-                    ? colHouses
-                    : (_singleTab == 2 ? colCorps : colCities)),
-          ],
-        );
+              )
+            : Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(
+                    margin: EdgeInsets.only(bottom: context.spacingControl),
+                    decoration: BoxDecoration(
+                      color: surfaceColor.withValues(alpha: .6),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(color: Colors.white12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: _buildNarrowTabButton(
+                            context,
+                            title: 'CITIZENS',
+                            icon: Icons.person_outline,
+                            isSelected: _singleTab == 0,
+                            onTap: () => setState(() => _singleTab = 0),
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildNarrowTabButton(
+                            context,
+                            title: 'HOUSES',
+                            icon: Icons.shield_outlined,
+                            isSelected: _singleTab == 1,
+                            onTap: () => setState(() => _singleTab = 1),
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildNarrowTabButton(
+                            context,
+                            title: 'CORPS',
+                            icon: Icons.account_balance_outlined,
+                            isSelected: _singleTab == 2,
+                            onTap: () => setState(() => _singleTab = 2),
+                          ),
+                        ),
+                        Expanded(
+                          child: _buildNarrowTabButton(
+                            context,
+                            title: 'CITIES',
+                            icon: Icons.location_city_outlined,
+                            isSelected: _singleTab == 3,
+                            onTap: () => setState(() => _singleTab = 3),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  _singleTab == 0
+                      ? colCitizens
+                      : (_singleTab == 1
+                          ? colHouses
+                          : (_singleTab == 2 ? colCorps : colCities)),
+                ],
+              );
 
         return Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1417,7 +1427,7 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
     BuildContext context, {
     required String title,
     required IconData icon,
-        required bool isSelected,
+    required bool isSelected,
     required VoidCallback onTap,
   }) {
     return Semantics(
@@ -1428,39 +1438,40 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? context.primaryColor.withValues(alpha: .15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(8),
-          border: isSelected
-              ? Border.all(color: context.primaryColor.withValues(alpha: .4))
-              : null,
-        ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              icon,
-              size: 13,
-              color: isSelected ? context.primaryColor : context.mutedColor,
-            ),
-            const SizedBox(width: 4),
-            Flexible(
-              child: Text(
-                title,
-                overflow: TextOverflow.ellipsis,
-                style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? Colors.white : context.mutedColor,
+          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? context.primaryColor.withValues(alpha: .15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            border: isSelected
+                ? Border.all(color: context.primaryColor.withValues(alpha: .4))
+                : null,
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: isSelected ? context.primaryColor : context.mutedColor,
+              ),
+              const SizedBox(width: 4),
+              Flexible(
+                child: Text(
+                  title,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                    color: isSelected ? Colors.white : context.mutedColor,
+                  ),
                 ),
               ),
-            ),
-          ],
-        ),
+            ],
+          ),
         ),
       ),
     );
@@ -2158,7 +2169,8 @@ class _CivicRankingsPanelState extends State<CivicRankingsPanel> {
                         corpNames != null &&
                         corpNames.containsKey(rawCorp))
                     ? corpNames[rawCorp]
-                    : (rawCorp ?? (entityId != null && cityToCorpMap != null
+                    : (rawCorp ??
+                        (entityId != null && cityToCorpMap != null
                             ? cityToCorpMap[entityId]
                             : null));
                 secondarySubtitle = (corpName != null && corpName.isNotEmpty)
@@ -2413,19 +2425,19 @@ class _PageNumberInputState extends State<_PageNumberInput> {
         label: 'Page number',
         child: TextField(
           controller: _controller,
-        focusNode: _focusNode,
-        keyboardType: TextInputType.number,
-        textAlign: TextAlign.center,
-        style: const TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: Colors.white,
-        ),
-        decoration: const InputDecoration(
-          isDense: true,
-          contentPadding: EdgeInsets.zero,
-          border: InputBorder.none,
-        ),
+          focusNode: _focusNode,
+          keyboardType: TextInputType.number,
+          textAlign: TextAlign.center,
+          style: const TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+          ),
+          decoration: const InputDecoration(
+            isDense: true,
+            contentPadding: EdgeInsets.zero,
+            border: InputBorder.none,
+          ),
           onSubmitted: (_) => _submit(),
         ),
       ),
@@ -2500,19 +2512,6 @@ class _CorporationHubPanelState extends State<CorporationHubPanel> {
           selectedCorporation: defaultCorp,
         );
 
-        final proposalsAndRoles = [
-          if (isMember) ...[
-            const SizedBox(height: 34),
-            ProposalPanel(
-              state: widget.state,
-              busy: widget.busy,
-              action: widget.action,
-              institutionId: currentCorpId,
-              scopeLabel: 'CORPORATION',
-            ),
-          ],
-        ];
-
         if (isWide) {
           return Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2531,7 +2530,6 @@ class _CorporationHubPanelState extends State<CorporationHubPanel> {
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
                     overview,
-                    ...proposalsAndRoles,
                   ],
                 ),
               ),
@@ -2545,7 +2543,6 @@ class _CorporationHubPanelState extends State<CorporationHubPanel> {
             directory,
             const SizedBox(height: 34),
             overview,
-            ...proposalsAndRoles,
           ],
         );
       },
@@ -2636,11 +2633,10 @@ class CorporationOverviewPanel extends StatelessWidget {
     final corpProposalsCount =
         ((state.governance['proposals'] as List<dynamic>?) ?? const [])
             .where((raw) {
-              if (raw is! Map) return false;
-              final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
-              return pInst == id;
-            })
-            .length;
+      if (raw is! Map) return false;
+      final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
+      return pInst == id;
+    }).length;
 
     final cockpit = EarthPageCockpit(
       status: isAffiliated ? 'AFFILIATED ENTERPRISE' : 'CHARTERED ENTERPRISE',
@@ -2706,7 +2702,7 @@ class CorporationOverviewPanel extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
                 LayoutBuilder(
-                builder: (context, constraints) {
+                  builder: (context, constraints) {
                     // Match the personal page: two columns when there is room,
                     // with a single-column fallback on narrow screens.
                     final isWide = constraints.maxWidth >= 450;
@@ -3305,7 +3301,30 @@ class InstitutionsCapacityPanel extends StatelessWidget {
     final residents = asIntOr(city['residents'], 100);
     final housingCap = asIntOr(city['housing_capacity'], 120);
     final energyCap = asIntOr(city['energy_capacity'], 200);
-    final cityTreasury = asDouble(city['treasury']) ?? 0.0;
+    final cityFinance = state.json['cityFinance'] is Map
+        ? Map<String, dynamic>.from(state.json['cityFinance'] as Map)
+        : const <String, dynamic>{};
+    final cityResources = cityFinance['resources'] is Map
+        ? Map<String, dynamic>.from(cityFinance['resources'] as Map)
+        : const <String, dynamic>{};
+    final cityTreasury =
+        asDouble(cityFinance['treasury']) ?? asDouble(city['treasury']) ?? 0.0;
+    final cityBuildings = state.buildings
+        .whereType<Map>()
+        .map(Map<String, dynamic>.from)
+        .where(
+          (building) =>
+              building['city_id']?.toString() == cityId &&
+              building['ownership_class']?.toString() == 'civic' &&
+              building['status']?.toString() == 'active',
+        )
+        .toList();
+    final cityDailyIncome = _dailyCityIncome(cityBuildings);
+    final cityCashflow = cityFinance['dailyCashflow'] is Map
+        ? Map<String, dynamic>.from(cityFinance['dailyCashflow'] as Map)
+        : const <String, dynamic>{};
+    final cityCreditStatement =
+        _cityCreditStatement(cityCashflow, cityBuildings);
 
     final isCityResident = state.membership?['city_id'] != null;
 
@@ -3320,15 +3339,6 @@ class InstitutionsCapacityPanel extends StatelessWidget {
         : const <dynamic>[];
     final playerId = state.human['id']?.toString();
     final standing = asIntOr(state.human['standing'], 0);
-
-    final cityProposalsCount =
-        ((state.governance['proposals'] as List<dynamic>?) ?? const [])
-            .where((raw) {
-              if (raw is! Map) return false;
-              final pInst = (raw['institution_id'] ?? raw['institutionId'])?.toString();
-              return pInst == cityId;
-            })
-            .length;
 
     final cockpit = EarthPageCockpit(
       status: isCityResident ? 'RESIDENT CHARTER' : 'MUNICIPAL JURISDICTION',
@@ -3352,12 +3362,6 @@ class InstitutionsCapacityPanel extends StatelessWidget {
           icon: Icons.account_balance_wallet_outlined,
           color: context.successColor,
         ),
-        CockpitMetric(
-          label: 'Proposals',
-          value: '$cityProposalsCount',
-          icon: Icons.how_to_vote_outlined,
-          color: context.goldColor,
-        ),
       ],
     );
 
@@ -3376,119 +3380,108 @@ class InstitutionsCapacityPanel extends StatelessWidget {
         children: [
           cockpit,
           const SizedBox(height: 28),
-          // City Administration Card
-          Container(
-            width: double.infinity,
-            padding: EdgeInsets.all(context.cardPadding),
-            decoration: BoxDecoration(
-              color: context.surfaceColor.withValues(alpha: .75),
-              borderRadius: BorderRadius.circular(context.radiusCard),
-              border: Border.all(color: context.subtleBorderColor),
-            ),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    final attributes = [
-                      _buildAttributeRow(context,
-                          icon: Icons.home_outlined,
-                          label: 'HOUSING',
-                          value: housingRatio,
-                          accentColor: context.primaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.bolt_outlined,
-                          label: 'ENERGY',
-                          value: energyRatio,
-                          accentColor: context.primaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.hub_outlined,
-                          label: 'CONNECTIVITY',
-                          value: connectRatio,
-                          accentColor: context.primaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.local_hospital_outlined,
-                          label: 'HEALTHCARE',
-                          value: healthRatio,
-                          accentColor: context.primaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.domain_outlined,
-                          label: 'HOUSING CAPACITY',
-                          value: '$housingCap',
-                          accentColor: context.secondaryColor),
-                      _buildAttributeRow(context,
-                          icon: Icons.workspace_premium_outlined,
-                          label: 'CITY STANDING',
-                          value: '$standing',
-                          accentColor: context.goldColor),
-                    ];
-                    if (constraints.maxWidth < 520) {
-                      return Column(children: attributes);
-                    }
-                    return Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                            child:
-                                Column(children: attributes.take(3).toList())),
-                        const SizedBox(width: 24),
-                        Expanded(
-                            child:
-                                Column(children: attributes.skip(3).toList())),
-                      ],
-                    );
-                  },
-                ),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final attributes = [
+                    _buildAttributeRow(context,
+                        icon: Icons.home_outlined,
+                        label: 'HOUSING',
+                        value: housingRatio,
+                        accentColor: context.primaryColor),
+                    _buildAttributeRow(context,
+                        icon: Icons.bolt_outlined,
+                        label: 'ENERGY',
+                        value: energyRatio,
+                        accentColor: context.primaryColor),
+                    _buildAttributeRow(context,
+                        icon: Icons.hub_outlined,
+                        label: 'CONNECTIVITY',
+                        value: connectRatio,
+                        accentColor: context.primaryColor),
+                    _buildAttributeRow(context,
+                        icon: Icons.local_hospital_outlined,
+                        label: 'HEALTHCARE',
+                        value: healthRatio,
+                        accentColor: context.primaryColor),
+                    _buildAttributeRow(context,
+                        icon: Icons.domain_outlined,
+                        label: 'HOUSING CAPACITY',
+                        value: '$housingCap',
+                        accentColor: context.secondaryColor),
+                    _buildAttributeRow(context,
+                        icon: Icons.workspace_premium_outlined,
+                        label: 'CITY STANDING',
+                        value: '$standing',
+                        accentColor: context.goldColor),
+                  ];
+                  if (constraints.maxWidth < 520) {
+                    return Column(children: attributes);
+                  }
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(
+                          child: Column(children: attributes.take(3).toList())),
+                      const SizedBox(width: 24),
+                      Expanded(
+                          child: Column(children: attributes.skip(3).toList())),
+                    ],
+                  );
+                },
+              ),
 
-                const SizedBox(height: 12),
-                _institutionBudgetCard(
-                  context,
-                  title: 'CITY BUDGET',
-                  amount: '${formatWholeNumber(cityTreasury)} C',
-                  icon: Icons.account_balance_wallet_outlined,
-                  description:
-                      'Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies. This is separate from personal and corporate money.',
-                  accent: context.warningColor,
-                ),
+              SizedBox(height: context.spacingTitleOffset),
+              Text('CITY RESERVES', style: context.topicTitleStyle),
+              SizedBox(height: context.spacingControl),
+              _resourceSummary(context, cityResources, credits: cityTreasury),
 
-                SizedBox(height: context.spacingTitleOffset),
+              SizedBox(height: context.spacingTitleOffset),
+              Text('DAILY CITY INCOME', style: context.topicTitleStyle),
+              SizedBox(height: context.spacingControl),
+              _resourceSummary(context, cityDailyIncome, signed: true),
+              const SizedBox(height: 12),
+              _cityCreditIncomeCard(context, cityCreditStatement),
 
-                // City Action Buttons
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    EarthButton(
-                      label: 'CHANGE CITY',
-                      variant: isCityResident
-                          ? EarthButtonVariant.secondary
-                          : EarthButtonVariant.primary,
-                      onPressed: busy
-                          ? null
-                          : () => showCityChangeDialog(
-                              context, state, cityId, action),
-                    ),
-                    EarthButton(
-                      label: 'PROPOSE BUDGET',
-                      icon: Icons.account_balance_wallet_outlined,
-                      variant: EarthButtonVariant.secondary,
-                      onPressed: busy
-                          ? null
-                          : () => action(() => const EarthApi()
-                              .setCityBudget('maintenance', cityId: cityId)),
-                    ),
-                    EarthButton(
-                      label: 'TAX CHARTER',
-                      icon: Icons.receipt_long_outlined,
-                      variant: EarthButtonVariant.secondary,
-                      onPressed: busy
-                          ? null
-                          : () => showTaxCharterDialog(context, action, cityId),
-                    ),
-                  ],
-                ),
-              ],
-            ),
+              SizedBox(height: context.spacingTitleOffset),
+
+              // City Action Buttons
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  EarthButton(
+                    label: 'CHANGE CITY',
+                    variant: isCityResident
+                        ? EarthButtonVariant.secondary
+                        : EarthButtonVariant.primary,
+                    onPressed: busy
+                        ? null
+                        : () => showCityChangeDialog(
+                            context, state, cityId, action),
+                  ),
+                  EarthButton(
+                    label: 'PROPOSE BUDGET',
+                    icon: Icons.account_balance_wallet_outlined,
+                    variant: EarthButtonVariant.secondary,
+                    onPressed: busy
+                        ? null
+                        : () => action(() => const EarthApi()
+                            .setCityBudget('maintenance', cityId: cityId)),
+                  ),
+                  EarthButton(
+                    label: 'TAX CHARTER',
+                    icon: Icons.receipt_long_outlined,
+                    variant: EarthButtonVariant.secondary,
+                    onPressed: busy
+                        ? null
+                        : () => showTaxCharterDialog(context, action, cityId),
+                  ),
+                ],
+              ),
+            ],
           ),
           if (isCityResident && cityMembers.isNotEmpty) ...[
             SizedBox(height: context.spacingTitleOffset),
@@ -3552,6 +3545,158 @@ class InstitutionsCapacityPanel extends StatelessWidget {
         ],
       ),
     );
+  }
+
+  static Map<String, double> _dailyCityIncome(
+      Iterable<Map<String, dynamic>> buildings) {
+    final totals = <String, double>{
+      'credits': 0,
+      'energy': 0,
+      'food': 0,
+      'materials': 0,
+      'components': 0,
+      'compute': 0,
+    };
+    for (final building in buildings) {
+      final policy = building['operating_policy']?.toString() ?? 'balanced';
+      final outputMultiplier = policy == 'high_output'
+          ? 1.3
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .75
+              : 1.0;
+      final costMultiplier = policy == 'high_output'
+          ? 1.4
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .7
+              : 1.0;
+      for (final resource in totals.keys) {
+        var output = asDoubleOr(building['output_$resource'], 0);
+        if (output == 0 &&
+            building['resource_output_type']?.toString() == resource) {
+          output = asDoubleOr(building['resource_output_amount'], 0);
+        }
+        var operating = asDoubleOr(building['operating_$resource'], 0);
+        if (resource == 'credits' && operating == 0) {
+          operating = asDoubleOr(building['daily_operating_credits'], 0);
+        }
+        final upkeep = asDoubleOr(building['upkeep_$resource'], 0);
+        totals[resource] = (totals[resource] ?? 0) +
+            output * outputMultiplier -
+            (upkeep + operating) * costMultiplier;
+      }
+    }
+    return totals;
+  }
+
+  static Map<String, double> _cityCreditStatement(
+      Map<String, dynamic> cashflow, Iterable<Map<String, dynamic>> buildings) {
+    var civicBuildingIncome = 0.0;
+    var buildingCosts = 0.0;
+    for (final building in buildings) {
+      final policy = building['operating_policy']?.toString() ?? 'balanced';
+      final outputMultiplier = policy == 'high_output'
+          ? 1.3
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .75
+              : 1.0;
+      final costMultiplier = policy == 'high_output'
+          ? 1.4
+          : (policy == 'frugal' || policy == 'eco_reserve')
+              ? .7
+              : 1.0;
+      var output = asDoubleOr(building['output_credits'], 0);
+      if (output == 0 &&
+          (building['resource_output_type']?.toString() == 'credits' ||
+              building['resource_output_type'] == null)) {
+        output = asDoubleOr(building['resource_output_amount'], 0);
+      }
+      final operating = asDoubleOr(building['operating_credits'], 0) == 0
+          ? asDoubleOr(building['daily_operating_credits'], 0)
+          : asDoubleOr(building['operating_credits'], 0);
+      civicBuildingIncome += output * outputMultiplier;
+      buildingCosts += (asDoubleOr(building['upkeep_credits'], 0) + operating) *
+          costMultiplier;
+    }
+    final cityTaxes = asDoubleOr(cashflow['city_taxes'], 0);
+    final investmentIncome = asDoubleOr(cashflow['bank_deposit_interest'], 0);
+    final residentDividends = asDoubleOr(cashflow['corporation_income_tax'], 0);
+    final civicBuildings = civicBuildingIncome - buildingCosts;
+    final gross = civicBuildings + cityTaxes + investmentIncome;
+    return {
+      'civicBuildingIncome': civicBuildings,
+      'cityTaxes': cityTaxes,
+      'investmentIncome': investmentIncome,
+      'gross': gross,
+      'buildingCosts': buildingCosts,
+      'residentDividends': residentDividends,
+      'net': gross - residentDividends,
+    };
+  }
+
+  static Widget _cityCreditIncomeCard(
+          BuildContext context, Map<String, double> statement) =>
+      CreditIncomeSummaryCard(
+        grossItems: [
+          CreditIncomeLineItem(
+              'Civic buildings', statement['civicBuildingIncome'] ?? 0),
+          CreditIncomeLineItem(
+              'City taxes received', statement['cityTaxes'] ?? 0),
+          CreditIncomeLineItem(
+              'Bank deposit interest', statement['investmentIncome'] ?? 0),
+        ],
+        deductionItems: [
+          CreditIncomeLineItem(
+              'Corporation income tax', statement['residentDividends'] ?? 0),
+        ],
+      );
+
+  static Widget _resourceSummary(
+      BuildContext context, Map<String, dynamic> values,
+      {double? credits, bool signed = false}) {
+    const resources = [
+      ('credits', Icons.account_balance_wallet_outlined),
+      ('energy', Icons.bolt_rounded),
+      ('food', Icons.eco_outlined),
+      ('materials', Icons.terrain_outlined),
+      ('components', Icons.precision_manufacturing_outlined),
+      ('compute', Icons.memory_rounded),
+    ];
+    return Center(
+        child: Wrap(
+      alignment: WrapAlignment.center,
+      spacing: 10,
+      runSpacing: 10,
+      children: resources.map((item) {
+        final value = item.$1 == 'credits'
+            ? (credits ?? asDoubleOr(values[item.$1], 0))
+            : asDoubleOr(values[item.$1], 0);
+        final prefix = signed && value > 0
+            ? '+'
+            : value < 0
+                ? '-'
+                : '';
+        final color = signed
+            ? (value < 0
+                ? context.errorColor
+                : value > 0
+                    ? context.successColor
+                    : context.mutedColor)
+            : EarthResourceMeta.forCommodity(item.$1).color;
+        return SizedBox(
+          width: 78,
+          child: Column(children: [
+            Icon(item.$2,
+                size: 17, color: EarthResourceMeta.forCommodity(item.$1).color),
+            const SizedBox(height: 3),
+            Text('$prefix${formatWholeNumber(value.abs())}',
+                style: context.bodyStyle.copyWith(
+                    color: color, fontWeight: FontWeight.w800, fontSize: 12)),
+            Text(item.$1.toUpperCase(),
+                style: context.captionStyle.copyWith(fontSize: 8)),
+          ]),
+        );
+      }).toList(),
+    ));
   }
 }
 
@@ -3798,7 +3943,8 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
       infoDescription:
           '• Civic Communities & Cooperatives: Grassroots voluntary associations formed by citizens for collective mutual aid, cultural affinity, industry cooperation, and shared services.\n\n• Membership & Contributions: Join or leave freely; voluntary treasury contributions fund shared communal initiatives and social crowdfunding campaigns.\n\n• Cross-World Belonging: Communities are independent citizen associations spanning across all corporations and cities on Earth.',
       title: 'COMMUNITIES & GUILDS',
-      subtitle: 'Grassroots civic associations, trade guilds, and mutual aid cooperatives across Earth',
+      subtitle:
+          'Grassroots civic associations, trade guilds, and mutual aid cooperatives across Earth',
       metrics: [
         CockpitMetric(
           label: 'Network',
@@ -3830,126 +3976,125 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
           Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(
-                      child: EarthSearchInput(
-                        controller: _searchController,
-                        hintText: 'Search communities by name...',
-                        onChanged: (value) => setState(() {
-                          _searchQuery = value.trim();
-                          _page = 0;
-                        }),
-                        onClear: () => setState(() {
-                          _searchQuery = '';
-                          _page = 0;
-                        }),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    EarthButton(
-                      label: '+ FOUND COMMUNITY',
-                      icon: Icons.add_business_outlined,
-                      onPressed: widget.busy
-                          ? null
-                          : () => showCommunityComposer(context, widget.action),
-                    ),
-                  ],
-                ),
-                SizedBox(height: context.spacingControl),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    _filterChip(
-                      label: 'ALL (${activeCommunities.length})',
-                      isSelected: _activeFilter == 'ALL',
-                      onTap: () => setState(() {
-                        _activeFilter = 'ALL';
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Expanded(
+                    child: EarthSearchInput(
+                      controller: _searchController,
+                      hintText: 'Search communities by name...',
+                      onChanged: (value) => setState(() {
+                        _searchQuery = value.trim();
+                        _page = 0;
+                      }),
+                      onClear: () => setState(() {
+                        _searchQuery = '';
                         _page = 0;
                       }),
                     ),
-                    _filterChip(
-                      label: 'MY COMMUNITIES ($myCount)',
-                      isSelected: _activeFilter == 'MY_COMMUNITIES',
-                      onTap: () => setState(() {
-                        _activeFilter = 'MY_COMMUNITIES';
-                        _page = 0;
-                      }),
-                    ),
-                    _filterChip(
-                      label: 'OPEN TO JOIN ($openCount)',
-                      isSelected: _activeFilter == 'OPEN_TO_JOIN',
-                      onTap: () => setState(() {
-                        _activeFilter = 'OPEN_TO_JOIN';
-                        _page = 0;
-                      }),
-                    ),
-                  ],
-                ),
-                SizedBox(height: context.spacingControl),
-                if (filteredList.isEmpty)
-                  EarthEmptyState(
-                    message: _searchQuery.isNotEmpty
-                        ? 'No communities found matching "$_searchQuery".'
-                        : (_activeFilter == 'MY_COMMUNITIES'
-                            ? 'You are not currently part of any community.'
-                            : (_activeFilter == 'OPEN_TO_JOIN'
-                                ? 'No joinable communities available at this time.'
-                                : 'No communities registered yet. You can found the first one.')),
-                    icon: Icons.groups_outlined,
-                  )
-                else ...[
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.stretch,
-                    children: pageItems.map((community) {
-                      final id = community['id']?.toString() ?? 'COM-001';
-                      final name = community['name']?.toString() ?? 'Community';
-                      final founderName =
-                          community['founder_name']?.toString() ?? 'Citizen';
-                      final description =
-                          community['description']?.toString() ?? '';
-                      final admissionPolicy =
-                          (community['admission_policy']?.toString() ?? 'open')
-                              .toUpperCase();
-                      final myRole = community['my_role']?.toString();
-                      final myRequestStatus =
-                          community['my_request_status']?.toString();
-                      final isOwner = myRole == 'founder';
-                      final isAdmin = myRole == 'admin';
-                      final isMember = isOwner || isAdmin || myRole == 'member';
-                      final isPending = myRequestStatus == 'pending';
-                      final members = asIntOr(community['member_count'], 12);
+                  ),
+                  const SizedBox(width: 10),
+                  EarthButton(
+                    label: '+ FOUND COMMUNITY',
+                    icon: Icons.add_business_outlined,
+                    onPressed: widget.busy
+                        ? null
+                        : () => showCommunityComposer(context, widget.action),
+                  ),
+                ],
+              ),
+              SizedBox(height: context.spacingControl),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _filterChip(
+                    label: 'ALL (${activeCommunities.length})',
+                    isSelected: _activeFilter == 'ALL',
+                    onTap: () => setState(() {
+                      _activeFilter = 'ALL';
+                      _page = 0;
+                    }),
+                  ),
+                  _filterChip(
+                    label: 'MY COMMUNITIES ($myCount)',
+                    isSelected: _activeFilter == 'MY_COMMUNITIES',
+                    onTap: () => setState(() {
+                      _activeFilter = 'MY_COMMUNITIES';
+                      _page = 0;
+                    }),
+                  ),
+                  _filterChip(
+                    label: 'OPEN TO JOIN ($openCount)',
+                    isSelected: _activeFilter == 'OPEN_TO_JOIN',
+                    onTap: () => setState(() {
+                      _activeFilter = 'OPEN_TO_JOIN';
+                      _page = 0;
+                    }),
+                  ),
+                ],
+              ),
+              SizedBox(height: context.spacingControl),
+              if (filteredList.isEmpty)
+                EarthEmptyState(
+                  message: _searchQuery.isNotEmpty
+                      ? 'No communities found matching "$_searchQuery".'
+                      : (_activeFilter == 'MY_COMMUNITIES'
+                          ? 'You are not currently part of any community.'
+                          : (_activeFilter == 'OPEN_TO_JOIN'
+                              ? 'No joinable communities available at this time.'
+                              : 'No communities registered yet. You can found the first one.')),
+                  icon: Icons.groups_outlined,
+                )
+              else ...[
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: pageItems.map((community) {
+                    final id = community['id']?.toString() ?? 'COM-001';
+                    final name = community['name']?.toString() ?? 'Community';
+                    final founderName =
+                        community['founder_name']?.toString() ?? 'Citizen';
+                    final description =
+                        community['description']?.toString() ?? '';
+                    final admissionPolicy =
+                        (community['admission_policy']?.toString() ?? 'open')
+                            .toUpperCase();
+                    final myRole = community['my_role']?.toString();
+                    final myRequestStatus =
+                        community['my_request_status']?.toString();
+                    final isOwner = myRole == 'founder';
+                    final isAdmin = myRole == 'admin';
+                    final isMember = isOwner || isAdmin || myRole == 'member';
+                    final isPending = myRequestStatus == 'pending';
+                    final members = asIntOr(community['member_count'], 12);
 
-                      final isExpanded = _expandedCommunityId == id;
+                    final isExpanded = _expandedCommunityId == id;
 
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Container(
-                          decoration: BoxDecoration(
-                            color: context.surfaceColor,
-                            borderRadius:
-                                BorderRadius.circular(context.radiusCard),
-                            border: Border.all(
-                                color: isMember
-                                    ? context.primaryColor
-                                        .withValues(alpha: .35)
-                                    : context.subtleBorderColor),
-                          ),
-                          child: Column(
-                            children: [
-                              Semantics(
-                                button: true,
-                                expanded: isExpanded,
-                                label: 'Show community $name details',
-                                child: InkWell(
-                                  borderRadius:
-                                      BorderRadius.circular(context.radiusCard),
-                                  onTap: () => setState(() =>
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 10),
+                      child: Container(
+                        decoration: BoxDecoration(
+                          color: context.surfaceColor,
+                          borderRadius:
+                              BorderRadius.circular(context.radiusCard),
+                          border: Border.all(
+                              color: isMember
+                                  ? context.primaryColor.withValues(alpha: .35)
+                                  : context.subtleBorderColor),
+                        ),
+                        child: Column(
+                          children: [
+                            Semantics(
+                              button: true,
+                              expanded: isExpanded,
+                              label: 'Show community $name details',
+                              child: InkWell(
+                                borderRadius:
+                                    BorderRadius.circular(context.radiusCard),
+                                onTap: () => setState(() =>
                                     _expandedCommunityId =
                                         isExpanded ? null : id),
-                                  child: Padding(
+                                child: Padding(
                                   padding: EdgeInsets.all(context.cardPadding),
                                   child: Row(
                                     children: [
@@ -3998,176 +4143,173 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
                                           color: context.mutedColor),
                                     ],
                                   ),
+                                ),
+                              ),
+                            ),
+                            if (isExpanded) ...[
+                              Divider(
+                                  height: 1, color: context.subtleBorderColor),
+                              Padding(
+                                padding: EdgeInsets.all(context.cardPadding),
+                                child: Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text('FOUNDED BY: $founderName',
+                                          style: context.widgetTitleStyle),
+                                      SizedBox(height: context.spacingControl),
+                                      Wrap(
+                                        alignment: WrapAlignment.start,
+                                        spacing: 8,
+                                        runSpacing: 6,
+                                        children: [
+                                          if (isPending) ...[
+                                            EarthButton(
+                                              label: 'CANCEL REQ',
+                                              variant:
+                                                  EarthButtonVariant.danger,
+                                              onPressed: widget.busy
+                                                  ? null
+                                                  : () => widget.action(() =>
+                                                      const EarthApi()
+                                                          .leaveCommunity(id)),
+                                            ),
+                                          ] else if (!isMember) ...[
+                                            EarthButton(
+                                              label:
+                                                  admissionPolicy == 'APPROVAL'
+                                                      ? 'APPLY'
+                                                      : 'JOIN',
+                                              variant:
+                                                  EarthButtonVariant.primary,
+                                              onPressed: widget.busy
+                                                  ? null
+                                                  : () {
+                                                      if (admissionPolicy ==
+                                                          'APPROVAL') {
+                                                        showCommunityApplicationDialog(
+                                                            context,
+                                                            community,
+                                                            widget.action);
+                                                      } else {
+                                                        widget.action(() =>
+                                                            const EarthApi()
+                                                                .joinCommunity(
+                                                                    id));
+                                                      }
+                                                    },
+                                            ),
+                                          ],
+                                        ],
+                                      ),
+                                    ],
                                   ),
                                 ),
                               ),
-                              if (isExpanded) ...[
-                                Divider(
-                                    height: 1,
-                                    color: context.subtleBorderColor),
-                                Padding(
-                                  padding: EdgeInsets.all(context.cardPadding),
-                                  child: Align(
-                                    alignment: Alignment.centerLeft,
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text('FOUNDED BY: $founderName',
-                                            style: context.widgetTitleStyle),
-                                        SizedBox(
-                                            height: context.spacingControl),
-                                        Wrap(
-                                          alignment: WrapAlignment.start,
-                                          spacing: 8,
-                                          runSpacing: 6,
-                                          children: [
-                                            if (isPending) ...[
-                                              EarthButton(
-                                                label: 'CANCEL REQ',
-                                                variant:
-                                                    EarthButtonVariant.danger,
-                                                onPressed: widget.busy
-                                                    ? null
-                                                    : () => widget.action(() =>
-                                                        const EarthApi()
-                                                            .leaveCommunity(
-                                                                id)),
-                                              ),
-                                            ] else if (!isMember) ...[
-                                              EarthButton(
-                                                label: admissionPolicy ==
-                                                        'APPROVAL'
-                                                    ? 'APPLY'
-                                                    : 'JOIN',
-                                                variant:
-                                                    EarthButtonVariant.primary,
-                                                onPressed: widget.busy
-                                                    ? null
-                                                    : () {
-                                                        if (admissionPolicy ==
-                                                            'APPROVAL') {
-                                                          showCommunityApplicationDialog(
-                                                              context,
-                                                              community,
-                                                              widget.action);
-                                                        } else {
-                                                          widget.action(() =>
-                                                              const EarthApi()
-                                                                  .joinCommunity(
-                                                                      id));
-                                                        }
-                                                      },
-                                              ),
-                                            ],
-                                          ],
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            ],
+                          ],
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                if (totalPages > 1) ...[
+                  SizedBox(height: context.spacingControl),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 32),
+                            icon: const Icon(Icons.first_page, size: 20),
+                            onPressed: safePage > 0
+                                ? () => setState(() => _page = 0)
+                                : null,
+                            tooltip: 'First Page',
+                          ),
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 32),
+                            icon: const Icon(Icons.chevron_left, size: 20),
+                            onPressed: safePage > 0
+                                ? () => setState(() => _page = safePage - 1)
+                                : null,
+                            tooltip: 'Previous Page',
+                          ),
+                        ],
+                      ),
+                      Expanded(
+                        child: Center(
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                'Page ',
+                                style: TextStyle(
+                                    fontSize: 12, color: context.mutedColor),
+                              ),
+                              _PageNumberInput(
+                                key: ValueKey(
+                                    'comm_page_${safePage + 1}_$totalPages'),
+                                currentPage: safePage + 1,
+                                totalPages: totalPages,
+                                onSubmitted: (newPage) {
+                                  setState(() {
+                                    _page = newPage - 1;
+                                  });
+                                },
+                              ),
+                              Text(
+                                ' of $totalPages ($totalCount)',
+                                style: TextStyle(
+                                    fontSize: 12, color: context.mutedColor),
+                              ),
                             ],
                           ),
                         ),
-                      );
-                    }).toList(),
-                  ),
-                  if (totalPages > 1) ...[
-                    SizedBox(height: context.spacingControl),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 32),
-                              icon: const Icon(Icons.first_page, size: 20),
-                              onPressed: safePage > 0
-                                  ? () => setState(() => _page = 0)
-                                  : null,
-                              tooltip: 'First Page',
-                            ),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 32),
-                              icon: const Icon(Icons.chevron_left, size: 20),
-                              onPressed: safePage > 0
-                                  ? () => setState(() => _page = safePage - 1)
-                                  : null,
-                              tooltip: 'Previous Page',
-                            ),
-                          ],
-                        ),
-                        Expanded(
-                          child: Center(
-                            child: Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  'Page ',
-                                  style: TextStyle(
-                                      fontSize: 12, color: context.mutedColor),
-                                ),
-                                _PageNumberInput(
-                                  key: ValueKey(
-                                      'comm_page_${safePage + 1}_$totalPages'),
-                                  currentPage: safePage + 1,
-                                  totalPages: totalPages,
-                                  onSubmitted: (newPage) {
-                                    setState(() {
-                                      _page = newPage - 1;
-                                    });
-                                  },
-                                ),
-                                Text(
-                                  ' of $totalPages ($totalCount)',
-                                  style: TextStyle(
-                                      fontSize: 12, color: context.mutedColor),
-                                ),
-                              ],
-                            ),
+                      ),
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 32),
+                            icon: const Icon(Icons.chevron_right, size: 20),
+                            onPressed: safePage < totalPages - 1
+                                ? () => setState(() => _page = safePage + 1)
+                                : null,
+                            tooltip: 'Next Page',
                           ),
-                        ),
-                        Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 32),
-                              icon: const Icon(Icons.chevron_right, size: 20),
-                              onPressed: safePage < totalPages - 1
-                                  ? () => setState(() => _page = safePage + 1)
-                                  : null,
-                              tooltip: 'Next Page',
-                            ),
-                            IconButton(
-                              visualDensity: VisualDensity.compact,
-                              padding: EdgeInsets.zero,
-                              constraints: const BoxConstraints(
-                                  minWidth: 28, minHeight: 32),
-                              icon: const Icon(Icons.last_page, size: 20),
-                              onPressed: safePage < totalPages - 1
-                                  ? () => setState(() => _page = totalPages - 1)
-                                  : null,
-                              tooltip: 'Last Page',
-                            ),
-                          ],
-                        ),
-                      ],
-                    ),
-                  ],
+                          IconButton(
+                            visualDensity: VisualDensity.compact,
+                            padding: EdgeInsets.zero,
+                            constraints: const BoxConstraints(
+                                minWidth: 28, minHeight: 32),
+                            icon: const Icon(Icons.last_page, size: 20),
+                            onPressed: safePage < totalPages - 1
+                                ? () => setState(() => _page = totalPages - 1)
+                                : null,
+                            tooltip: 'Last Page',
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
                 ],
               ],
-            ),
+            ],
+          ),
         ],
       ),
     );
@@ -4186,24 +4328,24 @@ class _CommunitiesPanelState extends State<CommunitiesPanel> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(6),
         child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? context.primaryColor.withValues(alpha: 0.15)
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color:
-                isSelected ? context.primaryColor : context.subtleBorderColor,
-            width: 1,
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: isSelected
+                ? context.primaryColor.withValues(alpha: 0.15)
+                : Colors.transparent,
+            borderRadius: BorderRadius.circular(6),
+            border: Border.all(
+              color:
+                  isSelected ? context.primaryColor : context.subtleBorderColor,
+              width: 1,
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: context.controlStyle.copyWith(
-            color: isSelected ? context.primaryColor : context.mutedColor,
+          child: Text(
+            label,
+            style: context.controlStyle.copyWith(
+              color: isSelected ? context.primaryColor : context.mutedColor,
+            ),
           ),
-        ),
         ),
       ),
     );
@@ -4424,7 +4566,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
         : isAdmin
             ? 'ADMINISTRATOR'
             : 'ACTIVE MEMBER';
-    final statusColor = isOwner || isAdmin ? context.primaryColor : context.successColor;
+    final statusColor =
+        isOwner || isAdmin ? context.primaryColor : context.successColor;
 
     final cockpit = EarthPageCockpit(
       status: statusText,
@@ -4444,13 +4587,13 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                 ? null
                 : () async {
                     await showCommunityManageDialog(
-                        context,
-                        myComm,
-                        widget.state,
-                        widget.action,
-                      );
-                      _fetchDetails();
-                    },
+                      context,
+                      myComm,
+                      widget.state,
+                      widget.action,
+                    );
+                    _fetchDetails();
+                  },
           ),
       ],
       metrics: [
@@ -4500,7 +4643,8 @@ class _MyCommunityPanelState extends State<MyCommunityPanel> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    Icon(Icons.chat_outlined, size: 10, color: context.primaryColor),
+                    Icon(Icons.chat_outlined,
+                        size: 10, color: context.primaryColor),
                     const SizedBox(width: 4),
                     Text(
                       'COMMUNICATION',

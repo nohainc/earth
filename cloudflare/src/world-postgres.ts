@@ -11,7 +11,6 @@ import { computeResourceFlows } from './engines/resource-flow-engine.ts';
 import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { getCityDistrictZoning } from './real-estate-postgres.ts';
-import { catchupOwnerSettlement } from './daily-settlement-profiles.ts';
 
 type Row = Record<string, any>;
 
@@ -24,20 +23,28 @@ function ratio(value: unknown, divisor: unknown, cap = 1): number {
 }
 
 export async function worldSnapshot(repository: PostgresRepository, viewerId: string): Promise<Record<string, unknown>> {
-  await catchupOwnerSettlement(repository, viewerId).catch(() => null);
+  // Snapshots are read paths. Daily settlement is performed exclusively by
+  // the scheduled coordinator so simply logging in cannot mutate an economy.
   const flows = await computeResourceFlows(repository, viewerId);
 
-  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, succession, membership, prices, ledger, resourceLedger, cityMetrics, corporationMetrics, personalFinance, technologyAdoptions, corporationTechnologyProjects, technologySubscriptions] = await Promise.all([
+  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, viewerBallots, succession, membership, prices, ledger, resourceLedger, cityMetrics, corporationMetrics, personalFinance, technologyAdoptions, corporationTechnologyProjects, technologySubscriptions] = await Promise.all([
     repository.query('SELECT * FROM world_state WHERE id = $1', ['WORLD']),
     repository.query('SELECT * FROM humans WHERE id = $1', [viewerId]),
     repository.query('SELECT * FROM institutions'),
     repository.query('SELECT resource, amount FROM resource_balances WHERE owner_id = $1', [viewerId]),
     repository.query('SELECT NULL::text AS id WHERE false'),
     repository.query('SELECT * FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewerId]),
-    repository.query('SELECT * FROM proposals ORDER BY closes_at ASC LIMIT 20'),
+    repository.query(`
+      SELECT p.*, COALESCE(h.display_name, 'Citizen') AS creator_name
+      FROM proposals p
+      LEFT JOIN humans h ON h.id = p.created_by_human_id
+      ORDER BY p.closes_at ASC
+      LIMIT 20
+    `),
     repository.query("SELECT * FROM governance_rules WHERE status IN ('active','superseded') ORDER BY institution_id, category, version DESC"),
     repository.query("SELECT balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewerId]),
     repository.query('SELECT proposal_id, choice, ROUND(SUM(weight), 3) AS count FROM ballots GROUP BY proposal_id, choice'),
+    repository.query('SELECT proposal_id, choice FROM ballots WHERE human_id = $1', [viewerId]),
     repository.query('SELECT * FROM succession_plans WHERE human_id = $1', [viewerId]),
     repository.query('SELECT * FROM memberships WHERE human_id = $1', [viewerId]),
     repository.query('SELECT * FROM market_prices ORDER BY product'),
@@ -66,7 +73,6 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const humanRow = human.rows[0] ?? {};
   const authoritativeTime = getAuthoritativeGameTime({
     genesisAt: worldRow.genesis_at,
-    simulatedDayOffset: worldRow.simulated_day_offset,
   });
   const currentGameDay = authoritativeTime.gameDay;
   const currentGameMinute = authoritativeTime.gameMinute;
@@ -97,6 +103,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     all[id][String(row.choice)] = Number(row.count);
     return all;
   }, {});
+  const viewerVotes = Object.fromEntries((viewerBallots.rows as Row[])
+    .map((row) => [String(row.proposal_id), String(row.choice)]));
   const products = Object.fromEntries((prices.rows as Row[]).map((row) => [row.product, { price: row.price, supply: row.supply, demand: row.demand }]));
   const referencePrice = (prices.rows as Row[])
     .filter((row) => row.product === 'components' || row.product === 'energy')
@@ -296,6 +304,30 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
       primaryEconomicPurpose: row.primary_economic_purpose || spec?.primaryEconomicPurpose,
     };
   });
+  const cityFinanceRows = city?.id
+    ? await Promise.all([
+        repository.query('SELECT resource, amount FROM resource_balances WHERE owner_id = $1', [city.id]),
+        repository.query("SELECT balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' LIMIT 1", [city.id]),
+        repository.query(`
+          SELECT
+            COALESCE(SUM(amount) FILTER (WHERE credit_account = $1 AND reason_type = 'civic_utility_revenue'), 0) AS civic_building_income,
+            COALESCE(SUM(amount) FILTER (WHERE credit_account = $1 AND reason_type IN ('business_tax_city', 'tax_settlement')), 0) AS city_taxes,
+            COALESCE(SUM(amount) FILTER (WHERE credit_account = $1 AND reason_type = 'bank_deposit_interest'), 0) AS bank_deposit_interest,
+            COALESCE(SUM(amount) FILTER (WHERE debit_account = $1 AND reason_type = 'building_operating_cost'), 0) AS building_costs,
+            COALESCE(SUM(amount) FILTER (WHERE debit_account = $1 AND reason_type = 'city_corporate_income_tax'), 0) AS corporation_income_tax
+          FROM ledger_entries
+          WHERE game_day = (
+            SELECT earth_game_day_from_total_minutes(total_game_minutes)
+            FROM earth_get_current_game_time()
+          )
+        `, [`account-city-${city.id}`]),
+      ])
+    : [{ rows: [] }, { rows: [] }, { rows: [] }];
+  const cityResources = Object.fromEntries(
+    cityFinanceRows[0].rows.map((row: any) => [row.resource, Number(row.amount ?? 0)]),
+  );
+  const cityTreasuryBalance = Number(cityFinanceRows[1].rows[0]?.balance ?? city?.treasury ?? 0);
+  const cityCashflow = cityFinanceRows[2].rows[0] ?? {};
   const investmentSharesRows = investmentShares?.rows ?? [];
   const civicDividendsRows = civicDividends?.rows ?? [];
   const corporateResearchRows = corporateResearch?.rows ?? [];
@@ -369,8 +401,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     deadline: projectGameDeadline({
       gameDay: currentGameDay,
       gameMinute: currentGameMinute,
-      deadlineGameDay: Number(proposal.closes_game_day),
-      deadlineGameMinute: Number(proposal.closes_game_minute),
+      deadlineGameDay: Number(proposal.voting_due_end_day ?? proposal.closes_game_day),
+      deadlineGameMinute: proposal.voting_due_end_day != null ? 1439 : Number(proposal.closes_game_minute),
       closesAt: proposal.closes_at,
       nowMs: Date.now(),
       realSecondsPerGameMinute: 1,
@@ -387,6 +419,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         WHEN '2.1' THEN CASE WHEN earth_governance.quorum_threshold IS NULL THEN NULL ELSE trim(trailing '.' from to_char(earth_governance.quorum_threshold * 100, 'FM999999990.999999')) || '%' END
         WHEN '2.2' THEN CASE WHEN earth_governance.approval_threshold IS NULL THEN NULL ELSE trim(trailing '.' from to_char(earth_governance.approval_threshold * 100, 'FM999999990.999999')) || '%' END
         WHEN '2.3' THEN CASE WHEN earth_governance.implementation_delay_days IS NULL THEN NULL ELSE earth_governance.implementation_delay_days::text || ' game day' || CASE WHEN earth_governance.implementation_delay_days = 1 THEN '' ELSE 's' END END
+        WHEN '2.4' THEN CASE WHEN earth_governance.voting_period_days IS NULL THEN NULL ELSE earth_governance.voting_period_days::text || ' game day' || CASE WHEN earth_governance.voting_period_days = 1 THEN '' ELSE 's' END END
         ELSE constitutional_rules.default_value
       END AS default_value,
       constitutional_rules.permitted_values, constitutional_rules.updated_game_day
@@ -394,7 +427,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     LEFT JOIN tax_rules basic_income_tax ON basic_income_tax.id = 'TAX-OUC-BASIC' AND basic_income_tax.active = true
     LEFT JOIN tax_rules market_tax ON market_tax.id = 'TAX-OUC-MARKET' AND market_tax.active = true
     LEFT JOIN LATERAL (
-      SELECT governance_rules.quorum_threshold, governance_rules.approval_threshold, governance_rules.implementation_delay_days
+      SELECT governance_rules.quorum_threshold, governance_rules.approval_threshold, governance_rules.implementation_delay_days, governance_rules.voting_period_days
       FROM governance_rules
       JOIN institutions ON institutions.id = governance_rules.institution_id
       WHERE institutions.kind = 'OUC' AND governance_rules.status = 'active'
@@ -423,6 +456,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
       corporation: corporation ?? {},
       city: city ?? {},
     },
+    cityFinance: { treasury: cityTreasuryBalance, resources: cityResources, dailyCashflow: cityCashflow },
     resources: resourceMap,
     resourceFlows: flows,
     buildings: buildingsRows,
@@ -434,7 +468,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     constitutionalRules: constitutionalRules.rows,
     buildingCatalog: buildingCatalogRows,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
-    governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, ballots: {} })), rules: governanceRules.rows },
+    governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, my_vote: viewerVotes[String(proposal.id)] ?? null, ballots: {} })), rules: governanceRules.rows },
     technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows, corporationProjects: corporationTechnologyProjects.rows, subscriptions: technologySubscriptions.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), citizens: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })), humans: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[2].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0 },

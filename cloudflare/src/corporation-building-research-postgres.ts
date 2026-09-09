@@ -1,5 +1,4 @@
 import type { PostgresRepository } from './repository.ts';
-import { getAuthoritativeGameTime } from './game-clock.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 
@@ -38,10 +37,10 @@ function researchCost(baseCost: number, tier: number, ownershipClass?: string): 
   return Math.max(1000, Math.round(Math.max(1000, baseCost) * scopeMul * tierMul));
 }
 
-function researchDurationMinutes(slotFootprint: number, tier: number, _ownershipClass?: string): number {
+function researchDurationDays(slotFootprint: number, tier: number, _ownershipClass?: string): number {
   const slots = Math.max(1, slotFootprint || 1);
   const days = (tier + 3) * slots;
-  return days * 1440;
+  return days;
 }
 
 export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
@@ -84,9 +83,14 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
       throw new Error(`Your corporation has already researched or is researching Tier ${targetTier} for this building`);
     }
     const cost = researchCost(Number(previous.rows[0].cost_credits), targetTier, previous.rows[0].ownership_class);
-    const durationMinutes = researchDurationMinutes(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_class);
-    const world = await tx.query<{ genesis_at: string | null; simulated_day_offset: number | null }>("SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
-    const time = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
+    const durationDays = researchDurationDays(Number(previous.rows[0].slot_footprint ?? 1), targetTier, previous.rows[0].ownership_class);
+    // The database clock is the sole source of time. Do not derive or submit
+    // a client/server timestamp for research start or completion.
+    const timeRes = await tx.query<{ game_day: number }>(
+      'SELECT earth_game_day_from_total_minutes(total_game_minutes) AS game_day FROM earth_get_current_game_time()',
+    );
+    const time = timeRes.rows[0];
+    if (!time) throw new Error('Authoritative game clock is unavailable');
     const projectId = `CBR-${crypto.randomUUID().slice(0, 10).toUpperCase()}`;
 
     const isPrivate = previous.rows[0].ownership_class === 'private';
@@ -122,23 +126,23 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
           operating_credits, operating_energy, operating_food, operating_materials, operating_components, operating_compute,
           description, construction_days, construction_minutes, is_active, research_project_id
         )
-        SELECT $1, building_type, name || ' · Tier ' || $2, $2, id, category, ownership_class, slot_footprint,
+        SELECT $1, building_type, name || ' · Tier ' || $2::text, $2::integer, id, category, ownership_class, slot_footprint,
           cost_credits * 1.70, cost_energy * 1.70, cost_food * 1.70, cost_materials * 1.70, cost_components * 1.70, cost_compute * 1.70,
           output_credits * 1.25, output_energy * 1.25, output_food * 1.25, output_materials * 1.25, output_components * 1.25, output_compute * 1.25,
           upkeep_credits * 1.12, upkeep_energy * 1.12, upkeep_food * 1.12, upkeep_materials * 1.12, upkeep_components * 1.12, upkeep_compute * 1.12,
           operating_credits * 1.12, operating_energy * 1.12, operating_food * 1.12, operating_materials * 1.12, operating_components * 1.12, operating_compute * 1.12,
-          COALESCE(description, '') || ' Researched Tier ' || $2 || ' generation.', GREATEST(1, slot_footprint * $2), GREATEST(1440, slot_footprint * $2 * 1440), false, $3
+          COALESCE(description, '') || ' Researched Tier ' || $2::text || ' generation.', GREATEST(1, slot_footprint * $2::integer), GREATEST(1440, slot_footprint * $2::integer * 1440), false, $3
         FROM building_catalog WHERE id = $4`,
         [targetCatalogId, targetTier, projectId, previous.rows[0].id],
       );
       await tx.query('UPDATE building_catalog SET next_catalog_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [targetCatalogId, previous.rows[0].id]);
     }
 
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: time.gameDay, debitAccount: debitAccountId, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
+    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: time.game_day, debitAccount: debitAccountId, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
     await tx.query(
-      `INSERT INTO corporation_building_research_projects (id, corporation_id, building_type, catalog_id, target_tier, research_cost_credits, duration_minutes, started_game_day, started_game_minute, correlation_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-      [projectId, corporationId, input.buildingType, targetCatalogId, targetTier, cost, durationMinutes, time.gameDay, time.gameMinute, input.correlationId],
+      `INSERT INTO corporation_building_research_projects (id, corporation_id, building_type, catalog_id, target_tier, research_cost_credits, duration_minutes, started_game_day, started_game_minute, research_start_day, research_duration_days, research_due_end_day, correlation_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12)`,
+      [projectId, corporationId, input.buildingType, targetCatalogId, targetTier, cost, durationDays * 1440, time.game_day, time.game_day + 1, durationDays, time.game_day + durationDays, input.correlationId],
     );
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_building_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
   });
@@ -156,21 +160,8 @@ export async function listCorporationBuildingResearch(repository: PostgresReposi
 }
 
 export async function advanceCorporationBuildingResearch(repository: PostgresRepository): Promise<number> {
-  const world = await repository.query<{ genesis_at: string | null; simulated_day_offset: number | null }>("SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'");
-  const time = getAuthoritativeGameTime({ genesisAt: world.rows[0]?.genesis_at, simulatedDayOffset: world.rows[0]?.simulated_day_offset });
-  const active = await repository.query<{ id: string; corporation_id: string; catalog_id: string; started_game_day: number; started_game_minute: number; duration_minutes: number }>("SELECT id, corporation_id, catalog_id, started_game_day, started_game_minute, duration_minutes FROM corporation_building_research_projects WHERE status = 'active' FOR UPDATE");
-  let completed = 0;
-  for (const project of active.rows) {
-    const elapsed = Math.max(0, time.totalGameMinutes - ((Number(project.started_game_day) - 1) * 1440 + Number(project.started_game_minute)));
-    const progress = Math.min(100, Math.round(elapsed / Math.max(1, Number(project.duration_minutes)) * 100000) / 1000);
-    if (progress < 100) {
-      await repository.query('UPDATE corporation_building_research_projects SET progress = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [progress, project.id]);
-      continue;
-    }
-    await repository.query("UPDATE corporation_building_research_projects SET progress = 100, status = 'completed', completed_game_day = $1, completed_game_minute = $2, updated_at = CURRENT_TIMESTAMP WHERE id = $3", [time.gameDay, time.gameMinute, project.id]);
-    await repository.query('UPDATE building_catalog SET is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [project.catalog_id]);
-    await repository.query("INSERT INTO corporation_building_unlocks (corporation_id, catalog_id, research_project_id, unlocked_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT (corporation_id, catalog_id) DO UPDATE SET status = 'unlocked', research_project_id = EXCLUDED.research_project_id", [project.corporation_id, project.catalog_id, project.id, time.gameDay]);
-    completed += 1;
-  }
-  return completed;
+  const advanced = await repository.query<{ completed: number }>(
+    'SELECT earth_advance_corporation_building_research() AS completed',
+  );
+  return Number(advanced.rows[0]?.completed ?? 0);
 }

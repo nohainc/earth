@@ -3459,12 +3459,25 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    if (isUnderConstruction)
+                    if (isUnderConstruction) ...[
+                      const SizedBox(height: 4),
                       Text(
-                        'Construction in progress ${progressVal.toStringAsFixed(0)}% complete',
+                        'Construction in progress (${progressVal.toStringAsFixed(1)}% complete)',
                         style: context.widgetFooterStyle.copyWith(
-                            color: context.warningColor, fontSize: 12),
+                            color: context.warningColor, fontSize: 12, fontWeight: FontWeight.w600),
                       ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (progressVal / 100.0).clamp(0.0, 1.0),
+                          minHeight: 6,
+                          backgroundColor: context.subtleBorderColor,
+                          valueColor: AlwaysStoppedAnimation<Color>(context.warningColor),
+                        ),
+                      ),
+                      const SizedBox(height: 6),
+                    ],
                     if (hasActiveResearch)
                       Text(
                         'R&D in progress: Tier $researchTargetTier (${researchProgressVal.toStringAsFixed(0)}% complete)',
@@ -3485,6 +3498,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   ],
                 ),
               ),
+              if (isUnderConstruction) ...[
+                const SizedBox(width: 6),
+                Tooltip(
+                  message: 'Construction in progress (${progressVal.toStringAsFixed(0)}%)',
+                  child: EarthBadge(
+                    label: 'BUILDING ${progressVal.toStringAsFixed(0)}%',
+                    variant: EarthBadgeVariant.warning,
+                  ),
+                ),
+              ],
               if (hasActiveResearch) ...[
                 const SizedBox(width: 6),
                 Tooltip(
@@ -3495,7 +3518,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                   ),
                 ),
               ],
-              if (!bActive && !hasActiveResearch) ...[
+              if (!bActive && !hasActiveResearch && !isUnderConstruction) ...[
                 const SizedBox(width: 6),
                 Tooltip(
                   message: inactiveReason,
@@ -3699,12 +3722,16 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                               ? 'UNDER CONSTRUCTION'
                               : hasActiveResearch
                                   ? 'R&D IN PROGRESS (${researchProgressVal.toStringAsFixed(0)}%)'
-                                  : 'RESEARCH TIER ${tier + 1}',
+                                  : (isCivic || isPublicInvestment)
+                                      ? 'PROPOSE CIVIC RESEARCH TIER ${tier + 1}'
+                                      : 'RESEARCH TIER ${tier + 1}',
                           icon: isUnderConstruction
                               ? Icons.hourglass_top_outlined
                               : hasActiveResearch
                                   ? Icons.hourglass_top_outlined
-                                  : Icons.science_outlined,
+                                  : (isCivic || isPublicInvestment)
+                                      ? Icons.how_to_vote_outlined
+                                      : Icons.science_outlined,
                           variant: (isUnderConstruction || hasActiveResearch)
                               ? EarthButtonVariant.secondary
                               : EarthButtonVariant.primary,
@@ -3867,8 +3894,11 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 border: Border.all(
                     color: context.primaryColor.withValues(alpha: .4)),
               ),
-              child: Icon(Icons.science_outlined,
-                  size: 20, color: context.primaryColor),
+              child: Icon(
+                isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
+                size: 20,
+                color: context.primaryColor,
+              ),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -3876,7 +3906,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Initiate R&D Project',
+                    isPrivate ? 'Initiate R&D Project' : 'Propose Civic Research',
                     style: TextStyle(
                       fontSize: 16,
                       fontWeight: FontWeight.w800,
@@ -3903,7 +3933,9 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.',
+                isPrivate
+                    ? 'Starting this research project will charge ${formatCreditsAmount(costCredits)} from $fundingSource to develop Tier $targetTier blueprints.'
+                    : 'Submitting this proposal requires no upfront credits. Upon vote passage by the corporation, ${formatCreditsAmount(costCredits)} will be funded from the corporation treasury to develop Tier $targetTier blueprints for all member cities.',
                 style: TextStyle(
                   fontSize: 13,
                   height: 1.4,
@@ -4124,8 +4156,8 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
             onPressed: () => Navigator.pop(dialogContext, false),
           ),
           EarthButton(
-            label: 'CONFIRM R&D PROJECT',
-            icon: Icons.science_outlined,
+            label: isPrivate ? 'CONFIRM R&D PROJECT' : 'SUBMIT CIVIC PROPOSAL',
+            icon: isPrivate ? Icons.science_outlined : Icons.how_to_vote_outlined,
             variant: EarthButtonVariant.primary,
             onPressed: () => Navigator.pop(dialogContext, true),
           ),
@@ -4134,10 +4166,29 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     );
 
     if (confirmed == true && mounted) {
-      await widget.action(
-          () => const EarthApi().startCorporationBuildingResearch(bType));
-      _showBuildingFeedback(
-          '$bName Tier $targetTier research project initiated.');
+      if (isPrivate) {
+        await widget.action(
+            () => const EarthApi().startCorporationBuildingResearch(bType));
+        _showBuildingFeedback(
+            '$bName Tier $targetTier research project initiated.');
+      } else {
+        final corpId = widget.state.membership?['corporation_id']?.toString() ??
+            widget.state.human['corporation_id']?.toString() ??
+            'CORP-0001';
+        await widget.action(() => const EarthApi().createProposal(
+              'Research $bName (Tier $targetTier)',
+              'Corporation proposal to research and unlock blueprints for $bName Tier $targetTier. Duration: $durationDays days, Estimated R&D funding: ${formatWholeNumber(costCredits)} C from corporation treasury.',
+              institutionId: corpId,
+              targetCategory: 'technology',
+              targetValue: {
+                'buildingType': bType,
+                'targetTier': targetTier,
+                'ownershipClass': ownership,
+              },
+            ));
+        _showBuildingFeedback(
+            'Corporation proposal to research $bName Tier $targetTier submitted.');
+      }
     }
   }
 

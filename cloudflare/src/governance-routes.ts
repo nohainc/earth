@@ -9,8 +9,6 @@ import {
 import {
   createProposalPostgres,
   castVotePostgres,
-  executeProposalPostgres,
-  challengeProposalPostgres,
   updateRulePostgres,
 } from './governance-postgres.ts';
 
@@ -127,45 +125,6 @@ export async function handleGovernanceRoutes(
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Ballot failed';
       return Response.json({ ok: false, error: message }, { status: /already/i.test(message) ? 409 : /not found/i.test(message) ? 404 : 403 });
-    }
-  }
-
-  const executeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/execute$/);
-  if (executeProposalMatch && request.method === 'POST') {
-    try {
-      const result = await withRepository(env, (repository) =>
-        executeProposalPostgres(repository, { proposalId: executeProposalMatch[1], humanId: viewer.id }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Proposal execution failed';
-      return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-    }
-  }
-
-  const challengeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/challenge$/);
-  if (challengeProposalMatch && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ reason?: string; correlationId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const body = parsed.value;
-    const reason = body.reason?.trim() ?? 'Constitutional appeal filed during delay window';
-    const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        challengeProposalPostgres(repository, {
-          proposalId: challengeProposalMatch[1],
-          humanId: viewer.id,
-          reason,
-          correlationId,
-        }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Proposal challenge failed';
-      return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
     }
   }
 

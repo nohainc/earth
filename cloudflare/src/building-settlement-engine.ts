@@ -4,62 +4,10 @@ import { centsToMoney, moneyToCents } from './money.ts';
 import { toNanoMarkup } from './nano-markup.ts';
 
 export async function advanceBuildingConstruction(tx: PostgresRepository, day: number): Promise<void> {
-  const worldRes = await tx.query<{ game_day: number; game_minute: number; total_game_minutes: number }>(
-    "SELECT game_day, game_minute, total_game_minutes FROM world_state WHERE id = 'WORLD'",
-  );
-  const persistedTotalMinute = Number(worldRes.rows[0]?.total_game_minutes ?? 0);
-  const currentTotalMinute = persistedTotalMinute > 0
-    ? persistedTotalMinute
-    : ((Math.max(1, Number(worldRes.rows[0]?.game_day ?? day)) - 1) * 1440 +
-        Number(worldRes.rows[0]?.game_minute ?? 0));
-
-  const constructionQuery = await tx.query<{
-    id: string;
-    name: string;
-    city_id: string | null;
-    owner_id: string;
-    construction_started_game_day: number;
-    construction_complete_game_day: number;
-    construction_started_minute: number | null;
-    construction_complete_minute: number | null;
-  }>(
-    "SELECT id, name, city_id, owner_id, construction_started_game_day, construction_complete_game_day, construction_started_minute, construction_complete_minute FROM buildings WHERE status = 'under_construction'",
-  );
-
-  for (const bld of constructionQuery.rows) {
-    const startMinute = bld.construction_started_minute != null
-      ? Number(bld.construction_started_minute)
-      : (Number(bld.construction_started_game_day ?? 1) - 1) * 1440;
-    const completeMinute = bld.construction_complete_minute != null
-      ? Number(bld.construction_complete_minute)
-      : (Number(bld.construction_complete_game_day ?? (Number(bld.construction_started_game_day ?? 1) + 1)) - 1) * 1440;
-
-    const totalMinutes = Math.max(1, completeMinute - startMinute);
-    const elapsedMinutes = Math.max(0, currentTotalMinute - startMinute);
-    const progress = Math.min(100.0, Math.round((elapsedMinutes / totalMinutes) * 10000) / 100);
-
-    if (currentTotalMinute >= completeMinute || day >= Number(bld.construction_complete_game_day ?? (Number(bld.construction_started_game_day ?? 1) + 1))) {
-      await tx.query(
-        "UPDATE buildings SET status = 'active', construction_progress = 100.0, updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-        [bld.id],
-      );
-      await tx.query(
-        'INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING',
-        [
-          `BLD-CONSTRUCTED-${bld.id}-${day}`,
-          day,
-          'building.constructed',
-          `Facility ${bld.name} construction completed`,
-          toNanoMarkup({ buildingId: bld.id, cityId: bld.city_id, ownerId: bld.owner_id }),
-        ],
-      );
-    } else {
-      await tx.query(
-        'UPDATE buildings SET construction_progress = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-        [progress, bld.id],
-      );
-    }
-  }
+  // Completion is deliberately post-commit end-of-day automation. Buildings
+  // cannot become active while the same day's economy is being settled.
+  void tx;
+  void day;
 }
 
 export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day: number): Promise<void> {

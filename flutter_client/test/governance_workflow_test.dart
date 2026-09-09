@@ -4,7 +4,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/governance/governance_panels.dart';
 
 void main() {
-  testWidgets('ProposalPanel renders passed proposal and executes proposal',
+  testWidgets('TabbedProposalPanel renders passed proposal and executes proposal',
       (tester) async {
     const passedState = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -40,7 +40,7 @@ void main() {
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: ProposalPanel(
+            child: TabbedProposalPanel(
               state: passedState,
               busy: false,
               action: (cb) async {
@@ -52,7 +52,9 @@ void main() {
       ),
     );
 
-    expect(find.text('UC PROPOSAL PROP-042'), findsOneWidget);
+    expect(find.text('WORLD (1)'), findsOneWidget);
+    await tester.tap(find.text('WORLD (1)'));
+    await tester.pumpAndSettle();
     expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
     expect(find.text('EXECUTABLE'), findsOneWidget);
     expect(find.text('EXECUTE PROPOSAL'), findsOneWidget);

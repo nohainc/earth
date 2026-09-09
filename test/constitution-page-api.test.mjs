@@ -31,20 +31,17 @@ test('Tier 1 Constitution API protects constitutional mutations', async () => {
   assert.equal(result.response.status, 401);
 });
 
-test('Tier 2 Constitution read model exposes governance state without secrets', async () => {
+test('Tier 2 Constitution read model exposes an empty fresh governance state without secrets', async () => {
   const result = await request('/api/world', {}, false);
   assert.equal(result.response.status, 200);
   assert.ok(Array.isArray(result.body.governance.proposals));
-  assert.equal(result.body.governance.proposals[0].id, '042');
+  assert.deepEqual(result.body.governance.proposals, []);
   assert.doesNotMatch(JSON.stringify(result.body), /password|session_token|password_hash/i);
 });
 
-test('Tier 3 Constitution API records an authenticated ballot', async () => {
+test('Tier 3 Constitution API does not accept a ballot for a deleted proposal', async () => {
   const result = await request('/api/governance/proposals/042/vote', { method: 'POST', body: { vote: 'support', weight: 999999, humanId: 'H-9999' } });
-  assert.equal(result.response.status, 200);
-  assert.equal(result.body.ok, true);
-  assert.equal(result.body.proposal.ballots['H-0044'], 'support');
-  assert.notEqual(result.body.proposal.votes.support, 999999);
+  assert.equal(result.response.status, 404);
 });
 
 test('Tier 4 Constitution API rejects invalid votes and unknown proposals', async () => {
@@ -54,8 +51,7 @@ test('Tier 4 Constitution API rejects invalid votes and unknown proposals', asyn
   assert.equal(unknown.response.status, 404);
 });
 
-test('Tier 5 Constitution API prevents duplicate constitutional ballots', async () => {
+test('Tier 5 Constitution API has no implicit seed ballot', async () => {
   const repeated = await request('/api/governance/proposals/042/vote', { method: 'POST', body: { vote: 'oppose' } });
-  assert.equal(repeated.response.status, 400);
-  assert.match(repeated.body.error, /already recorded/i);
+  assert.equal(repeated.response.status, 404);
 });

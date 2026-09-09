@@ -221,7 +221,6 @@ export async function purchasePrivatePlotAndConstruct(
       simulatedDayOffset: world.rows[0]?.simulated_day_offset,
     });
     const day = authTime.gameDay;
-    const currentTotalMinute = authTime.totalGameMinutes;
     const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     // Transfer Credits (60% to City Treasury, 25% to Corp Treasury if affiliated, 15% to OUC)
@@ -253,24 +252,24 @@ export async function purchasePrivatePlotAndConstruct(
       });
     }
 
-    // Calculate construction timeline from catalog or spec in minutes
+    // Private building construction starts immediately upon purchase and runs for
+    // the exact duration in continuous game minutes (1 real second = 1 game minute).
     const catalogRes = await tx.query<{ construction_days: number; construction_minutes: number }>(
       'SELECT construction_days, construction_minutes FROM building_catalog WHERE id = $1',
       [`${input.buildingType}-t${spec.tier || 1}`],
     );
-    const constructionMinutes = Math.max(
-      1,
-      catalogRes.rows[0]?.construction_minutes ??
-        ((catalogRes.rows[0]?.construction_days ?? spec.slotFootprint ?? 1) * 1440),
-    );
-    const completeMinute = currentTotalMinute + constructionMinutes;
-    // game_day is a display/settlement bucket (day 1 starts at minute 0),
-    // while the minute columns are the authoritative construction timeline.
+    const constructionDays = Math.max(1, Number(catalogRes.rows[0]?.construction_days ?? spec.slotFootprint ?? 1));
+    const durationMinutes = catalogRes.rows[0]?.construction_minutes && Number(catalogRes.rows[0].construction_minutes) > 0
+      ? Number(catalogRes.rows[0].construction_minutes)
+      : constructionDays * 1440;
+    const startMinute = authTime.totalGameMinutes;
+    const completeMinute = startMinute + durationMinutes;
+    const startDay = day;
     const completeDay = Math.floor(completeMinute / 1440) + 1;
 
     const catalogId = `${input.buildingType}-t${spec.tier || 1}`;
 
-    // Insert Building with authoritative catalog_id and minute timestamps
+    // Insert Building with authoritative catalog_id and continuous minute timestamps
     await tx.query(
       `INSERT INTO buildings (
         id, city_id, owner_id, ownership_class,
@@ -281,9 +280,10 @@ export async function purchasePrivatePlotAndConstruct(
         resource_output_type, resource_output_amount,
         construction_started_game_day, construction_complete_game_day,
         construction_started_minute, construction_complete_minute,
+        construction_start_day, construction_duration_days, construction_due_end_day,
         construction_progress,
         status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, 0.0, 'under_construction', $21)`,
+      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 0.0, 'under_construction', $24)`,
       [
         buildingId,
         citizenCityId,
@@ -301,10 +301,13 @@ export async function purchasePrivatePlotAndConstruct(
         spec.dailyStaffingCredits,
         spec.resourceOutputType,
         spec.resourceOutputAmount,
-        day,
+        startDay,
         completeDay,
-        currentTotalMinute,
+        startMinute,
         completeMinute,
+        startDay,
+        constructionDays,
+        completeDay,
         day,
       ],
     );
