@@ -625,15 +625,15 @@ void main() {
       await tester.tap(find.text('Urban District Module × 1'));
       await tester.pumpAndSettle();
 
-      // Tier 2 is not in catalog -> displays RESEARCH TIER 2 button
-      expect(find.text('RESEARCH TIER 2'), findsOneWidget);
+      // Tier 2 is not in catalog -> displays PROPOSE CIVIC RESEARCH TIER 2 button for civic building
+      expect(find.text('PROPOSE CIVIC RESEARCH TIER 2'), findsOneWidget);
 
-      // Tap RESEARCH TIER 2 button
-      await tester.tap(find.text('RESEARCH TIER 2'));
+      // Tap PROPOSE CIVIC RESEARCH TIER 2 button
+      await tester.tap(find.text('PROPOSE CIVIC RESEARCH TIER 2'));
       await tester.pumpAndSettle();
 
       // Research dialog opens
-      expect(find.text('Initiate R&D Project'), findsOneWidget);
+      expect(find.text('Propose Civic Research'), findsOneWidget);
       expect(find.textContaining('Urban District Module · Tier 1 → Tier 2'), findsOneWidget);
     });
   });

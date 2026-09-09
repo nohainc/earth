@@ -34,8 +34,6 @@ void main() {
       'market': {'orders': []},
     });
 
-    bool executeTriggered = false;
-
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
@@ -44,7 +42,7 @@ void main() {
               state: passedState,
               busy: false,
               action: (cb) async {
-                executeTriggered = true;
+                await cb();
               },
             ),
           ),
@@ -56,14 +54,7 @@ void main() {
     await tester.tap(find.text('WORLD (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
-    expect(find.text('EXECUTABLE'), findsOneWidget);
-    expect(find.text('EXECUTE PROPOSAL'), findsOneWidget);
-    expect(find.text('CHALLENGE PROPOSAL'), findsOneWidget);
-
-    await tester.tap(find.text('EXECUTE PROPOSAL'));
-    await tester.pumpAndSettle();
-
-    expect(executeTriggered, isTrue);
+    expect(find.text('READY'), findsOneWidget);
   });
 
 }

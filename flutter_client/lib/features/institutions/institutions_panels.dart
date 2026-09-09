@@ -3416,6 +3416,11 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                         label: 'CITY STANDING',
                         value: '$standing',
                         accentColor: context.goldColor),
+                    _buildAttributeRow(context,
+                        icon: Icons.account_balance_wallet_outlined,
+                        label: 'CITY BUDGET',
+                        value: '${formatWholeNumber(cityTreasury)} C',
+                        accentColor: context.warningColor),
                   ];
                   if (constraints.maxWidth < 520) {
                     return Column(children: attributes);
@@ -3424,13 +3429,24 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Expanded(
-                          child: Column(children: attributes.take(3).toList())),
+                          child: Column(children: attributes.take(4).toList())),
                       const SizedBox(width: 24),
                       Expanded(
-                          child: Column(children: attributes.skip(3).toList())),
+                          child: Column(children: attributes.skip(4).toList())),
                     ],
                   );
                 },
+              ),
+
+              const SizedBox(height: 12),
+              _institutionBudgetCard(
+                context,
+                title: 'CITY BUDGET',
+                amount: '${formatWholeNumber(cityTreasury)} C',
+                icon: Icons.account_balance_wallet_outlined,
+                description:
+                    'Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies. This is separate from personal and corporate money.',
+                accent: context.warningColor,
               ),
 
               SizedBox(height: context.spacingTitleOffset),

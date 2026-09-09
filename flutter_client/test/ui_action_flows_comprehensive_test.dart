@@ -356,6 +356,8 @@ void main() {
           expect(find.text('CITY BUDGET'), findsWidgets);
           expect(find.textContaining('5000'), findsWidgets);
           if (i.isEven) {
+            await tester.ensureVisible(find.text('PROPOSE BUDGET'));
+            await tester.pumpAndSettle();
             await tester.tap(find.text('PROPOSE BUDGET'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);
