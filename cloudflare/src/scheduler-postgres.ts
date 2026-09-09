@@ -749,6 +749,13 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
   let result: { day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean };
   try {
     result = await repository.transaction(async (tx) => {
+    if (idempotencyKey) {
+      const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`SCHEDULED-TICK-${idempotencyKey}`]);
+      if (prior.rows[0]) {
+        const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'");
+        return { day: Number(world.rows[0]?.game_day ?? 0), minute: Number(world.rows[0]?.game_minute ?? 0), newDay: false, productionEvents: 0, marketSettlements: 0, alreadyProcessed: true };
+      }
+    }
     await tx.query("SELECT id FROM world_state WHERE id = 'WORLD' FOR UPDATE");
     const clock = await tx.query<{ total_game_minutes: string; game_day: string; game_minute: number }>(
       `SELECT t.total_game_minutes,
@@ -810,6 +817,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const productionEvents = await settleProduction(tx, day);
     await runAiMaintenance(tx, day);
     if (idempotencyKey) {
+      await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, JSON.stringify({ day, minute, newDay: settlementDay !== null, productionEvents })]);
     }
     return { day, minute, newDay: settlementDay !== null, settledGameDay: settlementDay ?? undefined, productionEvents };
     });
