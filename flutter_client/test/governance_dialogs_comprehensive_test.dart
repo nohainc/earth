@@ -3,79 +3,45 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/features/governance/governance_dialogs.dart';
 
 void main() {
-  testWidgets('showChallengeDialog accepts reason and files challenge',
+  testWidgets('showProposalComposer renders and submits proposal',
       (tester) async {
-    bool challenged = false;
+    bool submitted = false;
 
     await tester.pumpWidget(
       MaterialApp(
         home: Builder(
           builder: (context) => Scaffold(
             body: ElevatedButton(
-              onPressed: () => showChallengeDialog(
+              onPressed: () => showProposalComposer(
                 context,
                 (fn) async {
-                  challenged = true;
+                  submitted = true;
                 },
-                'PROP-001',
+                institutionId: 'OUC-001',
+                scopeLabel: 'UC',
               ),
-              child: const Text('Open Challenge'),
+              child: const Text('Open Composer'),
             ),
           ),
         ),
       ),
     );
 
-    await tester.tap(find.text('Open Challenge'));
+    await tester.tap(find.text('Open Composer'));
     await tester.pumpAndSettle();
 
-    expect(find.text('File constitutional challenge'), findsOneWidget);
+    expect(find.text('Create UC proposal'), findsOneWidget);
     await tester.enterText(
-        find.widgetWithText(TextField, 'Constitutional grounds (10–2000 characters)'),
-        'Violation of Section 4 Article 2 of the United Corporations Charter');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('File challenge'));
-    await tester.pumpAndSettle();
-
-    expect(challenged, true);
-  });
-
-  testWidgets('showAppealRulingDialog issues High Court ruling',
-      (tester) async {
-    bool ruled = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => showAppealRulingDialog(
-                context,
-                (fn) async {
-                  ruled = true;
-                },
-                'PROP-001',
-              ),
-              child: const Text('Open Ruling'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open Ruling'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Issue High Court ruling'), findsOneWidget);
+        find.widgetWithText(TextField, 'Title (8–140 characters)'),
+        'Municipal Solar Grid Expansion');
     await tester.enterText(
-        find.widgetWithText(TextField, 'Judicial rationale (10–2000 characters)'),
-        'The court finds no constitutional violation and upholds the proposal.');
+        find.widgetWithText(TextField, 'Policy proposal (20–4000 characters)'),
+        'Invest in civic solar infrastructure to boost energy output across Carthage.');
     await tester.pumpAndSettle();
 
-    await tester.tap(find.text('Issue ruling'));
+    await tester.tap(find.text('Submit proposal'));
     await tester.pumpAndSettle();
 
-    expect(ruled, true);
+    expect(submitted, true);
   });
 }

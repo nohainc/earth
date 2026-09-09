@@ -98,9 +98,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   int? _lastRecalculateDay;
   int? _lastPrefetchDay;
 
-  static final int epochStartMs =
-      DateTime.utc(2026, 1, 1, 0, 0, 0).millisecondsSinceEpoch;
-
   @override
   void initState() {
     super.initState();

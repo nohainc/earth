@@ -9,7 +9,6 @@ import '../../shared/design_system/design_system.dart';
 import '../../core/nano_markup_helper.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/format_helpers.dart';
-import 'governance_dialogs.dart';
 
 class CivicStatusPanel extends StatelessWidget {
   final EarthState state;
@@ -769,7 +768,7 @@ class _ProposalCard extends StatelessWidget {
                                 const SizedBox(height: 5),
                                 Text(
                                   isScheduled
-                                      ? 'Voting begins: ${_formatGameStart(proposal, state) ?? 'next game day'} · Voting closes: ${voteDeadline ?? 'the following game day'}'
+                                      ? 'Voting begins: ${_formatGameStart(proposal, state) ?? 'next game day'} · Voting closes: $voteDeadline'
                                       : isVotingOpen &&
                                               gameMinutesRemaining != null
                                           ? 'Voting ends in ${_formatGameTimeRemaining(gameMinutesRemaining)} · $voteDeadline'
