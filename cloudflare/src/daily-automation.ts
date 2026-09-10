@@ -72,7 +72,7 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
   for (const action of dueProposals.rows) {
     try {
       const result = await executeProposal(repository, { proposalId: action.proposal_id, humanId: 'SYSTEM', systemExecution: true, completedDay });
-      const finished = ['executed', 'skipped', 'expired_unfunded', 'blocked'].includes(String(result.executionStatus));
+      const finished = ['started', 'executed', 'skipped', 'expired_unfunded', 'blocked'].includes(String(result.executionStatus));
       await repository.query(
         `UPDATE scheduled_actions
          SET status = CASE WHEN $2::boolean THEN 'completed' ELSE 'pending' END,

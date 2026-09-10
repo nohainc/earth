@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 142,
+  "migrationVersion": 143,
   "requiredTables": {
     "app_error_logs": [
       "id",

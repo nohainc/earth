@@ -136,8 +136,11 @@ void main() {
     expect(find.text('WORLD (1)'), findsOneWidget);
     await tester.tap(find.text('WORLD (1)'));
     await tester.pumpAndSettle();
-    expect(find.text('READY'), findsOneWidget);
-    expect(find.text('Approved — it will execute automatically after daily settlement.'), findsOneWidget);
+    expect(find.text('APPROVED'), findsOneWidget);
+    expect(
+        find.text(
+            'Approved — the action will start automatically after daily settlement.'),
+        findsOneWidget);
     expect(find.text('EXECUTE PROPOSAL'), findsNothing);
     expect(find.text('CHALLENGE PROPOSAL'), findsNothing);
   });
@@ -179,8 +182,7 @@ void main() {
       ),
     ));
 
-    expect(
-        find.textContaining('Voting ends in 3 days · Year 1 · Day 16'),
+    expect(find.textContaining('Voting ends in 3 days · Year 1 · Day 16'),
         findsOneWidget);
     expect(find.text('VOTED SUPPORT'), findsOneWidget);
     expect(find.text('support'), findsNothing);
@@ -391,7 +393,8 @@ void main() {
     await tester.pump();
 
     // Rationale above
-    expect(find.text('Urgent strategic energy infrastructure initiative.'), findsOneWidget);
+    expect(find.text('Urgent strategic energy infrastructure initiative.'),
+        findsOneWidget);
     // Catalog title & description to right
     expect(find.text('Fusion Power Plant'), findsOneWidget);
     expect(find.text('Advanced clean energy facility.'), findsOneWidget);

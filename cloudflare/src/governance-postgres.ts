@@ -268,7 +268,7 @@ export async function resolveProposalsInTransaction(repository: PostgresReposito
       // Funding is not started until the first automatic execution attempt.
       // It therefore always represents seven *upcoming complete* game days.
       await tx.query(
-        "UPDATE proposals SET outcome = $1, resolved_at = CURRENT_TIMESTAMP, resolved_game_day = $2, implementation_at = CASE WHEN $1 = 'passed' THEN implementation_at ELSE NULL END, execution_status = CASE WHEN $1 = 'passed' THEN 'ready' ELSE 'not_ready' END WHERE id = $3 AND outcome = 'pending'",
+        "UPDATE proposals SET outcome = $1, resolved_at = CURRENT_TIMESTAMP, resolved_game_day = $2, status = CASE WHEN $1 = 'passed' THEN 'approved' ELSE 'closed' END, implementation_at = CASE WHEN $1 = 'passed' THEN implementation_at ELSE NULL END, execution_status = CASE WHEN $1 = 'passed' THEN 'ready' ELSE 'not_ready' END WHERE id = $3 AND outcome = 'pending'",
         [outcome, gameDay, proposal.id],
       );
       if (passed) {
@@ -298,19 +298,19 @@ export async function resolveProposals(repository: PostgresRepository): Promise<
  */
 export async function executeProposal(repository: PostgresRepository, input: { proposalId: string; humanId: string; systemExecution?: boolean; completedDay?: number }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-  const proposal = await tx.query<{ id: string; institution_id: string; title: string; outcome: string; executed_at: string | null; implementation_game_day: number | null; implementation_game_minute: number | null; target_category: string | null; target_value_json: unknown; execution_status: string; created_by_human_id: string | null }>('SELECT * FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
+  const proposal = await tx.query<{ id: string; institution_id: string; title: string; outcome: string; executed_at: string | null; implementation_game_day: number | null; implementation_game_minute: number | null; target_category: string | null; target_value_json: unknown; execution_status: string; challenge_status: string; created_by_human_id: string | null }>('SELECT * FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
     const current = proposal.rows[0];
     if (current.outcome !== 'passed') throw new Error('Only passed proposals can be executed');
-    if (current.executed_at) return { ok: true, executionStatus: 'executed', proposal: current };
-    if (current.execution_status === 'challenged') throw new Error('Proposal is currently under constitutional challenge');
+    if (current.executed_at) return { ok: true, executionStatus: current.execution_status === 'started' ? 'started' : 'executed', proposal: current };
+    if (current.challenge_status === 'pending') throw new Error('Proposal is currently under constitutional challenge');
     const world = await tx.query<{ game_day: number; genesis_at: string | null }>("SELECT game_day, genesis_at FROM world_state WHERE id = 'WORLD'");
     if (!input.systemExecution) throw new Error('Proposal execution is automatic after daily settlement');
     const day = Math.max(1, Number(input.completedDay ?? world.rows[0]?.game_day ?? 1));
     const category = String(current.target_category ?? '').trim();
     const value = jsonObject(current.target_value_json);
     if (!category || !Object.keys(value).length) {
-      await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = $1", [current.id]);
+      await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = $1", [current.id]);
       return { ok: true, executionStatus: 'skipped', reason: 'Proposal has no target rule payload', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
     if (category === 'megaproject_procurement') {
@@ -323,7 +323,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
         [cityId, bType, ownershipClass],
       );
       if (existingBuilding.rows[0]) {
-        await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = $1", [current.id]);
+        await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped' WHERE id = $1", [current.id]);
         return { ok: true, executionStatus: 'skipped', reason: 'This building already exists for the city', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
       }
       const cityAccount = await tx.query<{ account_id: string; balance: string }>(
@@ -417,15 +417,15 @@ export async function executeProposal(repository: PostgresRepository, input: { p
         ],
       );
 
-      await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, execution_status = 'executed', funding_block_reason = NULL WHERE id = $1", [current.id, day]);
-      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'megaproject.constructed', `Municipal Megaproject ${spec.name} commissioned`, toNanoMarkup({ proposalId: current.id, buildingId, cityId: current.institution_id })]);
-      return { ok: true, executionStatus: 'executed', buildingId, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+      await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, started_at = CURRENT_TIMESTAMP, started_game_day = $2, started_action_id = $3, execution_status = 'started', funding_block_reason = NULL WHERE id = $1", [current.id, day, buildingId]);
+      await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'building.construction_started', `Municipal Megaproject ${spec.name} construction started`, toNanoMarkup({ proposalId: current.id, buildingId, cityId: current.institution_id })]);
+      return { ok: true, executionStatus: 'started', buildingId, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
 
     if (category === 'technology' || category === 'research') {
       const buildingType = String(value.buildingType ?? value.building_type ?? '').trim();
       if (!buildingType) {
-        await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped', funding_block_reason = 'Missing building type in research proposal' WHERE id = $1", [current.id]);
+        await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped', funding_block_reason = 'Missing building type in research proposal' WHERE id = $1", [current.id]);
         return { ok: true, executionStatus: 'skipped', reason: 'Missing building type in research proposal', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
       }
       const result = await startCorporationBuildingResearchInTransaction(tx, {
@@ -433,8 +433,8 @@ export async function executeProposal(repository: PostgresRepository, input: { p
         buildingType,
         correlationId: `proposal-research:${current.id}`,
       });
-      await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, execution_status = 'executed', funding_block_reason = NULL WHERE id = $1", [current.id, day]);
-      return { ok: true, executionStatus: 'executed', researchProject: result.project, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+      await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, started_at = CURRENT_TIMESTAMP, started_game_day = $2, started_action_id = $3, execution_status = 'started', funding_block_reason = NULL WHERE id = $1", [current.id, day, result.project?.id ?? null]);
+      return { ok: true, executionStatus: 'started', researchProject: result.project, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
 
     if (!['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(category)) throw new Error('Target rule is outside engine bounds');
@@ -447,9 +447,9 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     const ruleId = `GOV-${current.institution_id}-${category}-v${version}`;
     await tx.query('INSERT INTO governance_rules (id, institution_id, name, category, quorum_threshold, approval_threshold, voting_period_days, version, status, created_by) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,\'active\',$9)', [ruleId, current.institution_id, current.title, category, quorum, approval, votingPeriod, version, input.humanId]);
     await tx.query("UPDATE governance_rules SET status = 'superseded' WHERE institution_id = $1 AND category = $2 AND status = 'active' AND id <> $3", [current.institution_id, category, ruleId]);
-    await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, execution_status = 'executed', funding_block_reason = NULL WHERE id = $1", [current.id, day]);
+    await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, started_at = CURRENT_TIMESTAMP, started_game_day = $2, started_action_id = $3, execution_status = 'started', funding_block_reason = NULL WHERE id = $1", [current.id, day, ruleId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), Number(world.rows[0]?.game_day ?? 0), 'rule.changed', `Rule ${category} changed`, toNanoMarkup({ proposalId: current.id, ruleId })]);
-    return { ok: true, executionStatus: 'executed', rule: (await tx.query('SELECT * FROM governance_rules WHERE id = $1', [ruleId])).rows[0], proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+    return { ok: true, executionStatus: 'started', rule: (await tx.query('SELECT * FROM governance_rules WHERE id = $1', [ruleId])).rows[0], proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
   });
 }
 
@@ -461,7 +461,7 @@ export async function executeQueuedProposals(repository: PostgresRepository): Pr
 
   // Expire queued proposals that exceeded their 7-day window
   await repository.query(
-    "UPDATE proposals SET execution_status = 'expired' WHERE outcome = 'passed' AND execution_status = 'queued' AND expires_game_day IS NOT NULL AND (expires_game_day, COALESCE(expires_game_minute, 0)) < ($1::bigint, $2::integer)",
+    "UPDATE proposals SET status = 'closed', execution_status = 'expired_unfunded' WHERE outcome = 'passed' AND execution_status = 'queued' AND expires_game_day IS NOT NULL AND (expires_game_day, COALESCE(expires_game_minute, 0)) < ($1::bigint, $2::integer)",
     [currentDay, currentMinute],
   );
 
@@ -472,7 +472,7 @@ export async function executeQueuedProposals(repository: PostgresRepository): Pr
   for (const proposal of queued.rows) {
     try {
       const result = await executeProposal(repository, { proposalId: proposal.id, humanId: 'SYSTEM', systemExecution: true, completedDay: currentDay });
-      if (result.executionStatus === 'executed' || result.executionStatus === 'skipped') executed += 1;
+      if (result.executionStatus === 'started' || result.executionStatus === 'skipped') executed += 1;
     } catch (error) {
       // A single unavailable city resource or capacity must not abort the world tick.
       console.warn(`[governance queue] proposal ${proposal.id} retry deferred`, error);
@@ -492,7 +492,7 @@ export async function challengeProposal(repository: PostgresRepository, input: {
     if (!(await eligible(tx, input.humanId, proposal.rows[0].institution_id))) throw new Error('Human is not authorized to challenge this proposal');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    await tx.query("UPDATE proposals SET execution_status = 'challenged' WHERE id = $1", [input.proposalId]);
+    await tx.query("UPDATE proposals SET challenge_status = 'pending' WHERE id = $1", [input.proposalId]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'governance.challenge_filed', `Constitutional challenge filed for proposal ${input.proposalId}`, toNanoMarkup({ proposalId: input.proposalId, challenger: input.humanId, reason: input.reason, correlationId: input.correlationId }), input.correlationId]);
     await enqueueOutbox(tx, {
       eventKey: `governance-challenge:${input.correlationId}`,
@@ -509,16 +509,16 @@ export async function resolveConstitutionalAppeal(repository: PostgresRepository
   return repository.transaction(async (tx) => {
     const prior = await tx.query<{ details: string }>("SELECT details FROM world_events WHERE event_type = 'governance.ruling_issued' AND correlation_id = $1", [input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, proposalId: input.proposalId, ruling: input.ruling, correlationId: input.correlationId };
-    const proposal = await tx.query<{ id: string; institution_id: string; outcome: string; executed_at: string | null }>('SELECT id, institution_id, outcome, executed_at FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
+    const proposal = await tx.query<{ id: string; institution_id: string; outcome: string; executed_at: string | null; challenge_status: string }>('SELECT id, institution_id, outcome, executed_at, challenge_status FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
     if (proposal.rows[0].executed_at) throw new Error('Proposal has already been executed');
     if (!(await eligible(tx, input.humanId, proposal.rows[0].institution_id))) throw new Error('Human is not authorized as a judicial delegate');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
     if (input.ruling === 'void') {
-      await tx.query("UPDATE proposals SET outcome = 'rejected', execution_status = 'skipped' WHERE id = $1", [input.proposalId]);
+      await tx.query("UPDATE proposals SET status = 'closed', outcome = 'rejected', challenge_status = 'voided', execution_status = 'skipped' WHERE id = $1", [input.proposalId]);
     } else {
-      await tx.query("UPDATE proposals SET execution_status = 'ready' WHERE id = $1", [input.proposalId]);
+      await tx.query("UPDATE proposals SET status = 'approved', challenge_status = 'upheld', execution_status = 'ready' WHERE id = $1", [input.proposalId]);
     }
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details, correlation_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), day, 'governance.ruling_issued', `Constitutional ruling for proposal ${input.proposalId}: ${input.ruling.toUpperCase()}`, toNanoMarkup({ proposalId: input.proposalId, jurist: input.humanId, ruling: input.ruling, rationale: input.rationale, correlationId: input.correlationId }), input.correlationId]);
     await enqueueOutbox(tx, {

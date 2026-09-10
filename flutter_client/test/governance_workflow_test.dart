@@ -4,7 +4,8 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/governance/governance_panels.dart';
 
 void main() {
-  testWidgets('TabbedProposalPanel renders passed proposal and executes proposal',
+  testWidgets(
+      'TabbedProposalPanel renders passed proposal and executes proposal',
       (tester) async {
     const passedState = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -54,7 +55,6 @@ void main() {
     await tester.tap(find.text('WORLD (1)'));
     await tester.pumpAndSettle();
     expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
-    expect(find.text('READY'), findsOneWidget);
+    expect(find.text('APPROVED'), findsOneWidget);
   });
-
 }

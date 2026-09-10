@@ -43,7 +43,7 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };
     }
-    if (sql.includes("UPDATE proposals SET execution_status = 'challenged'")) {
+    if (sql.includes('UPDATE proposals SET challenge_status =')) {
       updatedStatus = 'challenged';
       return { rows: [], rowCount: 1 };
     }
@@ -76,8 +76,8 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
     if (sql.includes("FROM world_events WHERE event_type = 'governance.ruling_issued'")) {
       return { rows: [] };
     }
-    if (sql.includes('SELECT id, institution_id, outcome, executed_at FROM proposals')) {
-      return { rows: [{ id: 'P-123', institution_id: 'INST-OUC', outcome: 'passed', executed_at: null }] };
+    if (sql.includes('SELECT id, institution_id, outcome, executed_at, challenge_status FROM proposals')) {
+      return { rows: [{ id: 'P-123', institution_id: 'INST-OUC', outcome: 'passed', executed_at: null, challenge_status: 'pending' }] };
     }
     if (sql.includes('SELECT kind, status FROM institutions')) {
       return { rows: [{ kind: 'OUC', status: 'active' }] };
@@ -94,7 +94,7 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };
     }
-    if (sql.includes("UPDATE proposals SET outcome = 'rejected', execution_status = 'skipped'")) {
+    if (sql.includes("UPDATE proposals SET status = 'closed', outcome = 'rejected'")) {
       finalOutcome = 'rejected';
       finalStatus = 'voided';
       return { rows: [], rowCount: 1 };
@@ -132,7 +132,8 @@ test('executeProposal blocks execution when under challenge', async () => {
             institution_id: 'INST-OUC',
             outcome: 'passed',
             executed_at: null,
-            execution_status: 'challenged',
+            execution_status: 'ready',
+            challenge_status: 'pending',
           },
         ],
       };

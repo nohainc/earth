@@ -114,7 +114,7 @@ class ActiveGovernanceRulePanel extends StatelessWidget {
       infoBulletPoints: const [
         'Quorum is the minimum participation required for a valid vote.',
         'Approval is the share of decisive votes required for a proposal to pass.',
-        'Approved proposals execute immediately if funds exist, or remain queued for up to 7 days while city resources accumulate.',
+        'Approved proposals start automatically after daily settlement, or remain approved while city resources accumulate.',
       ],
       child: rule == null
           ? const EarthEmptyState(
@@ -326,8 +326,8 @@ class _TabbedProposalPanelState extends State<TabbedProposalPanel>
       infoBulletPoints: const [
         'Proposals remain open until their configured voting deadline. The result is calculated automatically after the deadline.',
         'Quorum is the minimum participation required; approval is the percentage of decisive votes needed to pass.',
-        'Passed proposals observe the implementation delay, then execute automatically. Civic construction waits in the city queue if resources or space are unavailable.',
-        'Stages: OPEN → PASSED/REJECTED → COOLING-OFF → READY/QUEUED → EXECUTED.',
+        'Passed proposals stay approved until daily settlement starts the action. The proposal then closes while construction or research continues separately.',
+        'Stages: SCHEDULED → OPEN → APPROVED → ACTION STARTED → CLOSED.',
       ],
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -604,22 +604,27 @@ class _ProposalCard extends StatelessWidget {
         .toLowerCase();
     final isAwaitingFunding = executionStatus == 'awaiting_funding';
     final isExpiredUnfunded = executionStatus == 'expired_unfunded';
+    final isStarted = executionStatus == 'started';
     final isExecuted = executionStatus == 'executed';
     final outcome = proposal['outcome']?.toString().toLowerCase() ?? 'pending';
+    final isApproved =
+        proposal['status']?.toString().toLowerCase() == 'approved';
     final isScheduled =
         proposal['status']?.toString().toLowerCase() == 'scheduled';
-    final badgeLabel = isExecuted
+    final badgeLabel = isStarted
+        ? 'ACTION STARTED'
+        : isExecuted
             ? 'EXECUTED'
             : isExpiredUnfunded
                 ? 'UNFUNDED'
-            : outcome == 'rejected'
-                ? 'REJECTED'
-                : outcome == 'no_quorum'
-                    ? 'NO QUORUM'
-                    : isAwaitingFunding
-                        ? 'AWAITING FUNDING'
-                            : isPassed
-                                ? 'READY'
+                : outcome == 'rejected'
+                    ? 'REJECTED'
+                    : outcome == 'no_quorum'
+                        ? 'NO QUORUM'
+                        : isAwaitingFunding
+                            ? 'AWAITING FUNDING'
+                            : isApproved || isPassed
+                                ? 'APPROVED'
                                 : isScheduled
                                     ? 'VOTING SCHEDULED'
                                     : proposal['status']
@@ -735,8 +740,14 @@ class _ProposalCard extends StatelessWidget {
                   color: statusColor.withValues(alpha: .15),
                   borderRadius: BorderRadius.circular(context.radiusControl),
                 ),
-                child: Icon(Icons.how_to_vote_outlined,
-                    size: context.iconSize + 4, color: statusColor),
+                child: Icon(
+                    isStarted
+                        ? Icons.play_circle_outline
+                        : isApproved
+                            ? Icons.verified_outlined
+                            : Icons.how_to_vote_outlined,
+                    size: context.iconSize + 4,
+                    color: statusColor),
               ),
               SizedBox(width: context.spacingTitleOffset),
               Expanded(
@@ -824,10 +835,13 @@ class _ProposalCard extends StatelessWidget {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                    ] else if (isPassed && !isExecuted && !isExpiredUnfunded) ...[
+                    ] else if (isPassed &&
+                        !isStarted &&
+                        !isExecuted &&
+                        !isExpiredUnfunded) ...[
                       const SizedBox(height: 3),
                       Text(
-                        'Approved — it will execute automatically after daily settlement.',
+                        'Approved — the action will start automatically after daily settlement.',
                         style: context.widgetFooterStyle.copyWith(
                           color: context.successColor,
                           fontWeight: FontWeight.w600,
@@ -927,22 +941,24 @@ class _ProposalCard extends StatelessWidget {
                             : EarthButtonVariant.ghost),
                     onPressed: busy ||
                             proposalId.isEmpty ||
-                            isExecuted || isExpiredUnfunded
+                            isExecuted ||
+                            isExpiredUnfunded
                         ? null
                         : () => action(
                             () => const EarthApi().vote(proposalId, choice)),
                   ),
               ],
             ),
-
         ],
       ),
     );
   }
 
   String _fundingProgress(Map<String, dynamic> proposal, int currentDay) {
-    final start = asInt(proposal['funding_start_day'] ?? proposal['fundingStartDay']);
-    final end = asInt(proposal['funding_due_end_day'] ?? proposal['fundingDueEndDay']);
+    final start =
+        asInt(proposal['funding_start_day'] ?? proposal['fundingStartDay']);
+    final end =
+        asInt(proposal['funding_due_end_day'] ?? proposal['fundingDueEndDay']);
     final reason = proposal['funding_block_reason']?.toString().trim();
     if (start == null || end == null) {
       return 'Approved — automatic funding check is being scheduled.';
