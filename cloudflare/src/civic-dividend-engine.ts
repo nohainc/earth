@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 
 export async function settleCivicDividends(tx: PostgresRepository, day: number): Promise<void> {
@@ -83,7 +83,7 @@ export async function settleCivicDividends(tx: PostgresRepository, day: number):
     // Distribute only after the full payout is known to be fundable.
     for (const payout of payouts) {
       const correlationId = `CIVIC-DIV-${cityId}-${payout.human_id}-${day}`;
-      await transferCredits(tx, {
+      await postEconomicCreditTransfer(tx, {
         ledgerId: crypto.randomUUID(),
         gameDay: day,
         debitAccount: cityAccount.rows[0].account_id,

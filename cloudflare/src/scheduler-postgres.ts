@@ -1,16 +1,19 @@
 import type { PostgresRepository } from './repository.ts';
 import { settleMarket } from './market-postgres.ts';
 import { processMortality } from './lifecycle-postgres.ts';
-import { transferCredits } from './financial-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
 import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
+import { settleBuildingUpkeepAndRevenueV2 } from './building-settlement-v2.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
 import { applyPreparedSettlementProfiles, rebuildDirtyDailySettlementProfiles } from './daily-settlement-profiles.ts';
 import { settleGlobalBank } from './global-bank-settlement-engine.ts';
 import { processEndOfDayAutomation } from './daily-automation.ts';
+import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
+import { provisionEconomicEntryPartitions } from './economic-entry-partitions.ts';
 
 export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
 
@@ -80,7 +83,7 @@ async function settleTechnologySubscriptions(tx: PostgresRepository, day: number
       await tx.query("UPDATE business_technology_subscriptions SET status = 'inactive', unsubscribed_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE business_id = $2 AND technology_key = $3", [day, subscription.business_id, subscription.technology_key]);
       continue;
     }
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: businessAccount.account_id, creditAccount: corporationAccount.account_id, amount, reasonType: 'technology_subscription', reasonId: subscription.business_id, ruleVersion: 'corporation-technology-v1', correlationId: `TECH-SUB-${subscription.business_id}-${subscription.technology_key}-${day}` });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: businessAccount.account_id, creditAccount: corporationAccount.account_id, amount, reasonType: 'technology_subscription', reasonId: subscription.business_id, ruleVersion: 'corporation-technology-v1', correlationId: `TECH-SUB-${subscription.business_id}-${subscription.technology_key}-${day}` });
     await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, subscription.business_id]);
     await tx.query('UPDATE business_technology_subscriptions SET last_billed_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE business_id = $2 AND technology_key = $3', [day, subscription.business_id, subscription.technology_key]);
   }
@@ -163,13 +166,13 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
     const corpTarget = business.corporation_id ? `account-corporation-${business.corporation_id}` : cityTarget;
 
     if (cityCents > 0n) {
-      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: cityTarget, amount: centsToMoney(cityCents), reasonType: 'business_tax_city', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-CITY` });
+      await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: cityTarget, amount: centsToMoney(cityCents), reasonType: 'business_tax_city', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-CITY` });
     }
     if (corpCents > 0n) {
-      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: corpTarget, amount: centsToMoney(corpCents), reasonType: 'business_tax_corp', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-CORP` });
+      await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: corpTarget, amount: centsToMoney(corpCents), reasonType: 'business_tax_corp', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-CORP` });
     }
     if (oucCents > 0n) {
-      await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(oucCents), reasonType: 'business_tax_ouc', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-OUC` });
+      await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(oucCents), reasonType: 'business_tax_ouc', reasonId: business.id, ruleVersion: `business-tax-v${rule.rows[0].version}`, correlationId: `${correlationId}-OUC` });
     }
 
     await tx.query('UPDATE business_financials SET taxed_revenue = revenue, operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [tax, day, business.id]);
@@ -196,7 +199,7 @@ async function settleCityCorporateIncomeTax(tx: PostgresRepository, day: number)
     const correlationId = `CITY-CORP-INCOME-TAX-${city.id}-${day}`;
     const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE reason_type = 'city_corporate_income_tax' AND correlation_id = $1", [correlationId]);
     if (prior.rows[0]) continue;
-    await transferCredits(tx, {
+    await postEconomicCreditTransfer(tx, {
       ledgerId: crypto.randomUUID(), gameDay: day,
       debitAccount: `account-city-${city.id}`,
       creditAccount: `account-corporation-${city.corporation_id}`,
@@ -220,7 +223,7 @@ async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<voi
     const levy = centsToMoney(levyCents);
     const correlationId = `BASIC-LEVY-${human.id}-${day}-v${rule.rows[0].version}`;
     if (levyCents <= 0n || moneyToCents(human.balance) < levyCents || (await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'basic_levy\' AND correlation_id = $1', [correlationId])).rows[0]) continue;
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: levy, reasonType: 'basic_levy', reasonId: human.id, ruleVersion: `tax-v${rule.rows[0].version}`, correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: levy, reasonType: 'basic_levy', reasonId: human.id, ruleVersion: `tax-v${rule.rows[0].version}`, correlationId });
   }
 }
 
@@ -420,7 +423,7 @@ async function settleServiceContracts(tx: PostgresRepository, day: number): Prom
     const payer = accounts.rows.find((row) => row.owner_id === contract.counterparty_id);
     const provider = accounts.rows.find((row) => row.owner_id === contract.proposer_id);
     if (!payer || !provider || moneyToCents(payer.balance) < moneyToCents(dailyAmount)) continue;
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.account_id, creditAccount: provider.account_id, amount: dailyAmount, reasonType: 'service_contract_payment', reasonId: contract.id, ruleVersion: 'service-contract-v1', correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: payer.account_id, creditAccount: provider.account_id, amount: dailyAmount, reasonType: 'service_contract_payment', reasonId: contract.id, ruleVersion: 'service-contract-v1', correlationId });
     const terms = fromNanoMarkup<Record<string, unknown>>(contract.terms_markup ?? '');
     const providerBusinessId = contract.proposer_business_id ?? (typeof terms.proposerBusinessId === 'string' ? terms.proposerBusinessId : null);
     const payerBusinessId = contract.counterparty_business_id ?? (typeof terms.counterpartyBusinessId === 'string' ? terms.counterpartyBusinessId : null);
@@ -447,7 +450,7 @@ async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): P
       await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Royalty payment pending\',$3,$4) ON CONFLICT DO NOTHING', [`ROYALTY-PENDING-${license.id}-${day}`, license.licensee_id, `The ${royalty} Credit royalty for license ${license.id} is pending until your balance is sufficient.`, license.id]);
       continue;
     }
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: royalty, reasonType: 'technology_royalty', reasonId: license.id, ruleVersion: 'technology-v3', correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: royalty, reasonType: 'technology_royalty', reasonId: license.id, ruleVersion: 'technology-v3', correlationId });
     await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $2, last_game_day = $3, updated_at = CURRENT_TIMESTAMP WHERE business_id = COALESCE($4, (SELECT id FROM businesses WHERE owner_id = $5 AND status = 'active' ORDER BY id LIMIT 1))", [royalty, royalty, day, license.licensee_business_id, license.licensee_id]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Technology royalty paid\',$3,$4), ($5,$6,\'technology\',\'Technology royalty received\',$7,$4)', [crypto.randomUUID(), license.licensee_id, `${royalty} Credits paid for licensed technology usage.`, license.id, crypto.randomUUID(), license.licensor_id, `${royalty} Credits received from licensed technology usage.`]);
   }
@@ -534,7 +537,7 @@ async function settleBuildingPatentLicenses(tx: PostgresRepository, day: number)
           : (await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [lic.licensee_id])).rows[0]?.account_id;
 
         if (payerAccount) {
-          await transferCredits(tx, {
+          await postEconomicCreditTransfer(tx, {
             ledgerId: crypto.randomUUID(),
             gameDay: day,
             debitAccount: payerAccount,
@@ -700,6 +703,102 @@ async function runDailyPhase(tx: PostgresRepository, day: number, phase: string,
   }
 }
 
+type ResumablePhaseWork = (tx: PostgresRepository) => Promise<unknown>;
+
+async function runResumablePhase(
+  repository: PostgresRepository,
+  day: number,
+  phase: string,
+  shard: string,
+  leaseOwner: string,
+  work: ResumablePhaseWork,
+): Promise<boolean> {
+  const claim = await repository.transaction(async (tx) => {
+    const result = await tx.query<{ claimed: boolean; status: string; attempt_count: number }>(
+      'SELECT * FROM earth_claim_settlement_phase($1,$2,$3,$4,$5)',
+      [day, phase, shard, leaseOwner, 300],
+    );
+    return result.rows[0] ?? { claimed: false, status: 'missing', attempt_count: 0 };
+  });
+  if (!claim.claimed) return claim.status === 'completed';
+
+  try {
+    const rowsProcessed = await repository.transaction(async (tx) => {
+      const result = await work(tx);
+      return typeof result === 'number' ? result : 0;
+    });
+    await repository.query(
+      'SELECT earth_heartbeat_settlement_phase($1,$2,$3,$4)',
+      [day, phase, shard, leaseOwner],
+    );
+    await repository.query(
+      'SELECT earth_complete_settlement_phase($1,$2,$3,$4,$5)',
+      [day, phase, shard, leaseOwner, rowsProcessed],
+    );
+    return true;
+  } catch (error) {
+    await repository.query(
+      'SELECT earth_fail_settlement_phase($1,$2,$3,$4,$5)',
+      [day, phase, shard, leaseOwner, error instanceof Error ? error.message : 'Unknown settlement phase error'],
+    ).catch(() => undefined);
+    throw error;
+  }
+}
+
+/**
+ * Worker-safe settlement runner. Each phase/shard is claimed and committed
+ * independently, so an interrupted invocation resumes at the first unfinished
+ * unit instead of reopening the completed work for the day.
+ */
+export async function runResumableSettlementDay(
+  repository: PostgresRepository,
+  day: number,
+  leaseOwner = `settlement-worker:${crypto.randomUUID()}`,
+): Promise<void> {
+  await provisionEconomicEntryPartitions(repository, day);
+  await repository.query(
+    `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, shard_count, lease_owner, lease_heartbeat_at, started_at)
+     VALUES ($1,'running','prepare',1,64,$2,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
+     ON CONFLICT (game_day) DO UPDATE SET status = 'running', lease_owner = EXCLUDED.lease_owner,
+       lease_heartbeat_at = CURRENT_TIMESTAMP, error_message = NULL
+     WHERE daily_settlement_runs.status IN ('pending','failed','running')`,
+    [day, leaseOwner],
+  );
+  const run = await repository.query<{ shard_count: number }>(
+    'SELECT shard_count FROM daily_settlement_runs WHERE game_day = $1', [day],
+  );
+  const shardCount = Math.max(1, Math.min(64, Number(run.rows[0]?.shard_count ?? 64)));
+
+  for (let shard = 0; shard < shardCount; shard++) {
+    await runResumablePhase(repository, day, 'daily_settlement_profiles', String(shard), leaseOwner, (tx) =>
+      tx.query<{ rebuilt_count: string }>('SELECT earth_rebuild_dirty_profiles($1::smallint,$2::bigint) AS rebuilt_count', [shard, day])
+        .then((result) => Number(result.rows[0]?.rebuilt_count ?? 0)));
+  }
+
+  const phases: Array<[string, ResumablePhaseWork]> = [
+    ['daily_settlement_profile_settlement', (tx) => applyPreparedSettlementProfiles(tx, day)],
+    ['life_maintenance', (tx) => settleLifeMaintenanceInTransaction(tx, day)],
+    ['basic_levy', (tx) => settleBasicLevy(tx, day)],
+    ['building_settlement', (tx) => settleBuildingUpkeepAndRevenueV2(tx, day)],
+    ['building_patent_licenses', (tx) => settleBuildingPatentLicenses(tx, day)],
+    ['city_corporate_income_tax', (tx) => settleCityCorporateIncomeTax(tx, day)],
+    ['global_bank', (tx) => settleGlobalBank(tx, day)],
+    ['city_dynamics', (tx) => processCityDynamics(tx, day)],
+    ['financial_states', (tx) => updateFinancialStates(tx, day)],
+    ['end_of_day_snapshots', (tx) => captureEndOfDaySnapshots(tx, day)],
+  ];
+  for (const [phase, work] of phases) {
+    await runResumablePhase(repository, day, phase, 'all', leaseOwner, work);
+  }
+  await repository.query(
+    `UPDATE daily_settlement_runs
+        SET status = 'completed', current_phase = 'completed', completed_at = CURRENT_TIMESTAMP,
+            lease_owner = NULL, lease_heartbeat_at = NULL
+      WHERE game_day = $1 AND lease_owner = $2`,
+    [day, leaseOwner],
+  );
+}
+
 async function captureEndOfDaySnapshots(tx: PostgresRepository, day: number): Promise<number> {
   const result = await tx.query<{ owner_id: string }>(
     `WITH credits AS (
@@ -743,9 +842,10 @@ async function captureEndOfDaySnapshots(tx: PostgresRepository, day: number): Pr
 }
 
 
-export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
+export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string, resumableSettlement = false): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
   validateWorldAdvanceMinutes(minutesPerTick);
   let claimedDay: number | null = null;
+  let pendingResumableSettlementDay: number | null = null;
   let result: { day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean };
   try {
     result = await repository.transaction(async (tx) => {
@@ -775,6 +875,8 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const nextDay = Number(completed.rows[0]?.game_day ?? 0) + 1;
     const settlementDay = active && nextDay < day ? nextDay : null;
     if (settlementDay !== null) {
+      if (resumableSettlement) pendingResumableSettlementDay = settlementDay;
+      else {
       claimedDay = settlementDay;
       await tx.query(
         `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, lease_owner, lease_heartbeat_at, started_at)
@@ -798,7 +900,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       if (settlementDay % 365 === 0) await processMortality(tx, settlementDay);
       await runDailyPhase(tx, settlementDay, 'life_maintenance', () => settleLifeMaintenanceInTransaction(tx, settlementDay));
       await runDailyPhase(tx, settlementDay, 'basic_levy', () => settleBasicLevy(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'building_settlement', () => settleBuildingUpkeepAndRevenue(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'building_settlement', () => settleBuildingUpkeepAndRevenueV2(tx, settlementDay));
       await runDailyPhase(tx, settlementDay, 'building_patent_licenses', () => settleBuildingPatentLicenses(tx, settlementDay));
       await runDailyPhase(tx, settlementDay, 'city_corporate_income_tax', () => settleCityCorporateIncomeTax(tx, settlementDay));
       await runDailyPhase(tx, settlementDay, 'global_bank', () => settleGlobalBank(tx, settlementDay));
@@ -809,6 +911,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       await runDailyPhase(tx, settlementDay, 'rankings_snapshot', () => snapshotRankings(tx, settlementDay));
       await runDailyPhase(tx, settlementDay, 'end_of_day_snapshots', () => captureEndOfDaySnapshots(tx, settlementDay));
       await tx.query("UPDATE daily_settlement_runs SET status = 'completed', current_phase = 'completed', completed_at = CURRENT_TIMESTAMP, lease_owner = NULL, lease_heartbeat_at = NULL WHERE game_day = $1", [settlementDay]);
+      }
     }
     await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
@@ -841,6 +944,11 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     throw error;
   }
   if (result.alreadyProcessed) return result;
+  if (pendingResumableSettlementDay !== null) {
+    await captureEconomyShadowOpening(repository, pendingResumableSettlementDay);
+    await runResumableSettlementDay(repository, pendingResumableSettlementDay, `scheduler:${idempotencyKey ?? crypto.randomUUID()}`);
+    await reconcileEconomyShadowDay(repository, pendingResumableSettlementDay);
+  }
   // Proposal resolution, construction completion, research completion, and
   // queued execution are idempotent and must be checked on every scheduler
   // tick. Daily settlement remains independently gated above.

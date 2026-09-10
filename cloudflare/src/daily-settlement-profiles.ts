@@ -1,10 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
 
-type Profile = {
-  owner_id: string;
-  owner_kind: string;
-};
-
 /**
  * Rebuilds the stable physical-resource part of an owner's daily profile.
  * Credit revenue, dividends, market clearing, shortages and tax remain
@@ -42,9 +37,20 @@ export async function catchupOwnerSettlement(
 }
 
 export async function rebuildDirtyDailySettlementProfiles(repository: PostgresRepository, gameDay: number): Promise<number> {
-  const profiles = await repository.query<Profile>("SELECT owner_id, owner_kind FROM daily_settlement_profiles WHERE status = 'dirty' ORDER BY owner_kind, owner_id FOR UPDATE");
-  for (const profile of profiles.rows) await rebuildDailySettlementProfile(repository, profile.owner_id, gameDay);
-  return profiles.rows.length;
+  const run = await repository.query<{ shard_count: number }>(
+    'SELECT COALESCE(shard_count, 64)::integer AS shard_count FROM daily_settlement_runs WHERE game_day = $1',
+    [gameDay],
+  );
+  const shardCount = Math.max(1, Math.min(64, Number(run.rows[0]?.shard_count ?? 64)));
+  let rebuilt = 0;
+  for (let shard = 0; shard < shardCount; shard++) {
+    const result = await repository.query<{ rebuilt_count: string }>(
+      'SELECT earth_rebuild_dirty_profiles($1::smallint, $2::bigint) AS rebuilt_count',
+      [shard, gameDay],
+    );
+    rebuilt += Number(result.rows[0]?.rebuilt_count ?? 0);
+  }
+  return rebuilt;
 }
 
 /** Applies the prepared daily profile as real gameplay. Credits and resources

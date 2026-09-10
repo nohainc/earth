@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
+import { postEconomicCreditTransfer, transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents, taxToCents } from './money.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 
@@ -22,7 +22,7 @@ export async function publicSpending(
     if (!cityAccount.rows[0]) throw new Error('City credit account not found');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: treasury.rows[0].account_id, creditAccount: cityAccount.rows[0].account_id, amount, reasonType: 'public_spending', reasonId: input.cityId, ruleVersion: 'finance-v2', correlationId: input.correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: treasury.rows[0].account_id, creditAccount: cityAccount.rows[0].account_id, amount, reasonType: 'public_spending', reasonId: input.cityId, ruleVersion: 'finance-v2', correlationId: input.correlationId });
     await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [amount, input.cityId]);
     await tx.query('INSERT INTO budgets (id, institution_id, category, amount, game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = budgets.amount + EXCLUDED.amount, game_day = EXCLUDED.game_day', [`SPEND-${input.cityId}-${input.category}`, input.cityId, input.category, amount, day]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, toNanoMarkup({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId })]);
@@ -52,7 +52,7 @@ export async function settleTax(repository: PostgresRepository, humanId: string,
     const prior = await tx.query<{ id: string; amount: string; game_day: number; rule_version: string }>("SELECT id, amount, game_day, rule_version FROM ledger_entries WHERE reason_type = 'tax_settlement' AND correlation_id = $1", [correlationId]);
     if (prior.rows[0]) return { ok: true, alreadySettled: true, amount: Number(prior.rows[0].amount), gameDay: prior.rows[0].game_day, ruleVersion: prior.rows[0].rule_version, correlationId };
     if (amountCents === 0n) return { ok: true, alreadySettled: true, amount: 0, rate: rateNumber, ruleVersion: version, correlationId };
-    const transfer = await transferCredits(tx, {
+    const transfer = await postEconomicCreditTransfer(tx, {
       ledgerId: crypto.randomUUID(),
       gameDay,
       debitAccount: accountId,

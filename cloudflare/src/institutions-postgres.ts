@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 
@@ -373,8 +373,8 @@ export async function setCityBudget(repository: PostgresRepository, input: { hum
     const cityAccount = await tx.query<{ account_id: string }>('SELECT account_id FROM account_balances WHERE account_id = $1', [`account-city-${input.cityId}`]);
     if (!cityAccount.rows[0]) throw new Error('City credit account not found');
     await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $2, 0, 'CREDIT') ON CONFLICT (account_id) DO NOTHING", [`account-budget-${budgetId}`, budgetId]);
-    if (deltaCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: cityAccount.rows[0].account_id, creditAccount: `account-budget-${budgetId}`, amount: delta, reasonType: 'city_budget_allocation', reasonId: budgetId, ruleVersion: 'city-finance-v2', correlationId: input.correlationId });
-    if (deltaCents < 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: `account-budget-${budgetId}`, creditAccount: cityAccount.rows[0].account_id, amount: delta, reasonType: 'city_budget_release', reasonId: budgetId, ruleVersion: 'city-finance-v2', correlationId: input.correlationId });
+    if (deltaCents > 0n) await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: cityAccount.rows[0].account_id, creditAccount: `account-budget-${budgetId}`, amount: delta, reasonType: 'city_budget_allocation', reasonId: budgetId, ruleVersion: 'city-finance-v2', correlationId: input.correlationId });
+    if (deltaCents < 0n) await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: `account-budget-${budgetId}`, creditAccount: cityAccount.rows[0].account_id, amount: delta, reasonType: 'city_budget_release', reasonId: budgetId, ruleVersion: 'city-finance-v2', correlationId: input.correlationId });
     const target = centsToMoney(targetCents);
     if (deltaCents !== 0n) await tx.query('UPDATE cities SET treasury = treasury - $1 WHERE id = $2', [deltaCents > 0n ? delta : `-${delta}`, input.cityId]);
     await tx.query('INSERT INTO budgets (id,institution_id,category,amount,game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = excluded.amount, game_day = excluded.game_day', [budgetId, input.cityId, input.category, target, gameDay]);
@@ -401,7 +401,7 @@ export async function spendCorporationTreasury(repository: PostgresRepository, i
       tx.query<{ account_id: string }>('SELECT account_id FROM account_balances WHERE account_id = $1', [`account-city-${input.cityId}`]),
     ]);
     if (!corporationAccount.rows[0] || !cityAccount.rows[0]) throw new Error('Institution credit account not found');
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: corporationAccount.rows[0].account_id, creditAccount: cityAccount.rows[0].account_id, amount, reasonType: 'corporation_public_spending', reasonId: input.cityId, ruleVersion: 'corp-finance-v2', correlationId: input.correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: corporationAccount.rows[0].account_id, creditAccount: cityAccount.rows[0].account_id, amount, reasonType: 'corporation_public_spending', reasonId: input.cityId, ruleVersion: 'corp-finance-v2', correlationId: input.correlationId });
     await tx.query('UPDATE corporations SET treasury = treasury - $1 WHERE id = $2', [amount, input.corporationId]);
     await tx.query('UPDATE cities SET treasury = treasury + $1 WHERE id = $2', [amount, input.cityId]);
     await tx.query('INSERT INTO budgets (id,institution_id,category,amount,game_day) VALUES ($1,$2,$3,$4,$5) ON CONFLICT(id) DO UPDATE SET amount = budgets.amount + excluded.amount, game_day = excluded.game_day', [`CORP-SPEND-${input.correlationId}`, input.cityId, input.category, amount, gameDay]);
@@ -427,7 +427,7 @@ export async function contributeToCorporation(repository: PostgresRepository, in
     const corporationAccount = await tx.query<{ account_id: string }>('SELECT account_id FROM account_balances WHERE account_id = $1', [`account-corporation-${input.corporationId}`]);
     if (!corporationAccount.rows[0]) throw new Error('Corporation credit account not found');
     const gameDay = await day(tx);
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: account.rows[0].account_id, creditAccount: corporationAccount.rows[0].account_id, amount, reasonType: 'corporation_contribution', reasonId: input.corporationId, ruleVersion: 'corp-finance-v2', correlationId: input.correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: account.rows[0].account_id, creditAccount: corporationAccount.rows[0].account_id, amount, reasonType: 'corporation_contribution', reasonId: input.corporationId, ruleVersion: 'corp-finance-v2', correlationId: input.correlationId });
     await tx.query('UPDATE corporations SET treasury = treasury + $1 WHERE id = $2', [amount, input.corporationId]);
     return { ok: true, amount: Number(amount), corporation: (await tx.query('SELECT id, treasury FROM corporations WHERE id = $1', [input.corporationId])).rows[0], correlationId: input.correlationId };
   });

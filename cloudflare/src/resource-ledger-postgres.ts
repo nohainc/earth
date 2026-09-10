@@ -69,7 +69,13 @@ export async function mutateResourceBalance(
   repository: PostgresRepository,
   input: MutateResourceInput,
 ): Promise<MutateResourceResult> {
-  return repository.transaction(async (tx) => {
+  return repository.transaction((tx) => mutateResourceBalanceInTransaction(tx, input));
+}
+
+async function mutateResourceBalanceInTransaction(
+  tx: PostgresRepository,
+  input: MutateResourceInput,
+): Promise<MutateResourceResult> {
     const result = await tx.query<{
       status: string;
       ledger_id: string;
@@ -105,6 +111,64 @@ export async function mutateResourceBalance(
       delta: Number(row.delta),
       balanceAfter: Number(row.balance_after),
       alreadyProcessed: Boolean(row.already_processed),
+    };
+}
+
+/**
+ * V2 bridge for discrete inventory mutations. A resource change is posted as
+ * double-entry accounting (inventory against an issuance or consumption
+ * account), then mirrored to the legacy projection until cutover is complete.
+ */
+export async function postEconomicResourceMutation(
+  repository: PostgresRepository,
+  input: MutateResourceInput,
+): Promise<MutateResourceResult> {
+  return repository.transaction(async (tx) => {
+    const assetCode = input.resource.toUpperCase();
+    const asset = await tx.query<{ id: number }>('SELECT id FROM economic_assets WHERE code = $1', [assetCode]);
+    const assetId = asset.rows[0]?.id;
+    if (!assetId) return mutateResourceBalanceInTransaction(tx, input);
+
+    const inventory = await tx.query<{ economic_account_id: string }>(
+      `SELECT economic_account_id::TEXT FROM economic_account_migrations
+       WHERE legacy_account_id = $1`,
+      [`resource:${input.ownerId}:${input.resource}`],
+    );
+    const system = await tx.query<{ account_id: string; economic_id: string }>(
+      `SELECT a.id::TEXT AS account_id, o.economic_id::TEXT AS economic_id
+         FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+        WHERE o.id = 'SYSTEM' AND a.asset_id = $1 AND a.account_type = $2 AND a.status = 'active'`,
+      [assetId, input.delta >= 0 ? 7 : 8],
+    );
+    if (!inventory.rows[0] || !system.rows[0]) return mutateResourceBalanceInTransaction(tx, input);
+
+    const amountUnits = BigInt(Math.round(Math.abs(input.delta) * (assetId === 1 ? 100 : 1_000_000)));
+    if (amountUnits === 0n) return mutateResourceBalanceInTransaction(tx, input);
+    const inventoryId = inventory.rows[0].economic_account_id;
+    const systemId = system.rows[0].account_id;
+    const entries = input.delta >= 0
+      ? [
+          { account_id: systemId, delta: (-amountUnits).toString(), reason_code: input.reasonType },
+          { account_id: inventoryId, delta: amountUnits.toString(), reason_code: input.reasonType },
+        ]
+      : [
+          { account_id: inventoryId, delta: (-amountUnits).toString(), reason_code: input.reasonType },
+          { account_id: systemId, delta: amountUnits.toString(), reason_code: input.reasonType },
+        ];
+    const correlationId = input.correlationId ?? `resource:${input.ownerId}:${input.resource}:${input.reasonType}:${input.reasonId ?? 'none'}:${input.gameDay ?? 0}`;
+    const posted = await tx.query<{ transaction_id: string; created: boolean }>(
+      'SELECT transaction_id, created FROM earth_post_transaction($1,$2,$3,$4,$5,$6,$7,$8::jsonb)',
+      [correlationId, input.gameDay ?? 0, input.gameMinute ?? 0, input.reasonType, 'interactive', input.reasonId ?? null, 'resource-v2', JSON.stringify(entries)],
+    );
+    const postedRow = posted.rows[0];
+    if (!postedRow) throw new Error('V2 resource transaction returned no result');
+
+    const legacy = await mutateResourceBalanceInTransaction(tx, { ...input, correlationId });
+    return {
+      ...legacy,
+      status: postedRow.created ? legacy.status : 'already_processed',
+      ledgerId: postedRow.transaction_id,
+      alreadyProcessed: !postedRow.created || legacy.alreadyProcessed,
     };
   });
 }

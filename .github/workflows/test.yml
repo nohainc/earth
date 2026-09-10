@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       - run: npm run check
       - run: npm run cf:assert-postgres
+      - run: npm run db:verify:canonical
       - run: npm run audit:mutation-boundaries
       - run: npm run flutter:prepare
       - run: npm test

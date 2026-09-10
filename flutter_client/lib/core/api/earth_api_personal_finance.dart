@@ -2,7 +2,28 @@ part of 'earth_api.dart';
 
 extension EarthApiPersonalFinance on EarthApi {
   Future<Map<String, dynamic>> personalFinance() async {
-    final response = await _request('/api/finance/personal');
+    final responses = await Future.wait([
+      _request('/api/finance/personal'),
+      _request('/api/economy/balances'),
+    ]);
+    final legacy = responses[0] is Map<String, dynamic>
+        ? Map<String, dynamic>.from(responses[0] as Map<String, dynamic>)
+        : <String, dynamic>{};
+    if (responses[1] is Map<String, dynamic>) legacy['economic'] = responses[1];
+    return legacy;
+  }
+
+  /// Canonical Economy V2 balances in display units. Storage precision stays
+  /// entirely behind the API boundary.
+  Future<Map<String, dynamic>> economicBalances() async {
+    final response = await _request('/api/economy/balances');
+    return response is Map<String, dynamic> ? response : <String, dynamic>{};
+  }
+
+  Future<Map<String, dynamic>> economicTransactions({int limit = 50, int? beforeId}) async {
+    final query = StringBuffer('/api/economy/transactions?limit=${limit.clamp(1, 100)}');
+    if (beforeId != null) query.write('&beforeId=$beforeId');
+    final response = await _request(query.toString());
     return response is Map<String, dynamic> ? response : <String, dynamic>{};
   }
 

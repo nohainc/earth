@@ -63,7 +63,14 @@ class PersonalFinancePanel extends StatelessWidget {
         _map(personalFinanceData['protectedMinimum'])['credits'], 100);
     final statusColor = unpaid > 0 ? Colors.orangeAccent : cyanAccentColor;
 
-    final liquidCredits = asDouble(state.human['credits']) ?? 0.0;
+    final economic = _map(personalFinanceData['economic']);
+    final economicAssets = (economic['assets'] as List? ?? const [])
+        .whereType<Map>()
+        .map((asset) => Map<String, dynamic>.from(asset));
+    final v2Credit = economicAssets.where((asset) => asset['code'] == 'CREDIT').firstOrNull;
+    final liquidCredits = v2Credit != null
+        ? asDoubleOr(v2Credit['balance'], 0)
+        : (asDouble(state.human['credits']) ?? 0.0);
     final netDailyCredits = grossCredits - incomeTax;
     final netSign = netDailyCredits >= 0 ? '+' : '';
 

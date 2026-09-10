@@ -34,6 +34,7 @@ import { handleInstitutionRoutes } from './institutions-routes.ts';
 import { handleRealEstateRoutes } from './real-estate-routes.ts';
 import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
 import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
+import { handleEconomicRoutes } from './economic-routes.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -516,6 +517,13 @@ const worker = {
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
 
+    if (url.pathname === '/api/economy' || url.pathname.startsWith('/api/economy/')) {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const economicRoute = await handleEconomicRoutes(request, env, url, viewer);
+      if (economicRoute) return economicRoute;
+    }
+
     if (url.pathname === '/api/finance/liquidity' && request.method === 'GET') {
       const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
       const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
@@ -908,7 +916,7 @@ const worker = {
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     const result = await withRepository(env, async (repository) => {
       // One real minute advances one game hour: a game day is 24 real minutes.
-      const world = await advanceWorldPostgres(repository, 60, String(_event.scheduledTime));
+      const world = await advanceWorldPostgres(repository, 60, String(_event.scheduledTime), true);
       await repository.query('UPDATE world_state SET last_scheduler_at = to_timestamp($1 / 1000.0) WHERE id = \'WORLD\'', [_event.scheduledTime]);
       const outboxDelivered = await deliverOutbox(repository, (outboxEvent) =>
         env.MARKET_COORDINATOR.getByName('events-global').broadcast({

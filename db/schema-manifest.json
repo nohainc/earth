@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 177,
+  "migrationVersion": 181,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -535,6 +535,49 @@
       "implementation_game_day",
       "implementation_game_minute",
       "updated_at"
+    ],
+    "economy_shadow_openings": [
+      "game_day",
+      "owner_economic_id",
+      "owner_id",
+      "asset_id",
+      "legacy_units",
+      "v2_units",
+      "captured_at"
+    ],
+    "economy_shadow_reconciliations": [
+      "game_day",
+      "owner_economic_id",
+      "owner_id",
+      "asset_id",
+      "legacy_opening_units",
+      "v2_opening_units",
+      "legacy_closing_units",
+      "v2_closing_units",
+      "legacy_delta_units",
+      "v2_delta_units",
+      "difference_units",
+      "difference_kind",
+      "details",
+      "reconciled_at"
+    ],
+    "economy_shadow_runs": [
+      "game_day",
+      "status",
+      "owners_checked",
+      "assets_checked",
+      "differences",
+      "absolute_difference_units",
+      "unexplained_difference",
+      "error_message",
+      "started_at",
+      "completed_at"
+    ],
+    "economic_entry_partitions": [
+      "from_game_day",
+      "to_game_day",
+      "partition_name",
+      "provisioned_at"
     ],
     "rankings_snapshots": [
       "id",

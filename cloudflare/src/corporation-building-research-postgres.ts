@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
@@ -137,7 +137,7 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
       await tx.query('UPDATE building_catalog SET next_catalog_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [targetCatalogId, previous.rows[0].id]);
     }
 
-    await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: time.game_day, debitAccount: debitAccountId, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
+    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: time.game_day, debitAccount: debitAccountId, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
     await tx.query(
       `INSERT INTO corporation_building_research_projects (id, corporation_id, building_type, catalog_id, target_tier, research_cost_credits, duration_minutes, started_game_day, started_game_minute, research_start_day, research_duration_days, research_due_end_day, correlation_id)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12)`,

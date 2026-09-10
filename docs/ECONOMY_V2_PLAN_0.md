@@ -84,21 +84,20 @@ The current TypeScript settlement path is explicitly per-owner:
 This is the first implementation boundary to replace after V2 posting and
 effect netting exist. It is not removed in Plan 0.
 
-## Schema-source drift
+## Schema source and reconciliation
 
-`db/schema-manifest.json` declares migration version 149, while the header in
-`db/schema.sql` says the clean schema is only through migration 080. The
-numbered migration history is authoritative for the applied database, so the
-canonical fresh-install schema must be reconciled before V2 becomes the
-canonical implementation.
+`db/schema-manifest.json` and the header in `db/schema.sql` now both identify
+the reconciled V2 baseline as migration 181. Numbered migrations remain the
+append-only upgrade history; `db/schema.sql` is the canonical fresh-install
+source and `db/schema-manifest.json` is the required catalog contract.
 
 Until that reconciliation is complete:
 
-- do not describe `db/schema.sql` as a migration-149 fresh-install schema;
-- do not reset a shared or local test database as part of Economy V2 work;
-- do not alter historical migrations 001–149;
-- use the manifest and live migration state together when validating schema
-  readiness.
+- do not edit historical migrations 001–180;
+- keep fresh-install schema definitions and the manifest synchronized;
+- use `npm run db:verify:canonical` in CI and before changing the baseline;
+- verify fresh-install and migrated-install catalogs against the same manifest
+  before production cutover.
 
 ## Cutover gates
 

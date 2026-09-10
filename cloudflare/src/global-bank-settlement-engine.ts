@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents, rateAmountToCents } from './money.ts';
 
 const BANK_ACCOUNT = 'account-global-corporate-bank';
@@ -51,7 +51,7 @@ export async function settleGlobalBank(tx: PostgresRepository, day: number): Pro
     );
     if (!corporationAccount.rows[0] || moneyToCents(corporationAccount.rows[0].balance) < incomeCents) continue;
 
-    await transferCredits(tx, {
+    await postEconomicCreditTransfer(tx, {
       ledgerId: crypto.randomUUID(),
       gameDay: day,
       debitAccount: corporationAccount.rows[0].account_id,

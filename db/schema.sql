@@ -1,9 +1,9 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Historical canonical schema snapshot representing the clean database state
--- from scratch through migration 080. The applied/current schema is tracked by
--- the append-only migrations and db/schema-manifest.json (currently migration
--- 149); reconcile this snapshot before using it as the V2 fresh-install source.
+-- Canonical fresh-install schema, reconciled through migration 181.
+-- Numbered migrations remain the append-only upgrade history; this file is the
+-- one-step fresh-install representation and is checked against the schema
+-- manifest in CI.
 --
 -- This script provisions a fresh, empty database in one step.
 -- When introducing new schema changes:
@@ -1403,6 +1403,146 @@ CREATE TABLE IF NOT EXISTS settlement_anomalies (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS settlement_anomalies_open_idx ON settlement_anomalies(severity, created_at DESC) WHERE resolved_at IS NULL;
+
+-- ----------------------------------------------------------------------------
+-- Reconciled late-schema extensions (migrations 088, 092, 097, 107, 157-180)
+-- ----------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS app_error_logs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  human_id TEXT REFERENCES humans(id) ON DELETE SET NULL, source TEXT NOT NULL,
+  endpoint TEXT, status_code INTEGER, error_code TEXT, error_message TEXT NOT NULL,
+  stack_trace TEXT, context_data JSONB DEFAULT '{}'::jsonb
+);
+
+CREATE TABLE IF NOT EXISTS building_catalog (
+  id TEXT PRIMARY KEY, building_type TEXT NOT NULL, name TEXT NOT NULL,
+  tier INTEGER NOT NULL DEFAULT 1, prev_catalog_id TEXT, next_catalog_id TEXT,
+  category TEXT NOT NULL, ownership_class TEXT NOT NULL, slot_footprint INTEGER NOT NULL DEFAULT 1,
+  cost_credits NUMERIC(18,6) DEFAULT 0, cost_energy NUMERIC(18,6) DEFAULT 0,
+  cost_food NUMERIC(18,6) DEFAULT 0, cost_materials NUMERIC(18,6) DEFAULT 0,
+  cost_components NUMERIC(18,6) DEFAULT 0, cost_compute NUMERIC(18,6) DEFAULT 0,
+  output_credits NUMERIC(18,6) DEFAULT 0, output_energy NUMERIC(18,6) DEFAULT 0,
+  output_food NUMERIC(18,6) DEFAULT 0, output_materials NUMERIC(18,6) DEFAULT 0,
+  output_components NUMERIC(18,6) DEFAULT 0, output_compute NUMERIC(18,6) DEFAULT 0,
+  upkeep_credits NUMERIC(18,6) DEFAULT 0, upkeep_energy NUMERIC(18,6) DEFAULT 0,
+  upkeep_food NUMERIC(18,6) DEFAULT 0, upkeep_materials NUMERIC(18,6) DEFAULT 0,
+  upkeep_components NUMERIC(18,6) DEFAULT 0, upkeep_compute NUMERIC(18,6) DEFAULT 0,
+  operating_credits NUMERIC(18,6) DEFAULT 0, operating_energy NUMERIC(18,6) DEFAULT 0,
+  operating_food NUMERIC(18,6) DEFAULT 0, operating_materials NUMERIC(18,6) DEFAULT 0,
+  operating_components NUMERIC(18,6) DEFAULT 0, operating_compute NUMERIC(18,6) DEFAULT 0,
+  unlocked_perks TEXT[] DEFAULT '{}', description TEXT, construction_days INTEGER NOT NULL DEFAULT 1,
+  is_active BOOLEAN DEFAULT TRUE, research_project_id TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS corporation_technology_projects (
+  id TEXT PRIMARY KEY, corporation_id TEXT NOT NULL REFERENCES corporations(id) ON DELETE CASCADE,
+  technology_key TEXT NOT NULL, technology_name TEXT NOT NULL,
+  research_cost_credits NUMERIC(20,2) NOT NULL CHECK (research_cost_credits > 0),
+  subscription_cost_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (subscription_cost_credits >= 0),
+  effect_key TEXT NOT NULL, progress NUMERIC(6,3) NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
+  started_game_day BIGINT NOT NULL, completed_game_day BIGINT, correlation_id TEXT UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (corporation_id, technology_key)
+);
+
+CREATE TABLE IF NOT EXISTS corporation_building_research_projects (
+  id TEXT PRIMARY KEY, corporation_id TEXT NOT NULL REFERENCES corporations(id), building_type TEXT NOT NULL,
+  catalog_id TEXT NOT NULL REFERENCES building_catalog(id), target_tier INTEGER NOT NULL CHECK (target_tier >= 2),
+  research_cost_credits NUMERIC(18,2) NOT NULL CHECK (research_cost_credits > 0), duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
+  progress NUMERIC(6,3) NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','completed','cancelled')),
+  started_game_day BIGINT NOT NULL, started_game_minute INTEGER NOT NULL DEFAULT 0 CHECK (started_game_minute BETWEEN 0 AND 1439),
+  completed_game_day BIGINT, completed_game_minute INTEGER, correlation_id TEXT UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS corporation_building_unlocks (
+  corporation_id TEXT NOT NULL REFERENCES corporations(id), catalog_id TEXT NOT NULL REFERENCES building_catalog(id),
+  research_project_id TEXT REFERENCES corporation_building_research_projects(id),
+  status TEXT NOT NULL DEFAULT 'unlocked' CHECK (status IN ('unlocked','revoked')),
+  unlocked_game_day BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (corporation_id, catalog_id)
+);
+
+CREATE UNLOGGED TABLE IF NOT EXISTS settlement_effects (
+  id BIGINT PRIMARY KEY, game_day BIGINT NOT NULL, phase TEXT NOT NULL, shard SMALLINT NOT NULL,
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id), account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id), delta BIGINT NOT NULL, reason_code TEXT NOT NULL, source_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNLOGGED TABLE IF NOT EXISTS settlement_effect_nets (
+  id BIGINT PRIMARY KEY, game_day BIGINT NOT NULL, phase TEXT NOT NULL, shard SMALLINT NOT NULL,
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id), account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id), delta BIGINT NOT NULL, reason_code TEXT NOT NULL, source_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, UNIQUE (game_day, phase, shard, account_id, asset_id)
+);
+
+CREATE TABLE IF NOT EXISTS economy_shadow_openings (
+  game_day BIGINT NOT NULL, owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id), owner_id TEXT NOT NULL,
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id), legacy_units BIGINT NOT NULL, v2_units BIGINT NOT NULL,
+  captured_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (game_day, owner_economic_id, asset_id)
+);
+CREATE TABLE IF NOT EXISTS economy_shadow_reconciliations (
+  game_day BIGINT NOT NULL, owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id), owner_id TEXT NOT NULL,
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id), legacy_opening_units BIGINT NOT NULL, v2_opening_units BIGINT NOT NULL,
+  legacy_closing_units BIGINT NOT NULL, v2_closing_units BIGINT NOT NULL, legacy_delta_units BIGINT NOT NULL, v2_delta_units BIGINT NOT NULL,
+  difference_units BIGINT NOT NULL, difference_kind TEXT NOT NULL, details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  reconciled_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, PRIMARY KEY (game_day, owner_economic_id, asset_id)
+);
+CREATE TABLE IF NOT EXISTS economy_shadow_runs (
+  game_day BIGINT PRIMARY KEY, status TEXT NOT NULL, owners_checked BIGINT NOT NULL DEFAULT 0, assets_checked BIGINT NOT NULL DEFAULT 0,
+  differences BIGINT NOT NULL DEFAULT 0, absolute_difference_units NUMERIC(30,0) NOT NULL DEFAULT 0,
+  unexplained_difference BOOLEAN NOT NULL DEFAULT FALSE, error_message TEXT,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP, completed_at TIMESTAMPTZ
+);
+CREATE TABLE IF NOT EXISTS economic_entry_partitions (
+  from_game_day BIGINT PRIMARY KEY, to_game_day BIGINT NOT NULL UNIQUE, partition_name TEXT NOT NULL UNIQUE,
+  provisioned_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Columns introduced as forward migrations are declared here as well so a
+-- fresh install has the same catalog shape as an installation upgraded in
+-- place. IF NOT EXISTS keeps this block safe for schema reconciliation.
+ALTER TABLE buildings ADD COLUMN IF NOT EXISTS catalog_id TEXT;
+ALTER TABLE building_catalog ADD COLUMN IF NOT EXISTS effects JSONB NOT NULL DEFAULT '{}';
+ALTER TABLE building_catalog ADD COLUMN IF NOT EXISTS is_original BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE corporation_membership_requests ADD COLUMN IF NOT EXISTS requested_game_day BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS quorum_threshold NUMERIC(10,4) NOT NULL DEFAULT 0;
+ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS approval_threshold NUMERIC(10,4) NOT NULL DEFAULT 0;
+ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS implementation_delay_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS id TEXT;
+ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS part_number INTEGER;
+ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS rule_number TEXT;
+ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS title TEXT;
+ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS default_value TEXT;
+ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS authority TEXT;
+ALTER TABLE humans ADD COLUMN IF NOT EXISTS account_status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE humans ADD COLUMN IF NOT EXISTS deleted_at TIMESTAMPTZ;
+ALTER TABLE institutions ADD COLUMN IF NOT EXISTS charter_rules TEXT;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS food_used NUMERIC(20,6) NOT NULL DEFAULT 0;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS energy_used NUMERIC(20,6) NOT NULL DEFAULT 0;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS compute_used NUMERIC(20,6) NOT NULL DEFAULT 0;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS credits_for_resources NUMERIC(20,2) NOT NULL DEFAULT 0;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS life_condition_after INTEGER NOT NULL DEFAULT 100;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS paid NUMERIC(20,2) NOT NULL DEFAULT 0;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS unpaid NUMERIC(20,2) NOT NULL DEFAULT 0;
+ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE research_projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
+ALTER TABLE human_life_conditions ADD COLUMN IF NOT EXISTS score INTEGER NOT NULL DEFAULT 100;
+ALTER TABLE human_life_conditions ADD COLUMN IF NOT EXISTS updated_game_day BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE human_life_conditions ADD COLUMN IF NOT EXISTS last_reason TEXT NOT NULL DEFAULT '';
+ALTER TABLE technologies ADD COLUMN IF NOT EXISTS required_compute NUMERIC(20,6) NOT NULL DEFAULT 0;
+ALTER TABLE technologies ADD COLUMN IF NOT EXISTS cost_credits NUMERIC(20,2) NOT NULL DEFAULT 0;
+ALTER TABLE technologies ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
+ALTER TABLE world_state ADD COLUMN IF NOT EXISTS last_scheduler_at TIMESTAMPTZ;
+ALTER TABLE world_state ADD COLUMN IF NOT EXISTS daily_settlement_mode TEXT NOT NULL DEFAULT 'profile_resources';
+ALTER TABLE commodity_futures_contracts ADD COLUMN IF NOT EXISTS seller_human_id TEXT REFERENCES humans(id);
+ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS commodity_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
+ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS equity_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
+ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS real_estate_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
 
 CREATE TABLE IF NOT EXISTS earth_schema_migrations (
   version INTEGER PRIMARY KEY,

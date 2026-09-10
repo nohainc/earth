@@ -15,6 +15,67 @@ type MarketOrderInput = {
 };
 
 const products = new Set(['food', 'material', 'components', 'energy', 'compute']);
+const assetIds: Record<string, number> = { food: 6, material: 2, components: 3, energy: 4, compute: 5 };
+
+async function marketV2Account(tx: PostgresRepository, ownerId: string, assetId: number, accountType?: number, legacyAccountId?: string): Promise<string | null> {
+  const result = await tx.query<{ account_id: string }>(
+    `SELECT a.id::TEXT AS account_id
+       FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+      WHERE o.id = $1 AND a.asset_id = $2 AND a.status = 'active'
+        AND ($3::SMALLINT IS NULL AND a.is_default_settlement OR a.account_type = $3)
+        AND ($4::TEXT IS NULL OR a.legacy_account_id = $4)
+      ORDER BY a.is_default_settlement DESC, a.id
+      LIMIT 1`,
+    [ownerId, assetId, accountType ?? null, legacyAccountId ?? null],
+  );
+  return result.rows[0]?.account_id ?? null;
+}
+
+async function marketV2LegacyAccount(tx: PostgresRepository, legacyAccountId: string): Promise<string | null> {
+  const result = await tx.query<{ economic_account_id: string }>(
+    'SELECT economic_account_id::TEXT FROM economic_account_migrations WHERE legacy_account_id = $1',
+    [legacyAccountId],
+  );
+  return result.rows[0]?.economic_account_id ?? null;
+}
+
+async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string, assetId: number, orderId: string): Promise<string | null> {
+  const existing = await marketV2Account(tx, ownerId, assetId, 6, `market-order:${orderId}`);
+  if (existing) return existing;
+  const owner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [ownerId]);
+  if (!owner.rows[0]) return null;
+  const created = await tx.query<{ account_id: string }>(
+    `INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, balance, is_default_settlement, status, legacy_account_id)
+     VALUES ($1,$2,6,0,FALSE,'active',$3)
+     ON CONFLICT DO NOTHING
+     RETURNING id::TEXT AS account_id`,
+    [owner.rows[0].economic_id, assetId, `market-order:${orderId}`],
+  );
+  const accountId = created.rows[0]?.account_id ?? await marketV2Account(tx, ownerId, assetId, 6, `market-order:${orderId}`);
+  if (!accountId) return null;
+  await tx.query(
+    `INSERT INTO economic_account_migrations (legacy_account_id, economic_account_id, mapping_kind, legacy_balance_units, account_semantics)
+     VALUES ($1,$2,'credit_account',0,'ESCROW') ON CONFLICT (legacy_account_id) DO NOTHING`,
+    [`market-order:${orderId}`, accountId],
+  );
+  return accountId;
+}
+
+async function postMarketV2(
+  tx: PostgresRepository,
+  day: number,
+  correlationId: string,
+  sourceId: string,
+  entries: Array<{ accountId: string; delta: bigint; assetId: number; reason: string }>,
+): Promise<boolean> {
+  if (entries.length < 2) return false;
+  const result = await tx.query<{ transaction_id: string; created: boolean }>(
+    `SELECT transaction_id, created FROM earth_post_transaction($1,$2,0,'MARKET_TRADE','market',$3,'market-v5',$4::jsonb)`,
+    [correlationId, day, sourceId, JSON.stringify(entries.map((entry) => ({ account_id: entry.accountId, delta: entry.delta.toString(), reason_code: entry.reason })))],
+  );
+  if (!result.rows[0]) throw new Error('V2 market transaction returned no result');
+  return Boolean(result.rows[0].created);
+}
 
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
@@ -29,14 +90,26 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
     const gameDay = Number(world.rows[0]?.game_day ?? 0);
     const orderId = crypto.randomUUID();
     const escrowAccount = `market-order-${orderId}`;
+    const marketAssetId = assetIds[input.product];
+    const v2Escrow = await ensureMarketEscrow(tx, input.humanId, input.side === 'buy' ? 1 : marketAssetId, orderId);
     if (input.side === 'sell') {
       const inventory = await tx.query<{ amount: string }>('SELECT amount FROM resource_balances WHERE owner_id = $1 AND resource = $2 FOR UPDATE', [input.humanId, input.product]);
       if (!inventory.rows[0] || Number(inventory.rows[0].amount) < input.quantity) throw new Error(`Insufficient ${input.product} inventory`);
+      const inventoryAccount = await marketV2Account(tx, input.humanId, marketAssetId);
+      if (v2Escrow && inventoryAccount) await postMarketV2(tx, gameDay, `market-order:${orderId}:reserve`, orderId, [
+        { accountId: inventoryAccount, delta: -BigInt(Math.round(input.quantity * 1_000_000)), assetId: marketAssetId, reason: 'market_sell_escrow' },
+        { accountId: v2Escrow, delta: BigInt(Math.round(input.quantity * 1_000_000)), assetId: marketAssetId, reason: 'market_sell_escrow' },
+      ]);
       await tx.query('UPDATE resource_balances SET amount = amount - $1 WHERE owner_id = $2 AND resource = $3 AND amount >= $1', [input.quantity, input.humanId, input.product]);
     } else {
       const account = await tx.query<{ account_id: string; balance: string }>("SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE", [input.humanId]);
       if (!account.rows[0] || moneyToCents(account.rows[0].balance) < reservedCents) throw new Error('Insufficient Credits to reserve this order');
       await tx.query("INSERT INTO account_balances (account_id, owner_id, balance, currency) VALUES ($1, $1, 0, 'CREDIT')", [escrowAccount]);
+      const buyerAccount = await marketV2Account(tx, input.humanId, 1);
+      if (v2Escrow && buyerAccount) await postMarketV2(tx, gameDay, `market-order:${orderId}:reserve`, orderId, [
+        { accountId: buyerAccount, delta: -reservedCents, assetId: 1, reason: 'market_order_reservation' },
+        { accountId: v2Escrow, delta: reservedCents, assetId: 1, reason: 'market_order_reservation' },
+      ]);
       await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: account.rows[0].account_id, creditAccount: escrowAccount, amount: reserved, reasonType: 'market_order_reservation', reasonId: orderId, ruleVersion: 'market-v4', correlationId: input.correlationId });
     }
     await tx.query('INSERT INTO market_orders (id, human_id, product, side, quantity, limit_price, reserved_credits, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)', [orderId, input.humanId, input.product, input.side, input.quantity, centsToMoney(moneyToCents(input.limitPrice)), reserved, input.correlationId]);
@@ -81,6 +154,23 @@ export async function settleMarket(repository: PostgresRepository, product: stri
     const buyerAccount = settlementAccounts.rows.find((row) => row.owner_id === String(buyOrder.human_id));
     const sellerAccount = settlementAccounts.rows.find((row) => row.owner_id === String(sellOrder.human_id));
     if (!buyerAccount || !sellerAccount) throw new Error('Market settlement accounts are missing');
+    const v2BuyEscrow = await ensureMarketEscrow(tx, String(buyOrder.human_id), 1, String(buyOrder.id));
+    const v2SellEscrow = await ensureMarketEscrow(tx, String(sellOrder.human_id), assetIds[product], String(sellOrder.id));
+    const v2Buyer = await marketV2Account(tx, String(buyOrder.human_id), 1);
+    const v2Seller = await marketV2Account(tx, String(sellOrder.human_id), 1);
+    const v2BuyerInventory = await marketV2Account(tx, String(buyOrder.human_id), assetIds[product]);
+    const v2Ouc = await marketV2LegacyAccount(tx, 'account-ouc-treasury');
+    const marketEntries = [
+      v2BuyEscrow && { accountId: v2BuyEscrow, delta: -usedCents, assetId: 1, reason: 'market_trade' },
+      v2Seller && { accountId: v2Seller, delta: totalCents, assetId: 1, reason: 'market_trade' },
+      feeCents > 0n && v2Ouc && { accountId: v2Ouc, delta: feeCents, assetId: 1, reason: 'market_fee' },
+      refund !== '0.00' && v2Buyer && { accountId: v2Buyer, delta: usedCents - payableCents, assetId: 1, reason: 'market_order_refund' },
+      v2SellEscrow && { accountId: v2SellEscrow, delta: -BigInt(Math.round(fill * 1_000_000)), assetId: assetIds[product], reason: 'market_trade' },
+      v2BuyerInventory && { accountId: v2BuyerInventory, delta: BigInt(Math.round(fill * 1_000_000)), assetId: assetIds[product], reason: 'market_trade' },
+    ].filter(Boolean) as Array<{ accountId: string; delta: bigint; assetId: number; reason: string }>;
+    if (v2BuyEscrow && v2Seller && v2SellEscrow && v2BuyerInventory && (feeCents === 0n || v2Ouc) && (refund === '0.00' || v2Buyer)) {
+      await postMarketV2(tx, gameDay, `market-trade:${tradeId}`, String(buyOrder.id), marketEntries);
+    }
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrowAccount, creditAccount: sellerAccount.account_id, amount: total, reasonType: 'market_trade', reasonId: String(buyOrder.id), ruleVersion: 'market-v4', correlationId: tradeId });
     if (feeCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrowAccount, creditAccount: 'account-ouc-treasury', amount: fee, reasonType: 'market_fee', reasonId: String(buyOrder.id), ruleVersion: 'market-v4', correlationId: tradeId });
     if (refund !== '0.00') await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay, debitAccount: escrowAccount, creditAccount: buyerAccount.account_id, amount: refund, reasonType: 'market_order_refund', reasonId: String(buyOrder.id), ruleVersion: 'market-v4', correlationId: tradeId });
@@ -125,7 +215,14 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
     if (!order.rows[0]) throw new Error('Open order not found for this Human');
     const current = order.rows[0];
     const remaining = Number(current.quantity) - Number(current.filled_quantity);
+    const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
     if (String(current.side) === 'sell') {
+      const escrow = await ensureMarketEscrow(tx, input.humanId, assetIds[String(current.product)], String(current.id));
+      const inventory = await marketV2Account(tx, input.humanId, assetIds[String(current.product)]);
+      if (escrow && inventory) await postMarketV2(tx, day, `market-cancel:${input.orderId}`, input.orderId, [
+        { accountId: escrow, delta: -BigInt(Math.round(remaining * 1_000_000)), assetId: assetIds[String(current.product)], reason: 'market_order_cancel_refund' },
+        { accountId: inventory, delta: BigInt(Math.round(remaining * 1_000_000)), assetId: assetIds[String(current.product)], reason: 'market_order_cancel_refund' },
+      ]);
       await mutateResourceBalance(tx, {
         ownerId: input.humanId,
         resource: current.product as ResourceKind,
@@ -141,7 +238,13 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
       if (!escrow.rows[0]) throw new Error('Market order escrow is missing');
       const buyerAccount = await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [String(current.human_id)]);
       if (!buyerAccount.rows[0]) throw new Error('Market order buyer account is missing');
-      const day = Number((await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'")).rows[0]?.game_day ?? 0);
+      const v2Escrow = await ensureMarketEscrow(tx, input.humanId, 1, String(current.id));
+      const v2Buyer = await marketV2Account(tx, input.humanId, 1);
+      const refundUnits = moneyToCents(current.reserved_credits ?? '0.00');
+      if (v2Escrow && v2Buyer && refundUnits > 0n) await postMarketV2(tx, day, `market-cancel:${input.orderId}`, input.orderId, [
+        { accountId: v2Escrow, delta: -refundUnits, assetId: 1, reason: 'market_order_cancellation' },
+        { accountId: v2Buyer, delta: refundUnits, assetId: 1, reason: 'market_order_cancellation' },
+      ]);
       if (moneyToCents(current.reserved_credits ?? '0.00') > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: escrowAccount, creditAccount: buyerAccount.rows[0].account_id, amount: String(current.reserved_credits ?? '0.00'), reasonType: 'market_order_cancellation', reasonId: String(current.id), ruleVersion: 'market-v4', correlationId: `CANCEL-${input.orderId}` });
       const removedEscrow = await tx.query('DELETE FROM account_balances WHERE account_id = $1 AND balance = 0', [escrowAccount]);
       if (removedEscrow.rowCount !== 1) throw new Error('Market order escrow did not refund to zero');

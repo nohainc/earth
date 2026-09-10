@@ -1,6 +1,6 @@
 import type { PostgresRepository } from './repository.ts';
-import { transferCredits } from './financial-postgres.ts';
-import { mutateResourceBalance, type ResourceKind } from './resource-ledger-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
+import { postEconomicResourceMutation, type ResourceKind } from './resource-ledger-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 
 type Resident = {
@@ -79,7 +79,7 @@ export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository,
       const consumed = Math.min(held, required);
       used[resource] = consumed;
       if (consumed > 0) {
-        await mutateResourceBalance(tx, {
+        await postEconomicResourceMutation(tx, {
           ownerId: resident.id,
           resource: resource as ResourceKind,
           delta: -consumed,
@@ -100,7 +100,7 @@ export async function settleLifeMaintenanceInTransaction(tx: PostgresRepository,
     missing = emergencyCents > 0n ? Number(unpaidCents) / Number(emergencyCents) : 0;
     const correlationId = `LIFE-MAINTENANCE-${resident.id}-${day}`;
     if (paidCents > 0n) {
-      await transferCredits(tx, {
+      await postEconomicCreditTransfer(tx, {
         ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: resident.account_id,
         creditAccount: 'account-ouc-treasury', amount: centsToMoney(paidCents),
         reasonType: 'life_maintenance_resources', reasonId: resident.id, ruleVersion: 'life-maintenance-v2', correlationId,

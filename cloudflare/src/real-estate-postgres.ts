@@ -1,7 +1,7 @@
 import type { PostgresRepository } from './repository.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
-import { transferCredits } from './financial-postgres.ts';
-import { mutateResourceBalance } from './resource-ledger-postgres.ts';
+import { postEconomicCreditTransfer } from './financial-postgres.ts';
+import { postEconomicResourceMutation } from './resource-ledger-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
 import {
   BUILDING_CATALOG,
@@ -225,7 +225,7 @@ export async function purchasePrivatePlotAndConstruct(
 
     // Transfer Credits (60% to City Treasury, 25% to Corp Treasury if affiliated, 15% to OUC)
     const costMoney = centsToMoney(creditCostCents);
-    await transferCredits(tx, {
+    await postEconomicCreditTransfer(tx, {
       ledgerId: crypto.randomUUID(),
       gameDay: day,
       debitAccount: account.rows[0].account_id,
@@ -241,7 +241,7 @@ export async function purchasePrivatePlotAndConstruct(
 
     // Deduct Materials with guaranteed ledger audit
     if (materialCost > 0) {
-      await mutateResourceBalance(tx, {
+      await postEconomicResourceMutation(tx, {
         ownerId: input.ownerId,
         resource: 'material',
         delta: -materialCost,
@@ -437,7 +437,7 @@ export async function upgradeBuilding(
     const day = Number(world.rows[0]?.game_day ?? 1);
 
     if (upgradeMaterialCost > 0) {
-      await mutateResourceBalance(tx, {
+      await postEconomicResourceMutation(tx, {
         ownerId: input.humanId,
         resource: 'material',
         delta: -upgradeMaterialCost,
@@ -449,7 +449,7 @@ export async function upgradeBuilding(
     }
 
     if (upgradeCompCost > 0) {
-      await mutateResourceBalance(tx, {
+      await postEconomicResourceMutation(tx, {
         ownerId: input.humanId,
         resource: 'components',
         delta: -upgradeCompCost,
@@ -461,7 +461,7 @@ export async function upgradeBuilding(
     }
 
     if (upgradeComputeCost > 0) {
-      await mutateResourceBalance(tx, {
+      await postEconomicResourceMutation(tx, {
         ownerId: input.humanId,
         resource: 'compute',
         delta: -upgradeComputeCost,
@@ -472,7 +472,7 @@ export async function upgradeBuilding(
       });
     }
 
-    await transferCredits(tx, {
+    await postEconomicCreditTransfer(tx, {
       ledgerId: crypto.randomUUID(),
       gameDay: day,
       debitAccount: account.rows[0].account_id,
@@ -649,7 +649,7 @@ export async function repairBuilding(
     const missingCondition = 100 - currentCondition;
     const requiredComponents = Math.max(1, Math.ceil((missingCondition / 10) * bld.rows[0].tier));
 
-    await mutateResourceBalance(tx, {
+    await postEconomicResourceMutation(tx, {
       ownerId: input.humanId,
       resource: 'components',
       delta: -requiredComponents,
@@ -700,7 +700,7 @@ export async function demolishBuilding(
 
     // Recycle materials back to owner with guaranteed ledger audit
     if (recycledMaterials > 0) {
-      await mutateResourceBalance(tx, {
+      await postEconomicResourceMutation(tx, {
         ownerId: input.humanId,
         resource: 'material',
         delta: recycledMaterials,
@@ -807,7 +807,7 @@ export async function contributeCorporateResearch(
       if (!account.rows[0] || moneyToCents(account.rows[0].balance) < creditCents) {
         throw new Error('Insufficient Credits for R&D contribution');
       }
-      await transferCredits(tx, {
+      await postEconomicCreditTransfer(tx, {
         ledgerId: crypto.randomUUID(),
         gameDay: day,
         debitAccount: account.rows[0].account_id,
@@ -821,7 +821,7 @@ export async function contributeCorporateResearch(
     }
 
     if (input.compute > 0) {
-      await mutateResourceBalance(tx, {
+      await postEconomicResourceMutation(tx, {
         ownerId: input.humanId,
         resource: 'compute',
         delta: -input.compute,
