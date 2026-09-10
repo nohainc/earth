@@ -460,7 +460,7 @@ export async function executeQueuedProposals(repository: PostgresRepository): Pr
 
   // Expire queued proposals that exceeded their 7-day window
   await repository.query(
-    "UPDATE proposals SET execution_status = 'expired' WHERE outcome = 'passed' AND execution_status = 'queued' AND expires_game_day IS NOT NULL AND (expires_game_day, COALESCE(expires_game_minute, 0)) < ($1, $2)",
+    "UPDATE proposals SET execution_status = 'expired' WHERE outcome = 'passed' AND execution_status = 'queued' AND expires_game_day IS NOT NULL AND (expires_game_day, COALESCE(expires_game_minute, 0)) < ($1::bigint, $2::integer)",
     [currentDay, currentMinute],
   );
 

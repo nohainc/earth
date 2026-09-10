@@ -767,7 +767,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const minute = Number(clock.rows[0]?.game_minute ?? 0);
     const totalGameMinutes = Number(clock.rows[0]?.total_game_minutes ?? 0);
     await tx.query("UPDATE world_state SET game_day = $1, game_minute = $2, total_game_minutes = $3 WHERE id = 'WORLD'", [day, minute, totalGameMinutes]);
-    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
+    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1::bigint, $2::integer)", [day, minute]);
     await tx.query("UPDATE market_prices SET price = GREATEST(1, LEAST(1000000, ROUND((price * (1.0 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))), game_day = $1", [day]);
     const control = await tx.query<{ status: string }>("SELECT status FROM daily_settlement_control WHERE id = 'WORLD' FOR UPDATE");
     const active = control.rows[0]?.status === 'active';
