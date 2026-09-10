@@ -94,6 +94,29 @@ void main() {
 
       expect(find.text(LiveConnectionStatus.offline.shortLabel), findsOneWidget);
     });
+
+    testWidgets('maintains fixed badge width across different statuses',
+        (tester) async {
+      for (final status in LiveConnectionStatus.values) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: TopFixedHudPanel(
+                state: testState,
+                connectionStatus: status,
+              ),
+            ),
+          ),
+        );
+        final statusPill = tester.widget<Container>(
+          find.descendant(
+            of: find.byKey(const Key('hud-live-connection-status')),
+            matching: find.byType(Container),
+          ).first,
+        );
+        expect(statusPill.constraints?.minWidth ?? (statusPill.constraints == null ? 78.0 : null), equals(78.0));
+      }
+    });
   });
 
   group('ActivityPanel keeps connection status out of the workspace', () {

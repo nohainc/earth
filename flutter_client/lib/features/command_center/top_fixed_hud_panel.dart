@@ -623,8 +623,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
         },
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: EdgeInsets.symmetric(
-            horizontal: isMobile ? 6 : 8,
+          width: 78,
+          padding: const EdgeInsets.symmetric(
+            horizontal: 4,
             vertical: 4,
           ),
           decoration: BoxDecoration(
@@ -636,7 +637,8 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
             ),
           ),
           child: Row(
-            mainAxisSize: MainAxisSize.min,
+            mainAxisSize: MainAxisSize.max,
+            mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Container(
                 width: 6,
@@ -653,14 +655,19 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
                   ],
                 ),
               ),
-              const SizedBox(width: 5),
-              Text(
-                status.shortLabel,
-                style: TextStyle(
-                  color: status.color,
-                  fontSize: 9.5,
-                  fontWeight: FontWeight.w800,
-                  letterSpacing: 1.1,
+              const SizedBox(width: 4),
+              Flexible(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    status.shortLabel,
+                    style: TextStyle(
+                      color: status.color,
+                      fontSize: 9.5,
+                      fontWeight: FontWeight.w800,
+                      letterSpacing: 0.8,
+                    ),
+                  ),
                 ),
               ),
             ],

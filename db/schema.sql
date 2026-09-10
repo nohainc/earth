@@ -1,7 +1,9 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Authoritative, self-contained schema representing the current clean database
--- state from scratch through migration 080.
+-- Historical canonical schema snapshot representing the clean database state
+-- from scratch through migration 080. The applied/current schema is tracked by
+-- the append-only migrations and db/schema-manifest.json (currently migration
+-- 149); reconcile this snapshot before using it as the V2 fresh-install source.
 --
 -- This script provisions a fresh, empty database in one step.
 -- When introducing new schema changes:
@@ -258,6 +260,44 @@ CREATE INDEX IF NOT EXISTS idx_notifications_unread ON notifications(human_id, c
 -- 4. Financial Architecture & Ledger
 -- -----------------------------------------------------------------------------
 
+CREATE SEQUENCE IF NOT EXISTS owner_registry_economic_id_seq
+  AS BIGINT START WITH 1001 INCREMENT BY 1 MINVALUE 1;
+
+CREATE TABLE IF NOT EXISTS owner_registry (
+  id TEXT PRIMARY KEY,
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('human','city','corporation','community','system','legacy')),
+  source_id TEXT NOT NULL UNIQUE,
+  economic_id BIGINT NOT NULL DEFAULT nextval('owner_registry_economic_id_seq'),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','closed','archived')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  UNIQUE (economic_id),
+  CHECK (id = source_id)
+);
+CREATE INDEX IF NOT EXISTS owner_registry_economic_type_idx
+  ON owner_registry (economic_id, owner_type, status);
+
+CREATE TABLE IF NOT EXISTS economic_assets (
+  id SMALLINT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE CHECK (code IN ('CREDIT','MATERIAL','COMPONENTS','ENERGY','COMPUTE','FOOD')),
+  unit_scale BIGINT NOT NULL CHECK (unit_scale IN (100, 1000000)),
+  scale BIGINT NOT NULL CHECK (scale IN (100, 1000000)),
+  decimals SMALLINT NOT NULL CHECK ((scale = 100 AND decimals = 2) OR (scale = 1000000 AND decimals = 6)),
+  is_currency BOOLEAN NOT NULL DEFAULT FALSE
+);
+INSERT INTO economic_assets (id, code, unit_scale, scale, decimals, is_currency) VALUES
+  (1, 'CREDIT', 100, 100, 2, TRUE), (2, 'MATERIAL', 1000000, 1000000, 6, FALSE),
+  (3, 'COMPONENTS', 1000000, 1000000, 6, FALSE), (4, 'ENERGY', 1000000, 1000000, 6, FALSE),
+  (5, 'COMPUTE', 1000000, 1000000, 6, FALSE), (6, 'FOOD', 1000000, 1000000, 6, FALSE)
+ON CONFLICT (id) DO NOTHING;
+
+INSERT INTO owner_registry (id, owner_type, source_id, economic_id)
+VALUES ('SYSTEM', 'system', 'SYSTEM', 2), ('OUC', 'system', 'OUC', 1)
+ON CONFLICT (id) DO NOTHING;
+INSERT INTO owner_registry (id, owner_type, source_id)
+SELECT id, 'human', id FROM humans
+ON CONFLICT (id) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS account_balances (
   account_id TEXT PRIMARY KEY,
   owner_id TEXT NOT NULL,
@@ -353,6 +393,127 @@ CREATE TABLE IF NOT EXISTS resource_balances (
   amount NUMERIC(20,6) NOT NULL DEFAULT 0 CHECK (amount >= 0),
   PRIMARY KEY (owner_id, resource)
 );
+
+CREATE SEQUENCE IF NOT EXISTS economic_accounts_id_seq
+  AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
+CREATE TABLE IF NOT EXISTS economic_accounts (
+  id BIGINT PRIMARY KEY DEFAULT nextval('economic_accounts_id_seq'),
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  account_type SMALLINT NOT NULL CHECK (account_type IN (1, 2, 3, 4, 5, 6)),
+  balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  is_default_settlement BOOLEAN NOT NULL DEFAULT FALSE,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','closed','archived')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS economic_accounts_default_settlement_uq
+  ON economic_accounts (owner_economic_id, asset_id) WHERE is_default_settlement;
+CREATE INDEX IF NOT EXISTS economic_accounts_owner_asset_idx
+  ON economic_accounts (owner_economic_id, asset_id, status);
+CREATE INDEX IF NOT EXISTS economic_accounts_asset_owner_idx
+  ON economic_accounts (asset_id, owner_economic_id, status);
+
+CREATE SEQUENCE IF NOT EXISTS economic_transactions_id_seq
+  AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
+CREATE SEQUENCE IF NOT EXISTS economic_entries_id_seq
+  AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
+CREATE TABLE IF NOT EXISTS economic_transactions (
+  id BIGINT PRIMARY KEY DEFAULT nextval('economic_transactions_id_seq'),
+  correlation_id TEXT NOT NULL UNIQUE CHECK (length(btrim(correlation_id)) > 0),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  game_minute SMALLINT NOT NULL DEFAULT 0 CHECK (game_minute BETWEEN 0 AND 1439),
+  transaction_kind TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT,
+  rules_version TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE TABLE IF NOT EXISTS economic_entries (
+  id BIGINT NOT NULL DEFAULT nextval('economic_entries_id_seq'),
+  transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id) ON DELETE CASCADE,
+  account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  delta BIGINT NOT NULL CHECK (delta <> 0),
+  reason_code TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id, game_day)
+) PARTITION BY RANGE (game_day);
+CREATE TABLE IF NOT EXISTS economic_entries_days_0000_1000 PARTITION OF economic_entries FOR VALUES FROM (0) TO (1001);
+CREATE TABLE IF NOT EXISTS economic_entries_days_1001_2000 PARTITION OF economic_entries FOR VALUES FROM (1001) TO (2001);
+CREATE TABLE IF NOT EXISTS economic_entries_days_2001_3000 PARTITION OF economic_entries FOR VALUES FROM (2001) TO (3001);
+CREATE TABLE IF NOT EXISTS economic_entries_default PARTITION OF economic_entries DEFAULT;
+CREATE INDEX IF NOT EXISTS economic_transactions_day_idx ON economic_transactions(game_day DESC, id DESC);
+CREATE INDEX IF NOT EXISTS economic_transactions_source_idx ON economic_transactions(source_type, source_id, game_day DESC);
+CREATE INDEX IF NOT EXISTS economic_entries_transaction_idx ON economic_entries(transaction_id, id);
+CREATE INDEX IF NOT EXISTS economic_entries_account_day_idx ON economic_entries(account_id, game_day DESC, id DESC);
+CREATE INDEX IF NOT EXISTS economic_entries_reason_idx ON economic_entries(reason_code, game_day DESC);
+
+CREATE TABLE IF NOT EXISTS economic_owner_totals (
+  owner_economic_id BIGINT PRIMARY KEY REFERENCES owner_registry(economic_id),
+  credit_received BIGINT NOT NULL DEFAULT 0, credit_spent BIGINT NOT NULL DEFAULT 0,
+  material_received BIGINT NOT NULL DEFAULT 0, material_spent BIGINT NOT NULL DEFAULT 0,
+  components_received BIGINT NOT NULL DEFAULT 0, components_spent BIGINT NOT NULL DEFAULT 0,
+  energy_received BIGINT NOT NULL DEFAULT 0, energy_spent BIGINT NOT NULL DEFAULT 0,
+  compute_received BIGINT NOT NULL DEFAULT 0, compute_spent BIGINT NOT NULL DEFAULT 0,
+  food_received BIGINT NOT NULL DEFAULT 0, food_spent BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE SEQUENCE IF NOT EXISTS settlement_rate_segments_id_seq
+  AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
+CREATE TABLE IF NOT EXISTS settlement_rate_segments (
+  id BIGINT PRIMARY KEY DEFAULT nextval('settlement_rate_segments_id_seq'),
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  effective_from_minute SMALLINT NOT NULL CHECK (effective_from_minute BETWEEN 0 AND 1439),
+  rate_units_per_day BIGINT NOT NULL,
+  reason_code TEXT NOT NULL,
+  source_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (owner_economic_id, asset_id, game_day, effective_from_minute)
+);
+CREATE INDEX IF NOT EXISTS settlement_rate_segments_day_idx ON settlement_rate_segments(game_day, owner_economic_id, asset_id, effective_from_minute);
+CREATE INDEX IF NOT EXISTS settlement_rate_segments_owner_asset_idx ON settlement_rate_segments(owner_economic_id, asset_id, game_day DESC, effective_from_minute);
+
+CREATE SEQUENCE IF NOT EXISTS settlement_effects_id_seq
+  AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
+CREATE UNLOGGED TABLE IF NOT EXISTS settlement_effects (
+  id BIGINT PRIMARY KEY DEFAULT nextval('settlement_effects_id_seq'),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  phase TEXT NOT NULL,
+  shard SMALLINT NOT NULL CHECK (shard BETWEEN 0 AND 63),
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  delta BIGINT NOT NULL CHECK (delta <> 0),
+  reason_code TEXT NOT NULL,
+  source_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS settlement_effects_phase_shard_day_idx ON settlement_effects(game_day, phase, shard, id);
+CREATE INDEX IF NOT EXISTS settlement_effects_owner_day_idx ON settlement_effects(owner_economic_id, game_day, asset_id);
+CREATE INDEX IF NOT EXISTS settlement_effects_account_day_idx ON settlement_effects(account_id, game_day, id);
+CREATE INDEX IF NOT EXISTS settlement_effects_source_idx ON settlement_effects(source_id, game_day, phase) WHERE source_id IS NOT NULL;
+
+CREATE SEQUENCE IF NOT EXISTS settlement_effect_nets_id_seq
+  AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
+CREATE UNLOGGED TABLE IF NOT EXISTS settlement_effect_nets (
+  id BIGINT PRIMARY KEY DEFAULT nextval('settlement_effect_nets_id_seq'),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  phase TEXT NOT NULL,
+  shard SMALLINT NOT NULL CHECK (shard BETWEEN 0 AND 63),
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  delta BIGINT NOT NULL CHECK (delta <> 0),
+  reason_code TEXT NOT NULL,
+  source_id TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (game_day, phase, shard, account_id, asset_id)
+);
+CREATE INDEX IF NOT EXISTS settlement_effect_nets_batch_idx ON settlement_effect_nets(game_day, phase, shard, account_id);
 
 CREATE TABLE IF NOT EXISTS resource_ledger_entries (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -462,9 +623,12 @@ CREATE INDEX IF NOT EXISTS idx_futures_settlement ON commodity_futures_contracts
 CREATE TABLE IF NOT EXISTS daily_settlement_profiles (
   owner_id TEXT PRIMARY KEY,
   owner_kind TEXT NOT NULL CHECK (owner_kind IN ('human', 'city', 'corporation', 'earth')),
+  owner_economic_id BIGINT REFERENCES owner_registry(economic_id),
   profile_version BIGINT NOT NULL DEFAULT 1,
   status TEXT NOT NULL DEFAULT 'dirty' CHECK (status IN ('clean', 'dirty')),
+  shard SMALLINT NOT NULL DEFAULT 0 CHECK (shard BETWEEN 0 AND 63),
   effective_game_day BIGINT NOT NULL DEFAULT 0,
+  effective_from_game_day BIGINT NOT NULL DEFAULT 0,
   last_settled_game_day BIGINT NOT NULL DEFAULT 0,
   credits_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
   energy_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
@@ -472,11 +636,25 @@ CREATE TABLE IF NOT EXISTS daily_settlement_profiles (
   materials_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
   components_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
   compute_delta NUMERIC(20,2) NOT NULL DEFAULT 0,
+  credit_units BIGINT NOT NULL DEFAULT 0,
+  material_units BIGINT NOT NULL DEFAULT 0,
+  components_units BIGINT NOT NULL DEFAULT 0,
+  energy_units BIGINT NOT NULL DEFAULT 0,
+  compute_units BIGINT NOT NULL DEFAULT 0,
+  food_units BIGINT NOT NULL DEFAULT 0,
+  fingerprint TEXT NOT NULL DEFAULT '',
+  dirty_reason TEXT,
   input_fingerprint TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS daily_settlement_profiles_due_idx
   ON daily_settlement_profiles (status, last_settled_game_day, owner_kind);
+CREATE UNIQUE INDEX IF NOT EXISTS daily_settlement_profiles_economic_owner_uq
+  ON daily_settlement_profiles (owner_economic_id)
+  WHERE owner_economic_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS daily_settlement_profiles_v2_dirty_shard_idx
+  ON daily_settlement_profiles (status, shard, owner_economic_id)
+  WHERE status = 'dirty';
 
 CREATE TABLE IF NOT EXISTS daily_settlement_profile_runs (
   owner_id TEXT NOT NULL,
@@ -1073,6 +1251,7 @@ CREATE TABLE IF NOT EXISTS daily_settlement_runs (
   status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'baseline', 'paused')),
   current_phase TEXT,
   attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  shard_count INTEGER NOT NULL DEFAULT 1 CHECK (shard_count BETWEEN 1 AND 1024),
   lease_owner TEXT,
   lease_heartbeat_at TIMESTAMPTZ,
   rules_version TEXT NOT NULL DEFAULT 'daily-settlement-v1',
@@ -1100,11 +1279,15 @@ CREATE TABLE IF NOT EXISTS daily_settlement_phase_runs (
   status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
   attempt_count INTEGER NOT NULL DEFAULT 0,
   rows_processed BIGINT NOT NULL DEFAULT 0,
+  lease_owner TEXT,
+  lease_heartbeat_at TIMESTAMPTZ,
   started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   completed_at TIMESTAMPTZ,
   error_message TEXT,
   PRIMARY KEY (game_day, phase, shard)
 );
+CREATE INDEX IF NOT EXISTS daily_settlement_phase_runs_lease_idx
+  ON daily_settlement_phase_runs(status, lease_heartbeat_at);
 
 CREATE TABLE IF NOT EXISTS entity_end_of_day_snapshots (
   owner_id TEXT NOT NULL,

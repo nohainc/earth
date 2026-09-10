@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 149,
+  "migrationVersion": 165,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -256,6 +256,17 @@
       "owner_kind",
       "profile_version",
       "status",
+      "owner_economic_id",
+      "shard",
+      "credit_units",
+      "material_units",
+      "components_units",
+      "energy_units",
+      "compute_units",
+      "food_units",
+      "fingerprint",
+      "dirty_reason",
+      "effective_from_game_day",
       "effective_game_day",
       "last_settled_game_day",
       "credits_delta",
@@ -310,7 +321,108 @@
       "id",
       "owner_type",
       "source_id",
+      "status",
+      "economic_id"
+    ],
+    "economic_assets": [
+      "id",
+      "code",
+      "unit_scale",
+      "is_currency",
+      "scale",
+      "decimals"
+    ],
+    "economic_accounts": [
+      "id",
+      "owner_economic_id",
+      "asset_id",
+      "account_type",
+      "balance",
+      "is_default_settlement",
       "status"
+    ],
+    "economic_transactions": [
+      "id",
+      "correlation_id",
+      "game_day",
+      "game_minute",
+      "transaction_kind",
+      "source_type",
+      "source_id",
+      "rules_version"
+    ],
+    "economic_entries": [
+      "id",
+      "transaction_id",
+      "account_id",
+      "game_day",
+      "delta",
+      "reason_code"
+    ],
+    "economic_owner_totals": [
+      "owner_economic_id",
+      "credit_received",
+      "credit_spent",
+      "material_received",
+      "material_spent",
+      "components_received",
+      "components_spent",
+      "energy_received",
+      "energy_spent",
+      "compute_received",
+      "compute_spent",
+      "food_received",
+      "food_spent"
+    ],
+    "settlement_rate_segments": [
+      "id",
+      "owner_economic_id",
+      "asset_id",
+      "game_day",
+      "effective_from_minute",
+      "rate_units_per_day",
+      "reason_code",
+      "source_id"
+    ],
+    "settlement_effects": [
+      "id",
+      "game_day",
+      "phase",
+      "shard",
+      "owner_economic_id",
+      "account_id",
+      "asset_id",
+      "delta",
+      "reason_code",
+      "source_id"
+    ],
+    "settlement_effect_nets": [
+      "id",
+      "game_day",
+      "phase",
+      "shard",
+      "owner_economic_id",
+      "account_id",
+      "asset_id",
+      "delta",
+      "reason_code",
+      "source_id"
+    ],
+    "daily_settlement_phase_runs": [
+      "game_day",
+      "phase",
+      "shard",
+      "status",
+      "attempt_count",
+      "rows_processed",
+      "lease_owner",
+      "lease_heartbeat_at"
+    ],
+    "daily_settlement_runs": [
+      "game_day",
+      "status",
+      "current_phase",
+      "shard_count"
     ],
     "institutions": [
       "id",
@@ -542,6 +654,26 @@
   },
   "requiredUniqueConstraints": [
     [
+      "owner_registry",
+      "economic_id"
+    ],
+    [
+      "economic_assets",
+      "code"
+    ],
+    [
+      "economic_transactions",
+      "correlation_id"
+    ],
+    [
+      "settlement_effect_nets",
+      "game_day",
+      "phase",
+      "shard",
+      "account_id",
+      "asset_id"
+    ],
+    [
       "humans",
       "account_id"
     ],
@@ -643,6 +775,23 @@
     "personal_life_maintenance_human_day_idx",
     "daily_settlement_profiles_due_idx",
     "daily_settlement_profile_runs_day_idx",
+    "economic_accounts_owner_asset_idx",
+    "economic_accounts_asset_owner_idx",
+    "economic_assets_scale_idx",
+    "economic_transactions_day_idx",
+    "economic_transactions_source_idx",
+    "economic_entries_transaction_idx",
+    "economic_entries_account_day_idx",
+    "economic_entries_reason_idx",
+    "daily_settlement_profiles_v2_dirty_shard_idx",
+    "settlement_effects_phase_shard_day_idx",
+    "settlement_effects_owner_day_idx",
+    "settlement_effects_account_day_idx",
+    "settlement_effects_source_idx",
+    "settlement_effect_nets_batch_idx",
+    "settlement_rate_segments_day_idx",
+    "settlement_rate_segments_owner_asset_idx",
+    "daily_settlement_phase_runs_lease_idx",
     "idx_market_trades_order",
     "idx_corp_research_corp_tech",
     "idx_futures_settlement",
