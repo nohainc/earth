@@ -16,7 +16,7 @@ export async function rebuildDailySettlementProfile(
   gameDay: number,
 ): Promise<void> {
   await repository.query(
-    'SELECT * FROM earth_rebuild_settlement_profile($1, $2)',
+    'SELECT * FROM earth_rebuild_settlement_profile($1::text, $2::bigint)',
     [ownerId, gameDay],
   );
 }
@@ -31,7 +31,7 @@ export async function catchupOwnerSettlement(
     elapsed_days: number;
     last_settled_day: string;
     settled: boolean;
-  }>('SELECT * FROM earth_catchup_owner_settlement($1, $2)', [ownerId, targetDay ?? null]);
+  }>('SELECT * FROM earth_catchup_owner_settlement($1::text, $2::bigint)', [ownerId, targetDay ?? null]);
   const row = res.rows[0];
   return {
     ownerId: row?.owner_id ?? ownerId,
@@ -86,7 +86,7 @@ export async function applyPreparedResourceProfiles(repository: PostgresReposito
   let appliedCount = 0;
   for (const row of dueOwners.rows) {
     const res = await repository.query<{ settled: boolean }>(
-      'SELECT * FROM earth_catchup_owner_settlement($1, $2)',
+      'SELECT * FROM earth_catchup_owner_settlement($1::text, $2::bigint)',
       [row.owner_id, gameDay],
     );
     if (res.rows[0]?.settled) appliedCount++;

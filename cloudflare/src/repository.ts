@@ -46,8 +46,17 @@ export class PostgresRepository {
     this.client = client;
   }
 
-  query<Row extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<QueryResult<Row>> {
-    return this.client.query<Row>(bindPlaceholders(sql), params);
+  async query<Row extends QueryResultRow = QueryResultRow>(sql: string, params: unknown[] = []): Promise<QueryResult<Row>> {
+    const boundSql = bindPlaceholders(sql);
+    try {
+      return await this.client.query<Row>(boundSql, params);
+    } catch (error) {
+      // Keep production diagnostics useful without logging parameter values.
+      if (error instanceof Error && !error.message.includes('[postgres query:')) {
+        error.message = `${error.message} [postgres query: ${boundSql.slice(0, 240)}]`;
+      }
+      throw error;
+    }
   }
 
   async transaction<T>(work: (repository: PostgresRepository) => Promise<T>): Promise<T> {

@@ -84,7 +84,7 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
     } catch (error) {
       await repository.query(
         `INSERT INTO settlement_anomalies (game_day, severity, anomaly_type, details)
-         VALUES ($1, 'warning', 'proposal_automation_deferred', jsonb_build_object('proposalId',$2,'message',$3))`,
+         VALUES ($1, 'warning', 'proposal_automation_deferred', jsonb_build_object('proposalId',$2::text,'message',$3::text))`,
         [completedDay, action.proposal_id, error instanceof Error ? error.message.slice(0, 1000) : 'Unknown error'],
       );
     }
