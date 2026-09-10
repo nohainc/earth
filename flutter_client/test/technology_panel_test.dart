@@ -301,15 +301,15 @@ void main() {
     expect(find.text('Geothermal Core Grid'), findsOneWidget);
 
     // Tap research button for Geothermal Core Grid
-    final researchBtn = find.text('RESEARCH TIER 2');
+    final researchBtn = find.text('PROPOSE CIVIC RESEARCH TIER 2');
     expect(researchBtn, findsOneWidget);
     await tester.ensureVisible(researchBtn);
     await tester.tap(researchBtn);
     await tester.pumpAndSettle();
 
     // Verify confirmation dialog
-    expect(find.text('CONFIRM R&D PROJECT'), findsOneWidget);
-    await tester.tap(find.text('CONFIRM R&D PROJECT'));
+    expect(find.text('Propose Civic Research'), findsOneWidget);
+    await tester.tap(find.text('SUBMIT CIVIC PROPOSAL'));
     await tester.pumpAndSettle();
 
     expect(researchedType, equals('geothermal-grid'));

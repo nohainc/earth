@@ -842,11 +842,10 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     throw error;
   }
   if (result.alreadyProcessed) return result;
-  if (result.settledGameDay !== undefined) {
-    // The daily economy is committed before due actions change construction,
-    // research, or governance state for the following day.
-    await processEndOfDayAutomation(repository, result.settledGameDay);
-  }
+  // Proposal resolution, construction completion, research completion, and
+  // queued execution are idempotent and must be checked on every scheduler
+  // tick. Daily settlement remains independently gated above.
+  await processEndOfDayAutomation(repository, result.settledGameDay ?? Math.max(0, result.day - 1));
   let marketSettlements = 0;
   for (const product of products) {
     const settled = await settleMarket(repository, product);

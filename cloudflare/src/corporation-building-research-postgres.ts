@@ -43,8 +43,7 @@ function researchDurationDays(slotFootprint: number, tier: number, _ownershipCla
   return days;
 }
 
-export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+export async function startCorporationBuildingResearchInTransaction(tx: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
     const corporationId = await corporationForHuman(tx, input.humanId);
     const prior = await tx.query('SELECT * FROM corporation_building_research_projects WHERE corporation_id = $1 AND correlation_id = $2', [corporationId, input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, project: prior.rows[0], correlationId: input.correlationId };
@@ -145,7 +144,10 @@ export async function startCorporationBuildingResearch(repository: PostgresRepos
       [projectId, corporationId, input.buildingType, targetCatalogId, targetTier, cost, durationDays * 1440, time.game_day, time.game_day + 1, durationDays, time.game_day + durationDays, input.correlationId],
     );
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_building_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
-  });
+}
+
+export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
+  return repository.transaction((tx) => startCorporationBuildingResearchInTransaction(tx, input));
 }
 
 export async function listCorporationBuildingResearch(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {

@@ -66,15 +66,24 @@ The Flutter client should then use `http://localhost:8788`. The legacy
 manual PostgreSQL-backed application path.
 
 To exercise the same scheduled settlement path as production, start the local
-app through `./scripts/run-local-ui-test.sh` and then run:
+app through `./scripts/run-local-ui-test.sh`. The launcher starts Wrangler with
+its scheduled-event test endpoint and invokes `/__scheduled` once every 60
+seconds. Each invocation enters the Worker `scheduled()` handler, advances one
+game hour, rebuilds dirty settlement profiles, and applies prepared normal
+resource deltas through PostgreSQL.
+
+The local scheduler is enabled by default. Disable it for a static session with
+`EARTH_LOCAL_SCHEDULER=false ./scripts/run-local-ui-test.sh`. To trigger one
+manual tick while Wrangler is running, use:
 
 ```bash
-./scripts/run-local-game-tick.sh
+curl --fail --show-error http://127.0.0.1:8788/__scheduled
 ```
 
-The local Worker uses Wrangler's scheduled-event test endpoint. It advances one
-game hour, rebuilds any dirty settlement profiles, and applies prepared normal
-resource deltas through PostgreSQL.
+Local daily settlement activation is also enabled by default. If a local
+database is still in `awaiting_baseline`, the launcher initializes it from the
+last completed game day before starting the Worker. Disable this with
+`EARTH_LOCAL_SETTLEMENT=false ./scripts/run-local-ui-test.sh`.
 
 
 The Flutter client in `flutter_client/` is the production web application. It reads canonical state from the Cloudflare Worker API backed by PlanetScale PostgreSQL through Hyperdrive. The public landing page is served at `/landing`; the authenticated application is served at `/app`.

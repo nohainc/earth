@@ -5,6 +5,7 @@ import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
+import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
   return Number.isFinite(currentGameDay) && Number.isFinite(eligibilityGameDay) && currentGameDay >= eligibilityGameDay;
@@ -297,7 +298,7 @@ export async function resolveProposals(repository: PostgresRepository): Promise<
  */
 export async function executeProposal(repository: PostgresRepository, input: { proposalId: string; humanId: string; systemExecution?: boolean; completedDay?: number }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const proposal = await tx.query<{ id: string; institution_id: string; title: string; outcome: string; executed_at: string | null; implementation_game_day: number | null; implementation_game_minute: number | null; target_category: string | null; target_value_json: unknown; execution_status: string }>('SELECT * FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
+  const proposal = await tx.query<{ id: string; institution_id: string; title: string; outcome: string; executed_at: string | null; implementation_game_day: number | null; implementation_game_minute: number | null; target_category: string | null; target_value_json: unknown; execution_status: string; created_by_human_id: string | null }>('SELECT * FROM proposals WHERE id = $1 FOR UPDATE', [input.proposalId]);
     if (!proposal.rows[0]) throw new Error('Proposal not found');
     const current = proposal.rows[0];
     if (current.outcome !== 'passed') throw new Error('Only passed proposals can be executed');
@@ -418,6 +419,21 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, execution_status = 'executed', funding_block_reason = NULL WHERE id = $1", [current.id, day]);
       await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'megaproject.constructed', `Municipal Megaproject ${spec.name} commissioned`, toNanoMarkup({ proposalId: current.id, buildingId, cityId: current.institution_id })]);
       return { ok: true, executionStatus: 'executed', buildingId, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+    }
+
+    if (category === 'technology' || category === 'research') {
+      const buildingType = String(value.buildingType ?? value.building_type ?? '').trim();
+      if (!buildingType) {
+        await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, execution_status = 'skipped', funding_block_reason = 'Missing building type in research proposal' WHERE id = $1", [current.id]);
+        return { ok: true, executionStatus: 'skipped', reason: 'Missing building type in research proposal', proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+      }
+      const result = await startCorporationBuildingResearchInTransaction(tx, {
+        humanId: current.created_by_human_id ?? input.humanId,
+        buildingType,
+        correlationId: `proposal-research:${current.id}`,
+      });
+      await tx.query("UPDATE proposals SET executed_at = CURRENT_TIMESTAMP, executed_game_day = $2, execution_status = 'executed', funding_block_reason = NULL WHERE id = $1", [current.id, day]);
+      return { ok: true, executionStatus: 'executed', researchProject: result.project, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
     }
 
     if (!['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(category)) throw new Error('Target rule is outside engine bounds');

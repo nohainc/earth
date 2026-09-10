@@ -9,6 +9,7 @@ API_ORIGIN="http://localhost:${WEB_PORT}"
 # same Worker entry point used by Cloudflare Cron. Set this to false when a
 # manual, completely static local session is needed.
 LOCAL_SCHEDULER_ENABLED="${EARTH_LOCAL_SCHEDULER:-true}"
+LOCAL_SETTLEMENT_ENABLED="${EARTH_LOCAL_SETTLEMENT:-true}"
 
 # Default to local PostgreSQL if DATABASE_URL is not set
 DEFAULT_LOCAL_DB="postgres://earth:earth_dev_only@localhost:5432/earth"
@@ -56,7 +57,15 @@ if [[ "${IS_LOCAL}" == "true" ]]; then
     exit 1
   fi
 
-  print "Local PostgreSQL is reachable; leaving the existing schema and data unchanged."
+  print "Local PostgreSQL is reachable; preserving existing schema and data."
+
+  if [[ "${LOCAL_SETTLEMENT_ENABLED}" == "true" ]]; then
+    settlement_status=$(psql "${DATABASE_URL}" -Atqc "SELECT status FROM daily_settlement_control WHERE id = 'WORLD'" 2>/dev/null || true)
+    if [[ "${settlement_status}" == "awaiting_baseline" ]]; then
+      print "Activating local daily settlement from the last completed game day..."
+      psql "${DATABASE_URL}" -v ON_ERROR_STOP=1 -c "SELECT earth_activate_daily_settlement(GREATEST(1, (SELECT earth_game_day_from_total_minutes(total_game_minutes) - 1 FROM world_state WHERE id = 'WORLD')), 'local-ui-launcher');" >/dev/null
+    fi
+  fi
 fi
 
 # Automatically release stale local port listeners before starting
@@ -83,7 +92,7 @@ api_command="cd ${(q)ROOT_DIR} && DATABASE_URL=${(q)DATABASE_URL} HYPERDRIVE_CON
       # Give Wrangler a moment to bind before the first one-minute check.
       sleep 60
       while true; do
-        curl --fail --silent --show-error http://127.0.0.1:${API_PORT}/__scheduled >/dev/null || print -u2 \"Local scheduled tick failed; retrying next minute.\"
+        curl --fail --silent --show-error --max-time 30 http://127.0.0.1:${API_PORT}/__scheduled >/dev/null || print -u2 \"Local scheduled tick failed; retrying next minute.\"
         sleep 60
       done
     ) &
@@ -109,5 +118,10 @@ if [[ "${LOCAL_SCHEDULER_ENABLED}" == "true" ]]; then
   print "The local Worker scheduled handler will run every 60 seconds. Set EARTH_LOCAL_SCHEDULER=false to disable it."
 else
   print "Local scheduled ticks are disabled. Set EARTH_LOCAL_SCHEDULER=true to enable the one-minute Worker timer."
+fi
+if [[ "${LOCAL_SETTLEMENT_ENABLED}" == "true" ]]; then
+  print "Local daily settlement activation is enabled. Set EARTH_LOCAL_SETTLEMENT=false to disable it."
+else
+  print "Local daily settlement activation is disabled. Set EARTH_LOCAL_SETTLEMENT=true to enable it."
 fi
 print "Open http://localhost:${WEB_PORT} or static prototype at file://${ROOT_DIR}/prototype3.html"

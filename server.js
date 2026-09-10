@@ -2759,6 +2759,32 @@ async function command(path, body, req = null) {
   }
 
   const voteMatch = path.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
+  if (path === '/api/governance/proposals' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const proposalBody = typeof body.body === 'string' ? body.body.trim() : '';
+    if (title.length < 3 || title.length > 120 || proposalBody.length < 10 || proposalBody.length > 4000) {
+      throw new ApiError('Title must be 3–120 characters and description 10–4000 characters', 400, 'VALIDATION_ERROR');
+    }
+    const proposal = {
+      id: `P-${randomUUID()}`,
+      institution_id: typeof body.institutionId === 'string' && body.institutionId.trim() ? body.institutionId.trim() : 'OUC-001',
+      title,
+      body: proposalBody,
+      status: 'open',
+      outcome: 'pending',
+      execution_status: 'not_ready',
+      closes_game_day: Number(state.clock.day) + 30,
+      closes_game_minute: Number(state.clock.minute ?? 0),
+      quorum: 0.25,
+      approval_threshold: 0.5,
+      votes: { support: 0, oppose: 0, abstain: 0, uncast: 1 },
+      ballots: {},
+    };
+    state.governance.proposals.push(proposal);
+    return { ok: true, proposal, state: snapshot() };
+  }
   if (voteMatch && body.method === 'POST') {
     const proposalId = voteMatch[1];
     const session = resolveSession(req);
