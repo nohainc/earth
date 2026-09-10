@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 165,
+  "migrationVersion": 177,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -332,6 +332,13 @@
       "scale",
       "decimals"
     ],
+    "economic_account_types": [
+      "id",
+      "code",
+      "allows_negative",
+      "is_system_type",
+      "description"
+    ],
     "economic_accounts": [
       "id",
       "owner_economic_id",
@@ -339,7 +346,30 @@
       "account_type",
       "balance",
       "is_default_settlement",
-      "status"
+      "status",
+      "legacy_account_id",
+      "settlement_shard"
+    ],
+    "economic_account_migrations": [
+      "legacy_account_id",
+      "economic_account_id",
+      "mapping_kind",
+      "legacy_balance_units",
+      "account_semantics"
+    ],
+    "economic_policy_rules": [
+      "code",
+      "output_multiplier",
+      "cost_multiplier",
+      "decay_multiplier",
+      "is_selectable",
+      "description"
+    ],
+    "economic_ownership_classes": [
+      "code",
+      "owner_scope",
+      "profile_scope",
+      "description"
     ],
     "economic_transactions": [
       "id",
@@ -778,6 +808,10 @@
     "economic_accounts_owner_asset_idx",
     "economic_accounts_asset_owner_idx",
     "economic_assets_scale_idx",
+    "economic_accounts_system_type_uq",
+    "economic_accounts_legacy_account_uq",
+    "economic_accounts_shard_clearing_uq",
+    "economic_accounts_shard_lookup_idx",
     "economic_transactions_day_idx",
     "economic_transactions_source_idx",
     "economic_entries_transaction_idx",

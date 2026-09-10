@@ -312,8 +312,8 @@ export async function purchasePrivatePlotAndConstruct(
       ],
     );
 
-    // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
+    // Invalidate the profile and record the V2 rate change atomically.
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
       input.ownerId,
       'building_construction',
       buildingId,
@@ -501,8 +501,8 @@ export async function upgradeBuilding(
       [newCatalogId, nextTier, tierSpec?.name ?? catalogOutput?.name ?? null, newOutputAmount, newOpCredits, bld.id],
     );
 
-    // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
+    // Invalidate the profile and record the V2 rate change atomically.
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
       input.humanId,
       'building_upgrade',
       bld.id,
@@ -551,6 +551,13 @@ export async function completeBuildingConstruction(
       "UPDATE buildings SET status = 'active', construction_progress = 100.0, condition = 100.0, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *",
       [bld.id],
     );
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
+      bld.owner_id,
+      bld.id,
+      'construction_completed',
+      current.gameDay,
+      current.gameMinute,
+    ]);
     return { ok: true, building: updated.rows[0] };
   });
 }
@@ -576,8 +583,8 @@ export async function setBuildingOperatingPolicy(
       [input.policy, input.buildingId],
     );
 
-    // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
+    // Invalidate the profile and record the V2 rate change atomically.
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
       input.humanId,
       'policy_change',
       input.buildingId,
@@ -609,6 +616,13 @@ export async function setBuildingAutoRepair(
       'UPDATE buildings SET auto_repair_enabled = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
       [input.autoRepairEnabled, input.buildingId],
     );
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
+      bld.rows[0].owner_id,
+      input.buildingId,
+      input.autoRepairEnabled ? 'auto_repair_enabled' : 'auto_repair_disabled',
+      null,
+      null,
+    ]);
 
     return { ok: true, buildingId: input.buildingId, autoRepairEnabled: input.autoRepairEnabled };
   });
@@ -648,6 +662,13 @@ export async function repairBuilding(
       "UPDATE buildings SET condition = 100.0, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
       [input.buildingId],
     );
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
+      bld.rows[0].owner_id,
+      input.buildingId,
+      'building_repaired',
+      null,
+      null,
+    ]);
 
     return { ok: true, buildingId: input.buildingId, condition: 100.0, componentsUsed: requiredComponents };
   });
@@ -693,8 +714,8 @@ export async function demolishBuilding(
       input.buildingId,
     ]);
 
-    // Record timestamped rate change snapshot
-    await tx.query('SELECT * FROM earth_record_rate_change($1, $2, $3, $4, $5)', [
+    // Invalidate the profile and record the V2 rate change atomically.
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
       input.humanId,
       'building_demolition',
       input.buildingId,

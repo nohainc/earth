@@ -291,6 +291,26 @@ INSERT INTO economic_assets (id, code, unit_scale, scale, decimals, is_currency)
   (5, 'COMPUTE', 1000000, 1000000, 6, FALSE), (6, 'FOOD', 1000000, 1000000, 6, FALSE)
 ON CONFLICT (id) DO NOTHING;
 
+CREATE TABLE IF NOT EXISTS economic_account_types (
+  id SMALLINT PRIMARY KEY,
+  code TEXT NOT NULL UNIQUE,
+  allows_negative BOOLEAN NOT NULL DEFAULT FALSE,
+  is_system_type BOOLEAN NOT NULL DEFAULT FALSE,
+  description TEXT NOT NULL
+);
+INSERT INTO economic_account_types (id, code, allows_negative, is_system_type, description) VALUES
+  (1, 'WALLET', FALSE, FALSE, 'Personal CREDIT account'),
+  (2, 'INVENTORY', FALSE, FALSE, 'Physical asset inventory'),
+  (3, 'TREASURY', FALSE, FALSE, 'Institutional CREDIT treasury'),
+  (4, 'OPERATIONS', FALSE, FALSE, 'Operating account for institutional costs'),
+  (5, 'RESERVE', FALSE, FALSE, 'Held reserve account'),
+  (6, 'ESCROW', FALSE, FALSE, 'Temporarily restricted account'),
+  (7, 'ISSUANCE', TRUE, TRUE, 'World source for explicitly created assets'),
+  (8, 'CONSUMPTION_SINK', FALSE, TRUE, 'World sink for consumed assets'),
+  (9, 'MARKET_CLEARING', FALSE, TRUE, 'Temporary market clearing account'),
+  (10, 'BANK_RESERVE', FALSE, TRUE, 'Bank reserve backing banking operations')
+ON CONFLICT (id) DO NOTHING;
+
 INSERT INTO owner_registry (id, owner_type, source_id, economic_id)
 VALUES ('SYSTEM', 'system', 'SYSTEM', 2), ('OUC', 'system', 'OUC', 1)
 ON CONFLICT (id) DO NOTHING;
@@ -400,10 +420,12 @@ CREATE TABLE IF NOT EXISTS economic_accounts (
   id BIGINT PRIMARY KEY DEFAULT nextval('economic_accounts_id_seq'),
   owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
   asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
-  account_type SMALLINT NOT NULL CHECK (account_type IN (1, 2, 3, 4, 5, 6)),
-  balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0),
+  account_type SMALLINT NOT NULL REFERENCES economic_account_types(id),
+  balance BIGINT NOT NULL DEFAULT 0 CHECK (balance >= 0 OR account_type = 7),
   is_default_settlement BOOLEAN NOT NULL DEFAULT FALSE,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','closed','archived')),
+  legacy_account_id TEXT,
+  settlement_shard SMALLINT CHECK (settlement_shard IS NULL OR (account_type = 9 AND settlement_shard BETWEEN 0 AND 63)),
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
@@ -413,6 +435,26 @@ CREATE INDEX IF NOT EXISTS economic_accounts_owner_asset_idx
   ON economic_accounts (owner_economic_id, asset_id, status);
 CREATE INDEX IF NOT EXISTS economic_accounts_asset_owner_idx
   ON economic_accounts (asset_id, owner_economic_id, status);
+CREATE UNIQUE INDEX IF NOT EXISTS economic_accounts_system_type_uq
+  ON economic_accounts (owner_economic_id, asset_id, account_type)
+  WHERE account_type IN (7, 8, 10) AND status = 'active';
+CREATE UNIQUE INDEX IF NOT EXISTS economic_accounts_legacy_account_uq
+  ON economic_accounts (legacy_account_id) WHERE legacy_account_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS economic_accounts_shard_clearing_uq
+  ON economic_accounts (owner_economic_id, asset_id, account_type, settlement_shard)
+  WHERE account_type = 9 AND status = 'active' AND settlement_shard IS NOT NULL;
+CREATE INDEX IF NOT EXISTS economic_accounts_shard_lookup_idx
+  ON economic_accounts (settlement_shard, asset_id, account_type, status)
+  WHERE settlement_shard IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS economic_account_migrations (
+  legacy_account_id TEXT PRIMARY KEY,
+  economic_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  mapping_kind TEXT NOT NULL,
+  legacy_balance_units BIGINT NOT NULL,
+  account_semantics TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE SEQUENCE IF NOT EXISTS economic_transactions_id_seq
   AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
@@ -674,6 +716,33 @@ CREATE INDEX IF NOT EXISTS daily_settlement_profile_runs_day_idx
 -- 6. Buildings & Real Estate Production
 -- -----------------------------------------------------------------------------
 
+CREATE TABLE IF NOT EXISTS economic_policy_rules (
+  code TEXT PRIMARY KEY,
+  output_multiplier NUMERIC(8,4) NOT NULL CHECK (output_multiplier >= 0),
+  cost_multiplier NUMERIC(8,4) NOT NULL CHECK (cost_multiplier >= 0),
+  decay_multiplier NUMERIC(8,4) NOT NULL CHECK (decay_multiplier >= 0),
+  is_selectable BOOLEAN NOT NULL DEFAULT TRUE,
+  description TEXT NOT NULL
+);
+INSERT INTO economic_policy_rules (code, output_multiplier, cost_multiplier, decay_multiplier, description) VALUES
+  ('balanced', 1.00, 1.00, 1.00, 'Normal production and operating costs'),
+  ('high_output', 1.30, 1.40, 1.75, 'Higher output with higher operating cost and wear'),
+  ('eco_reserve', 0.75, 0.70, 0.50, 'Reduced output and costs with lower wear'),
+  ('halted', 0.00, 0.20, 0.10, 'Production halted with minimum operating cost and low residual wear'),
+  ('overclock', 1.60, 1.90, 3.00, 'Extreme output with extreme operating cost and wear')
+ON CONFLICT (code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS economic_ownership_classes (
+  code TEXT PRIMARY KEY,
+  owner_scope TEXT NOT NULL CHECK (owner_scope IN ('human', 'city')),
+  profile_scope TEXT NOT NULL CHECK (profile_scope IN ('private', 'civic')),
+  description TEXT NOT NULL
+);
+INSERT INTO economic_ownership_classes (code, owner_scope, profile_scope, description) VALUES
+  ('private', 'human', 'private', 'Human-owned economic activity'),
+  ('civic', 'city', 'civic', 'City-owned civic economic activity')
+ON CONFLICT (code) DO NOTHING;
+
 CREATE TABLE IF NOT EXISTS institutions (
   id TEXT PRIMARY KEY,
   kind TEXT NOT NULL CHECK (kind IN ('OUC','CORPORATION','CITY')),
@@ -705,8 +774,8 @@ CREATE TABLE IF NOT EXISTS buildings (
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier >= 1),
   condition NUMERIC(10,4) NOT NULL DEFAULT 100.0 CHECK (condition >= 0.0 AND condition <= 100.0),
   slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint >= 0),
-  ownership_class TEXT NOT NULL CHECK (ownership_class IN ('private','civic')),
-  operating_policy TEXT NOT NULL DEFAULT 'balanced' CHECK (operating_policy IN ('balanced','high_output','eco_reserve','overclock')),
+  ownership_class TEXT NOT NULL REFERENCES economic_ownership_classes(code),
+  operating_policy TEXT NOT NULL DEFAULT 'balanced' REFERENCES economic_policy_rules(code),
   auto_repair_enabled BOOLEAN NOT NULL DEFAULT TRUE,
   daily_operating_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (daily_operating_credits >= 0),
   resource_output_amount NUMERIC(20,6) NOT NULL DEFAULT 0 CHECK (resource_output_amount >= 0),
@@ -1251,7 +1320,7 @@ CREATE TABLE IF NOT EXISTS daily_settlement_runs (
   status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'baseline', 'paused')),
   current_phase TEXT,
   attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
-  shard_count INTEGER NOT NULL DEFAULT 1 CHECK (shard_count BETWEEN 1 AND 1024),
+  shard_count INTEGER NOT NULL DEFAULT 1 CHECK (shard_count BETWEEN 1 AND 64),
   lease_owner TEXT,
   lease_heartbeat_at TIMESTAMPTZ,
   rules_version TEXT NOT NULL DEFAULT 'daily-settlement-v1',

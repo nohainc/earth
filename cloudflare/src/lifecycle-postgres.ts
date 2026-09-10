@@ -68,6 +68,8 @@ export async function settleInheritance(repository: PostgresRepository, input: {
     const buildings = await tx.query<{ id: string }>('SELECT id FROM buildings WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
     const resources = await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
     await tx.query('UPDATE buildings SET owner_id = $1 WHERE owner_id = $2', [input.successorId, input.predecessorId]);
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [input.predecessorId, eventId, 'ownership_transfer_out', input.day, 0]);
+    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [input.successorId, eventId, 'ownership_transfer_in', input.day, 0]);
     for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [input.successorId, resource.resource, resource.amount]);
     await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [input.predecessorId]);
     await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [input.predecessorId]);
@@ -128,6 +130,8 @@ export async function processMortality(tx: PostgresRepository, day: number): Pro
       if (taxCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(taxCents), reasonType: 'inheritance_tax', reasonId: eventId, ruleVersion: 'life-v4', correlationId: `TAX-${eventId}` });
       await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [successorRow.id]);
       await tx.query('UPDATE buildings SET owner_id = $1 WHERE owner_id = $2', [successorRow.id, human.id]);
+      await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [human.id, eventId, 'ownership_transfer_out', day, 0]);
+      await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [successorRow.id, eventId, 'ownership_transfer_in', day, 0]);
       for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [successorRow.id, resource.resource, resource.amount]);
       await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [human.id]);
       for (const asset of assets.rows) await tx.query('INSERT INTO ownership_events (id,asset_type,asset_id,from_owner_id,to_owner_id,quantity,reason_type,reason_id,game_day) VALUES ($1,$2,$3,$4,$5,1,\'inheritance\',$6,$7)', [crypto.randomUUID(), asset.type, asset.id, human.id, successorRow.id, eventId, day]);
@@ -173,6 +177,7 @@ export async function liquidateExpiredEstates(repository: PostgresRepository, da
         await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: estate.account_id, creditAccount: 'account-ouc-treasury', amount: centsToMoney(balanceCents), reasonType: 'estate_liquidation', reasonId: estate.id, ruleVersion: 'life-v3', correlationId: `ESTATE-LIQUIDATION-${estate.id}-${day}` });
       }
       await tx.query("UPDATE buildings SET status = 'closed' WHERE owner_id = $1 AND ownership_class = 'private'", [estate.id]);
+      await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [estate.id, `ESTATE-LIQUIDATION-${estate.id}-${day}`, 'estate_liquidation', day, 0]);
       await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [estate.id]);
       await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [estate.id]);
       await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, NULL FROM humans WHERE id = $1 ON CONFLICT (human_id) DO NOTHING', [estate.id]);

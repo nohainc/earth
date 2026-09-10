@@ -44,6 +44,9 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     condition: string;
     auto_repair_enabled: boolean | null;
     profile_resources_applied: boolean;
+    economic_output_multiplier: string | null;
+    economic_cost_multiplier: string | null;
+    economic_decay_multiplier: string | null;
   }>(`SELECT
       b.*,
       COALESCE(bc.output_credits, CASE WHEN b.resource_output_type = 'credits' OR b.resource_output_type IS NULL THEN b.resource_output_amount ELSE 0 END, 0) AS output_credits,
@@ -62,14 +65,26 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
         SELECT 1 FROM daily_settlement_profiles p
         WHERE p.owner_id = CASE WHEN b.ownership_class = 'civic' THEN b.city_id ELSE b.owner_id END
           AND p.last_settled_game_day = $1
-      ) AS profile_resources_applied
+          AND p.credits_delta = 0
+          AND p.energy_delta = ROUND(p.energy_delta, 2)
+          AND p.food_delta = ROUND(p.food_delta, 2)
+          AND p.materials_delta = ROUND(p.materials_delta, 2)
+          AND p.components_delta = ROUND(p.components_delta, 2)
+          AND p.compute_delta = ROUND(p.compute_delta, 2)
+      ) AS profile_resources_applied,
+      (SELECT MAX(e.effective_output_multiplier)::NUMERIC
+         FROM earth_calculate_building_economics(b.id) e) AS economic_output_multiplier,
+      (SELECT MAX(e.effective_cost_multiplier)::NUMERIC
+         FROM earth_calculate_building_economics(b.id) e) AS economic_cost_multiplier,
+      (SELECT policy.decay_multiplier
+         FROM economic_policy_rules policy
+         WHERE policy.code = b.operating_policy) AS economic_decay_multiplier
     FROM buildings b
     LEFT JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
     WHERE b.status = 'active'`, [day]);
 
   for (const bld of bldQuery.rows) {
     const oClass = (bld.ownership_class || 'private').toLowerCase();
-    const policy = (bld.operating_policy || 'balanced').toLowerCase();
     const initialCondition = Number(bld.condition || 100);
     const resourceOwner = oClass === 'civic' ? bld.city_id : bld.owner_id;
     const profileResourcesApplied = (oClass === 'private' || oClass === 'civic') && bld.profile_resources_applied;
@@ -113,19 +128,12 @@ export async function settleBuildingUpkeepAndRevenue(tx: PostgresRepository, day
     const efficiency = 1.0;
     const costMult = 1.0;
 
-    // Policy Modifiers
-    let policyYield = 1.0;
-    let policyCost = 1.0;
-    let policyDecay = 1.0;
-    if (policy === 'frugal' || policy === 'eco_reserve') {
-      policyYield = 0.75;
-      policyCost = 0.70;
-      policyDecay = 0.50;
-    } else if (policy === 'high_output') {
-      policyYield = 1.30;
-      policyCost = 1.40;
-      policyDecay = 1.75;
-    }
+    // Policy multipliers come from the DB-catalog-backed calculator above.
+    let policyYield = Number(bld.economic_output_multiplier ?? NaN);
+    let policyCost = Number(bld.economic_cost_multiplier ?? NaN);
+    if (!Number.isFinite(policyYield)) policyYield = 1.0;
+    if (!Number.isFinite(policyCost)) policyCost = 1.0;
+    const policyDecay = Number(bld.economic_decay_multiplier ?? 1);
 
     const effectiveYield = efficiency * policyYield;
 

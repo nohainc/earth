@@ -22,6 +22,10 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
     );
     for (const building of buildings.rows) {
       await tx.query(
+        'SELECT earth_economic_state_changed($1, $2, $3, $4, $5)',
+        [building.owner_id ?? building.city_id, building.id, 'construction_completed', completedDay, 0],
+      );
+      await tx.query(
         `INSERT INTO world_events (id, game_day, event_type, title, details)
          VALUES ($1,$2,'building.constructed',$3,jsonb_build_object('buildingId',$4::text,'cityId',$5::text,'ownerId',$6::text)::text)
          ON CONFLICT (id) DO NOTHING`,
@@ -45,14 +49,25 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
            SET status = 'unlocked', research_project_id = EXCLUDED.research_project_id, unlocked_game_day = EXCLUDED.unlocked_game_day`,
         [project.corporation_id, project.catalog_id, project.id, completedDay],
       );
+      await tx.query(
+        'SELECT earth_economic_state_changed($1, $2, $3, $4, $5)',
+        [project.corporation_id, project.id, 'building_technology_upgrade', completedDay, 0],
+      );
     }
 
-    await tx.query(
+    const completedTechnologies = await tx.query<{ corporation_id: string; id: string; technology_key: string }>(
       `UPDATE corporation_technology_projects
        SET status = 'completed', progress = 100, completed_game_day = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE status = 'active' AND research_due_end_day <= $1`,
+       WHERE status = 'active' AND research_due_end_day <= $1
+       RETURNING corporation_id, id, technology_key`,
       [completedDay],
     );
+    for (const technology of completedTechnologies.rows) {
+      await tx.query(
+        'SELECT earth_economic_state_changed($1, $2, $3, $4, $5)',
+        [technology.corporation_id, technology.id, 'technology_upgrade', completedDay, 0],
+      );
+    }
     await resolveProposalsInTransaction(tx, completedDay);
   });
 

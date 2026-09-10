@@ -9,7 +9,7 @@ export type BuildingCategory =
   | 'food';
 
 export type OwnershipClass = 'private' | 'civic';
-export type OperatingPolicy = 'balanced' | 'high_output' | 'eco_reserve' | 'overclock';
+export type OperatingPolicy = 'halted' | 'eco_reserve' | 'balanced' | 'high_output' | 'overclock';
 
 export interface RequiredPatentSpec {
   patentId: string;
