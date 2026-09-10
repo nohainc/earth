@@ -80,10 +80,10 @@ void main() {
     expect(find.text('Available Credits'), findsNothing);
     expect(find.text('GROSS CREDIT INCOME'), findsOneWidget);
     expect(find.text('Private buildings'), findsOneWidget);
-    expect(find.text('Investment dividend'), findsOneWidget);
+    expect(find.text('Bank deposit interest'), findsOneWidget);
     expect(find.text('FROM PRIVATE BUILDINGS'), findsNothing);
     expect(find.text('NET CREDIT INCOME'), findsOneWidget);
-    expect(find.text('Basic income tax'), findsOneWidget);
+    expect(find.text('Income tax 2%'), findsOneWidget);
     expect(find.text('DAILY INCOME'), findsOneWidget);
     expect(find.text('YOUR DAILY RESULT'), findsNothing);
     expect(find.text('ON TRACK'), findsOneWidget);

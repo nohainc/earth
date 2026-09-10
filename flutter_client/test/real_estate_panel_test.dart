@@ -181,13 +181,18 @@ void main() {
 
     expect(find.text('PRIVATE'), findsOneWidget);
     expect(find.text('CIVIC'), findsOneWidget);
-    expect(find.text('PRIVATE CATALOG'), findsOneWidget);
+    expect(find.text('BUILT'), findsWidgets);
+    expect(find.text('CATALOG'), findsWidgets);
+
+    await tester.tap(find.text('CATALOG'));
+    await tester.pumpAndSettle();
     expect(find.text('Solar Concentrator Array'), findsOneWidget);
 
     await tester.tap(find.text('CIVIC'));
     await tester.pumpAndSettle();
 
-    expect(find.text('CIVIC CATALOG'), findsOneWidget);
+    expect(find.text('BUILT'), findsWidgets);
+    expect(find.text('CATALOG'), findsWidgets);
   });
 
   testWidgets(
@@ -221,11 +226,10 @@ void main() {
     await tester.tap(find.text('OPEN TREE'));
     await tester.pumpAndSettle();
 
-    expect(find.textContaining('Multi-Tier Upgrade Tree'), findsOneWidget);
-    expect(
-        find.textContaining('MULTI-TIER UPGRADE PROGRESSION'), findsOneWidget);
-    expect(find.text('TIER 1: Bistro & Molecular Diner'), findsOneWidget);
-    expect(find.text('TIER 2: Gourmet Gastronomy Lounge'), findsOneWidget);
+    expect(find.textContaining('Upgrade to Tier 2'), findsWidgets);
+    expect(find.textContaining('UPGRADE COST'), findsOneWidget);
+    expect(find.textContaining('DAILY UPKEEP CHANGES'), findsOneWidget);
+    expect(find.textContaining('OPERATING COST CHANGES'), findsOneWidget);
     expect(find.text('COMMENCE TIER 2 UPGRADE'), findsOneWidget);
   });
 

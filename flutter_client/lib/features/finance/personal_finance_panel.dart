@@ -7,6 +7,7 @@ import '../../shared/design_system/design_system.dart';
 import '../../shared/widgets/earth_page_cockpit.dart';
 import '../../shared/widgets/earth_primitives.dart';
 import '../../shared/widgets/format_helpers.dart';
+import '../../shared/widgets/credit_income_summary_card.dart';
 
 class PersonalFinancePanel extends StatelessWidget {
   final EarthState state;
@@ -40,27 +41,27 @@ class PersonalFinancePanel extends StatelessWidget {
             building['status']?.toString() == 'active')
         .map((building) => Map<String, dynamic>.from(building))
         .toList();
-    const investmentDividend = 0.0;
+    final bank = _map(personalFinanceData['bank']);
+    final bankDeposits = (bank['deposits'] as List? ?? const [])
+        .whereType<Map>()
+        .map((deposit) => Map<String, dynamic>.from(deposit))
+        .toList();
+    final investmentDividend = bankDeposits.fold<double>(0, (total, deposit) =>
+        total + asDoubleOr(deposit['principal'], 0) * asDoubleOr(deposit['daily_rate'], 0));
     final buildingChange = _buildingResourceChange(privateBuildings);
-    final preparedBuildingChange = buildingChange;
+    final preparedBuildingChange = _addChanges(buildingChange, {'credits': investmentDividend});
     final basicRule = taxRules
         .where((rule) => rule['category']?.toString() == 'basic_income')
         .firstOrNull;
     final basicRate = asDoubleOr(basicRule?['rate'], 0);
     final grossCredits = preparedBuildingChange['credits']!;
     final incomeTax = grossCredits > 0 ? grossCredits * basicRate : 0.0;
-    final finalChange = _addChanges(
-        preparedBuildingChange,
-        {'credits': -incomeTax});
+    final finalChange =
+        _addChanges(preparedBuildingChange, {'credits': -incomeTax});
     final unpaid = asDoubleOr(maintenance['unpaidTotal'], 0);
     final protected = asDoubleOr(
         _map(personalFinanceData['protectedMinimum'])['credits'], 100);
     final statusColor = unpaid > 0 ? Colors.orangeAccent : cyanAccentColor;
-    final bank = _map(personalFinanceData['bank']);
-    final bankDeposits = (bank['deposits'] as List? ?? const [])
-        .whereType<Map>()
-        .map((deposit) => Map<String, dynamic>.from(deposit))
-        .toList();
 
     final liquidCredits = asDouble(state.human['credits']) ?? 0.0;
     final netDailyCredits = grossCredits - incomeTax;
@@ -85,8 +86,11 @@ class PersonalFinancePanel extends StatelessWidget {
         asInt(rawClock['game_minute']) ??
         asInt(rawClock['current_minute']);
 
-    final currentDay = (parsedDay != null && parsedDay > 0) ? parsedDay : fallbackDay;
-    final currentMinute = (parsedMinute != null && parsedMinute >= 0) ? parsedMinute : fallbackMinute;
+    final currentDay =
+        (parsedDay != null && parsedDay > 0) ? parsedDay : fallbackDay;
+    final currentMinute = (parsedMinute != null && parsedMinute >= 0)
+        ? parsedMinute
+        : fallbackMinute;
 
     final cockpit = EarthPageCockpit(
       status: unpaid > 0 ? 'NEEDS ATTENTION' : 'ON TRACK',
@@ -108,11 +112,14 @@ class PersonalFinancePanel extends StatelessWidget {
           label: 'Daily Cashflow',
           value: '$netSign${formatWholeNumber(netDailyCredits)}',
           icon: Icons.trending_up_outlined,
-          color: netDailyCredits >= 0 ? context.successColor : context.warningColor,
+          color: netDailyCredits >= 0
+              ? context.successColor
+              : context.warningColor,
         ),
         CockpitMetric(
           label: 'Daily Tax',
-          value: '${formatWholeNumber(incomeTax)} (${(basicRate * 100).toStringAsFixed(0)}%)',
+          value:
+              '${formatWholeNumber(incomeTax)} (${(basicRate * 100).toStringAsFixed(0)}%)',
           icon: Icons.receipt_long_outlined,
           color: context.secondaryColor,
         ),
@@ -135,7 +142,7 @@ class PersonalFinancePanel extends StatelessWidget {
         _allResourcesLine(finalChange, emphasize: true),
         const SizedBox(height: 24),
         _CreditIncomeSummaryCard(
-          buildingCredits: preparedBuildingChange['credits']!,
+          buildingCredits: buildingChange['credits']!,
           investmentDividend: investmentDividend,
           grossCredits: grossCredits,
           taxRate: basicRate,
@@ -171,12 +178,16 @@ class PersonalFinancePanel extends StatelessWidget {
       ? Map<String, dynamic>.from(value)
       : const <String, dynamic>{};
   static Map<String, double> _profileChange(Map<String, dynamic> profile) => {
-        'credits': asDoubleOr(profile['credits_delta'] ?? profile['credits'], 0),
+        'credits':
+            asDoubleOr(profile['credits_delta'] ?? profile['credits'], 0),
         'energy': asDoubleOr(profile['energy_delta'] ?? profile['energy'], 0),
         'food': asDoubleOr(profile['food_delta'] ?? profile['food'], 0),
-        'materials': asDoubleOr(profile['materials_delta'] ?? profile['materials'], 0),
-        'components': asDoubleOr(profile['components_delta'] ?? profile['components'], 0),
-        'compute': asDoubleOr(profile['compute_delta'] ?? profile['compute'], 0),
+        'materials':
+            asDoubleOr(profile['materials_delta'] ?? profile['materials'], 0),
+        'components':
+            asDoubleOr(profile['components_delta'] ?? profile['components'], 0),
+        'compute':
+            asDoubleOr(profile['compute_delta'] ?? profile['compute'], 0),
       };
   static String _number(double value) => value.abs() >= 100
       ? value.abs().toStringAsFixed(0)
@@ -268,11 +279,22 @@ class PersonalFinancePanel extends StatelessWidget {
               ? .7
               : 1.0;
 
-      for (final key in ['credits', 'energy', 'food', 'materials', 'components', 'compute']) {
+      for (final key in [
+        'credits',
+        'energy',
+        'food',
+        'materials',
+        'components',
+        'compute'
+      ]) {
         double outVal = asDoubleOr(building['output_$key'], 0);
-        if (outVal == 0 && building['resource_output_type']?.toString() == key) {
+        if (outVal == 0 &&
+            building['resource_output_type']?.toString() == key) {
           outVal = asDoubleOr(building['resource_output_amount'], 0);
-        } else if (outVal == 0 && key == 'credits' && (building['resource_output_type']?.toString() == 'credits' || building['resource_output_type'] == null)) {
+        } else if (outVal == 0 &&
+            key == 'credits' &&
+            (building['resource_output_type']?.toString() == 'credits' ||
+                building['resource_output_type'] == null)) {
           outVal = asDoubleOr(building['resource_output_amount'], 0);
         }
 
@@ -282,9 +304,10 @@ class PersonalFinancePanel extends StatelessWidget {
           opVal = asDoubleOr(building['daily_operating_credits'], 0);
         }
 
-        final net = (outVal * outputMultiplier) - ((upkeepVal + opVal) * costMultiplier);
-        changes[key] = (changes[key] ?? 0) +
-            (key == 'credits' ? net : rounded(net));
+        final net = (outVal * outputMultiplier) -
+            ((upkeepVal + opVal) * costMultiplier);
+        changes[key] =
+            (changes[key] ?? 0) + (key == 'credits' ? net : rounded(net));
       }
     }
     return changes;
@@ -312,8 +335,8 @@ class PersonalFinancePanel extends StatelessWidget {
               : 1.0;
       final gross =
           asDoubleOr(building['resource_output_amount'], 0) * yieldMultiplier;
-      final cost = asDoubleOr(building['daily_operating_credits'], 0) *
-          costMultiplier;
+      final cost =
+          asDoubleOr(building['daily_operating_credits'], 0) * costMultiplier;
       total += (gross - cost).clamp(0, double.infinity) *
           asDoubleOr(holding['shares_owned'], 0) /
           asDoubleOr(holding['total_shares_issued'], 1000)
@@ -332,7 +355,14 @@ class PersonalFinancePanel extends StatelessWidget {
       'components': Icons.precision_manufacturing_outlined,
       'compute': Icons.memory_rounded
     };
-    const order = ['credits', 'energy', 'food', 'materials', 'components', 'compute'];
+    const order = [
+      'credits',
+      'energy',
+      'food',
+      'materials',
+      'components',
+      'compute'
+    ];
     return Center(
       child: Wrap(
           alignment: WrapAlignment.center,
@@ -454,7 +484,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
   static const double _dailyRate = 0.001; // 0.1% per game day baseline
   static const List<int> _terms = [1, 7, 30, 90];
 
-  final TextEditingController _amountController = TextEditingController(text: '100');
+  final TextEditingController _amountController =
+      TextEditingController(text: '100');
   int _selectedTermDays = 30;
   bool _submitting = false;
 
@@ -464,8 +495,10 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     super.dispose();
   }
 
-  double get _enteredAmount => double.tryParse(_amountController.text.trim()) ?? 0.0;
-  double get _estimatedInterest => _enteredAmount * _dailyRate * _selectedTermDays;
+  double get _enteredAmount =>
+      double.tryParse(_amountController.text.trim()) ?? 0.0;
+  double get _estimatedInterest =>
+      _enteredAmount * _dailyRate * _selectedTermDays;
 
   Future<void> _showDepositReviewDialog(BuildContext context) async {
     final amount = _enteredAmount;
@@ -487,10 +520,13 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           ),
           title: Row(
             children: [
-              const Icon(Icons.account_balance_outlined, color: EarthResourceColors.credits, size: 22),
+              const Icon(Icons.account_balance_outlined,
+                  color: EarthResourceColors.credits, size: 22),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('Confirm Bank Deposit', style: context.topicTitleStyle.copyWith(color: context.inkColor)),
+                child: Text('Confirm Bank Deposit',
+                    style: context.topicTitleStyle
+                        .copyWith(color: context.inkColor)),
               ),
             ],
           ),
@@ -514,18 +550,34 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   ),
                   child: Column(
                     children: [
-                      _reviewRow(dialogContext, 'Deposit amount', '${formatWholeNumber(amount)} C', isBold: true),
+                      _reviewRow(dialogContext, 'Deposit amount',
+                          '${formatWholeNumber(amount)} C',
+                          isBold: true),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Remaining liquid credits', '${formatWholeNumber(remainingCredits < 0 ? 0 : remainingCredits)} C',
-                          color: remainingCredits < 0 ? context.errorColor : context.inkColor),
+                      _reviewRow(dialogContext, 'Remaining liquid credits',
+                          '${formatWholeNumber(remainingCredits < 0 ? 0 : remainingCredits)} C',
+                          color: remainingCredits < 0
+                              ? context.errorColor
+                              : context.inkColor),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Lock-up term', '$termDays game days'),
+                      _reviewRow(
+                          dialogContext, 'Lock-up term', '$termDays game days'),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Current game time', formatGameDateTime(widget.currentDay, widget.currentMinute)),
+                      _reviewRow(
+                          dialogContext,
+                          'Current game time',
+                          formatGameDateTime(
+                              widget.currentDay, widget.currentMinute)),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Maturity', formatGameDateTime(maturityDay, widget.currentMinute)),
+                      _reviewRow(
+                          dialogContext,
+                          'Maturity',
+                          formatGameDateTime(
+                              maturityDay, widget.currentMinute)),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Estimated interest', '~${estInterest.toStringAsFixed(2)} C', color: context.successColor),
+                      _reviewRow(dialogContext, 'Estimated interest',
+                          '~${estInterest.toStringAsFixed(2)} C',
+                          color: context.successColor),
                       const Divider(height: 18, color: Colors.white10),
                       _reviewRow(
                         dialogContext,
@@ -543,19 +595,23 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                     padding: const EdgeInsets.all(10),
                     decoration: BoxDecoration(
                       color: context.errorColor.withValues(alpha: .12),
-                      borderRadius: BorderRadius.circular(context.radiusControl),
-                      border: Border.all(color: context.errorColor.withValues(alpha: .3)),
+                      borderRadius:
+                          BorderRadius.circular(context.radiusControl),
+                      border: Border.all(
+                          color: context.errorColor.withValues(alpha: .3)),
                     ),
                     child: Row(
                       children: [
-                        Icon(Icons.error_outline, size: 16, color: context.errorColor),
+                        Icon(Icons.error_outline,
+                            size: 16, color: context.errorColor),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             amount <= 0
                                 ? 'Please enter a valid deposit amount greater than 0.'
                                 : 'Insufficient Liquid credits. You need ${formatWholeNumber(deficit)} more Credits.',
-                            style: context.captionStyle.copyWith(color: context.errorColor),
+                            style: context.captionStyle
+                                .copyWith(color: context.errorColor),
                           ),
                         ),
                       ],
@@ -565,7 +621,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                 ],
                 Text(
                   '• Variable yield: returns depend on realized bank income and settlement.\n• Idempotent execution: unique correlation token attached to transaction.',
-                  style: context.captionStyle.copyWith(color: context.mutedColor, height: 1.35),
+                  style: context.captionStyle
+                      .copyWith(color: context.mutedColor, height: 1.35),
                 ),
               ],
             ),
@@ -602,13 +659,15 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     try {
       EarthAudioEngine.instance.playCash();
       await widget.action(() async {
-        await const EarthApi().createBankDeposit(amount: amount, termDays: termDays);
+        await const EarthApi()
+            .createBankDeposit(amount: amount, termDays: termDays);
         return const EarthApi().world();
       });
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Successfully deposited ${formatWholeNumber(amount)} C for $termDays days.'),
+            content: Text(
+                'Successfully deposited ${formatWholeNumber(amount)} C for $termDays days.'),
             backgroundColor: context.successColor,
           ),
         );
@@ -644,10 +703,13 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           ),
           title: Row(
             children: [
-              const Icon(Icons.download_done_rounded, color: Colors.tealAccent, size: 22),
+              const Icon(Icons.download_done_rounded,
+                  color: Colors.tealAccent, size: 22),
               const SizedBox(width: 10),
               Expanded(
-                child: Text('Withdraw Matured Deposit', style: context.topicTitleStyle.copyWith(color: context.inkColor)),
+                child: Text('Withdraw Matured Deposit',
+                    style: context.topicTitleStyle
+                        .copyWith(color: context.inkColor)),
               ),
             ],
           ),
@@ -673,9 +735,12 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                     children: [
                       _reviewRow(dialogContext, 'Deposit ID', depositId),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Principal return', '${formatWholeNumber(principal)} C'),
+                      _reviewRow(dialogContext, 'Principal return',
+                          '${formatWholeNumber(principal)} C'),
                       const SizedBox(height: 8),
-                      _reviewRow(dialogContext, 'Realized interest', '${interest.toStringAsFixed(2)} C', color: context.successColor),
+                      _reviewRow(dialogContext, 'Realized interest',
+                          '${interest.toStringAsFixed(2)} C',
+                          color: context.successColor),
                       const Divider(height: 18, color: Colors.white10),
                       _reviewRow(
                         dialogContext,
@@ -721,7 +786,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Successfully withdrawn ${totalPayout.toStringAsFixed(2)} C to your liquid balance.'),
+              content: Text(
+                  'Successfully withdrawn ${totalPayout.toStringAsFixed(2)} C to your liquid balance.'),
               backgroundColor: context.successColor,
             ),
           );
@@ -741,7 +807,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     }
   }
 
-  Widget _reviewRow(BuildContext ctx, String label, String value, {bool isBold = false, Color? color}) {
+  Widget _reviewRow(BuildContext ctx, String label, String value,
+      {bool isBold = false, Color? color}) {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -765,11 +832,14 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
   Widget build(BuildContext context) {
     final activeDeposits = widget.deposits.where((d) {
       final status = d['status']?.toString().toLowerCase() ?? '';
-      final maturityDay = asIntOr(d['maturity_game_day'], widget.currentDay + 1);
+      final maturityDay =
+          asIntOr(d['maturity_game_day'], widget.currentDay + 1);
       return status == 'active' && widget.currentDay < maturityDay;
     }).toList();
-    final totalPrincipal = widget.deposits.fold<double>(0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
-    final totalAccruedInterest = widget.deposits.fold<double>(0.0, (sum, d) => sum + asDoubleOr(d['accrued_interest'], 0));
+    final totalPrincipal = widget.deposits
+        .fold<double>(0.0, (sum, d) => sum + asDoubleOr(d['principal'], 0));
+    final totalAccruedInterest = widget.deposits.fold<double>(
+        0.0, (sum, d) => sum + asDoubleOr(d['accrued_interest'], 0));
 
     return EarthPanel(
       title: 'GLOBAL CORPORATE BANK',
@@ -817,7 +887,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('OVERVIEW', style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
+            Text('OVERVIEW',
+                style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
             const EarthBadge(
               label: 'GLOBAL BANK v1',
               variant: EarthBadgeVariant.neutral,
@@ -829,18 +900,42 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           builder: (context, constraints) {
             final isNarrow = constraints.maxWidth < 600;
             final tiles = [
-              _metricBox(context, 'Liquid credits', '${formatWholeNumber(liquidCredits)} C', Icons.account_balance_wallet_outlined, EarthResourceColors.credits),
-              _metricBox(context, 'Deposited principal', '${formatWholeNumber(totalPrincipal)} C', Icons.lock_clock_outlined, context.primaryColor),
-              _metricBox(context, 'Accrued interest', '${accruedInterest >= 0 ? '+' : ''}${accruedInterest.toStringAsFixed(2)} C', Icons.trending_up, context.successColor),
-              _metricBox(context, 'Active deposits', '$activeDepositCount', Icons.receipt_long_outlined, context.secondaryColor),
+              _metricBox(
+                  context,
+                  'Liquid credits',
+                  '${formatWholeNumber(liquidCredits)} C',
+                  Icons.account_balance_wallet_outlined,
+                  EarthResourceColors.credits),
+              _metricBox(
+                  context,
+                  'Deposited principal',
+                  '${formatWholeNumber(totalPrincipal)} C',
+                  Icons.lock_clock_outlined,
+                  context.primaryColor),
+              _metricBox(
+                  context,
+                  'Accrued interest',
+                  '${accruedInterest >= 0 ? '+' : ''}${accruedInterest.toStringAsFixed(2)} C',
+                  Icons.trending_up,
+                  context.successColor),
+              _metricBox(context, 'Active deposits', '$activeDepositCount',
+                  Icons.receipt_long_outlined, context.secondaryColor),
             ];
 
             if (isNarrow) {
               return Column(
                 children: [
-                  Row(children: [Expanded(child: tiles[0]), const SizedBox(width: 10), Expanded(child: tiles[1])]),
+                  Row(children: [
+                    Expanded(child: tiles[0]),
+                    const SizedBox(width: 10),
+                    Expanded(child: tiles[1])
+                  ]),
                   const SizedBox(height: 10),
-                  Row(children: [Expanded(child: tiles[2]), const SizedBox(width: 10), Expanded(child: tiles[3])]),
+                  Row(children: [
+                    Expanded(child: tiles[2]),
+                    const SizedBox(width: 10),
+                    Expanded(child: tiles[3])
+                  ]),
                 ],
               );
             }
@@ -873,7 +968,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
               Expanded(
                 child: Text(
                   'Credit deposits earn variable interest from realized bank income. Returns are variable and not guaranteed.',
-                  style: context.captionStyle.copyWith(color: context.mutedColor, fontSize: 11),
+                  style: context.captionStyle
+                      .copyWith(color: context.mutedColor, fontSize: 11),
                 ),
               ),
             ],
@@ -883,7 +979,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     );
   }
 
-  Widget _metricBox(BuildContext context, String label, String value, IconData icon, Color color) {
+  Widget _metricBox(BuildContext context, String label, String value,
+      IconData icon, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       decoration: BoxDecoration(
@@ -901,7 +998,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
               Expanded(
                 child: Text(
                   label,
-                  style: context.captionStyle.copyWith(color: context.mutedColor, fontSize: 11),
+                  style: context.captionStyle
+                      .copyWith(color: context.mutedColor, fontSize: 11),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -910,7 +1008,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           const SizedBox(height: 6),
           Text(
             value,
-            style: context.widgetTitleStyle.copyWith(fontWeight: FontWeight.w700, fontSize: 14),
+            style: context.widgetTitleStyle
+                .copyWith(fontWeight: FontWeight.w700, fontSize: 14),
           ),
         ],
       ),
@@ -926,7 +1025,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('DEPOSIT FUNDS', style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
+        Text('DEPOSIT FUNDS',
+            style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
         const SizedBox(height: 12),
         LayoutBuilder(
           builder: (context, constraints) {
@@ -964,17 +1064,24 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                             Wrap(
                               crossAxisAlignment: WrapCrossAlignment.center,
                               children: [
-                                Text('Estimated interest: ', style: context.bodyStyle.copyWith(color: context.mutedColor, fontSize: 12)),
+                                Text('Estimated interest: ',
+                                    style: context.bodyStyle.copyWith(
+                                        color: context.mutedColor,
+                                        fontSize: 12)),
                                 Text(
                                   '+${estReturn.toStringAsFixed(2)} C (~0.1%/day)',
-                                  style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                  style: context.bodyStyle.copyWith(
+                                      color: context.successColor,
+                                      fontWeight: FontWeight.bold,
+                                      fontSize: 12),
                                 ),
                               ],
                             ),
                             const SizedBox(height: 4),
                             Text(
                               'Maturity: Game Day $maturityDay · Returns depend on realized bank income and settlement.',
-                              style: context.captionStyle.copyWith(color: context.mutedColor, fontSize: 10.5),
+                              style: context.captionStyle.copyWith(
+                                  color: context.mutedColor, fontSize: 10.5),
                             ),
                             const SizedBox(height: 12),
                             EarthButton(
@@ -982,7 +1089,9 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                               icon: Icons.add_circle_outline,
                               variant: EarthButtonVariant.primary,
                               isLoading: _submitting,
-                              onPressed: _submitting || amount <= 0 ? null : () => _showDepositReviewDialog(context),
+                              onPressed: _submitting || amount <= 0
+                                  ? null
+                                  : () => _showDepositReviewDialog(context),
                             ),
                           ],
                         )
@@ -993,19 +1102,28 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Wrap(
-                                    crossAxisAlignment: WrapCrossAlignment.center,
+                                    crossAxisAlignment:
+                                        WrapCrossAlignment.center,
                                     children: [
-                                      Text('Estimated interest: ', style: context.bodyStyle.copyWith(color: context.mutedColor, fontSize: 12)),
+                                      Text('Estimated interest: ',
+                                          style: context.bodyStyle.copyWith(
+                                              color: context.mutedColor,
+                                              fontSize: 12)),
                                       Text(
                                         '+${estReturn.toStringAsFixed(2)} C (~0.1%/day)',
-                                        style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold, fontSize: 12),
+                                        style: context.bodyStyle.copyWith(
+                                            color: context.successColor,
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 12),
                                       ),
                                     ],
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
                                     'Maturity: Game Day $maturityDay · Returns depend on realized bank income and settlement.',
-                                    style: context.captionStyle.copyWith(color: context.mutedColor, fontSize: 10.5),
+                                    style: context.captionStyle.copyWith(
+                                        color: context.mutedColor,
+                                        fontSize: 10.5),
                                   ),
                                 ],
                               ),
@@ -1016,7 +1134,9 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                               icon: Icons.add_circle_outline,
                               variant: EarthButtonVariant.primary,
                               isLoading: _submitting,
-                              onPressed: _submitting || amount <= 0 ? null : () => _showDepositReviewDialog(context),
+                              onPressed: _submitting || amount <= 0
+                                  ? null
+                                  : () => _showDepositReviewDialog(context),
                             ),
                           ],
                         ),
@@ -1024,12 +1144,14 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                 const SizedBox(height: 8),
                 Row(
                   children: [
-                    const Icon(Icons.warning_amber_rounded, size: 14, color: Colors.orangeAccent),
+                    const Icon(Icons.warning_amber_rounded,
+                        size: 14, color: Colors.orangeAccent),
                     const SizedBox(width: 6),
                     Expanded(
                       child: Text(
                         'Deposited credits cannot be withdrawn before maturity.',
-                        style: context.captionStyle.copyWith(color: Colors.orangeAccent, fontSize: 11),
+                        style: context.captionStyle
+                            .copyWith(color: Colors.orangeAccent, fontSize: 11),
                       ),
                     ),
                   ],
@@ -1046,7 +1168,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Deposit Amount (Credits)', style: context.captionStyle.copyWith(color: context.mutedColor)),
+        Text('Deposit Amount (Credits)',
+            style: context.captionStyle.copyWith(color: context.mutedColor)),
         const SizedBox(height: 6),
         Container(
           height: context.inputHeight,
@@ -1058,13 +1181,16 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
           padding: const EdgeInsets.symmetric(horizontal: 12),
           child: Row(
             children: [
-              const Icon(Icons.account_balance_wallet_outlined, size: 16, color: EarthResourceColors.credits),
+              const Icon(Icons.account_balance_wallet_outlined,
+                  size: 16, color: EarthResourceColors.credits),
               const SizedBox(width: 8),
               Expanded(
                 child: TextField(
                   controller: _amountController,
-                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  style: context.bodyStyle.copyWith(fontWeight: FontWeight.bold),
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  style:
+                      context.bodyStyle.copyWith(fontWeight: FontWeight.bold),
                   decoration: const InputDecoration(
                     border: InputBorder.none,
                     hintText: 'Enter amount...',
@@ -1073,7 +1199,9 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   onChanged: (_) => setState(() {}),
                 ),
               ),
-              Text('C', style: context.bodyStyle.copyWith(color: context.mutedColor, fontWeight: FontWeight.bold)),
+              Text('C',
+                  style: context.bodyStyle.copyWith(
+                      color: context.mutedColor, fontWeight: FontWeight.bold)),
             ],
           ),
         ),
@@ -1085,7 +1213,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text('Term Length (Game Days)', style: context.captionStyle.copyWith(color: context.mutedColor)),
+        Text('Term Length (Game Days)',
+            style: context.captionStyle.copyWith(color: context.mutedColor)),
         const SizedBox(height: 6),
         Row(
           children: _terms.map((term) {
@@ -1103,18 +1232,26 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                     height: context.inputHeight,
                     alignment: Alignment.center,
                     decoration: BoxDecoration(
-                      color: isSelected ? context.primaryColor.withValues(alpha: .15) : context.surfaceColor,
-                      borderRadius: BorderRadius.circular(context.radiusControl),
+                      color: isSelected
+                          ? context.primaryColor.withValues(alpha: .15)
+                          : context.surfaceColor,
+                      borderRadius:
+                          BorderRadius.circular(context.radiusControl),
                       border: Border.all(
-                        color: isSelected ? context.primaryColor : context.subtleBorderColor,
+                        color: isSelected
+                            ? context.primaryColor
+                            : context.subtleBorderColor,
                         width: isSelected ? 1.5 : 1,
                       ),
                     ),
                     child: Text(
                       '$term d',
                       style: context.bodyStyle.copyWith(
-                        fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                        color: isSelected ? context.primaryColor : context.mutedColor,
+                        fontWeight:
+                            isSelected ? FontWeight.bold : FontWeight.normal,
+                        color: isSelected
+                            ? context.primaryColor
+                            : context.mutedColor,
                       ),
                     ),
                   ),
@@ -1136,7 +1273,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text('MY DEPOSITS', style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
+            Text('MY DEPOSITS',
+                style: context.widgetTitleStyle.copyWith(letterSpacing: .8)),
             Text(
               '${deposits.length} ${deposits.length == 1 ? 'record' : 'records'}',
               style: context.widgetFooterStyle,
@@ -1155,19 +1293,23 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
             ),
             child: Column(
               children: [
-                Icon(Icons.savings_outlined, size: 28, color: context.mutedColor),
+                Icon(Icons.savings_outlined,
+                    size: 28, color: context.mutedColor),
                 const SizedBox(height: 8),
                 Text(
                   'No active deposits. Deposit credits to earn potential interest over a selected term.',
                   textAlign: TextAlign.center,
-                  style: context.bodyStyle.copyWith(color: context.mutedColor, fontSize: 12),
+                  style: context.bodyStyle
+                      .copyWith(color: context.mutedColor, fontSize: 12),
                 ),
               ],
             ),
           )
         else
           Column(
-            children: deposits.map((deposit) => _buildDepositRow(context, deposit)).toList(),
+            children: deposits
+                .map((deposit) => _buildDepositRow(context, deposit))
+                .toList(),
           ),
       ],
     );
@@ -1179,14 +1321,17 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     final startDay = asIntOr(deposit['start_game_day'], 1);
     final startMinute = asIntOr(deposit['start_game_minute'], 0);
     final maturityDay = asIntOr(deposit['maturity_game_day'], startDay + 1);
-    final maturityMinute = asIntOr(deposit['maturity_game_minute'], startMinute);
+    final maturityMinute =
+        asIntOr(deposit['maturity_game_minute'], startMinute);
     final rawStatus = deposit['status']?.toString().toLowerCase() ?? 'active';
 
-    final isMaturedByTime = (widget.currentDay - 1) * 1440 + widget.currentMinute >=
-        (maturityDay - 1) * 1440 + maturityMinute;
+    final isMaturedByTime =
+        (widget.currentDay - 1) * 1440 + widget.currentMinute >=
+            (maturityDay - 1) * 1440 + maturityMinute;
     final isWithdrawn = rawStatus == 'withdrawn';
     final isCancelled = rawStatus == 'cancelled';
-    final isMatured = rawStatus == 'matured' || (!isWithdrawn && !isCancelled && isMaturedByTime);
+    final isMatured = rawStatus == 'matured' ||
+        (!isWithdrawn && !isCancelled && isMaturedByTime);
 
     final statusText = isWithdrawn
         ? 'Withdrawn'
@@ -1207,7 +1352,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
     // Term progress: clamped 0.0 to 1.0
     final totalDays = (maturityDay - startDay).clamp(1, 9999);
     final elapsedDays = (widget.currentDay - startDay).clamp(0, totalDays);
-    final progress = isWithdrawn ? 1.0 : (elapsedDays / totalDays).clamp(0.0, 1.0);
+    final progress =
+        isWithdrawn ? 1.0 : (elapsedDays / totalDays).clamp(0.0, 1.0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 10),
@@ -1222,7 +1368,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
         children: [
           Row(
             children: [
-              const Icon(Icons.account_balance_outlined, size: 18, color: EarthResourceColors.credits),
+              const Icon(Icons.account_balance_outlined,
+                  size: 18, color: EarthResourceColors.credits),
               const SizedBox(width: 8),
               Expanded(
                 child: Column(
@@ -1230,16 +1377,20 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   children: [
                     Text(
                       '${formatWholeNumber(principal)} C',
-                      style: context.widgetTitleStyle.copyWith(fontWeight: FontWeight.bold),
+                      style: context.widgetTitleStyle
+                          .copyWith(fontWeight: FontWeight.bold),
                     ),
                     Text.rich(
                       TextSpan(
                         text: 'Accrued interest: ',
-                        style: context.captionStyle.copyWith(color: context.mutedColor, fontSize: 11),
+                        style: context.captionStyle
+                            .copyWith(color: context.mutedColor, fontSize: 11),
                         children: [
                           TextSpan(
-                            text: '${interest >= 0 ? '+' : ''}${interest.toStringAsFixed(2)} C',
-                            style: context.captionStyle.copyWith(color: context.successColor, fontSize: 11),
+                            text:
+                                '${interest >= 0 ? '+' : ''}${interest.toStringAsFixed(2)} C',
+                            style: context.captionStyle.copyWith(
+                                color: context.successColor, fontSize: 11),
                           ),
                         ],
                       ),
@@ -1287,7 +1438,8 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
               Flexible(
                 child: Text(
                   formatGameDateTime(startDay, startMinute),
-                  style: context.captionStyle.copyWith(color: context.mutedColor, fontSize: 10.5),
+                  style: context.captionStyle
+                      .copyWith(color: context.mutedColor, fontSize: 10.5),
                   overflow: TextOverflow.ellipsis,
                 ),
               ),
@@ -1297,8 +1449,12 @@ class _BankDepositsCardState extends State<_BankDepositsCard> {
                   formatGameDateTime(maturityDay, maturityMinute),
                   textAlign: TextAlign.end,
                   style: context.captionStyle.copyWith(
-                    color: isMatured && !isWithdrawn ? context.successColor : context.mutedColor,
-                    fontWeight: isMatured && !isWithdrawn ? FontWeight.bold : FontWeight.normal,
+                    color: isMatured && !isWithdrawn
+                        ? context.successColor
+                        : context.mutedColor,
+                    fontWeight: isMatured && !isWithdrawn
+                        ? FontWeight.bold
+                        : FontWeight.normal,
                     fontSize: 10.5,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -1330,7 +1486,18 @@ class _CreditIncomeSummaryCard extends StatelessWidget {
   });
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context) => CreditIncomeSummaryCard(
+        grossItems: [
+          CreditIncomeLineItem('Private buildings', buildingCredits),
+          CreditIncomeLineItem('Bank deposit interest', investmentDividend),
+        ],
+        deductionItems: [
+          CreditIncomeLineItem(
+              'Income tax ${(taxRate * 100).toStringAsFixed(0)}%', taxAmount)
+        ],
+      );
+
+  /* Widget build(BuildContext context) {
     Widget buildGrossColumn() {
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1472,5 +1639,5 @@ class _CreditIncomeSummaryCard extends StatelessWidget {
         },
       ),
     );
-  }
+  } */
 }

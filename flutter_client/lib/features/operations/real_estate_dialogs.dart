@@ -226,7 +226,7 @@ Future<void> showBuildingAcquisitionDialog(
                         ),
                         const SizedBox(height: 8),
                         Text(
-                          'Construction Cost: ${formatWholeNumber(creditCost)} CRD + $materialCost Materials',
+                          'Construction Cost: ${formatWholeNumber(creditCost)} C + $materialCost Materials',
                           style: context.widgetTitleStyle.copyWith(color: context.primaryColor),
                         ),
                         const Divider(height: 16),
@@ -242,7 +242,7 @@ Future<void> showBuildingAcquisitionDialog(
                                 children: [
                                   Text('UPKEEP DRAINS', style: context.widgetFooterStyle),
                                   const SizedBox(height: 4),
-                                  if (opCost > 0) Text('• ${formatWholeNumber(opCost)} CRD / day', style: context.bodyStyle),
+                                  if (opCost > 0) Text('• ${formatWholeNumber(opCost)} C / day', style: context.bodyStyle),
                                   if (uEnergy > 0) Text('• ${uEnergy.toStringAsFixed(1)} Energy / day', style: context.bodyStyle),
                                   if (uFood > 0) Text('• ${uFood.toStringAsFixed(1)} Food / day', style: context.bodyStyle),
                                   if (uMat > 0) Text('• ${uMat.toStringAsFixed(1)} Materials / day', style: context.bodyStyle),
@@ -258,7 +258,7 @@ Future<void> showBuildingAcquisitionDialog(
                                   Text('OUTPUT YIELDS', style: context.widgetFooterStyle),
                                   const SizedBox(height: 4),
                                   if (baseRev > 0)
-                                    Text('+${formatWholeNumber(baseRev)} CRD / day',
+                                    Text('+${formatWholeNumber(baseRev)} C / day',
                                         style: context.bodyStyle.copyWith(color: context.successColor, fontWeight: FontWeight.bold)),
                                   if (resOutAmt > 0 && resOutType != null)
                                     Text('+${resOutAmt.toStringAsFixed(1)} ${resOutType.toUpperCase()} / day',

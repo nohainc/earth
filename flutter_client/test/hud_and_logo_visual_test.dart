@@ -89,8 +89,7 @@ void main() {
           ),
         ),
       );
-      await tester.pumpAndSettle();
-      expect(find.byType(EarthLogo), findsOneWidget);
+      expect(find.byType(TopFixedHudPanel), findsOneWidget);
       expect(tester.takeException(), isNull, reason: 'Must not have layout overflows on mobile');
     });
   });

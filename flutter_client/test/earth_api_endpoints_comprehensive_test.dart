@@ -97,8 +97,6 @@ void main() {
     await api.createProposal(
         'Tax Reform', 'Adjust municipal tax charter to 2.5%');
     await api.vote('P-1', 'yes');
-    await api.challengeProposal('P-1', 'Constitutional dispute');
-    await api.resolveConstitutionalAppeal('P-1', 'uphold', 'Ruling upheld');
 
     await api.createCommunity(
         name: 'Carthage Guild', description: 'Artisanal guild');

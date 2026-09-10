@@ -219,6 +219,175 @@ void main() {
     expect(find.text('24-year statutory term'), findsOneWidget);
   });
 
+  testWidgets(
+      'CorporateBuildingResearchPanel renders building cards, sub-tabs, tier data, and confirms research',
+      (tester) async {
+    const state = EarthState({
+      'membership': {'corporation_id': 'CORP-001'},
+      'corporationBuildingResearch': {
+        'corporationId': 'CORP-001',
+        'projects': [
+          {
+            'id': 'CBR-001',
+            'building_type': 'restaurant',
+            'catalog_name': 'Molecular Bistro',
+            'target_tier': 2,
+            'progress': 65.0,
+            'status': 'active',
+          }
+        ],
+        'unlocks': [],
+      },
+      'buildingCatalog': [
+        {
+          'building_type': 'restaurant',
+          'name': 'Molecular Bistro',
+          'category': 'commercial',
+          'ownership_class': 'private',
+          'cost_credits': 38000,
+          'construction_days': 2,
+          'tier': 1,
+        },
+        {
+          'building_type': 'geothermal-grid',
+          'name': 'Geothermal Core Grid',
+          'category': 'energy',
+          'ownership_class': 'civic',
+          'cost_credits': 140000,
+          'construction_days': 5,
+          'tier': 1,
+        },
+      ],
+    });
+
+    String? researchedType;
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: CorporateBuildingResearchPanel(
+              state: state,
+              busy: false,
+              action: (cb) async {
+                researchedType = 'geothermal-grid';
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // Verify sub-tabs render
+    expect(find.textContaining('ALL BLUEPRINTS'), findsOneWidget);
+    expect(find.textContaining('PRIVATE SECTOR'), findsWidgets);
+    expect(find.textContaining('CIVIC & UTILITY'), findsOneWidget);
+
+    // Active research is shown on its matching blueprint card.
+    expect(find.text('R&D IN PROGRESS'), findsOneWidget);
+    expect(find.textContaining('65%'), findsWidgets);
+
+
+    // Filter to CIVIC & UTILITY
+    await tester.tap(find.textContaining('CIVIC & UTILITY'));
+    await tester.pumpAndSettle();
+    expect(find.text('Geothermal Core Grid'), findsOneWidget);
+    expect(find.textContaining('CIVIC'), findsWidgets);
+
+    // Search for Geothermal
+    await tester.enterText(find.byType(TextField).first, 'Geothermal');
+    await tester.pumpAndSettle();
+    expect(find.text('Geothermal Core Grid'), findsOneWidget);
+
+    // Tap research button for Geothermal Core Grid
+    final researchBtn = find.text('PROPOSE CIVIC RESEARCH TIER 2');
+    expect(researchBtn, findsOneWidget);
+    await tester.ensureVisible(researchBtn);
+    await tester.tap(researchBtn);
+    await tester.pumpAndSettle();
+
+    // Verify confirmation dialog
+    expect(find.text('Propose Civic Research'), findsOneWidget);
+    await tester.tap(find.text('SUBMIT CIVIC PROPOSAL'));
+    await tester.pumpAndSettle();
+
+    expect(researchedType, equals('geothermal-grid'));
+  });
+
+  testWidgets(
+      'CorporateBuildingResearchPanel renders 3 columns on wide screens (1440px)',
+      (tester) async {
+    tester.view.physicalSize = const Size(1440, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(() {
+      tester.view.resetPhysicalSize();
+      tester.view.resetDevicePixelRatio();
+    });
+
+    final state = const EarthState({
+      'clock': {'day': 50, 'minute': 100},
+      'human': {'id': 'H-0044', 'credits': 100000},
+      'membership': {'corporation_id': 'CORP-01'},
+      'buildingCatalog': [
+        {
+          'building_type': 'restaurant',
+          'name': 'Molecular Bistro',
+          'tier': 1,
+          'category': 'commercial',
+          'ownership_class': 'private',
+          'slot_footprint': 1,
+          'baseCreditCost': 8500,
+        },
+        {
+          'building_type': 'vertical-farm',
+          'name': 'Hydroponic Tier Farm',
+          'tier': 1,
+          'category': 'agriculture',
+          'ownership_class': 'private',
+          'slot_footprint': 2,
+          'baseCreditCost': 15000,
+        },
+        {
+          'building_type': 'geothermal-grid',
+          'name': 'Geothermal Core Grid',
+          'tier': 1,
+          'category': 'energy',
+          'ownership_class': 'civic',
+          'slot_footprint': 3,
+          'baseCreditCost': 45000,
+        },
+      ],
+      'technologyRegistry': {
+        'buildingResearch': {'projects': []},
+        'unlockedTiers': {},
+      },
+      'institutions': {},
+      'life': {},
+      'governance': {},
+      'market': {'orders': []},
+    });
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: SingleChildScrollView(
+            child: CorporateBuildingResearchPanel(
+              state: state,
+              busy: false,
+              action: _dummyAction,
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    // All 3 blueprints rendered on wide 3-column screen
+    expect(find.text('Molecular Bistro'), findsOneWidget);
+    expect(find.text('Hydroponic Tier Farm'), findsOneWidget);
+    expect(find.text('Geothermal Core Grid'), findsOneWidget);
+  });
 }
 
 Future<void> _dummyAction(Future<EarthState> Function() fn) async {}

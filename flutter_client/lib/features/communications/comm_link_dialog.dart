@@ -451,11 +451,11 @@ class _CommLinkDialogState extends State<CommLinkDialog> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'COMMUNICATIONS',
+                      'Select a chat',
                       style: context.bodyStyle.copyWith(
                         fontWeight: FontWeight.w700,
                         fontSize: 12.5,
-                        letterSpacing: 1.0,
+                        letterSpacing: 0.5,
                         color: context.inkColor,
                       ),
                     ),

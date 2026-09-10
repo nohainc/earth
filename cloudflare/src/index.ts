@@ -4,7 +4,7 @@ import { cancelMarketOrder as cancelMarketOrderPostgres, listMarketOrders as lis
 import { declarePersonalInsolvency as declarePersonalInsolvencyPostgres, publicSpending as publicSpendingPostgres, recoverInstitution as recoverInstitutionPostgres, settleTax as settleTaxPostgres } from './finance-postgres';
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, liquidateExpiredEstates as liquidateExpiredEstatesPostgres, registerSuccessor as registerSuccessorPostgres, settleInheritance as settleInheritancePostgres } from './lifecycle-postgres';
 import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
-import { castVote as castVotePostgres, challengeProposal as challengeProposalPostgres, createProposal as createProposalPostgres, executeProposal as executeProposalPostgres, resolveConstitutionalAppeal as resolveConstitutionalAppealPostgres, resolveProposals as resolveProposalsPostgres } from './governance-postgres';
+import { castVote as castVotePostgres, createProposal as createProposalPostgres } from './governance-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
 import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
@@ -31,6 +31,7 @@ import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
 import { handleCommunityRoutes } from './community-routes.ts';
 import { handleInstitutionRoutes } from './institutions-routes.ts';
+import { handleRealEstateRoutes } from './real-estate-routes.ts';
 import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
 import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 
@@ -337,6 +338,12 @@ const worker = {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const response = await handleInstitutionRoutes(request, env, url, viewer);
+      if (response) return response;
+    }
+    if (url.pathname.startsWith('/api/real-estate') || url.pathname.startsWith('/api/corporate-research') || url.pathname.startsWith('/api/corporation/building-research') || url.pathname.startsWith('/api/corporations/building-research')) {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const response = await handleRealEstateRoutes(request, env, url, viewer);
       if (response) return response;
     }
     if (url.pathname.startsWith('/api/comm/')) {
@@ -763,7 +770,6 @@ const worker = {
       }
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
-      await withRepository(env, (repository) => resolveProposalsPostgres(repository));
       const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -811,58 +817,6 @@ const worker = {
       } catch (error) {
         const message = error instanceof Error ? error.message : 'Ballot failed';
         return Response.json({ ok: false, error: message }, { status: /already/i.test(message) ? 409 : /not found/i.test(message) ? 404 : 403 });
-      }
-    }
-    const executeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/execute$/);
-    if (executeProposalMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      try {
-        const result = await withRepository(env, (repository) => executeProposalPostgres(repository, { proposalId: executeProposalMatch[1], humanId: viewer.id }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Proposal execution failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-    const challengeProposalMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/challenge$/);
-    if (challengeProposalMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ reason?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const reason = body.reason?.trim() ?? 'Constitutional appeal filed during delay window';
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => challengeProposalPostgres(repository, { humanId: viewer.id, proposalId: challengeProposalMatch[1], reason, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Constitutional challenge failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-    const appealRulingMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/appeal-ruling$/);
-    if (appealRulingMatch && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ ruling?: string; rationale?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const ruling = body.ruling === 'void' ? 'void' : 'uphold';
-      const rationale = body.rationale?.trim() ?? 'High Court appeal determination';
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'A valid correlation ID is required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => resolveConstitutionalAppealPostgres(repository, { humanId: viewer.id, proposalId: appealRulingMatch[1], ruling, rationale, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Appeal resolution failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
     }
     if (url.pathname === '/api/pantheon' && request.method === 'GET') {
@@ -953,7 +907,6 @@ const worker = {
   },
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     const result = await withRepository(env, async (repository) => {
-      await resolveProposalsPostgres(repository);
       // One real minute advances one game hour: a game day is 24 real minutes.
       const world = await advanceWorldPostgres(repository, 60, String(_event.scheduledTime));
       await repository.query('UPDATE world_state SET last_scheduler_at = to_timestamp($1 / 1000.0) WHERE id = \'WORLD\'', [_event.scheduledTime]);

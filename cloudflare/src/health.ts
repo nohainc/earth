@@ -4,7 +4,7 @@ import { withPostgresRepository } from './repository';
 export async function healthResponse(request: Request, env: Env): Promise<Response> {
   const postgres = await probePostgres(env.HYPERDRIVE);
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
-    const [core, feature, reservations, governance, financial, assets, taxed, balances, scheduler, outbox, migrations, counts] = await Promise.all([
+    const [core, feature, reservations, governance, financial, assets, taxed, balances, scheduler, outbox, migrations, counts, settlement] = await Promise.all([
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['ai_assistants', 'buildings', 'civic_dividend_payouts', 'global_bank_deposits']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_orders' AND column_name = 'reserved_credits'"),
@@ -32,6 +32,31 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         repository.query('SELECT COUNT(*)::integer AS count FROM ledger_entries'),
         repository.query("SELECT COUNT(*)::integer AS count FROM world_state WHERE id = 'WORLD'"),
       ]),
+      repository.query<{
+        status: string;
+        current_game_day: string;
+        last_completed_game_day: string | null;
+        backlog_game_days: string;
+        last_completed_at: string | null;
+      }>(`
+        WITH clock AS (
+          SELECT earth_game_day_from_total_minutes(total_game_minutes) AS current_game_day
+          FROM earth_get_current_game_time()
+        ), completed AS (
+          SELECT game_day, completed_at
+          FROM daily_settlement_runs
+          WHERE status IN ('completed', 'baseline')
+          ORDER BY game_day DESC LIMIT 1
+        )
+        SELECT control.status,
+               clock.current_game_day::text,
+               completed.game_day::text AS last_completed_game_day,
+               GREATEST(0, (clock.current_game_day - 1) - COALESCE(completed.game_day, 0))::text AS backlog_game_days,
+               completed.completed_at::text AS last_completed_at
+        FROM daily_settlement_control control CROSS JOIN clock
+        LEFT JOIN completed ON TRUE
+        WHERE control.id = 'WORLD'
+      `),
     ]);
     const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
     const outboxRow = outbox.rows[0];
@@ -42,6 +67,9 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
     const outboxRetryFailures = Number(outboxRow?.failed ?? 0);
     const outboxOldestAgeSeconds = outboxRow?.oldest_pending_age != null ? Number(outboxRow.oldest_pending_age) : null;
     const outboxLastDeliveryAt = outboxRow?.last_delivery ?? null;
+    const settlementRow = settlement.rows[0];
+    const settlementBacklog = Number(settlementRow?.backlog_game_days ?? Number.POSITIVE_INFINITY);
+    const settlementStatus = settlementRow?.status ?? 'unavailable';
     return {
       checks: {
         database: true,
@@ -56,6 +84,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         schedulerFresh: schedulerAgeSeconds <= 900,
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
+        dailySettlementBacklog: settlementStatus !== 'active' || settlementBacklog <= 1,
         migrationManifest: Number(migrations.rows[0]?.version ?? 0) >= 33,
       },
       readiness: {
@@ -71,6 +100,13 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
           lastSuccessfulDeliveryAt: outboxLastDeliveryAt,
         },
         migrationVersion: Number(migrations.rows[0]?.version ?? 0),
+        dailySettlement: {
+          status: settlementStatus,
+          currentGameDay: settlementRow?.current_game_day != null ? Number(settlementRow.current_game_day) : null,
+          lastCompletedGameDay: settlementRow?.last_completed_game_day != null ? Number(settlementRow.last_completed_game_day) : null,
+          backlogGameDays: Number.isFinite(settlementBacklog) ? settlementBacklog : null,
+          lastCompletedAt: settlementRow?.last_completed_at ?? null,
+        },
         invariantScan: {
           ok: Number(balances.rows[0]?.invalid ?? 0) === 0,
           balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0,

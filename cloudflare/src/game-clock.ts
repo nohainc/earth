@@ -8,9 +8,8 @@ export type GameDeadline = {
 export const DEFAULT_GENESIS_START_ISO = '2026-01-01T00:00:00.000Z';
 
 /**
- * Calculates the effective genesis start date taking into account any simulated days passed.
- * Shifting the effective genesis backward by the simulated day offset allows all game time
- * calculations to seamlessly derive the correct game day and minute.
+ * Legacy helper for simulation tooling. It must not be used as the public or
+ * governance clock: `genesis_at` is the sole authoritative real timestamp.
  */
 export function getEffectiveGenesisTime(input?: {
   genesisAt?: Date | string | null;
@@ -36,14 +35,20 @@ export type AuthoritativeGameTime = {
 };
 
 /**
- * Authoritative single entry point to compute the current game day and minute.
+ * Authoritative clock: elapsed real seconds since `genesis_at` are game
+ * minutes. Stored scheduler offsets cannot alter this clock.
  */
 export function getAuthoritativeGameTime(input?: {
   nowMs?: number | null;
   genesisAt?: Date | string | null;
   simulatedDayOffset?: number | null;
 }): AuthoritativeGameTime {
-  const effectiveGenesis = getEffectiveGenesisTime(input);
+  const rawGenesis = input?.genesisAt instanceof Date
+    ? input.genesisAt
+    : new Date(String(input?.genesisAt ?? DEFAULT_GENESIS_START_ISO));
+  const effectiveGenesis = Number.isFinite(rawGenesis.getTime())
+    ? rawGenesis
+    : new Date(DEFAULT_GENESIS_START_ISO);
   const now = input?.nowMs != null && Number.isFinite(input.nowMs) ? input.nowMs : Date.now();
   const elapsedMs = Math.max(0, now - effectiveGenesis.getTime());
   // The world clock runs at 1 real second = 1 game minute. Keep this
@@ -51,14 +56,12 @@ export function getAuthoritativeGameTime(input?: {
   const totalGameMinutes = Math.floor(elapsedMs / 1000);
   const gameDay = Math.floor(totalGameMinutes / 1440) + 1;
   const gameMinute = totalGameMinutes % 1440;
-  const offsetDays = Number.isFinite(input?.simulatedDayOffset) ? Number(input?.simulatedDayOffset) : 0;
-
   return {
     totalGameMinutes,
     gameDay,
     gameMinute,
     effectiveGenesisAt: effectiveGenesis.toISOString(),
-    simulatedDayOffset: offsetDays,
+    simulatedDayOffset: 0,
   };
 }
 

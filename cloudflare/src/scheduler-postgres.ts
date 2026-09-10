@@ -9,9 +9,8 @@ import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './b
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
 import { applyPreparedResourceProfiles, rebuildDirtyDailySettlementProfiles, recordDailySettlementProfileShadow } from './daily-settlement-profiles.ts';
-import { executeQueuedProposals, resolveProposalsInTransaction } from './governance-postgres.ts';
-import { advanceCorporationBuildingResearch } from './corporation-building-research-postgres.ts';
 import { settleGlobalBank } from './global-bank-settlement-engine.ts';
+import { processEndOfDayAutomation } from './daily-automation.ts';
 
 export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
 
@@ -177,6 +176,38 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
   }
 }
 
+async function settleCityCorporateIncomeTax(tx: PostgresRepository, day: number): Promise<number> {
+  const cities = await tx.query<{ id: string; corporation_id: string; charter_rules: string | null; gross_income: string }>(`
+    SELECT c.id, c.corporation_id, corporation_institution.charter_rules,
+      COALESCE((SELECT SUM(l.amount) FROM ledger_entries l
+        WHERE l.credit_account = 'account-city-' || c.id
+          AND l.game_day = $1 AND l.reason_type = 'civic_utility_revenue'), 0) AS gross_income
+    FROM cities c
+    JOIN corporations corp ON corp.id = c.corporation_id
+    JOIN institutions corporation_institution ON corporation_institution.id = corp.institution_id
+    WHERE c.corporation_id IS NOT NULL
+  `, [day]);
+  let settled = 0;
+  for (const city of cities.rows) {
+    const rate = charterRate(city.charter_rules, 'incomeTaxBps') ?? 0;
+    const gross = moneyToCents(city.gross_income);
+    const taxCents = rate > 0 && gross > 0n ? rateAmountToCents(gross, String(rate), 1) : 0n;
+    if (taxCents <= 0n) continue;
+    const correlationId = `CITY-CORP-INCOME-TAX-${city.id}-${day}`;
+    const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE reason_type = 'city_corporate_income_tax' AND correlation_id = $1", [correlationId]);
+    if (prior.rows[0]) continue;
+    await transferCredits(tx, {
+      ledgerId: crypto.randomUUID(), gameDay: day,
+      debitAccount: `account-city-${city.id}`,
+      creditAccount: `account-corporation-${city.corporation_id}`,
+      amount: centsToMoney(taxCents), reasonType: 'city_corporate_income_tax',
+      reasonId: city.id, ruleVersion: 'city-corporate-income-tax-v1', correlationId,
+    });
+    settled += 1;
+  }
+  return settled;
+}
+
 async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<void> {
   const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true");
   const world = await tx.query<{ living_cost_index: string }>("SELECT living_cost_index FROM world_state WHERE id = 'WORLD'");
@@ -283,7 +314,7 @@ async function settleSupplyContracts(tx: PostgresRepository, day: number): Promi
       await tx.query(
         `UPDATE contract_escrow_vaults 
          SET released_amount = released_amount + $1,
-             status = CASE WHEN $2 THEN 'released' ELSE status END,
+             status = CASE WHEN $2::boolean THEN 'released' ELSE status END,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $3`,
         [dailyPrice, isComplete, contract.vault_id],
@@ -641,10 +672,83 @@ async function settleProduction(tx: PostgresRepository, day: number): Promise<nu
   return 0;
 }
 
+async function runDailyPhase(tx: PostgresRepository, day: number, phase: string, work: () => Promise<unknown>): Promise<void> {
+  await tx.query(
+    `INSERT INTO daily_settlement_phase_runs (game_day, phase, status, attempt_count)
+     VALUES ($1, $2, 'running', 1)
+     ON CONFLICT (game_day, phase, shard) DO UPDATE
+       SET status = 'running', attempt_count = daily_settlement_phase_runs.attempt_count + 1,
+           started_at = CURRENT_TIMESTAMP, completed_at = NULL, error_message = NULL`,
+    [day, phase],
+  );
+  try {
+    await runLoggedEngine(tx, day, phase, work);
+    await tx.query(
+      `UPDATE daily_settlement_phase_runs
+       SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+       WHERE game_day = $1 AND phase = $2 AND shard = 'all'`,
+      [day, phase],
+    );
+  } catch (error) {
+    await tx.query(
+      `UPDATE daily_settlement_phase_runs
+       SET status = 'failed', error_message = $3
+       WHERE game_day = $1 AND phase = $2 AND shard = 'all'`,
+      [day, phase, error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error'],
+    ).catch(() => undefined);
+    throw error;
+  }
+}
 
-export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
+async function captureEndOfDaySnapshots(tx: PostgresRepository, day: number): Promise<number> {
+  const result = await tx.query<{ owner_id: string }>(
+    `WITH credits AS (
+       SELECT owner_id, SUM(balance)::numeric AS balance
+       FROM account_balances WHERE currency = 'CREDIT' GROUP BY owner_id
+     ), resources AS (
+       SELECT owner_id, jsonb_object_agg(resource, amount) AS values
+       FROM resource_balances GROUP BY owner_id
+     ), earned AS (
+       SELECT accounts.owner_id, SUM(entries.amount)::numeric AS amount
+       FROM ledger_entries entries
+       JOIN account_balances accounts ON accounts.account_id = entries.credit_account
+       WHERE entries.game_day <= $1 GROUP BY accounts.owner_id
+     ), spent AS (
+       SELECT accounts.owner_id, SUM(entries.amount)::numeric AS amount
+       FROM ledger_entries entries
+       JOIN account_balances accounts ON accounts.account_id = entries.debit_account
+       WHERE entries.game_day <= $1 GROUP BY accounts.owner_id
+     )
+     INSERT INTO entity_end_of_day_snapshots (owner_id, game_day, owner_kind, credits, resources, cumulative_metrics)
+     SELECT owners.source_id,
+            $1,
+            owners.owner_type,
+            COALESCE(credits.balance, 0),
+            COALESCE(resources.values, '{}'::jsonb),
+            jsonb_build_object(
+              'credits_earned', COALESCE(earned.amount, 0),
+              'credits_spent', COALESCE(spent.amount, 0)
+            )
+     FROM owner_registry owners
+     LEFT JOIN credits ON credits.owner_id = owners.source_id
+     LEFT JOIN resources ON resources.owner_id = owners.source_id
+     LEFT JOIN earned ON earned.owner_id = owners.source_id
+     LEFT JOIN spent ON spent.owner_id = owners.source_id
+     WHERE owners.status = 'active'
+     ON CONFLICT (owner_id, game_day) DO NOTHING
+     RETURNING owner_id`,
+    [day],
+  );
+  return result.rows.length;
+}
+
+
+export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
   validateWorldAdvanceMinutes(minutesPerTick);
-  const result = await repository.transaction(async (tx) => {
+  let claimedDay: number | null = null;
+  let result: { day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean };
+  try {
+    result = await repository.transaction(async (tx) => {
     if (idempotencyKey) {
       const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`SCHEDULED-TICK-${idempotencyKey}`]);
       if (prior.rows[0]) {
@@ -652,44 +756,60 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
         return { day: Number(world.rows[0]?.game_day ?? 0), minute: Number(world.rows[0]?.game_minute ?? 0), newDay: false, productionEvents: 0, marketSettlements: 0, alreadyProcessed: true };
       }
     }
-    const world = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD' FOR UPDATE");
-    const currentDay = Number(world.rows[0]?.game_day ?? 0);
-    const currentMinute = Number(world.rows[0]?.game_minute ?? 0);
-    const totalMinutes = currentMinute + minutesPerTick;
-    const day = currentDay + Math.floor(totalMinutes / 1440);
-    const minute = totalMinutes % 1440;
-    const newDay = day !== currentDay;
-    const offsetInc = day - currentDay;
-    await tx.query("UPDATE world_state SET game_day = $1, game_minute = $2, simulated_day_offset = COALESCE(simulated_day_offset, 0) + $3 WHERE id = 'WORLD'", [day, minute, offsetInc]);
-    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1, $2)", [day, minute]);
-    await runLoggedEngine(tx, day, 'governance_resolution', () => resolveProposalsInTransaction(tx));
-    await runLoggedEngine(tx, day, 'corporation_building_research', () => advanceCorporationBuildingResearch(tx));
+    await tx.query("SELECT id FROM world_state WHERE id = 'WORLD' FOR UPDATE");
+    const clock = await tx.query<{ total_game_minutes: string; game_day: string; game_minute: number }>(
+      `SELECT t.total_game_minutes,
+              earth_game_day_from_total_minutes(t.total_game_minutes) AS game_day,
+              earth_minute_of_day_from_total_minutes(t.total_game_minutes) AS game_minute
+       FROM earth_get_current_game_time() t`,
+    );
+    const day = Number(clock.rows[0]?.game_day ?? 1);
+    const minute = Number(clock.rows[0]?.game_minute ?? 0);
+    const totalGameMinutes = Number(clock.rows[0]?.total_game_minutes ?? 0);
+    await tx.query("UPDATE world_state SET game_day = $1, game_minute = $2, total_game_minutes = $3 WHERE id = 'WORLD'", [day, minute, totalGameMinutes]);
+    await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1::bigint, $2::integer)", [day, minute]);
     await tx.query("UPDATE market_prices SET price = GREATEST(1, LEAST(1000000, ROUND((price * (1.0 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))), game_day = $1", [day]);
-    if (newDay) {
-      await runLoggedEngine(tx, day, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, day));
-      await runLoggedEngine(tx, day, 'daily_settlement_profile_shadow', () => recordDailySettlementProfileShadow(tx, day));
-      const mode = await tx.query<{ daily_settlement_mode: string }>("SELECT daily_settlement_mode FROM world_state WHERE id = 'WORLD'");
-      const settlementMode = mode.rows[0]?.daily_settlement_mode ?? 'on_demand';
-      if (settlementMode === 'profile_resources') {
-        await runLoggedEngine(tx, day, 'daily_settlement_profile_resources', () => applyPreparedResourceProfiles(tx, day));
-      }
+    const control = await tx.query<{ status: string }>("SELECT status FROM daily_settlement_control WHERE id = 'WORLD' FOR UPDATE");
+    const active = control.rows[0]?.status === 'active';
+    const completed = await tx.query<{ game_day: string }>("SELECT game_day FROM daily_settlement_runs WHERE status IN ('completed', 'baseline') ORDER BY game_day DESC LIMIT 1");
+    const nextDay = Number(completed.rows[0]?.game_day ?? 0) + 1;
+    const settlementDay = active && nextDay < day ? nextDay : null;
+    if (settlementDay !== null) {
+      claimedDay = settlementDay;
+      await tx.query(
+        `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, lease_owner, lease_heartbeat_at, started_at)
+         VALUES ($1, 'running', 'preflight', 1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+         ON CONFLICT (game_day) DO UPDATE
+         SET status = 'running', current_phase = 'preflight', attempt_count = daily_settlement_runs.attempt_count + 1,
+             lease_owner = EXCLUDED.lease_owner, lease_heartbeat_at = CURRENT_TIMESTAMP,
+             started_at = COALESCE(daily_settlement_runs.started_at, CURRENT_TIMESTAMP), error_message = NULL
+         WHERE daily_settlement_runs.status IN ('pending', 'failed')`,
+        [settlementDay, `scheduler:${idempotencyKey ?? 'cron'}`],
+      );
+      const run = await tx.query<{ status: string }>('SELECT status FROM daily_settlement_runs WHERE game_day = $1 FOR UPDATE', [settlementDay]);
+      if (run.rows[0]?.status !== 'running') throw new Error(`Daily settlement ${settlementDay} could not be claimed`);
+      await runDailyPhase(tx, settlementDay, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'daily_settlement_profile_shadow', () => recordDailySettlementProfileShadow(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'daily_settlement_profile_resources', () => applyPreparedResourceProfiles(tx, settlementDay));
       await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
       await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
-      await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [day]);
-      await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
-      if (day % 365 === 0) await processMortality(tx, day);
-      await runLoggedEngine(tx, day, 'life_maintenance', () => settleLifeMaintenanceInTransaction(tx, day));
-      await runLoggedEngine(tx, day, 'basic_levy', () => settleBasicLevy(tx, day));
-      await runLoggedEngine(tx, day, 'building_settlement', () => settleBuildingUpkeepAndRevenue(tx, day));
-      await runLoggedEngine(tx, day, 'building_patent_licenses', () => settleBuildingPatentLicenses(tx, day));
-      await runLoggedEngine(tx, day, 'civic_dividends', () => settleCivicDividends(tx, day));
-      await runLoggedEngine(tx, day, 'global_bank', () => settleGlobalBank(tx, day));
-      await runLoggedEngine(tx, day, 'city_dynamics', () => processCityDynamics(tx, day));
-      await runLoggedEngine(tx, day, 'patent_expirations', () => processPatentExpirations(tx, day));
-      await runLoggedEngine(tx, day, 'financial_states', () => updateFinancialStates(tx, day));
-      await runLoggedEngine(tx, day, 'institution_dissolution', () => dissolveInstitutions(tx, day));
-      await runLoggedEngine(tx, day, 'rankings_snapshot', () => snapshotRankings(tx, day));
+      await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [settlementDay]);
+      await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [settlementDay]);
+      if (settlementDay % 365 === 0) await processMortality(tx, settlementDay);
+      await runDailyPhase(tx, settlementDay, 'life_maintenance', () => settleLifeMaintenanceInTransaction(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'basic_levy', () => settleBasicLevy(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'building_settlement', () => settleBuildingUpkeepAndRevenue(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'building_patent_licenses', () => settleBuildingPatentLicenses(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'city_corporate_income_tax', () => settleCityCorporateIncomeTax(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'global_bank', () => settleGlobalBank(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'city_dynamics', () => processCityDynamics(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'patent_expirations', () => processPatentExpirations(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'financial_states', () => updateFinancialStates(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'institution_dissolution', () => dissolveInstitutions(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'rankings_snapshot', () => snapshotRankings(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'end_of_day_snapshots', () => captureEndOfDaySnapshots(tx, settlementDay));
+      await tx.query("UPDATE daily_settlement_runs SET status = 'completed', current_phase = 'completed', completed_at = CURRENT_TIMESTAMP, lease_owner = NULL, lease_heartbeat_at = NULL WHERE game_day = $1", [settlementDay]);
     }
     await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
@@ -697,11 +817,35 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const productionEvents = await settleProduction(tx, day);
     await runAiMaintenance(tx, day);
     if (idempotencyKey) {
+      await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'scheduled_tick','Scheduled world tick committed',$3) ON CONFLICT (id) DO NOTHING", [`SCHEDULED-TICK-${idempotencyKey}`, day, JSON.stringify({ day, minute, newDay: settlementDay !== null, productionEvents })]);
     }
-    return { day, minute, newDay, productionEvents };
-  });
+    return { day, minute, newDay: settlementDay !== null, settledGameDay: settlementDay ?? undefined, productionEvents };
+    });
+  } catch (error) {
+    if (claimedDay !== null) {
+      await repository.query(
+        `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, error_message, updated_at)
+         VALUES ($1, 'failed', 'failed', 1, $2, CURRENT_TIMESTAMP)
+         ON CONFLICT (game_day) DO UPDATE
+           SET status = 'failed', current_phase = 'failed',
+               attempt_count = daily_settlement_runs.attempt_count + 1,
+               error_message = EXCLUDED.error_message, lease_owner = NULL,
+               lease_heartbeat_at = NULL, updated_at = CURRENT_TIMESTAMP`,
+        [claimedDay, error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error'],
+      ).catch(() => undefined);
+      await repository.query(
+        `INSERT INTO settlement_anomalies (game_day, severity, anomaly_type, details)
+         VALUES ($1, 'error', 'daily_settlement_failed', jsonb_build_object('message', $2))`,
+        [claimedDay, error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error'],
+      ).catch(() => undefined);
+    }
+    throw error;
+  }
   if (result.alreadyProcessed) return result;
-  await executeQueuedProposals(repository);
+  // Proposal resolution, construction completion, research completion, and
+  // queued execution are idempotent and must be checked on every scheduler
+  // tick. Daily settlement remains independently gated above.
+  await processEndOfDayAutomation(repository, result.settledGameDay ?? Math.max(0, result.day - 1));
   let marketSettlements = 0;
   for (const product of products) {
     const settled = await settleMarket(repository, product);

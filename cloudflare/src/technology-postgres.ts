@@ -76,16 +76,22 @@ export async function createResearchProject(repository: PostgresRepository, inpu
     if (!account.rows[0] || moneyToCents(account.rows[0].balance) < budgetCents) throw new Error('Insufficient Credits for research funding');
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
     const day = Number(world.rows[0]?.game_day ?? 0);
+    const researchStartDay = day + 1;
+    const researchDurationDays = 3;
+    const researchDueEndDay = researchStartDay + researchDurationDays - 1;
     const projectId = `PROJECT-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: account.rows[0].account_id, creditAccount: 'account-research-registry', amount: budget, reasonType: 'corporation_technology_research', reasonId: projectId, ruleVersion: 'corporation-technology-v1', correlationId: input.correlationId });
-    await tx.query(`INSERT INTO corporation_technology_projects (id, corporation_id, technology_key, technology_name, research_cost_credits, subscription_cost_credits, effect_key, progress, status, started_game_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,0,'active',$8,$9)`, [projectId, corporationId, input.name.toLowerCase().replaceAll(' ', '_'), input.name, budget, catalogEntry.subscriptionCost, catalogEntry.effect, day, input.correlationId]);
+    await tx.query(`INSERT INTO corporation_technology_projects (id, corporation_id, technology_key, technology_name, research_cost_credits, subscription_cost_credits, effect_key, progress, status, started_game_day, research_start_day, research_duration_days, research_due_end_day, correlation_id) VALUES ($1,$2,$3,$4,$5,$6,$7,0,'active',$8,$9,$10,$11,$12)`, [projectId, corporationId, input.name.toLowerCase().replaceAll(' ', '_'), input.name, budget, catalogEntry.subscriptionCost, catalogEntry.effect, day, researchStartDay, researchDurationDays, researchDueEndDay, input.correlationId]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Corporation research started', `${input.name} is now being researched by your corporation.`, projectId]);
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_technology_projects WHERE id = $1', [projectId])).rows[0], correlationId: input.correlationId };
   });
 }
 
 export async function fundResearchProject(repository: PostgresRepository, input: { ownerId: string; amount: number; correlationId: string }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
+  void repository;
+  void input;
+  throw new Error('Research is funded at creation and completes after its scheduled whole-day duration');
+  /* return repository.transaction(async (tx) => {
     await requireResearchJurisdiction(tx, input.ownerId);
     const membership = await tx.query<{ corporation_id: string }>('SELECT corporation_id FROM memberships WHERE human_id = $1', [input.ownerId]);
     const corporationId = membership.rows[0]?.corporation_id;
@@ -105,7 +111,7 @@ export async function fundResearchProject(repository: PostgresRepository, input:
     await tx.query("UPDATE corporation_technology_projects SET progress = $1, status = CASE WHEN $1 >= 100 THEN 'completed' ELSE status END, completed_game_day = CASE WHEN $1 >= 100 THEN $2 ELSE completed_game_day END, updated_at = CURRENT_TIMESTAMP WHERE id = $3", [progress, day, project.rows[0].id]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.ownerId, 'technology', 'Research funding added', `${input.amount} Credits added to research project ${project.rows[0].id}.`, project.rows[0].id]);
     return { ok: true, project: (await tx.query('SELECT * FROM corporation_technology_projects WHERE id = $1', [project.rows[0].id])).rows[0], amount: Number(amount), correlationId: input.correlationId };
-  });
+  }); */
 }
 
 export async function setHumanTechnologySubscription(repository: PostgresRepository, input: { humanId: string; technologyKey: string; status: 'active' | 'inactive'; correlationId: string }): Promise<Record<string, unknown>> {

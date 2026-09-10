@@ -57,8 +57,17 @@ test('API Security Boundaries and Request Hardening', async () => {
     // let's verify response is structured
     assert.ok(unauthOrderRes.status === 200 || unauthOrderRes.status === 201 || unauthOrderRes.status === 401);
 
-    // 2. Client-supplied weight forging in governance voting must be ignored
-    const voteRes = await fetch(`${baseUrl}/api/governance/proposals/042/vote`, {
+    // 2. Client-supplied weight forging in governance voting must be ignored.
+    // Proposals are explicitly created; the simulator must not seed one.
+    const proposalRes = await fetch(`${baseUrl}/api/governance/proposals`, {
+      method: 'POST',
+      headers: authHeaders,
+      body: JSON.stringify({ title: 'Security boundary proposal', body: 'Proposal created for request-hardening coverage.' }),
+    });
+    assert.equal(proposalRes.status, 200);
+    const proposalJson = await proposalRes.json();
+    const proposalId = proposalJson.proposal.id;
+    const voteRes = await fetch(`${baseUrl}/api/governance/proposals/${proposalId}/vote`, {
       method: 'POST',
       headers: { ...authHeaders, 'Idempotency-Key': 'sec-vote-test-1' },
       body: JSON.stringify({ vote: 'support', weight: 1000000, humanId: 'H-9999' }),

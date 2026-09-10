@@ -515,7 +515,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // Check title in small screen header
-    expect(find.text('COMMUNICATIONS'), findsOneWidget);
+    expect(find.text('Select a chat'), findsOneWidget);
 
     // Verify close button in header works
     final closeBtnFinder = find.byKey(const ValueKey('comm_link_close_button'));

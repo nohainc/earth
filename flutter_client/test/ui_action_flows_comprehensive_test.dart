@@ -345,7 +345,7 @@ void main() {
           if (i.isEven) {
             await tester.tap(find.textContaining('Bistro').first);
             await tester.pumpAndSettle();
-            expect(find.textContaining('spaces'), findsWidgets);
+            expect(find.textContaining(RegExp(r'space', caseSensitive: false)), findsWidgets);
           }
         } else if (i <= 20) {
           await pumpWithAction(
@@ -356,6 +356,8 @@ void main() {
           expect(find.text('CITY BUDGET'), findsWidgets);
           expect(find.textContaining('5000'), findsWidgets);
           if (i.isEven) {
+            await tester.ensureVisible(find.text('PROPOSE BUDGET'));
+            await tester.pumpAndSettle();
             await tester.tap(find.text('PROPOSE BUDGET'));
             await tester.pumpAndSettle();
             expect(spy.calls, 1);

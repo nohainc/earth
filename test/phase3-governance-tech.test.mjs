@@ -31,6 +31,9 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes('SELECT kind, status FROM institutions')) {
       return { rows: [{ kind: 'OUC', status: 'active' }] };
     }
+    if (sql.includes('SELECT id, life_status FROM humans')) {
+      return { rows: [{ id: 'H-CITIZEN', life_status: 'active' }] };
+    }
     if (sql.includes("SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h")) {
       return { rows: [{ game_day: 100, political_eligibility_game_day: 0 }] };
     }
@@ -40,7 +43,7 @@ test('challengeProposal puts passed proposal under constitutional injunction', a
     if (sql.includes("SELECT game_day FROM world_state WHERE id = 'WORLD'")) {
       return { rows: [{ game_day: 100 }] };
     }
-    if (sql.includes("UPDATE proposals SET execution_status = 'not_ready'")) {
+    if (sql.includes("UPDATE proposals SET execution_status = 'challenged'")) {
       updatedStatus = 'challenged';
       return { rows: [], rowCount: 1 };
     }
@@ -78,6 +81,9 @@ test('resolveConstitutionalAppeal voids unconstitutional proposal', async () => 
     }
     if (sql.includes('SELECT kind, status FROM institutions')) {
       return { rows: [{ kind: 'OUC', status: 'active' }] };
+    }
+    if (sql.includes('SELECT id, life_status FROM humans')) {
+      return { rows: [{ id: 'H-JUSTICE', life_status: 'active' }] };
     }
     if (sql.includes("SELECT w.game_day, h.political_eligibility_game_day FROM world_state w JOIN humans h")) {
       return { rows: [{ game_day: 100, political_eligibility_game_day: 0 }] };

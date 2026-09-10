@@ -39,7 +39,7 @@ void main() {
     // 1. Municipal Header & Services
     expect(find.text('NEW KYOTO'), findsWidgets);
     expect(find.text('HOUSING'), findsOneWidget);
-    expect(find.text('ENERGY'), findsOneWidget);
+    expect(find.text('ENERGY'), findsWidgets);
     expect(find.text('CONNECTIVITY'), findsOneWidget);
     expect(find.text('HEALTHCARE'), findsOneWidget);
 

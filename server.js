@@ -169,7 +169,7 @@ const state = {
     orders: [],
     lastSettlement: null,
   },
-  governance: { proposals: [{ id: '042', title: 'Components maintenance levy', status: 'open', levy: 0.02, votes: { support: 41, oppose: 17, uncast: 42 }, ballots: {} }] },
+  governance: { proposals: [] },
   technology: {
     research: { id: 'TECH-001', name: 'Building Systems Optimization', progress: 72, budgetPerDay: 240, focus: 'efficiency', status: 'active', budget: 1440 },
   },
@@ -618,10 +618,20 @@ function computeCosmicClock(serverNow = Date.now()) {
   };
 }
 
+// The reference simulator can advance from wall time. When PostgreSQL is
+// configured, its persisted scheduler clock is authoritative and must not be
+// overwritten by this separate genesis-derived display clock.
+let lastObservedDay = state.clock.day;
 Object.assign(state.clock, computeCosmicClock());
+lastObservedDay = state.clock.day;
 
 const serverClockInterval = setInterval(() => {
+  const previousDay = state.clock.day;
   Object.assign(state.clock, computeCosmicClock());
+  if (state.clock.day > previousDay && previousDay > 0) {
+    // A full game day elapsed in real time (every 24 real minutes): execute daily settlement
+    advanceDay();
+  }
 }, 1000);
 if (serverClockInterval.unref) serverClockInterval.unref();
 
@@ -672,10 +682,12 @@ function advanceDay() {
   player.credits += revenue;
   appendLedger({ debit: 'market-buyers', credit: 'H-0044', amount: revenue, reason: 'business_output', correlationId: randomUUID() });
   business.condition = Math.max(0, business.condition - (business.policy === 'capacity' ? 3 : 1));
-  state.resources.components = Math.max(0, state.resources.components - 12);
+  state.resources.energy = (state.resources.energy || 0) + 12;
   state.resources.food = (state.resources.food || 0) + 16;
-  state.resources.material += 24;
-  state.resources.compute += 8;
+  state.resources.material = (state.resources.material || 0) + 24;
+  state.resources.materials = state.resources.material;
+  state.resources.components = Math.max(0, (state.resources.components || 0) - 2);
+  state.resources.compute = (state.resources.compute || 0) + 8;
   state.technology.research.progress = Math.min(100, state.technology.research.progress + 2);
   if (state.clock.day % 365 === 0) {
     player.ageYears += 1;
@@ -2747,6 +2759,32 @@ async function command(path, body, req = null) {
   }
 
   const voteMatch = path.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
+  if (path === '/api/governance/proposals' && body.method === 'POST') {
+    const session = resolveSession(req);
+    if (!session) throw new ApiError('Authentication required', 401, 'AUTHENTICATION_REQUIRED');
+    const title = typeof body.title === 'string' ? body.title.trim() : '';
+    const proposalBody = typeof body.body === 'string' ? body.body.trim() : '';
+    if (title.length < 3 || title.length > 120 || proposalBody.length < 10 || proposalBody.length > 4000) {
+      throw new ApiError('Title must be 3–120 characters and description 10–4000 characters', 400, 'VALIDATION_ERROR');
+    }
+    const proposal = {
+      id: `P-${randomUUID()}`,
+      institution_id: typeof body.institutionId === 'string' && body.institutionId.trim() ? body.institutionId.trim() : 'OUC-001',
+      title,
+      body: proposalBody,
+      status: 'open',
+      outcome: 'pending',
+      execution_status: 'not_ready',
+      closes_game_day: Number(state.clock.day) + 30,
+      closes_game_minute: Number(state.clock.minute ?? 0),
+      quorum: 0.25,
+      approval_threshold: 0.5,
+      votes: { support: 0, oppose: 0, abstain: 0, uncast: 1 },
+      ballots: {},
+    };
+    state.governance.proposals.push(proposal);
+    return { ok: true, proposal, state: snapshot() };
+  }
   if (voteMatch && body.method === 'POST') {
     const proposalId = voteMatch[1];
     const session = resolveSession(req);
@@ -2754,6 +2792,17 @@ async function command(path, body, req = null) {
     if (!['support', 'oppose', 'abstain'].includes(body.vote)) throw new ApiError('Invalid ballot', 400, 'VALIDATION_ERROR');
     const proposal = state.governance.proposals.find((p) => String(p.id) === proposalId);
     if (!proposal) throw new ApiError('Proposal not found', 404, 'NOT_FOUND');
+    if (proposal.status !== 'open') throw new ApiError('Voting is closed for this proposal', 400, 'VALIDATION_ERROR');
+    const closesAt = proposal.closes_at ? new Date(proposal.closes_at) : null;
+    if (closesAt && !isNaN(closesAt.getTime()) && Date.now() > closesAt.getTime()) throw new ApiError('Voting deadline has passed', 400, 'VALIDATION_ERROR');
+    const closesDay = Number(proposal.closes_game_day);
+    const closesMinute = Number(proposal.closes_game_minute ?? 0);
+    const currentDay = Number(state.clock.day);
+    const currentMinute = Number(state.clock.minute ?? 0);
+    if (Number.isFinite(closesDay) && Number.isFinite(currentDay) &&
+        (currentDay > closesDay || (currentDay === closesDay && currentMinute >= closesMinute))) {
+      throw new ApiError('Voting deadline has passed', 400, 'VALIDATION_ERROR');
+    }
     const voter = human('amara', req);
     if (!voter) throw new ApiError('Human is not eligible to vote', 401, 'AUTHENTICATION_REQUIRED');
     const humanId = voter.id || 'H-0044';
@@ -2780,12 +2829,13 @@ function snapshot() {
     institutions: state.institutions,
     resources: state.resources,
     resourceFlows: {
-      credits: { inflow: 1250, outflow: 320, net: 930 },
-      food: { inflow: 16, outflow: 4, net: 12 },
-      materials: { inflow: 24, outflow: 8, net: 16 },
-      components: { inflow: 10, outflow: 12, net: -2 },
-      energy: { inflow: 30, outflow: 18, net: 12 },
-      compute: { inflow: 12, outflow: 4, net: 8 },
+      credits: { grossProductionPerSecond: 0.868, grossConsumptionPerSecond: 0.222, netPerSecond: 0.646, netPerGameDay: 930 },
+      food: { grossProductionPerSecond: 0.011, grossConsumptionPerSecond: 0.003, netPerSecond: 0.008, netPerGameDay: 12 },
+      material: { grossProductionPerSecond: 0.017, grossConsumptionPerSecond: 0.006, netPerSecond: 0.011, netPerGameDay: 16 },
+      materials: { grossProductionPerSecond: 0.017, grossConsumptionPerSecond: 0.006, netPerSecond: 0.011, netPerGameDay: 16 },
+      components: { grossProductionPerSecond: 0.007, grossConsumptionPerSecond: 0.008, netPerSecond: -0.001, netPerGameDay: -2 },
+      energy: { grossProductionPerSecond: 0.021, grossConsumptionPerSecond: 0.013, netPerSecond: 0.008, netPerGameDay: 12 },
+      compute: { grossProductionPerSecond: 0.008, grossConsumptionPerSecond: 0.003, netPerSecond: 0.005, netPerGameDay: 8 },
     },
     business: state.businesses.klineWorks,
     market: state.market,
@@ -3196,6 +3246,12 @@ async function hydrateFromDatabase() {
         outcome: proposal.outcome,
         execution_status: proposal.execution_status,
         executionStatus: proposal.execution_status,
+        rule_version_id: proposal.rule_version_id || undefined,
+        ruleVersionId: proposal.rule_version_id || undefined,
+        opens_game_day: proposal.opens_game_day != null ? Number(proposal.opens_game_day) : undefined,
+        opensGameDay: proposal.opens_game_day != null ? Number(proposal.opens_game_day) : undefined,
+        opens_game_minute: proposal.opens_game_minute != null ? Number(proposal.opens_game_minute) : undefined,
+        opensGameMinute: proposal.opens_game_minute != null ? Number(proposal.opens_game_minute) : undefined,
         closes_game_day: proposal.closes_game_day != null ? Number(proposal.closes_game_day) : undefined,
         closesGameDay: proposal.closes_game_day != null ? Number(proposal.closes_game_day) : undefined,
         closes_game_minute: proposal.closes_game_minute != null ? Number(proposal.closes_game_minute) : undefined,
@@ -3213,6 +3269,18 @@ async function hydrateFromDatabase() {
         approval_threshold: proposal.approval_threshold != null ? Number(proposal.approval_threshold) : 0.5,
         implementation_delay_days: proposal.implementation_delay_days != null ? Number(proposal.implementation_delay_days) : 1,
         levy: proposal.levy != null ? Number(proposal.levy) : undefined,
+        target_category: proposal.target_category || undefined,
+        targetCategory: proposal.target_category || undefined,
+        target_value_json: proposal.target_value_json || undefined,
+        targetValue: proposal.target_value_json || undefined,
+        target_kind: proposal.target_kind || undefined,
+        targetKind: proposal.target_kind || undefined,
+        building_catalog_id: proposal.building_catalog_id || undefined,
+        buildingCatalogId: proposal.building_catalog_id || undefined,
+        research_project_id: proposal.research_project_id || undefined,
+        researchProjectId: proposal.research_project_id || undefined,
+        created_at: proposal.created_at != null ? Number(proposal.created_at) : undefined,
+        createdAt: proposal.created_at != null ? Number(proposal.created_at) : undefined,
         eligible_weight: eligibleWeight,
         eligibleWeight,
         votes: {
@@ -3224,7 +3292,7 @@ async function hydrateFromDatabase() {
         ballots: ballotsMap,
       };
     });
-  } else {
+  } else if (state.governance.proposals.length > 0) {
     for (const ballot of canonical.ballots || []) {
       if (String(ballot.proposal_id) === '042' || !ballot.proposal_id) {
         state.governance.proposals[0].ballots[ballot.human_id || 'amara'] = ballot.choice;

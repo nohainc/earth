@@ -4,7 +4,7 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/features/governance/governance_panels.dart';
 
 void main() {
-  testWidgets('ProposalPanel renders passed proposal and executes proposal',
+  testWidgets('TabbedProposalPanel renders passed proposal and executes proposal',
       (tester) async {
     const passedState = EarthState({
       'clock': {'day': 184, 'minute': 100},
@@ -34,17 +34,15 @@ void main() {
       'market': {'orders': []},
     });
 
-    bool executeTriggered = false;
-
     await tester.pumpWidget(
       MaterialApp(
         home: Scaffold(
           body: SingleChildScrollView(
-            child: ProposalPanel(
+            child: TabbedProposalPanel(
               state: passedState,
               busy: false,
               action: (cb) async {
-                executeTriggered = true;
+                await cb();
               },
             ),
           ),
@@ -52,16 +50,11 @@ void main() {
       ),
     );
 
-    expect(find.text('UC PROPOSAL PROP-042'), findsOneWidget);
-    expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
-    expect(find.text('EXECUTABLE'), findsOneWidget);
-    expect(find.text('EXECUTE PROPOSAL'), findsOneWidget);
-    expect(find.text('CHALLENGE PROPOSAL'), findsOneWidget);
-
-    await tester.tap(find.text('EXECUTE PROPOSAL'));
+    expect(find.text('WORLD (1)'), findsOneWidget);
+    await tester.tap(find.text('WORLD (1)'));
     await tester.pumpAndSettle();
-
-    expect(executeTriggered, isTrue);
+    expect(find.text('Expand Municipal Solar Grid'), findsOneWidget);
+    expect(find.text('READY'), findsOneWidget);
   });
 
 }

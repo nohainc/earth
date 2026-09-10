@@ -59,7 +59,7 @@ test('getEffectiveGenesisTime shifts start time back according to simulated day 
   assert.equal(effective5.toISOString(), '2025-12-31T22:00:00.000Z');
 });
 
-test('getAuthoritativeGameTime derives game day and minute from effective genesis', () => {
+test('getAuthoritativeGameTime derives game day and minute directly from genesis', () => {
   const genesis = '2026-01-01T00:00:00.000Z';
   // 10 days and 30 minutes after genesis
   const nowMs = Date.parse('2026-01-01T04:00:30.000Z');
@@ -73,13 +73,13 @@ test('getAuthoritativeGameTime derives game day and minute from effective genesi
   assert.equal(time.gameMinute, 30);
   assert.equal(time.effectiveGenesisAt, '2026-01-01T00:00:00.000Z');
 
-  // With a 3-day simulation offset, effective genesis shifts back and game day increases by 3
+  // A scheduler offset cannot change the authoritative real-time clock.
   const timeWithOffset = getAuthoritativeGameTime({
     nowMs,
     genesisAt: genesis,
     simulatedDayOffset: 3,
   });
-  assert.equal(timeWithOffset.gameDay, 14);
+  assert.equal(timeWithOffset.gameDay, 11);
   assert.equal(timeWithOffset.gameMinute, 30);
-  assert.equal(timeWithOffset.effectiveGenesisAt, '2025-12-31T22:48:00.000Z');
+  assert.equal(timeWithOffset.effectiveGenesisAt, '2026-01-01T00:00:00.000Z');
 });

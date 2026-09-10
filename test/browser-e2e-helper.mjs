@@ -233,8 +233,18 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
         });
         const order = await orderRes.json();
 
-        // 6. Governance Vote with server-authoritative voting weight
-        const voteRes = await fetch('/api/governance/proposals/042/vote', {
+        // 6. Governance proposal and vote with server-authoritative voting weight
+        const proposalRes = await fetch('/api/governance/proposals', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'browser-proposal-1' },
+          body: JSON.stringify({
+            institutionId: 'OUC-001',
+            title: 'Browser security proposal',
+            body: 'Proposal created by the browser journey before voting.'
+          })
+        });
+        const proposal = await proposalRes.json();
+        const voteRes = await fetch('/api/governance/proposals/' + proposal.proposal.id + '/vote', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'browser-vote-1' },
           body: JSON.stringify({ vote: 'support', weight: 999999 }) // spoofed weight ignored

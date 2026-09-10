@@ -98,9 +98,6 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   int? _lastRecalculateDay;
   int? _lastPrefetchDay;
 
-  static final int epochStartMs =
-      DateTime.utc(2026, 1, 1, 0, 0, 0).millisecondsSinceEpoch;
-
   @override
   void initState() {
     super.initState();
@@ -150,14 +147,15 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   void _syncClockWithServer() {
     try {
       final clockMap = widget.state.json['clock'] as Map<String, dynamic>?;
-      final rawServerTime = clockMap?['serverCurrentTime'];
-      final serverMs = rawServerTime is num
-          ? rawServerTime.toInt()
-          : (rawServerTime is String ? int.tryParse(rawServerTime) : null) ??
-              DateTime.now().toUtc().millisecondsSinceEpoch;
-
-      final diffMs = serverMs - epochStartMs;
-      _baseElapsedRealSeconds = diffMs > 0 ? (diffMs ~/ 1000) : 0;
+      final totalGameMinutes = clockMap?['totalGameMinutes'];
+      if (totalGameMinutes is num) {
+        _baseElapsedRealSeconds = totalGameMinutes.toInt();
+      } else {
+        final day = asIntOr(clockMap?['day'], 1);
+        final minute = asIntOr(clockMap?['minute'], 0);
+        _baseElapsedRealSeconds =
+            ((day - 1).clamp(0, 1 << 31) * 1440) + minute.clamp(0, 1439);
+      }
     } catch (_) {
       _baseElapsedRealSeconds = 0;
     }
@@ -211,7 +209,11 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
     double netFor(String key) {
       final raw =
           flowMap[key] ?? (key == 'material' ? flowMap['materials'] : null);
-      return asDoubleOr(raw is Map ? raw['net'] : null, 0);
+      if (raw is! Map) return 0.0;
+      if (raw['net'] != null) return asDoubleOr(raw['net'], 0.0);
+      if (raw['netPerGameDay'] != null) return asDoubleOr(raw['netPerGameDay'], 0.0);
+      if (raw['netPerSecond'] != null) return asDoubleOr(raw['netPerSecond'], 0.0) * 1440.0;
+      return 0.0;
     }
 
     final resources = [
@@ -376,6 +378,9 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
   // --- BRAND HEADER ---
   Widget _buildBrandHeader(BuildContext context, bool isMobile, bool isTablet,
       {bool hideTitle = false}) {
+    if (isMobile || hideTitle) {
+      return const SizedBox.shrink();
+    }
     return InkWell(
       onTap: () {
         EarthAudioEngine.instance.playClick();

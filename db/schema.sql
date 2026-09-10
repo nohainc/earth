@@ -730,27 +730,53 @@ CREATE TABLE IF NOT EXISTS proposals (
   body TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',
   opens_at TIMESTAMPTZ NOT NULL,
+  opens_game_day BIGINT,
+  opens_game_minute INTEGER CHECK (opens_game_minute BETWEEN 0 AND 1439),
   closes_at TIMESTAMPTZ NOT NULL,
   rule_version_id TEXT,
   quorum NUMERIC(10,6) NOT NULL DEFAULT 0.25,
   approval_threshold NUMERIC(10,6) NOT NULL DEFAULT 0.5,
-  implementation_delay_days INTEGER NOT NULL DEFAULT 1,
+  implementation_delay_days INTEGER NOT NULL DEFAULT 0,
   outcome TEXT NOT NULL DEFAULT 'pending' CHECK (outcome IN ('pending','passed','rejected','no_quorum')),
   implementation_at TIMESTAMPTZ,
   resolved_at TIMESTAMPTZ,
   target_category TEXT,
   target_value_json JSONB,
+  target_kind TEXT NOT NULL DEFAULT 'generic' CHECK (target_kind IN ('generic', 'building_catalog', 'research_project', 'finance_rule')),
+  building_catalog_id TEXT REFERENCES building_catalog(id) ON DELETE RESTRICT,
+  research_project_id TEXT REFERENCES corporation_building_research_projects(id) ON DELETE RESTRICT,
   executed_at TIMESTAMPTZ,
-  execution_status TEXT NOT NULL DEFAULT 'not_ready' CHECK (execution_status IN ('not_ready','ready','queued','executed','skipped','challenged','voided')),
+  execution_status TEXT NOT NULL DEFAULT 'not_ready' CHECK (execution_status IN ('not_ready','ready','awaiting_funding','executed','skipped','expired_unfunded','blocked')),
   correlation_id TEXT,
   closes_game_day BIGINT,
   closes_game_minute INTEGER CHECK (closes_game_minute BETWEEN 0 AND 1439),
   implementation_game_day BIGINT,
-  implementation_game_minute INTEGER CHECK (implementation_game_minute BETWEEN 0 AND 1439)
+  implementation_game_minute INTEGER CHECK (implementation_game_minute BETWEEN 0 AND 1439),
+  expires_game_day BIGINT,
+  expires_game_minute INTEGER DEFAULT 0 CHECK (expires_game_minute BETWEEN 0 AND 1439),
+  created_by_human_id TEXT REFERENCES humans(id) ON DELETE SET NULL,
+  submitted_game_day BIGINT NOT NULL DEFAULT 1,
+  voting_start_day BIGINT NOT NULL DEFAULT 1,
+  voting_duration_days INTEGER NOT NULL DEFAULT 1,
+  voting_due_end_day BIGINT NOT NULL DEFAULT 1,
+  resolved_game_day BIGINT,
+  implementation_due_end_day BIGINT,
+  executed_game_day BIGINT,
+  funding_start_day BIGINT,
+  funding_due_end_day BIGINT,
+  funding_last_checked_day BIGINT,
+  funding_block_reason TEXT,
+  funding_requirements JSONB NOT NULL DEFAULT '{}'::jsonb,
+  CONSTRAINT proposals_single_entity_target_check CHECK (num_nonnulls(building_catalog_id, research_project_id) <= 1)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS proposals_institution_correlation_idx ON proposals(institution_id, correlation_id) WHERE correlation_id IS NOT NULL;
 CREATE INDEX IF NOT EXISTS proposals_game_deadline_idx ON proposals(status, closes_game_day, closes_game_minute);
 CREATE INDEX IF NOT EXISTS idx_proposals_institution_status ON proposals(institution_id, status);
+CREATE INDEX IF NOT EXISTS proposals_building_catalog_target_idx ON proposals(building_catalog_id) WHERE building_catalog_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS proposals_research_project_target_idx ON proposals(research_project_id) WHERE research_project_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS proposals_queued_expiry_idx ON proposals (execution_status, expires_game_day) WHERE execution_status = 'queued';
+CREATE INDEX IF NOT EXISTS proposals_created_by_human_id_idx ON proposals(created_by_human_id);
+CREATE INDEX IF NOT EXISTS proposals_funding_window_idx ON proposals(execution_status, funding_due_end_day) WHERE execution_status = 'awaiting_funding';
 
 CREATE TABLE IF NOT EXISTS ballots (
   proposal_id TEXT NOT NULL REFERENCES proposals(id),
@@ -1035,6 +1061,92 @@ CREATE TABLE IF NOT EXISTS scheduler_tick_logs (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_scheduler_tick_logs_day ON scheduler_tick_logs(game_day DESC);
+
+-- Durable daily economic settlement. The live database receives the matching
+-- forward migrations; these definitions keep a fresh schema in sync.
+CREATE TABLE IF NOT EXISTS daily_settlement_runs (
+  game_day BIGINT PRIMARY KEY CHECK (game_day >= 1),
+  status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed', 'baseline', 'paused')),
+  current_phase TEXT,
+  attempt_count INTEGER NOT NULL DEFAULT 0 CHECK (attempt_count >= 0),
+  lease_owner TEXT,
+  lease_heartbeat_at TIMESTAMPTZ,
+  rules_version TEXT NOT NULL DEFAULT 'daily-settlement-v1',
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS daily_settlement_runs_status_day_idx ON daily_settlement_runs(status, game_day);
+
+CREATE TABLE IF NOT EXISTS daily_settlement_control (
+  id TEXT PRIMARY KEY DEFAULT 'WORLD' CHECK (id = 'WORLD'),
+  status TEXT NOT NULL CHECK (status IN ('awaiting_baseline', 'active', 'paused')) DEFAULT 'awaiting_baseline',
+  activated_at TIMESTAMPTZ,
+  activated_by TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+INSERT INTO daily_settlement_control (id, status) VALUES ('WORLD', 'awaiting_baseline') ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS daily_settlement_phase_runs (
+  game_day BIGINT NOT NULL REFERENCES daily_settlement_runs(game_day) ON DELETE CASCADE,
+  phase TEXT NOT NULL,
+  shard TEXT NOT NULL DEFAULT 'all',
+  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'failed')),
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  rows_processed BIGINT NOT NULL DEFAULT 0,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  completed_at TIMESTAMPTZ,
+  error_message TEXT,
+  PRIMARY KEY (game_day, phase, shard)
+);
+
+CREATE TABLE IF NOT EXISTS entity_end_of_day_snapshots (
+  owner_id TEXT NOT NULL,
+  game_day BIGINT NOT NULL,
+  owner_kind TEXT NOT NULL,
+  credits NUMERIC(20,2) NOT NULL DEFAULT 0,
+  resources JSONB NOT NULL DEFAULT '{}'::jsonb,
+  cumulative_metrics JSONB NOT NULL DEFAULT '{}'::jsonb,
+  rules_version TEXT NOT NULL DEFAULT 'daily-settlement-v1',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  PRIMARY KEY (owner_id, game_day)
+);
+CREATE INDEX IF NOT EXISTS entity_eod_snapshot_day_idx ON entity_end_of_day_snapshots(game_day DESC, owner_kind);
+
+CREATE TABLE IF NOT EXISTS scheduled_actions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  owner_id TEXT,
+  action_type TEXT NOT NULL,
+  due_game_day BIGINT NOT NULL CHECK (due_game_day >= 1),
+  due_game_minute INTEGER NOT NULL DEFAULT 0 CHECK (due_game_minute BETWEEN 0 AND 1439),
+  due_end_game_day BIGINT NOT NULL DEFAULT 1,
+  priority INTEGER NOT NULL DEFAULT 100,
+  attempt_count INTEGER NOT NULL DEFAULT 0,
+  payload JSONB NOT NULL DEFAULT '{}'::jsonb,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'running', 'completed', 'failed', 'cancelled')),
+  correlation_id TEXT NOT NULL UNIQUE,
+  claimed_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  error_message TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS scheduled_actions_due_idx ON scheduled_actions(status, due_game_day, due_game_minute);
+CREATE INDEX IF NOT EXISTS scheduled_actions_end_of_day_idx ON scheduled_actions(status, due_end_game_day, priority, created_at);
+
+CREATE TABLE IF NOT EXISTS settlement_anomalies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  game_day BIGINT,
+  severity TEXT NOT NULL CHECK (severity IN ('info', 'warning', 'error', 'critical')),
+  anomaly_type TEXT NOT NULL,
+  owner_id TEXT,
+  details JSONB NOT NULL DEFAULT '{}'::jsonb,
+  resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS settlement_anomalies_open_idx ON settlement_anomalies(severity, created_at DESC) WHERE resolved_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS earth_schema_migrations (
   version INTEGER PRIMARY KEY,
