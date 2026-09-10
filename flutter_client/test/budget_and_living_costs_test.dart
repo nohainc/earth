@@ -127,7 +127,9 @@ void main() {
       expect(find.text('NEW CARTHAGE'), findsWidgets);
       expect(find.text('HOUSING'), findsOneWidget);
       expect(find.text('78%'), findsOneWidget);
-      expect(find.text('ENERGY'), findsOneWidget);
+      // The capacity panel intentionally repeats the resource label in its
+      // summary and responsive detail cards.
+      expect(find.text('ENERGY'), findsWidgets);
       expect(find.text('92%'), findsOneWidget);
       expect(find.text('CONNECTIVITY'), findsOneWidget);
       expect(find.text('85%'), findsOneWidget);
@@ -135,8 +137,8 @@ void main() {
       expect(find.text('64%'), findsOneWidget);
 
       // Explicit CITY BUDGET Card and Amount
-      expect(find.text('CITY BUDGET'), findsOneWidget);
-      expect(find.text('450000 C'), findsOneWidget);
+      expect(find.text('CITY BUDGET'), findsWidgets);
+      expect(find.text('450000 C'), findsWidgets);
       expect(
         find.textContaining('Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies.'),
         findsOneWidget,

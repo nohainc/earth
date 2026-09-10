@@ -169,24 +169,7 @@ const state = {
     orders: [],
     lastSettlement: null,
   },
-  governance: {
-    proposals: [
-      {
-        id: '042',
-        title: 'Cast Sovereign Vote on Municipal Tax Charter',
-        body: 'Amend the local civic tax policy to support infrastructure growth.',
-        status: 'open',
-        outcome: 'pending',
-        execution_status: 'not_ready',
-        closes_game_day: 9999,
-        closes_game_minute: 0,
-        quorum: 0.25,
-        approval_threshold: 0.5,
-        votes: { support: 0, oppose: 0, abstain: 0, uncast: 10 },
-        ballots: {},
-      },
-    ],
-  },
+  governance: { proposals: [] },
   technology: {
     research: { id: 'TECH-001', name: 'Building Systems Optimization', progress: 72, budgetPerDay: 240, focus: 'efficiency', status: 'active', budget: 1440 },
   },
