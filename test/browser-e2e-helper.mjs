@@ -56,6 +56,12 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
   // processes. A dedicated profile also avoids first-run locks in GitHub CI.
   const profileDir = await mkdtemp(join(tmpdir(), 'earth-browser-e2e-'));
   let chromeOutput = '';
+  // Some CI/desktop shells export a malformed D-Bus address. Chrome treats
+  // it as a fatal startup dependency in headless mode even though the E2E
+  // browser does not need desktop integration at all.
+  const { DBUS_SESSION_BUS_ADDRESS, DBUS_SYSTEM_BUS_ADDRESS, ...chromeEnv } = process.env;
+  void DBUS_SESSION_BUS_ADDRESS;
+  void DBUS_SYSTEM_BUS_ADDRESS;
   const chrome = spawn(chromePath, [
     '--headless=new',
     `--remote-debugging-port=${port}`,
@@ -71,7 +77,7 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     '--disable-sync',
     '--mute-audio',
     '--no-sandbox',
-  ], { stdio: ['ignore', 'ignore', 'pipe'] });
+  ], { env: chromeEnv, stdio: ['ignore', 'ignore', 'pipe'] });
   chrome.stderr?.on('data', (chunk) => {
     chromeOutput = `${chromeOutput}${chunk}`.slice(-2000);
   });
