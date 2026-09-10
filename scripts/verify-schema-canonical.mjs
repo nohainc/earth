@@ -19,6 +19,6 @@ for (const [table, columns] of Object.entries(manifest.requiredTables)) {
   }
 }
 
-if (!schema.includes('reconciled through migration 181')) failures.push('schema.sql header must identify migration 181 reconciliation');
+if (!schema.includes('reconciled through migration 186')) failures.push('schema.sql header must identify migration 186 reconciliation');
 if (failures.length) throw new Error(`Canonical schema verification failed:\n- ${failures.join('\n- ')}`);
 console.log(JSON.stringify({ ok: true, migrationVersion: manifest.migrationVersion, tablesChecked: Object.keys(manifest.requiredTables).length }, null, 2));

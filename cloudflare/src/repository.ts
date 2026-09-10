@@ -3,6 +3,9 @@ import { Client, type QueryResult, type QueryResultRow } from 'pg';
 const MAX_TRANSACTION_ATTEMPTS = 3;
 const RETRY_BACKOFF_MS = 10;
 
+export type RepositoryWorkload = 'api' | 'scheduler';
+export type RepositoryOptions = { workload?: RepositoryWorkload };
+
 export type AuthorityMode = 'postgres';
 
 export function authorityMode(env: Env): AuthorityMode {
@@ -78,25 +81,28 @@ export class PostgresRepository {
   }
 }
 
-export async function withPostgresRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>): Promise<T | undefined> {
+export async function withPostgresRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>, options: RepositoryOptions = {}): Promise<T | undefined> {
   if (!env.HYPERDRIVE?.connectionString) return undefined;
+  const config = env as unknown as Record<string, unknown>;
+  const scheduler = options.workload === 'scheduler';
   const client = new Client({
     connectionString: env.HYPERDRIVE.connectionString,
     connectionTimeoutMillis: 3000,
-    query_timeout: 5000,
-    statement_timeout: 5000,
+    query_timeout: scheduler ? Number(config.EARTH_SCHEDULER_STATEMENT_TIMEOUT_MS ?? 30000) : Number(config.EARTH_API_STATEMENT_TIMEOUT_MS ?? 5000),
+    statement_timeout: scheduler ? Number(config.EARTH_SCHEDULER_STATEMENT_TIMEOUT_MS ?? 30000) : Number(config.EARTH_API_STATEMENT_TIMEOUT_MS ?? 5000),
     application_name: 'earth-world-repository',
   });
   await client.connect();
   try {
+    if (scheduler) await client.query('SELECT set_config(\'lock_timeout\',$1,false)', [`${Number(config.EARTH_SCHEDULER_LOCK_TIMEOUT_MS ?? 5000)}ms`]);
     return await work(new PostgresRepository(client));
   } finally {
     await client.end().catch(() => undefined);
   }
 }
 
-export async function withRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>): Promise<T | undefined> {
+export async function withRepository<T>(env: Env, work: (repository: PostgresRepository) => Promise<T>, options: RepositoryOptions = {}): Promise<T | undefined> {
   authorityMode(env);
   if (!env.HYPERDRIVE?.connectionString) throw new Error('PostgreSQL Hyperdrive binding is required');
-  return withPostgresRepository(env, work);
+  return withPostgresRepository(env, work, options);
 }

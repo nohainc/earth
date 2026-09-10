@@ -1,23 +1,19 @@
 import type { PostgresRepository } from './repository.ts';
-import { settleMarket } from './market-postgres.ts';
 import { processMortality } from './lifecycle-postgres.ts';
 import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
-import { validateWorldAdvanceMinutes } from './scheduler-rules.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleBuildingUpkeepAndRevenueV2 } from './building-settlement-v2.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
-import { applyPreparedSettlementProfiles, rebuildDirtyDailySettlementProfiles } from './daily-settlement-profiles.ts';
+import { applyPreparedSettlementProfiles } from './daily-settlement-profiles.ts';
 import { settleGlobalBank } from './global-bank-settlement-engine.ts';
-import { processEndOfDayAutomation } from './daily-automation.ts';
 import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
+import { createDailySettlementPhaseRegistry, type DailySettlementPhaseContext } from './daily-settlement-phases.ts';
 import { provisionEconomicEntryPartitions } from './economic-entry-partitions.ts';
 
 export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
-
-const products = ['food', 'material', 'components', 'energy', 'compute'];
 
 function charterRate(raw: unknown, key: string): number | null {
   if (!raw) return null;
@@ -32,19 +28,6 @@ function effectiveRate(cityRules: unknown, corporationRules: unknown, key: strin
   const corporation = charterRate(corporationRules, key);
   if (corporation !== null) return String(corporation);
   return earthRate;
-}
-
-async function runLoggedEngine(tx: PostgresRepository, day: number, engine: string, work: () => Promise<unknown>): Promise<void> {
-  const started = Date.now();
-  try {
-    const result = await work();
-    const rowsProcessed = typeof result === 'number' ? result : 0;
-    await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, rows_processed, duration_ms, status) VALUES ($1,$2,$3,$4,$5)', [day, engine, rowsProcessed, Date.now() - started, 'ok']);
-  } catch (error) {
-    console.error(`[runLoggedEngine Error in ${engine}]:`, error);
-    await tx.query('INSERT INTO scheduler_tick_logs (game_day, engine, duration_ms, status, error_message) VALUES ($1,$2,$3,$4,$5)', [day, engine, Date.now() - started, 'error', error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error']).catch(() => undefined);
-    throw error;
-  }
 }
 
 async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Promise<void> {
@@ -675,35 +658,13 @@ async function settleProduction(tx: PostgresRepository, day: number): Promise<nu
   return 0;
 }
 
-async function runDailyPhase(tx: PostgresRepository, day: number, phase: string, work: () => Promise<unknown>): Promise<void> {
-  await tx.query(
-    `INSERT INTO daily_settlement_phase_runs (game_day, phase, status, attempt_count)
-     VALUES ($1, $2, 'running', 1)
-     ON CONFLICT (game_day, phase, shard) DO UPDATE
-       SET status = 'running', attempt_count = daily_settlement_phase_runs.attempt_count + 1,
-           started_at = CURRENT_TIMESTAMP, completed_at = NULL, error_message = NULL`,
-    [day, phase],
-  );
-  try {
-    await runLoggedEngine(tx, day, phase, work);
-    await tx.query(
-      `UPDATE daily_settlement_phase_runs
-       SET status = 'completed', completed_at = CURRENT_TIMESTAMP
-       WHERE game_day = $1 AND phase = $2 AND shard = 'all'`,
-      [day, phase],
-    );
-  } catch (error) {
-    await tx.query(
-      `UPDATE daily_settlement_phase_runs
-       SET status = 'failed', error_message = $3
-       WHERE game_day = $1 AND phase = $2 AND shard = 'all'`,
-      [day, phase, error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error'],
-    ).catch(() => undefined);
-    throw error;
-  }
-}
-
 type ResumablePhaseWork = (tx: PostgresRepository) => Promise<unknown>;
+export type SettlementResult =
+  | { status: 'completed'; gameDay: number }
+  | { status: 'busy'; gameDay: number; phase?: string }
+  | { status: 'partial'; gameDay: number; phase: string }
+  | { status: 'failed'; gameDay: number; error: string };
+type PhaseRunResult = 'claimed' | 'completed' | 'busy';
 
 async function runResumablePhase(
   repository: PostgresRepository,
@@ -712,7 +673,7 @@ async function runResumablePhase(
   shard: string,
   leaseOwner: string,
   work: ResumablePhaseWork,
-): Promise<boolean> {
+): Promise<PhaseRunResult> {
   const claim = await repository.transaction(async (tx) => {
     const result = await tx.query<{ claimed: boolean; status: string; attempt_count: number }>(
       'SELECT * FROM earth_claim_settlement_phase($1,$2,$3,$4,$5)',
@@ -720,29 +681,48 @@ async function runResumablePhase(
     );
     return result.rows[0] ?? { claimed: false, status: 'missing', attempt_count: 0 };
   });
-  if (!claim.claimed) return claim.status === 'completed';
+  if (!claim.claimed) return claim.status === 'completed' ? 'completed' : 'busy';
 
+  const heartbeatTimer = setInterval(() => {
+    void repository.query('SELECT earth_heartbeat_settlement_phase($1,$2,$3,$4)', [day, phase, shard, leaseOwner]).catch(() => undefined);
+  }, 60_000);
   try {
     const rowsProcessed = await repository.transaction(async (tx) => {
       const result = await work(tx);
       return typeof result === 'number' ? result : 0;
     });
-    await repository.query(
+    const heartbeat = await repository.query<{ heartbeat: boolean }>(
       'SELECT earth_heartbeat_settlement_phase($1,$2,$3,$4)',
       [day, phase, shard, leaseOwner],
     );
-    await repository.query(
+    if (heartbeat.rows.length === 0) throw new Error(`Settlement phase lease lost for ${day}/${phase}/${shard}`);
+    const completion = await repository.query<{ completed: boolean }>(
       'SELECT earth_complete_settlement_phase($1,$2,$3,$4,$5)',
       [day, phase, shard, leaseOwner, rowsProcessed],
     );
-    return true;
+    if (completion.rows.length === 0) throw new Error(`Settlement phase completion lease lost for ${day}/${phase}/${shard}`);
+    return 'claimed';
   } catch (error) {
     await repository.query(
       'SELECT earth_fail_settlement_phase($1,$2,$3,$4,$5)',
       [day, phase, shard, leaseOwner, error instanceof Error ? error.message : 'Unknown settlement phase error'],
     ).catch(() => undefined);
     throw error;
+  } finally {
+    clearInterval(heartbeatTimer);
   }
+}
+
+async function settleResearchAndProgress(tx: PostgresRepository, day: number): Promise<void> {
+  await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
+  await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
+  await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
+  await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [day]);
+}
+
+async function settleLifecycle(tx: PostgresRepository, day: number): Promise<void> {
+  await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
+  if (day % 365 === 0) await processMortality(tx, day);
 }
 
 /**
@@ -754,49 +734,87 @@ export async function runResumableSettlementDay(
   repository: PostgresRepository,
   day: number,
   leaseOwner = `settlement-worker:${crypto.randomUUID()}`,
-): Promise<void> {
-  await provisionEconomicEntryPartitions(repository, day);
-  await repository.query(
-    `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, shard_count, lease_owner, lease_heartbeat_at, started_at)
-     VALUES ($1,'running','prepare',1,64,$2,CURRENT_TIMESTAMP,CURRENT_TIMESTAMP)
-     ON CONFLICT (game_day) DO UPDATE SET status = 'running', lease_owner = EXCLUDED.lease_owner,
-       lease_heartbeat_at = CURRENT_TIMESTAMP, error_message = NULL
-     WHERE daily_settlement_runs.status IN ('pending','failed','running')`,
-    [day, leaseOwner],
-  );
+): Promise<SettlementResult> {
+  const claim = await repository.transaction(async (tx) => tx.query<{ claimed: boolean; status: string; attempt_count: number; current_phase: string | null }>(
+    'SELECT * FROM earth_claim_settlement_day($1,$2,$3)', [day, leaseOwner, 300],
+  ));
+  const dayClaim = claim.rows[0];
+  if (!dayClaim?.claimed) {
+    if (dayClaim?.status === 'completed' || dayClaim?.status === 'baseline') return { status: 'completed', gameDay: day };
+    return { status: 'busy', gameDay: day, phase: dayClaim?.current_phase ?? undefined };
+  }
   const run = await repository.query<{ shard_count: number }>(
     'SELECT shard_count FROM daily_settlement_runs WHERE game_day = $1', [day],
   );
   const shardCount = Math.max(1, Math.min(64, Number(run.rows[0]?.shard_count ?? 64)));
 
-  for (let shard = 0; shard < shardCount; shard++) {
-    await runResumablePhase(repository, day, 'daily_settlement_profiles', String(shard), leaseOwner, (tx) =>
-      tx.query<{ rebuilt_count: string }>('SELECT earth_rebuild_dirty_profiles($1::smallint,$2::bigint) AS rebuilt_count', [shard, day])
-        .then((result) => Number(result.rows[0]?.rebuilt_count ?? 0)));
+  const context = (tx: PostgresRepository, shard?: number): DailySettlementPhaseContext => ({ tx, day, shard });
+  const phases = createDailySettlementPhaseRegistry({
+    preparePartitions: ({ tx }) => provisionEconomicEntryPartitions(tx, day),
+    rebuildProfiles: ({ tx, shard }) => tx.query<{ rebuilt_count: string }>('SELECT earth_rebuild_dirty_profiles($1::smallint,$2::bigint) AS rebuilt_count', [shard, day]).then((result) => Number(result.rows[0]?.rebuilt_count ?? 0)),
+    profileSettlement: ({ tx }) => applyPreparedSettlementProfiles(tx, day),
+    lifeMaintenance: ({ tx }) => settleLifeMaintenanceInTransaction(tx, day),
+    basicLevy: ({ tx }) => settleBasicLevy(tx, day),
+    buildingSettlement: ({ tx }) => settleBuildingUpkeepAndRevenueV2(tx, day),
+    buildingPatentLicenses: ({ tx }) => settleBuildingPatentLicenses(tx, day),
+    cityCorporateIncomeTax: ({ tx }) => settleCityCorporateIncomeTax(tx, day),
+    globalBank: ({ tx }) => settleGlobalBank(tx, day),
+    cityDynamics: ({ tx }) => processCityDynamics(tx, day),
+    patentExpirations: ({ tx }) => processPatentExpirations(tx, day),
+    researchAndProgress: ({ tx }) => settleResearchAndProgress(tx, day),
+    lifecycle: ({ tx }) => settleLifecycle(tx, day),
+    financialStates: ({ tx }) => updateFinancialStates(tx, day),
+    institutionDissolution: ({ tx }) => dissolveInstitutions(tx, day),
+    rankingsSnapshot: ({ tx }) => snapshotRankings(tx, day),
+    endOfDaySnapshots: ({ tx }) => captureEndOfDaySnapshots(tx, day),
+  });
+  const dayHeartbeatTimer = setInterval(() => {
+    void repository.query('SELECT earth_heartbeat_settlement_day($1,$2)', [day, leaseOwner]).catch(() => undefined);
+  }, 60_000);
+  try {
+    for (let phaseIndex = 0; phaseIndex < phases.length; phaseIndex += 1) {
+      const phase = phases[phaseIndex];
+      const prerequisites = phases.slice(0, phaseIndex);
+      if (prerequisites.length > 0) {
+        const barrier = await repository.query<{ incomplete: string }>(
+          `SELECT COUNT(*) FILTER (WHERE status <> 'completed')::bigint AS incomplete
+             FROM daily_settlement_phase_runs
+            WHERE game_day = $1 AND phase = ANY($2::text[])`,
+          [day, prerequisites.map((item) => item.id)],
+        );
+        if (Number(barrier.rows[0]?.incomplete ?? 0) > 0) return { status: 'partial', gameDay: day, phase: phase.id };
+      }
+      const dayHeartbeat = await repository.query<{ heartbeat: boolean }>('SELECT earth_heartbeat_settlement_day($1,$2)', [day, leaseOwner]);
+      if (dayHeartbeat.rows.length === 0) throw new Error(`Settlement day lease lost for ${day}`);
+      const phaseState = await repository.query(
+        `UPDATE daily_settlement_runs
+            SET current_phase = $3, updated_at = CURRENT_TIMESTAMP
+          WHERE game_day = $1 AND status = 'running' AND lease_owner = $2`,
+        [day, leaseOwner, phase.id],
+      );
+      if (phaseState.rowCount !== 1) throw new Error(`Settlement day lease lost before phase ${day}/${phase.id}`);
+      if (phase.shardMode === 'owner-shards') {
+        for (let shard = 0; shard < shardCount; shard += 1) {
+          const outcome = await runResumablePhase(repository, day, phase.id, String(shard), leaseOwner, (tx) => phase.execute(context(tx, shard)));
+          if (outcome === 'busy') return { status: 'busy', gameDay: day, phase: phase.id };
+        }
+      } else {
+        const outcome = await runResumablePhase(repository, day, phase.id, 'all', leaseOwner, (tx) => phase.execute(context(tx)));
+        if (outcome === 'busy') return { status: 'busy', gameDay: day, phase: phase.id };
+      }
+    }
+    const completion = await repository.query<{ completed: boolean }>(
+      'SELECT earth_complete_settlement_day($1,$2)', [day, leaseOwner],
+    );
+    if (completion.rows.length === 0) throw new Error(`Settlement day completion lease lost for ${day}`);
+    return { status: 'completed', gameDay: day };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown settlement day error';
+    await repository.query('SELECT earth_fail_settlement_day($1,$2,$3)', [day, leaseOwner, message]).catch(() => undefined);
+    return { status: 'failed', gameDay: day, error: message };
+  } finally {
+    clearInterval(dayHeartbeatTimer);
   }
-
-  const phases: Array<[string, ResumablePhaseWork]> = [
-    ['daily_settlement_profile_settlement', (tx) => applyPreparedSettlementProfiles(tx, day)],
-    ['life_maintenance', (tx) => settleLifeMaintenanceInTransaction(tx, day)],
-    ['basic_levy', (tx) => settleBasicLevy(tx, day)],
-    ['building_settlement', (tx) => settleBuildingUpkeepAndRevenueV2(tx, day)],
-    ['building_patent_licenses', (tx) => settleBuildingPatentLicenses(tx, day)],
-    ['city_corporate_income_tax', (tx) => settleCityCorporateIncomeTax(tx, day)],
-    ['global_bank', (tx) => settleGlobalBank(tx, day)],
-    ['city_dynamics', (tx) => processCityDynamics(tx, day)],
-    ['financial_states', (tx) => updateFinancialStates(tx, day)],
-    ['end_of_day_snapshots', (tx) => captureEndOfDaySnapshots(tx, day)],
-  ];
-  for (const [phase, work] of phases) {
-    await runResumablePhase(repository, day, phase, 'all', leaseOwner, work);
-  }
-  await repository.query(
-    `UPDATE daily_settlement_runs
-        SET status = 'completed', current_phase = 'completed', completed_at = CURRENT_TIMESTAMP,
-            lease_owner = NULL, lease_heartbeat_at = NULL
-      WHERE game_day = $1 AND lease_owner = $2`,
-    [day, leaseOwner],
-  );
 }
 
 async function captureEndOfDaySnapshots(tx: PostgresRepository, day: number): Promise<number> {
@@ -842,13 +860,10 @@ async function captureEndOfDaySnapshots(tx: PostgresRepository, day: number): Pr
 }
 
 
-export async function advanceWorld(repository: PostgresRepository, minutesPerTick = 5, idempotencyKey?: string, resumableSettlement = false): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
-  validateWorldAdvanceMinutes(minutesPerTick);
-  let claimedDay: number | null = null;
+export async function runWorldSchedulerTick(repository: PostgresRepository, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; settlementStatus?: SettlementResult['status']; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
   let pendingResumableSettlementDay: number | null = null;
-  let result: { day: number; minute: number; newDay: boolean; settledGameDay?: number; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean };
-  try {
-    result = await repository.transaction(async (tx) => {
+  let result: { day: number; minute: number; newDay: boolean; settledGameDay?: number; settlementStatus?: SettlementResult['status']; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean };
+  result = await repository.transaction(async (tx) => {
     if (idempotencyKey) {
       const prior = await tx.query('SELECT id FROM world_events WHERE id = $1', [`SCHEDULED-TICK-${idempotencyKey}`]);
       if (prior.rows[0]) {
@@ -868,51 +883,14 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     const totalGameMinutes = Number(clock.rows[0]?.total_game_minutes ?? 0);
     await tx.query("UPDATE world_state SET game_day = $1, game_minute = $2, total_game_minutes = $3 WHERE id = 'WORLD'", [day, minute, totalGameMinutes]);
     await tx.query("UPDATE proposals SET status = 'closed' WHERE status = 'open' AND (closes_game_day, closes_game_minute) <= ($1::bigint, $2::integer)", [day, minute]);
-    await tx.query("UPDATE market_prices SET price = GREATEST(1, LEAST(1000000, ROUND((price * (1.0 + LEAST(0.05, GREATEST(-0.05, (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))), game_day = $1", [day]);
     const control = await tx.query<{ status: string }>("SELECT status FROM daily_settlement_control WHERE id = 'WORLD' FOR UPDATE");
     const active = control.rows[0]?.status === 'active';
-    const completed = await tx.query<{ game_day: string }>("SELECT game_day FROM daily_settlement_runs WHERE status IN ('completed', 'baseline') ORDER BY game_day DESC LIMIT 1");
-    const nextDay = Number(completed.rows[0]?.game_day ?? 0) + 1;
+    const watermark = await tx.query<{ settlement_watermark: string }>(
+      'SELECT earth_settlement_watermark($1)::text AS settlement_watermark', [day],
+    );
+    const nextDay = Number(watermark.rows[0]?.settlement_watermark ?? 0) + 1;
     const settlementDay = active && nextDay < day ? nextDay : null;
-    if (settlementDay !== null) {
-      if (resumableSettlement) pendingResumableSettlementDay = settlementDay;
-      else {
-      claimedDay = settlementDay;
-      await tx.query(
-        `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, lease_owner, lease_heartbeat_at, started_at)
-         VALUES ($1, 'running', 'preflight', 1, $2, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
-         ON CONFLICT (game_day) DO UPDATE
-         SET status = 'running', current_phase = 'preflight', attempt_count = daily_settlement_runs.attempt_count + 1,
-             lease_owner = EXCLUDED.lease_owner, lease_heartbeat_at = CURRENT_TIMESTAMP,
-             started_at = COALESCE(daily_settlement_runs.started_at, CURRENT_TIMESTAMP), error_message = NULL
-         WHERE daily_settlement_runs.status IN ('pending', 'failed')`,
-        [settlementDay, `scheduler:${idempotencyKey ?? 'cron'}`],
-      );
-      const run = await tx.query<{ status: string }>('SELECT status FROM daily_settlement_runs WHERE game_day = $1 FOR UPDATE', [settlementDay]);
-      if (run.rows[0]?.status !== 'running') throw new Error(`Daily settlement ${settlementDay} could not be claimed`);
-      await runDailyPhase(tx, settlementDay, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'daily_settlement_profile_settlement', () => applyPreparedSettlementProfiles(tx, settlementDay));
-      await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
-      await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
-      await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
-      await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [settlementDay]);
-      await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [settlementDay]);
-      if (settlementDay % 365 === 0) await processMortality(tx, settlementDay);
-      await runDailyPhase(tx, settlementDay, 'life_maintenance', () => settleLifeMaintenanceInTransaction(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'basic_levy', () => settleBasicLevy(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'building_settlement', () => settleBuildingUpkeepAndRevenueV2(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'building_patent_licenses', () => settleBuildingPatentLicenses(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'city_corporate_income_tax', () => settleCityCorporateIncomeTax(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'global_bank', () => settleGlobalBank(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'city_dynamics', () => processCityDynamics(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'patent_expirations', () => processPatentExpirations(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'financial_states', () => updateFinancialStates(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'institution_dissolution', () => dissolveInstitutions(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'rankings_snapshot', () => snapshotRankings(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'end_of_day_snapshots', () => captureEndOfDaySnapshots(tx, settlementDay));
-      await tx.query("UPDATE daily_settlement_runs SET status = 'completed', current_phase = 'completed', completed_at = CURRENT_TIMESTAMP, lease_owner = NULL, lease_heartbeat_at = NULL WHERE game_day = $1", [settlementDay]);
-      }
-    }
+    if (settlementDay !== null) pendingResumableSettlementDay = settlementDay;
     await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
     await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM buildings WHERE status = 'active') * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
@@ -923,40 +901,13 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
     }
     return { day, minute, newDay: settlementDay !== null, settledGameDay: settlementDay ?? undefined, productionEvents };
     });
-  } catch (error) {
-    if (claimedDay !== null) {
-      await repository.query(
-        `INSERT INTO daily_settlement_runs (game_day, status, current_phase, attempt_count, error_message, updated_at)
-         VALUES ($1, 'failed', 'failed', 1, $2, CURRENT_TIMESTAMP)
-         ON CONFLICT (game_day) DO UPDATE
-           SET status = 'failed', current_phase = 'failed',
-               attempt_count = daily_settlement_runs.attempt_count + 1,
-               error_message = EXCLUDED.error_message, lease_owner = NULL,
-               lease_heartbeat_at = NULL, updated_at = CURRENT_TIMESTAMP`,
-        [claimedDay, error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error'],
-      ).catch(() => undefined);
-      await repository.query(
-        `INSERT INTO settlement_anomalies (game_day, severity, anomaly_type, details)
-         VALUES ($1, 'error', 'daily_settlement_failed', jsonb_build_object('message', $2::text))`,
-        [claimedDay, error instanceof Error ? error.message.slice(0, 2000) : 'Unknown error'],
-      ).catch(() => undefined);
-    }
-    throw error;
-  }
   if (result.alreadyProcessed) return result;
+  let settlementStatus: SettlementResult['status'] | undefined;
   if (pendingResumableSettlementDay !== null) {
     await captureEconomyShadowOpening(repository, pendingResumableSettlementDay);
-    await runResumableSettlementDay(repository, pendingResumableSettlementDay, `scheduler:${idempotencyKey ?? crypto.randomUUID()}`);
-    await reconcileEconomyShadowDay(repository, pendingResumableSettlementDay);
+    const settlement = await runResumableSettlementDay(repository, pendingResumableSettlementDay, `scheduler:${idempotencyKey ?? crypto.randomUUID()}`);
+    settlementStatus = settlement.status;
+    if (settlement.status === 'completed') await reconcileEconomyShadowDay(repository, pendingResumableSettlementDay);
   }
-  // Proposal resolution, construction completion, research completion, and
-  // queued execution are idempotent and must be checked on every scheduler
-  // tick. Daily settlement remains independently gated above.
-  await processEndOfDayAutomation(repository, result.settledGameDay ?? Math.max(0, result.day - 1));
-  let marketSettlements = 0;
-  for (const product of products) {
-    const settled = await settleMarket(repository, product);
-    if (settled.filled) marketSettlements += 1;
-  }
-  return { ...result, marketSettlements };
+  return { ...result, settlementStatus, marketSettlements: 0 };
 }

@@ -119,7 +119,7 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
   });
 }
 
-export async function settleMarket(repository: PostgresRepository, product: string): Promise<Record<string, unknown>> {
+export async function settleMarket(repository: PostgresRepository, product: string, settlementGameDay?: number): Promise<Record<string, unknown>> {
   if (!products.has(product)) throw new Error('Unknown product');
   return repository.transaction(async (tx) => {
     const price = await tx.query<{ price: string; supply: string }>('SELECT * FROM market_prices WHERE product = $1 FOR UPDATE', [product]);
@@ -138,7 +138,7 @@ export async function settleMarket(repository: PostgresRepository, product: stri
     const usedCents = reservedCents > 0n ? marketValueToCents(fill, buyOrder.limit_price) + rateAmountToCents(marketValueToCents(fill, buyOrder.limit_price), rate) : payableCents;
     if (reservedCents > 0n && reservedCents < usedCents) throw new Error('Buy order reservation is inconsistent');
     const game = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
-    const gameDay = Number(game.rows[0]?.game_day ?? 0);
+    const gameDay = settlementGameDay ?? Number(game.rows[0]?.game_day ?? 0);
     const tradeId = crypto.randomUUID();
     const buyFilled = Number(buyOrder.filled_quantity) + fill;
     const sellFilled = Number(sellOrder.filled_quantity) + fill;

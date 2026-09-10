@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 181,
+  "migrationVersion": 186,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -479,10 +479,20 @@
       "status",
       "reserved_credits"
     ],
+    "market_batch_runs": [
+      "batch_id",
+      "product",
+      "status",
+      "lease_owner",
+      "lease_expires_at",
+      "orders_processed",
+      "trades_created"
+    ],
     "market_prices": [
       "product",
       "price",
-      "game_day"
+      "game_day",
+      "last_market_batch_id"
     ],
     "market_trades": [
       "id",
@@ -649,6 +659,23 @@
       "status",
       "created_at"
     ],
+    "scheduler_runs": [
+      "id",
+      "scheduled_time",
+      "worker_instance_id",
+      "started_at",
+      "status",
+      "settlement_watermark_before",
+      "settlement_watermark_after",
+      "backlog_before",
+      "backlog_after",
+      "settlement_days_processed",
+      "actions_processed",
+      "market_batches_processed",
+      "outbox_events_delivered",
+      "error_stage",
+      "error_message"
+    ],
     "world_events": [
       "id",
       "game_day",
@@ -659,6 +686,8 @@
       "game_day",
       "health",
       "essential_services_index",
+      "clock_mode",
+      "manual_total_game_minutes",
       "last_scheduler_at",
       "genesis_at",
       "simulated_day_offset",
@@ -869,6 +898,10 @@
     "settlement_rate_segments_day_idx",
     "settlement_rate_segments_owner_asset_idx",
     "daily_settlement_phase_runs_lease_idx",
+    "scheduled_actions_lease_idx",
+    "market_batch_runs_status_idx",
+    "scheduler_runs_started_idx",
+    "scheduler_runs_status_idx",
     "idx_market_trades_order",
     "idx_corp_research_corp_tech",
     "idx_futures_settlement",

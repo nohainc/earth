@@ -42,11 +42,14 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         WITH clock AS (
           SELECT earth_game_day_from_total_minutes(total_game_minutes) AS current_game_day
           FROM earth_get_current_game_time()
+        ), watermark AS (
+          SELECT earth_settlement_watermark(clock.current_game_day) AS game_day
+          FROM clock
         ), completed AS (
-          SELECT game_day, completed_at
-          FROM daily_settlement_runs
-          WHERE status IN ('completed', 'baseline')
-          ORDER BY game_day DESC LIMIT 1
+          SELECT r.game_day, r.completed_at
+          FROM daily_settlement_runs r
+          JOIN watermark w ON w.game_day = r.game_day
+          WHERE r.status IN ('completed', 'baseline')
         )
         SELECT control.status,
                clock.current_game_day::text,
@@ -59,6 +62,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       `),
     ]);
     const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
+    const schedulerState = schedulerAgeSeconds <= 180 ? 'healthy' : schedulerAgeSeconds <= 600 ? 'degraded' : 'critical';
     const outboxRow = outbox.rows[0];
     const outboxPending = Number(outboxRow?.pending ?? 0);
     const outboxRetrying = Number(outboxRow?.retrying ?? 0);
@@ -81,7 +85,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         buildingAssetSchema: Number(assets.rows[0]?.count ?? 0) === 1,
         businessTaxSchema: Number(taxed.rows[0]?.count ?? 0) === 1,
         balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0,
-        schedulerFresh: schedulerAgeSeconds <= 900,
+        schedulerFresh: schedulerState !== 'critical',
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
         dailySettlementBacklog: settlementStatus !== 'active' || settlementBacklog <= 1,
@@ -89,6 +93,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       },
       readiness: {
         schedulerAgeSeconds: Number.isFinite(schedulerAgeSeconds) ? schedulerAgeSeconds : null,
+        schedulerState,
         outboxPending,
         outboxRetryFailures,
         outboxMetrics: {

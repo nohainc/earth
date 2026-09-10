@@ -6,7 +6,7 @@ import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPos
 import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, createProposal as createProposalPostgres } from './governance-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
-import { advanceWorld as advanceWorldPostgres } from './scheduler-postgres';
+import { runSchedulerHeartbeat } from './scheduler';
 import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, decideCommunityMembershipRequest as decideCommunityMembershipRequestPostgres, disbandCommunity as disbandCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres, listCommunityMembershipRequests as listCommunityMembershipRequestsPostgres, setCommunityMemberRole as setCommunityMemberRolePostgres, updateCommunity as updateCommunityPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
@@ -916,9 +916,17 @@ const worker = {
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     const result = await withRepository(env, async (repository) => {
       // One real minute advances one game hour: a game day is 24 real minutes.
-      const world = await advanceWorldPostgres(repository, 60, String(_event.scheduledTime), true);
-      await repository.query('UPDATE world_state SET last_scheduler_at = to_timestamp($1 / 1000.0) WHERE id = \'WORLD\'', [_event.scheduledTime]);
-      const outboxDelivered = await deliverOutbox(repository, (outboxEvent) =>
+      const schedulerConfig = env as unknown as Record<string, unknown>;
+      const world = await runSchedulerHeartbeat(repository, _event.scheduledTime, {
+        maxCatchupDays: schedulerConfig.EARTH_SCHEDULER_MAX_CATCHUP_DAYS,
+        workBudgetMs: schedulerConfig.EARTH_SCHEDULER_WORK_BUDGET_MS,
+      });
+      return world;
+    }, { workload: 'scheduler' });
+    if (!result) throw new Error('PostgreSQL repository is unavailable for scheduled world advancement');
+    let outboxDelivered = 0;
+    try {
+      outboxDelivered = await withRepository(env, (repository) => deliverOutbox(repository, (outboxEvent) =>
         env.MARKET_COORDINATOR.getByName('events-global').broadcast({
           ...outboxEvent.payload,
           id: outboxEvent.id,
@@ -927,16 +935,21 @@ const worker = {
           aggregateType: outboxEvent.aggregate_type,
           aggregateId: outboxEvent.aggregate_id,
         }),
-      );
-      return { ...world, outboxDelivered };
-    });
-    if (!result) throw new Error('PostgreSQL repository is unavailable for scheduled world advancement');
+      ), { workload: 'scheduler' }) ?? 0;
+    } catch (error) {
+      console.error('Scheduler outbox delivery failed after committed economy work', error);
+    }
+    await withRepository(env, (repository) => repository.query(
+      'UPDATE scheduler_runs SET outbox_events_delivered = $2 WHERE id = $1',
+      [result.schedulerRunId, outboxDelivered],
+    ), { workload: 'scheduler' }).catch(() => undefined);
+    const completedResult = { ...result, outboxDelivered };
     await env.MARKET_COORDINATOR.getByName('events-global').broadcast({
-      type: result.newDay ? 'world_day_started' : 'world_tick',
-      gameDay: result.day,
-      gameMinute: result.minute,
-      productionEvents: result.productionEvents,
-      marketSettlements: result.marketSettlements,
+      type: completedResult.newDay ? 'world_day_started' : 'world_tick',
+      gameDay: completedResult.day,
+      gameMinute: completedResult.minute,
+      productionEvents: completedResult.productionEvents,
+      marketSettlements: completedResult.marketSettlements,
       at: new Date().toISOString(),
     });
   },

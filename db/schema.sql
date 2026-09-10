@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 181.
+-- Canonical fresh-install schema, reconciled through migration 186.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -218,6 +218,8 @@ CREATE TABLE IF NOT EXISTS world_state (
   essential_services_index NUMERIC(10,4) NOT NULL DEFAULT 0.68,
   genesis_at TIMESTAMPTZ NOT NULL DEFAULT '2026-01-01T00:00:00Z',
   simulated_day_offset BIGINT NOT NULL DEFAULT 0,
+  clock_mode TEXT NOT NULL DEFAULT 'realtime' CHECK (clock_mode IN ('realtime', 'manual', 'paused')),
+  manual_total_game_minutes BIGINT NOT NULL DEFAULT 0 CHECK (manual_total_game_minutes >= 0),
   scheduler_heartbeat_at TIMESTAMPTZ
 );
 
@@ -1313,6 +1315,29 @@ CREATE TABLE IF NOT EXISTS scheduler_tick_logs (
 );
 CREATE INDEX IF NOT EXISTS idx_scheduler_tick_logs_day ON scheduler_tick_logs(game_day DESC);
 
+CREATE TABLE IF NOT EXISTS scheduler_runs (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  scheduled_time BIGINT NOT NULL,
+  worker_instance_id TEXT NOT NULL,
+  started_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMPTZ,
+  status TEXT NOT NULL CHECK (status IN ('running', 'completed', 'partial', 'busy', 'failed')),
+  game_day BIGINT,
+  game_minute INTEGER,
+  settlement_watermark_before BIGINT,
+  settlement_watermark_after BIGINT,
+  backlog_before BIGINT,
+  backlog_after BIGINT,
+  settlement_days_processed INTEGER NOT NULL DEFAULT 0,
+  actions_processed INTEGER NOT NULL DEFAULT 0,
+  market_batches_processed INTEGER NOT NULL DEFAULT 0,
+  outbox_events_delivered INTEGER NOT NULL DEFAULT 0,
+  error_stage TEXT,
+  error_message TEXT
+);
+CREATE INDEX IF NOT EXISTS scheduler_runs_started_idx ON scheduler_runs(started_at DESC);
+CREATE INDEX IF NOT EXISTS scheduler_runs_status_idx ON scheduler_runs(status, started_at DESC);
+
 -- Durable daily economic settlement. The live database receives the matching
 -- forward migrations; these definitions keep a fresh schema in sync.
 CREATE TABLE IF NOT EXISTS daily_settlement_runs (
@@ -1391,6 +1416,28 @@ CREATE TABLE IF NOT EXISTS scheduled_actions (
 );
 CREATE INDEX IF NOT EXISTS scheduled_actions_due_idx ON scheduled_actions(status, due_game_day, due_game_minute);
 CREATE INDEX IF NOT EXISTS scheduled_actions_end_of_day_idx ON scheduled_actions(status, due_end_game_day, priority, created_at);
+ALTER TABLE scheduled_actions ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+ALTER TABLE scheduled_actions ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+ALTER TABLE scheduled_actions ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ;
+CREATE INDEX IF NOT EXISTS scheduled_actions_lease_idx ON scheduled_actions(status, lease_expires_at);
+ALTER TABLE market_prices ADD COLUMN IF NOT EXISTS last_market_batch_id BIGINT;
+
+CREATE TABLE IF NOT EXISTS market_batch_runs (
+  batch_id BIGINT NOT NULL,
+  product TEXT NOT NULL,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'running', 'completed', 'failed')),
+  lease_owner TEXT,
+  lease_expires_at TIMESTAMPTZ,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  orders_processed BIGINT NOT NULL DEFAULT 0,
+  trades_created BIGINT NOT NULL DEFAULT 0,
+  error_message TEXT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (batch_id, product)
+);
+CREATE INDEX IF NOT EXISTS market_batch_runs_status_idx ON market_batch_runs(status, batch_id);
 
 CREATE TABLE IF NOT EXISTS settlement_anomalies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
