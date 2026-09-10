@@ -303,6 +303,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     const current = proposal.rows[0];
     if (current.outcome !== 'passed') throw new Error('Only passed proposals can be executed');
     if (current.executed_at) return { ok: true, executionStatus: 'executed', proposal: current };
+    if (current.execution_status === 'challenged') throw new Error('Proposal is currently under constitutional challenge');
     const world = await tx.query<{ game_day: number; genesis_at: string | null }>("SELECT game_day, genesis_at FROM world_state WHERE id = 'WORLD'");
     if (!input.systemExecution) throw new Error('Proposal execution is automatic after daily settlement');
     const day = Math.max(1, Number(input.completedDay ?? world.rows[0]?.game_day ?? 1));

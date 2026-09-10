@@ -128,6 +128,7 @@ test('createProposal associates typed building_catalog target', async () => {
       rows: [{ id: 'GOV-C1-v1', quorum_threshold: '0.25', approval_threshold: '0.5', voting_period_days: 7, implementation_delay_days: 1 }],
       rowCount: 1,
     },
+    'SELECT kind, status FROM institutions': { rows: [{ id: 'CITY-1', kind: 'CITY', status: 'active' }], rowCount: 1 },
     'SELECT game_day, game_minute': {
       rows: [{ game_day: 10, game_minute: 100, genesis_at: new Date(Date.now() - 10 * 86400000).toISOString(), simulated_day_offset: 0 }],
       rowCount: 1,
@@ -160,10 +161,9 @@ test('createProposal associates typed building_catalog target', async () => {
   const insertCall = client.calls.find((c) => c.sql.startsWith('INSERT INTO proposals'));
   assert.ok(insertCall);
   // targetKind should be 'building_catalog'
-  assert.equal(insertCall.params[14], 'building_catalog');
+  assert.equal(insertCall.params[13], 'building_catalog');
   // building_catalog_id should be 'fusion-plant-t1'
-  assert.equal(insertCall.params[15], 'fusion-plant-t1');
+  assert.equal(insertCall.params[14], 'fusion-plant-t1');
   // research_project_id should be null
-  assert.equal(insertCall.params[16], null);
+  assert.equal(insertCall.params[15], null);
 });
-
