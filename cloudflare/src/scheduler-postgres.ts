@@ -8,7 +8,7 @@ import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
 import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
-import { applyPreparedResourceProfiles, rebuildDirtyDailySettlementProfiles, recordDailySettlementProfileShadow } from './daily-settlement-profiles.ts';
+import { applyPreparedSettlementProfiles, rebuildDirtyDailySettlementProfiles } from './daily-settlement-profiles.ts';
 import { settleGlobalBank } from './global-bank-settlement-engine.ts';
 import { processEndOfDayAutomation } from './daily-automation.ts';
 
@@ -789,8 +789,7 @@ export async function advanceWorld(repository: PostgresRepository, minutesPerTic
       const run = await tx.query<{ status: string }>('SELECT status FROM daily_settlement_runs WHERE game_day = $1 FOR UPDATE', [settlementDay]);
       if (run.rows[0]?.status !== 'running') throw new Error(`Daily settlement ${settlementDay} could not be claimed`);
       await runDailyPhase(tx, settlementDay, 'daily_settlement_profiles', () => rebuildDirtyDailySettlementProfiles(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'daily_settlement_profile_shadow', () => recordDailySettlementProfileShadow(tx, settlementDay));
-      await runDailyPhase(tx, settlementDay, 'daily_settlement_profile_resources', () => applyPreparedResourceProfiles(tx, settlementDay));
+      await runDailyPhase(tx, settlementDay, 'daily_settlement_profile_settlement', () => applyPreparedSettlementProfiles(tx, settlementDay));
       await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
       await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
       await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");

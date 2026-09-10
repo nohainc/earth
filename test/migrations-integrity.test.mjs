@@ -12,10 +12,10 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '143_proposal_start_lifecycle.sql');
+  assert.equal(files.at(-1), '149_qualify_real_profile_run_conflict.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 143, 'Manifest version must match latest migration version (143)');
+  assert.equal(manifest.migrationVersion, 149, 'Manifest version must match latest migration version (149)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
   assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS buildings'), 'Canonical schema.sql must define buildings');

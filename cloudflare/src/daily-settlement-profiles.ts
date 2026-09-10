@@ -47,40 +47,19 @@ export async function rebuildDirtyDailySettlementProfiles(repository: PostgresRe
   return profiles.rows.length;
 }
 
-/**
- * Saves one immutable, idempotent snapshot per owner and game day. This is the
- * shadow executor: it exercises the exact prepared input set without changing
- * any live balance while the legacy Building engine remains authoritative.
- */
-export async function recordDailySettlementProfileShadow(repository: PostgresRepository, gameDay: number): Promise<number> {
-  const result = await repository.query<{ owner_id: string }>(
-    `INSERT INTO daily_settlement_profile_runs
-       (owner_id, game_day, profile_version, last_settled_game_day, elapsed_days, mode, expected_delta)
-     SELECT owner_id, $1, profile_version, last_settled_game_day,
-       GREATEST(1, $1 - last_settled_game_day), 'shadow',
-       jsonb_build_object(
-         'credits', credits_delta * GREATEST(1, $1 - last_settled_game_day),
-         'energy', energy_delta * GREATEST(1, $1 - last_settled_game_day),
-         'food', food_delta * GREATEST(1, $1 - last_settled_game_day),
-         'materials', materials_delta * GREATEST(1, $1 - last_settled_game_day),
-         'components', components_delta * GREATEST(1, $1 - last_settled_game_day),
-         'compute', compute_delta * GREATEST(1, $1 - last_settled_game_day))
-     FROM daily_settlement_profiles
-     WHERE status = 'clean'
-     ON CONFLICT (owner_id, game_day) DO NOTHING
-     RETURNING owner_id`,
-    [gameDay],
-  );
-  return result.rows.length;
-}
-
-/** Applies only normal, physical-resource deltas. Any owner that would cross
- * zero is deliberately left to the detailed legacy path for shortage handling. */
-export async function applyPreparedResourceProfiles(repository: PostgresRepository, gameDay: number): Promise<number> {
+/** Applies the prepared daily profile as real gameplay. Credits and resources
+ * are posted atomically by earth_catchup_owner_settlement, with an idempotent
+ * applied run and ledger correlation for every owner/day. */
+export async function applyPreparedSettlementProfiles(repository: PostgresRepository, gameDay: number): Promise<number> {
   const dueOwners = await repository.query<{ owner_id: string }>(
     `SELECT owner_id FROM daily_settlement_profiles
      WHERE status = 'clean' AND last_settled_game_day < $1
-       AND owner_kind IN ('human', 'city', 'corporation', 'earth')`,
+       AND owner_kind IN ('human', 'city', 'corporation', 'earth')
+       AND (credits_delta = 0 OR EXISTS (
+         SELECT 1 FROM account_balances credit_account
+         WHERE credit_account.owner_id = daily_settlement_profiles.owner_id
+           AND credit_account.currency = 'CREDIT'
+       ))`,
     [gameDay],
   );
   let appliedCount = 0;
