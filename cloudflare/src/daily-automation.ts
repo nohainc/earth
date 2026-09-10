@@ -75,8 +75,8 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
       const finished = ['executed', 'skipped', 'expired_unfunded', 'blocked'].includes(String(result.executionStatus));
       await repository.query(
         `UPDATE scheduled_actions
-         SET status = CASE WHEN $2 THEN 'completed' ELSE 'pending' END,
-             completed_at = CASE WHEN $2 THEN CURRENT_TIMESTAMP ELSE NULL END,
+         SET status = CASE WHEN $2::boolean THEN 'completed' ELSE 'pending' END,
+             completed_at = CASE WHEN $2::boolean THEN CURRENT_TIMESTAMP ELSE NULL END,
              attempt_count = attempt_count + 1, updated_at = CURRENT_TIMESTAMP
          WHERE id = $1`,
         [action.id, finished],

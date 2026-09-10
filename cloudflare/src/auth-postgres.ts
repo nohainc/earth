@@ -97,7 +97,7 @@ export async function loginIdentity(repository: PostgresRepository, input: { ema
     const withinWindow = Boolean(attempt && Date.now() - new Date(attempt.window_started_at).getTime() < 15 * 60 * 1000);
     const count = withinWindow ? Number(attempt?.attempt_count ?? 0) + 1 : 1;
     const blockedUntil = count >= 5 ? new Date(Date.now() + 15 * 60 * 1000).toISOString() : null;
-    await repository.query('INSERT INTO auth_login_attempts (email,window_started_at,attempt_count,blocked_until) VALUES ($1,CURRENT_TIMESTAMP,$2,$3) ON CONFLICT(email) DO UPDATE SET window_started_at = CASE WHEN $4 THEN auth_login_attempts.window_started_at ELSE CURRENT_TIMESTAMP END, attempt_count = $2, blocked_until = $3', [input.email, count, blockedUntil, withinWindow]);
+    await repository.query('INSERT INTO auth_login_attempts (email,window_started_at,attempt_count,blocked_until) VALUES ($1,CURRENT_TIMESTAMP,$2,$3) ON CONFLICT(email) DO UPDATE SET window_started_at = CASE WHEN $4::boolean THEN auth_login_attempts.window_started_at ELSE CURRENT_TIMESTAMP END, attempt_count = $2, blocked_until = $3', [input.email, count, blockedUntil, withinWindow]);
     throw new Error('Invalid email or password');
   }
   if (credential.mfa_enabled && (!credential.mfa_secret || !(await input.validTotp(credential.mfa_secret, input.otp)))) throw new Error('Authenticator code required');

@@ -314,7 +314,7 @@ async function settleSupplyContracts(tx: PostgresRepository, day: number): Promi
       await tx.query(
         `UPDATE contract_escrow_vaults 
          SET released_amount = released_amount + $1,
-             status = CASE WHEN $2 THEN 'released' ELSE status END,
+             status = CASE WHEN $2::boolean THEN 'released' ELSE status END,
              updated_at = CURRENT_TIMESTAMP
          WHERE id = $3`,
         [dailyPrice, isComplete, contract.vault_id],

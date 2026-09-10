@@ -818,8 +818,8 @@ export async function contributeCorporateResearch(
       `UPDATE corporate_research_pools SET
         contributed_credits = $1,
         contributed_compute = $2,
-        status = CASE WHEN $3 THEN 'completed' ELSE 'active' END,
-        completed_game_day = CASE WHEN $3 THEN $4 ELSE NULL END,
+        status = CASE WHEN $3::boolean THEN 'completed' ELSE 'active' END,
+        completed_game_day = CASE WHEN $3::boolean THEN $4 ELSE NULL END,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $5`,
       [newCredits, newCompute, completed, day, pool.id],
