@@ -38,8 +38,8 @@ export async function auditWorld(repository: PostgresRepository, humanId: string
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account'),
     repository.query<{ count: string }>('SELECT COUNT(*)::integer AS count FROM succession_plans WHERE human_id = $1', [humanId]),
-    repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)'),
-    repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)'),
+    repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM corporations c JOIN corporation_membership_summary s ON s.corporation_id = c.id WHERE c.member_count != s.active_house_count'),
+    repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM cities c JOIN city_population_summary s ON s.city_id = c.id WHERE c.residents != s.active_house_count'),
     repository.query<{ check_name: string; invalid_count: string }>('SELECT check_name, invalid_count FROM earth_market_integrity_report()'),
   ]);
   const marketChecks = Object.fromEntries(market.rows.map((row) => [row.check_name, Number(row.invalid_count) === 0]));
@@ -53,7 +53,7 @@ export async function listInstitutions(repository: PostgresRepository): Promise<
     repository.query('SELECT * FROM cities ORDER BY id'),
     repository.query('SELECT * FROM corporations ORDER BY id'),
     repository.query('SELECT * FROM memberships ORDER BY human_id'),
-    repository.query('SELECT * FROM budgets ORDER BY game_day DESC'),
+    repository.query('SELECT b.id, b.institution_id, p.start_game_day AS game_day, p.id AS fiscal_period_id, p.period_type, p.end_game_day, c.category_code, b.authorized_units / 100.0 AS amount, b.authorized_units, b.committed_units, b.spent_units, b.status, b.created_game_day, b.rule_version FROM institution_budget_lines b JOIN fiscal_periods p ON p.id = b.fiscal_period_id JOIN budget_categories c ON c.id = b.category_id ORDER BY p.start_game_day DESC'),
   ]);
   return { community: community.rows, city: city.rows, corporation: corporation.rows, membership: membership.rows, budgets: budgets.rows };
 }

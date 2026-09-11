@@ -16,7 +16,7 @@ export async function settleCivicDividends(tx: PostgresRepository, day: number):
     const cityAccount = await tx.query<{ account_id: string; balance: string }>("SELECT id AS account_id, balance::TEXT AS balance FROM economic_accounts WHERE owner_economic_id = $1 AND asset_id = 1 AND account_type = 3 AND is_default_settlement AND status = 'active' FOR UPDATE", [city.economic_id]);
     if (!cityAccount.rows[0]) continue;
     const commitments = await tx.query<{ units: string }>(`SELECT
-      COALESCE((SELECT SUM(GREATEST(0, committed_units - spent_units)) FROM institution_budgets WHERE institution_id = $1 AND game_period = $2), 0)
+      COALESCE((SELECT SUM(authorized_units - committed_units - spent_units) FROM institution_budget_lines WHERE institution_id = $1 AND fiscal_period_id = earth_fiscal_period_for_day($2)), 0)
       + COALESCE((SELECT SUM(amount_units) FROM tax_obligations WHERE taxpayer_economic_id = $3 AND status IN ('DUE', 'PARTIAL', 'ARREARS')), 0)
       + COALESCE((SELECT SUM(LEAST(outstanding_principal_units + accrued_interest_units, accrued_interest_units + CASE WHEN remaining_installments > 0 THEN (outstanding_principal_units + remaining_installments - 1) / remaining_installments ELSE 0 END)) FROM bank_loans WHERE borrower_economic_id = $3 AND status IN ('CURRENT', 'GRACE', 'DELINQUENT', 'RESTRUCTURED') AND next_payment_game_day <= $2), 0) AS units`, [city.id, day, city.economic_id]);
     const committedUnits = BigInt(commitments.rows[0]?.units ?? '0');

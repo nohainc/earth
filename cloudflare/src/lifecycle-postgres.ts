@@ -195,8 +195,8 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
            WHERE game_day BETWEEN $1 - 7 AND $1 - 1
            GROUP BY human_id
         ) maintenance ON maintenance.human_id = human.id
-        LEFT JOIN memberships membership ON membership.human_id = human.id
-        LEFT JOIN cities city ON city.id = membership.city_id
+        LEFT JOIN house_affiliations affiliation ON affiliation.house_id = house.id AND affiliation.status = 'ACTIVE'
+        LEFT JOIN cities city ON city.id = affiliation.city_id
         LEFT JOIN house_succession_plans plan
           ON plan.house_id = house.id AND plan.status = 'ACTIVE'
        WHERE human.life_status = 'active' AND human.age_years >= 65 AND world.id = 'WORLD'
@@ -217,7 +217,7 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     if ((await tx.query("SELECT 1 FROM life_events WHERE id IN ($1, $2) AND event_type = 'death'", [eventId, `DEATH-${human.id}-${day}`])).rows[0]) continue;
 
     const membership = await tx.query<{ corporation_id: string | null; city_id: string | null; joined_game_day: number }>(
-      'SELECT corporation_id, city_id, joined_game_day FROM memberships WHERE human_id = $1 FOR UPDATE', [human.id]);
+      'SELECT corporation_id, city_id, joined_game_day FROM house_affiliations WHERE house_id = $1 AND status = \'ACTIVE\' FOR UPDATE', [human.house_id]);
     const historicalLineage = await tx.query<{ title: string }>(
       'SELECT title FROM house_lineage_records WHERE human_id = $1 ORDER BY generation DESC LIMIT 1', [human.id]);
     const majorTitles = historicalLineage.rows.map(({ title }) => title).filter(Boolean);
@@ -279,10 +279,10 @@ export async function processHouseMortality(tx: PostgresRepository, day: number)
     await tx.query('INSERT INTO house_lineage_records (id, house_id, human_id, predecessor_human_id, successor_human_id, generation, name, title, birth_game_day, is_incumbent, legacy_score) VALUES ($1,$2,$3,$4,NULL,$5,$6,$7,$8,false,$9) ON CONFLICT (house_id, generation) DO NOTHING', [`LINEAGE-${human.house_id}-${nextGeneration}`, human.house_id, newHumanId, human.id, nextGeneration, successorName, emergency ? 'Emergency Successor' : 'House Successor', day, 0]);
     await tx.query("UPDATE humans SET mortality_state = 'DECEASED' WHERE id = $1", [human.id]);
 
-    if (membership.rows[0]) {
-      await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT (human_id) DO NOTHING', [newHumanId, membership.rows[0].corporation_id, membership.rows[0].city_id, day]);
-      await tx.query('DELETE FROM memberships WHERE human_id = $1', [human.id]);
-    }
+    // Persistent affiliation belongs to the House. Refresh only the
+    // compatibility membership projection for the new representative; the
+    // authoritative house_affiliations row is deliberately unchanged.
+    await tx.query('SELECT earth_project_house_affiliation_to_memberships($1)', [human.house_id]);
     if (planName) await tx.query("UPDATE house_succession_plans SET status = 'USED', used_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE house_id = $2 AND status = 'ACTIVE'", [day, human.house_id]);
     await tx.query('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES ($1,$2,\'death\',$3,$4,0)', [eventId, human.id, day, successorName]);
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'human.succession\',$3,$4) ON CONFLICT (id) DO NOTHING', [successionCorrelation, day, emergency ? `${successorName} inherited the House` : `${successorName} succeeded ${human.display_name}`, toNanoMarkup({ successionEventId: successionCorrelation, predecessorId: human.id, successorId: newHumanId, houseId: human.house_id, emergency, predecessorFinalLegacy: Number(human.legacy), houseLegacyContribution: legacyContribution, successionCostUnits: successionCost.units.toString(), successionCostRuleVersion: successionCost.ruleVersion, successionTransitionDays: successionCost.transitionDays })]);

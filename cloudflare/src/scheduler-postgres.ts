@@ -391,42 +391,90 @@ async function updateFinancialStates(tx: PostgresRepository, day: number): Promi
     if (current === 'dissolved' || current === 'liquidation' || current === 'bankrupt') continue;
     const unableToService = BigInt(candidate.value) < BigInt(candidate.due_units);
     const materiallyInsolvent = BigInt(candidate.liabilities_units) > BigInt(candidate.realizable_assets_units);
-    const target = current === 'restructuring'
-      ? (day - Number(existing.rows[0]?.since_game_day ?? day) >= 7 ? 'insolvent' : 'restructuring')
-      : unableToService && materiallyInsolvent
-        ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed')
-      : 'active';
+    const city = candidate.kind === 'CITY';
+    const healthy = !unableToService && !materiallyInsolvent;
+    const target = city
+      ? current === 'receivership'
+        ? (healthy ? 'recovery' : 'receivership')
+        : current === 'recovery'
+          ? (healthy ? 'active' : 'receivership')
+          : unableToService && materiallyInsolvent
+            ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'receivership' : 'fiscal_stress')
+            : 'active'
+      : current === 'restructuring'
+        ? (day - Number(existing.rows[0]?.since_game_day ?? day) >= 7 ? 'insolvent' : 'restructuring')
+        : current === 'distressed'
+          ? (day - Number(existing.rows[0]?.since_game_day ?? day) >= 7 ? 'restructuring' : 'distressed')
+        : current === 'insolvent'
+          ? (day - Number(existing.rows[0]?.since_game_day ?? day) >= 30 ? 'liquidation' : 'insolvent')
+        : unableToService && materiallyInsolvent
+          ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed')
+          : 'active';
     if (target === current && existing.rows[0]) continue;
-    const reason = target === 'active' ? 'Positive operating position restored' : 'Operating reserve is depleted';
-    await tx.query('INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,recovery_game_day,last_reason) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(institution_id) DO UPDATE SET status=EXCLUDED.status,recovery_game_day=EXCLUDED.recovery_game_day,last_reason=EXCLUDED.last_reason,updated_at=CURRENT_TIMESTAMP', [candidate.id, candidate.kind, target, existing.rows[0]?.since_game_day ?? day, target === 'active' ? day : null, reason]);
+    const reason = target === 'active'
+      ? 'Positive operating position restored'
+      : target === 'recovery'
+        ? 'City liquidity and mandatory obligations entered recovery'
+        : city
+          ? 'City fiscal obligations are not currently serviceable'
+          : 'Operating reserve is depleted';
+    const stateSince = target === current ? Number(existing.rows[0]?.since_game_day ?? day) : day;
+    await tx.query('INSERT INTO financial_states (institution_id,institution_kind,status,since_game_day,recovery_game_day,last_reason) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT(institution_id) DO UPDATE SET status=EXCLUDED.status,since_game_day=EXCLUDED.since_game_day,recovery_game_day=EXCLUDED.recovery_game_day,last_reason=EXCLUDED.last_reason,updated_at=CURRENT_TIMESTAMP', [candidate.id, candidate.kind, target, stateSince, target === 'active' ? day : null, reason]);
     await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,$4,$5,$6,$7)', [crypto.randomUUID(), candidate.id, candidate.kind, current, target, day, reason]);
+    if (target !== current) {
+      const eventType = target === 'receivership' ? 'RECEIVERSHIP_STARTED' : target === 'restructuring' ? 'RESTRUCTURING_STARTED' : target === 'liquidation' ? 'LIQUIDATION_STARTED' : target === 'active' ? 'FINANCIAL_STATE_RECOVERED' : 'FINANCIAL_STATE_CHANGED';
+      await tx.query(`SELECT earth_record_institution_financial_event($1,$2,$3,0,NULL,NULL,$4,NULL,NULL,$5)`, [candidate.id, day, eventType, reason, `financial-state:${candidate.id}:${target}:${day}`]);
+    }
+    if (!city && target === 'liquidation') {
+      await tx.query("UPDATE corporation_insolvency_proceedings SET status = 'LIQUIDATION', liquidation_game_day = $1 WHERE institution_id = $2 AND status IN ('RESTRUCTURING','INSOLVENT')", [day, candidate.id]);
+    }
+    if (city && target === 'receivership') {
+      await tx.query(`INSERT INTO city_fiscal_proceedings
+        (city_id, debtor_economic_id, status, opened_game_day, due_obligations_units, treasury_units, recovery_plan, correlation_id)
+        SELECT $1, o.economic_id, 'RECEIVERSHIP', $2, $3, $4,
+               '{"nonessential_spending":false,"dividends":false,"new_debt":false,"essential_services":true}'::jsonb,
+               $5
+          FROM owner_registry o
+         WHERE o.id = $1 AND o.owner_type = 'city' AND o.status = 'active'
+        ON CONFLICT (correlation_id) DO NOTHING`, [candidate.id, day, candidate.due_units, candidate.value, `city-receivership:${candidate.id}:${day}`]);
+      await tx.query(`INSERT INTO institution_governance_roles
+        (institution_id, human_id, role_code, source_type, source_id, effective_from_game_day, status)
+        SELECT i.id, i.administrator_human_id, 'RECEIVERSHIP_RECEIVER', 'EMERGENCY', $1, $2, 'ACTIVE'
+          FROM institutions i
+         WHERE i.id = $1 AND i.administrator_human_id IS NOT NULL
+        ON CONFLICT DO NOTHING`, [`city-receivership:${candidate.id}:${day}`, day]);
+    }
+    if (city && target === 'active' && ['receivership', 'recovery'].includes(current)) {
+      await tx.query("UPDATE city_fiscal_proceedings SET status = 'ACTIVE', recovery_game_day = $1, resolved_game_day = $1 WHERE city_id = $2 AND status IN ('RECEIVERSHIP','RECOVERY')", [day, candidate.id]);
+      await tx.query("UPDATE institution_governance_roles SET status = 'ENDED', effective_to_game_day = $1 WHERE institution_id = $2 AND role_code = 'RECEIVERSHIP_RECEIVER' AND status = 'ACTIVE'", [day, candidate.id]);
+    }
+    if (city && target === 'recovery') {
+      await tx.query("UPDATE city_fiscal_proceedings SET status = 'RECOVERY', recovery_game_day = $1 WHERE city_id = $2 AND status = 'RECEIVERSHIP'", [day, candidate.id]);
+    }
   }
 }
 
 async function dissolveInstitutions(tx: PostgresRepository, day: number): Promise<void> {
-  const candidates = await tx.query<{ id: string; kind: string; name: string }>("SELECT institutions.id, institutions.kind, institutions.name FROM institutions JOIN financial_states ON financial_states.institution_id = institutions.id WHERE financial_states.status = 'insolvent' AND $1 - financial_states.since_game_day >= 30 FOR UPDATE", [day]);
+  // City fiscal stress is a recoverable public-institution state. Only the
+  // corporate insolvency path may reach generic dissolution.
+  const candidates = await tx.query<{ id: string; kind: string; name: string }>("SELECT institutions.id, institutions.kind, institutions.name FROM institutions JOIN financial_states ON financial_states.institution_id = institutions.id WHERE institutions.kind = 'CORPORATION' AND financial_states.status = 'liquidation' AND $1 - financial_states.since_game_day >= 1 FOR UPDATE", [day]);
   for (const candidate of candidates.rows) {
     if (candidate.kind === 'CORPORATION') {
       await tx.query('SELECT earth_transfer_dissolved_corporation_ip($1, $2, $3)', [candidate.id, day, `corporation-ip-registry:${candidate.id}:${day}`]);
     }
-    const members = candidate.kind === 'CITY'
-      ? await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 FOR UPDATE', [candidate.id])
-      : candidate.kind === 'CORPORATION'
-        ? await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE corporation_id = $1 FOR UPDATE', [candidate.id])
-        : { rows: [] } as { rows: Array<{ human_id: string }> };
-    if (candidate.kind === 'CITY') {
-      await tx.query('UPDATE memberships SET city_id = NULL WHERE city_id = $1', [candidate.id]);
-      await tx.query('UPDATE cities SET residents = 0 WHERE id = $1', [candidate.id]);
-    } else if (candidate.kind === 'CORPORATION') {
-      await tx.query('UPDATE memberships SET corporation_id = NULL WHERE corporation_id = $1', [candidate.id]);
-      await tx.query('UPDATE corporations SET member_count = 0 WHERE id = $1', [candidate.id]);
-    }
+    const members = await tx.query<{ human_id: string; house_id: string }>(
+      'SELECT h.current_human_id AS human_id, a.house_id FROM house_affiliations a JOIN houses h ON h.id = a.house_id WHERE a.corporation_id = $1 AND a.status = \'ACTIVE\' FOR UPDATE OF a', [candidate.id]);
+    await tx.query("UPDATE corporation_insolvency_proceedings SET status = 'DISSOLVED', resolved_game_day = $1 WHERE institution_id = $2 AND status = 'LIQUIDATION'", [day, candidate.id]);
+    await tx.query("UPDATE institution_budget_commitments c SET status = 'CANCELLED', remaining_units = 0, updated_at = CURRENT_TIMESTAMP FROM institution_budget_lines l JOIN budget_categories bc ON bc.id = l.category_id WHERE c.budget_line_id = l.id AND l.institution_id = $1 AND bc.spending_class = 'DISCRETIONARY' AND c.status IN ('ACTIVE','PARTIALLY_PAID')", [candidate.id]);
+    await tx.query("UPDATE house_affiliations SET corporation_id = NULL, updated_at = CURRENT_TIMESTAMP WHERE corporation_id = $1 AND status = 'ACTIVE'", [candidate.id]);
+    for (const member of members.rows) await tx.query('SELECT earth_project_house_affiliation_to_memberships($1)', [member.house_id]);
+    await tx.query('SELECT earth_refresh_population_projections($1,$2)', [candidate.id, null]);
     await tx.query("UPDATE institutions SET status = 'dissolved' WHERE id = $1", [candidate.id]);
-    await tx.query("UPDATE financial_states SET status = 'dissolved', recovery_game_day = $1, last_reason = 'Institution remained insolvent beyond the engine resolution window', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND status = 'insolvent'", [day, candidate.id]);
-    const reason = 'Institution remained insolvent beyond the engine resolution window';
-    await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,\'insolvent\',\'dissolved\',$4,$5) ON CONFLICT (id) DO NOTHING', [`DISSOLVE-${candidate.id}-${day}`, candidate.id, candidate.kind, day, reason]);
-    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'institution.dissolved\',$3,$4) ON CONFLICT (id) DO NOTHING', [`DISSOLVE-${candidate.id}-${day}`, day, `${candidate.kind} ${candidate.name} was dissolved`, toNanoMarkup({ institutionId: candidate.id, releasedMembers: members.rows.length })]);
-    for (const member of members.rows) await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'institution\',$3,$4,$5) ON CONFLICT DO NOTHING', [`DISSOLVE-${candidate.id}-${day}-${member.human_id}`, member.human_id, `${candidate.kind} dissolved`, `${candidate.kind} ${candidate.name} was dissolved after prolonged insolvency. Your institutional membership was released.`, candidate.id]);
+    await tx.query("UPDATE financial_states SET status = 'dissolved', recovery_game_day = $1, last_reason = 'Corporation liquidation completed', updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND status = 'liquidation'", [day, candidate.id]);
+    const reason = 'Corporation liquidation completed';
+    await tx.query('INSERT INTO bankruptcy_events (id,institution_id,institution_kind,from_status,to_status,game_day,reason) VALUES ($1,$2,$3,\'liquidation\',\'dissolved\',$4,$5) ON CONFLICT (id) DO NOTHING', [`DISSOLVE-${candidate.id}-${day}`, candidate.id, candidate.kind, day, reason]);
+    await tx.query('INSERT INTO world_events (id,game_day,event_type,title,details) VALUES ($1,$2,\'institution.dissolved\',$3,$4) ON CONFLICT (id) DO NOTHING', [`DISSOLVE-${candidate.id}-${day}`, day, `${candidate.kind} ${candidate.name} was dissolved`, toNanoMarkup({ institutionId: candidate.id, releasedMembers: members.rows.length, liquidation: true })]);
+    for (const member of members.rows) await tx.query('INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) VALUES ($1,$2,\'institution\',$3,$4,$5) ON CONFLICT DO NOTHING', [`DISSOLVE-${candidate.id}-${day}-${member.human_id}`, member.human_id, `${candidate.kind} dissolved`, `${candidate.kind} ${candidate.name} completed liquidation. Your institutional affiliation was released.`, candidate.id]);
   }
 }
 
@@ -454,7 +502,7 @@ async function snapshotRankings(tx: PostgresRepository, day: number): Promise<vo
 }
 
 async function processCityDynamics(tx: PostgresRepository, day: number): Promise<void> {
-  const cities = await tx.query<{ id: string; residents: number; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number }>('SELECT id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities WHERE residents > 0 ORDER BY id');
+  const cities = await tx.query<{ id: string; residents: number; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number }>('SELECT c.id, c.residents, COALESCE(s.housing_capacity, 0) AS housing_capacity, COALESCE(s.energy_capacity, 0) AS energy_capacity, COALESCE(s.connectivity_capacity, 0) AS connectivity_capacity, COALESCE(s.health_capacity, 0) AS health_capacity FROM cities c LEFT JOIN city_service_capacity_daily s ON s.city_id = c.id AND s.game_day = $1 WHERE c.residents > 0 ORDER BY c.id', [day]);
   for (const city of cities.rows) {
     const res = Math.max(1, Number(city.residents));
     if (Number(city.energy_capacity) < res) {
@@ -486,6 +534,28 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
       await tx.query("INSERT INTO notifications (id,human_id,notification_type,title,body,entity_id) SELECT 'MIGRATION-OPPORTUNITY-' || $1 || '-' || human_id, human_id, 'institution', 'A better city is available', $2::text, $1 FROM memberships WHERE city_id = $1 ON CONFLICT DO NOTHING", [worstCity.id, `City ${bestCity.id} currently offers stronger services. Review the City page if you want to move; no transfer happens automatically.`]);
     }
   }
+}
+
+async function refreshCityServiceProjections(tx: PostgresRepository, day: number): Promise<void> {
+  await tx.query('SELECT earth_refresh_city_service_capacity_daily($1)', [day]);
+}
+
+async function settleMandatoryBudgetPayments(tx: PostgresRepository, day: number): Promise<number> {
+  const result = await tx.query<{ count: string }>(`SELECT COUNT(*)::text AS count
+    FROM institution_budget_commitments c
+    JOIN institution_budget_lines l ON l.id = c.budget_line_id
+    JOIN budget_categories bc ON bc.id = l.category_id
+   WHERE bc.spending_class = 'MANDATORY'
+     AND c.status IN ('ACTIVE','PARTIALLY_PAID')
+     AND c.due_game_day <= $1`, [day]);
+  return Number(result.rows[0]?.count ?? 0);
+}
+
+async function settleScheduledBudgetPayments(tx: PostgresRepository, day: number): Promise<number> {
+  const result = await tx.query<{ count: string }>(`SELECT COUNT(*)::text AS count
+    FROM institution_budget_commitments c
+   WHERE c.status IN ('ACTIVE','PARTIALLY_PAID') AND c.due_game_day <= $1`, [day]);
+  return Number(result.rows[0]?.count ?? 0);
 }
 
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
@@ -598,6 +668,9 @@ export async function runResumableSettlementDay(
     cityCorporateIncomeTax: ({ tx }) => settleCityCorporateIncomeTax(tx, day),
     globalBank: ({ tx }) => settleGlobalBank(tx, day),
     bankHealth: ({ tx }) => tx.query('SELECT earth_evaluate_global_bank_resolution($1)', [day]),
+    mandatoryBudgetPayments: ({ tx }) => settleMandatoryBudgetPayments(tx, day),
+    scheduledBudgetPayments: ({ tx }) => settleScheduledBudgetPayments(tx, day),
+    cityServiceProjections: ({ tx }) => refreshCityServiceProjections(tx, day),
     cityDynamics: ({ tx }) => processCityDynamics(tx, day),
     budgetDividendEligibility: ({ tx }) => settleCivicDividends(tx, day),
     patentExpirations: ({ tx }) => tx.query('SELECT earth_finalize_technology_public_domain($1)', [day]),
@@ -609,7 +682,10 @@ export async function runResumableSettlementDay(
     },
     financialStates: ({ tx }) => updateFinancialStates(tx, day),
     institutionDissolution: ({ tx }) => dissolveInstitutions(tx, day),
-    financialProjections: ({ tx }) => tx.query('SELECT earth_refresh_daily_financial_projections($1)', [day]),
+    financialProjections: async ({ tx }) => {
+      await tx.query('SELECT earth_refresh_daily_financial_projections($1)', [day]);
+      return tx.query('SELECT earth_refresh_institution_financial_projection_fields($1)', [day]);
+    },
     rankingsSnapshot: ({ tx }) => snapshotRankings(tx, day),
     endOfDaySnapshots: ({ tx }) => captureEndOfDaySnapshots(tx, day),
   });

@@ -20,6 +20,7 @@ import {
   spendCorporationTreasury,
   contributeToCorporation,
 } from './institutions-postgres.ts';
+import { getInstitutionBudget, listInstitutionBudgetLines, listInstitutionCommitments, createInstitutionCommitment, payInstitutionCommitment, cancelInstitutionCommitment } from './institution-budget-api.ts';
 
 export async function handleInstitutionRoutes(
   request: Request,
@@ -27,6 +28,58 @@ export async function handleInstitutionRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  const institutionBudgetMatch = url.pathname.match(/^\/api\/institutions\/([^/]+)\/budget(?:\/(lines|commitments|fiscal-summary|financial-projection))?$/);
+  if (institutionBudgetMatch && request.method === 'GET') {
+    const institutionId = institutionBudgetMatch[1];
+    const kind = institutionBudgetMatch[2];
+    const fiscalPeriodId = url.searchParams.get('fiscalPeriodId') ?? undefined;
+    const gameDay = Number(url.searchParams.get('gameDay')) || undefined;
+    const result = await withRepository(env, async (repository) => {
+      if (kind === 'lines') return { lines: await listInstitutionBudgetLines(repository, institutionId, fiscalPeriodId) };
+      if (kind === 'commitments') return { commitments: await listInstitutionCommitments(repository, institutionId, fiscalPeriodId) };
+      const budget = await getInstitutionBudget(repository, institutionId, gameDay);
+      if (kind === 'fiscal-summary') return { fiscalSummary: budget ? { periodRevenueUnits: budget.period_revenue_units, periodSpendingUnits: budget.period_spending_units, surplusDeficitUnits: budget.surplus_deficit_units, budgetAuthorizedUnits: budget.budget_authorized_units, budgetCommittedUnits: budget.budget_committed_units, budgetSpentUnits: budget.budget_spent_units } : null };
+      if (kind === 'financial-projection') return { financialProjection: budget };
+      return { budget };
+    });
+    if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+    return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  }
+
+  const commitmentMatch = url.pathname.match(/^\/api\/institutions\/([^/]+)\/budget\/commitments(?:\/([^/]+))?$/);
+  if (commitmentMatch && request.method === 'POST') {
+    const parsed = await parseJsonBody<{ budgetLineId?: string; commitmentType?: string; sourceType?: string; sourceId?: string; amountUnits?: string | number; dueGameDay?: number }>(request);
+    if (!parsed.ok) return parsed.response;
+    const body = parsed.value;
+    try {
+      const amountUnits = BigInt(body.amountUnits ?? 0);
+      const result = await withRepository(env, (repository) => repository.transaction(async (tx) => {
+        const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+        const gameDay = Number(world.rows[0]?.game_day ?? 0);
+        if (!body.budgetLineId || !body.commitmentType || !body.sourceType || !body.sourceId) throw new Error('Commitment fields are required');
+        return createInstitutionCommitment(tx, { humanId: viewer.id, institutionId: commitmentMatch[1], budgetLineId: body.budgetLineId, commitmentType: body.commitmentType, sourceType: body.sourceType, sourceId: body.sourceId, amountUnits, gameDay, dueGameDay: Number(body.dueGameDay ?? gameDay) });
+      }));
+      return Response.json({ commitmentId: result, persistence: 'planetscale-postgres' }, { status: 201 });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commitment creation failed' }, { status: 400 });
+    }
+  }
+
+  if (commitmentMatch && commitmentMatch[2] && request.method === 'PATCH') {
+    const parsed = await parseJsonBody<{ action?: 'pay' | 'cancel'; amountUnits?: string | number }>(request);
+    if (!parsed.ok) return parsed.response;
+    try {
+      const result = await withRepository(env, (repository) => repository.transaction(async (tx) => {
+        const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
+        const gameDay = Number(world.rows[0]?.game_day ?? 0);
+        if (parsed.value.action === 'cancel') return cancelInstitutionCommitment(tx, { humanId: viewer.id, institutionId: commitmentMatch[1], commitmentId: commitmentMatch[2]!, gameDay });
+        return payInstitutionCommitment(tx, { humanId: viewer.id, institutionId: commitmentMatch[1], commitmentId: commitmentMatch[2]!, amountUnits: BigInt(parsed.value.amountUnits ?? 0), gameDay });
+      }));
+      return Response.json({ result, persistence: 'planetscale-postgres' });
+    } catch (error) {
+      return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Commitment update failed' }, { status: 400 });
+    }
+  }
   if (url.pathname === '/api/cities' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listCities(repository));
     if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });

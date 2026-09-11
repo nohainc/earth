@@ -238,8 +238,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     Promise.all([
       repository.query('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
       repository.query('SELECT COUNT(*)::integer AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account'),
-      repository.query('SELECT COUNT(*)::integer AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)'),
-      repository.query('SELECT COUNT(*)::integer AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)'),
+      repository.query('SELECT COUNT(*)::integer AS invalid FROM corporations c JOIN corporation_membership_summary s ON s.corporation_id = c.id WHERE c.member_count != s.active_house_count'),
+      repository.query('SELECT COUNT(*)::integer AS invalid FROM cities c JOIN city_population_summary s ON s.city_id = c.id WHERE c.residents != s.active_house_count'),
     ]),
     repository.query('SELECT institution_id, institution_kind, status, since_game_day, recovery_game_day FROM financial_states ORDER BY institution_kind, institution_id'),
     Promise.all([repository.query('SELECT id, game_day, event_type, title, details FROM world_events ORDER BY game_day DESC, created_at DESC LIMIT 12'), repository.query('SELECT game_day, ranking_type, entity_id, rank, score FROM rankings_snapshots ORDER BY game_day DESC, ranking_type, rank LIMIT 20')]),

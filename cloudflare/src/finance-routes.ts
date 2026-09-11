@@ -74,14 +74,15 @@ export async function handleFinanceRoutes(
   if (url.pathname.startsWith('/api/finance/institutions/') && request.method === 'GET') {
     const institutionId = url.pathname.split('/').pop() ?? '';
     const result = await withRepository(env, async (repository) => {
-      const [accounts, state, obligations] = await Promise.all([
+      const [accounts, state, obligations, financialProjection] = await Promise.all([
         repository.query(`SELECT a.id AS account_id, ea.code AS asset_code, a.asset_id, a.account_type, a.balance::TEXT AS balance_units
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id LEFT JOIN economic_assets ea ON ea.id = a.asset_id
                            WHERE o.id = $1 AND a.status = 'active' ORDER BY a.asset_id, a.account_type`, [institutionId]),
         repository.query('SELECT * FROM financial_states WHERE institution_id = $1', [institutionId]),
         repository.query(`SELECT f.* FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id WHERE o.id = $1`, [institutionId]),
+        repository.query('SELECT * FROM institution_financial_projections WHERE institution_id = $1', [institutionId]),
       ]);
-      return { institutionId, accounts: accounts.rows, state: state.rows[0] ?? null, obligations: obligations.rows };
+      return { institutionId, accounts: accounts.rows, state: state.rows[0] ?? null, financialProjection: financialProjection.rows[0] ?? null, obligations: obligations.rows };
     });
     return Response.json({ ...(result ?? {}), persistence: 'planetscale-postgres' });
   }

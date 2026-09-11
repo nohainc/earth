@@ -93,7 +93,7 @@ test('listInstitutions and listRankings return structured models', async () => {
     'SELECT * FROM cities': { rows: [{ id: 'CITY-01', name: 'Neo' }], rowCount: 1 },
     'SELECT * FROM corporations': { rows: [{ id: 'CORP-01', name: 'Cyber' }], rowCount: 1 },
     'SELECT * FROM memberships': { rows: [], rowCount: 0 },
-    'SELECT * FROM budgets': { rows: [], rowCount: 0 },
+    'FROM institution_budget_lines': { rows: [], rowCount: 0 },
     'SELECT owner_id AS human_id, balance': { rows: [{ human_id: 'H-01', balance: 5000 }], rowCount: 1 },
     'SELECT id, residents, treasury': { rows: [], rowCount: 0 },
     'SELECT id, member_count, treasury': { rows: [], rowCount: 0 },

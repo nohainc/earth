@@ -19,18 +19,8 @@ export async function settleContinuousInstitutions(
     [gameDay, gameMinute],
   );
 
-  // 2. Adjust municipal capacity ratios based on budgets
-  await repo.query(
-    `UPDATE cities
-     SET housing_capacity = LEAST(1000000, housing_capacity + FLOOR(LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.institution_id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000.0))::integer),
-         energy_capacity = LEAST(1000000, energy_capacity + FLOOR(LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.institution_id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000.0))::integer),
-         connectivity_capacity = LEAST(1000000, connectivity_capacity + FLOOR(LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.institution_id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000.0))::integer),
-         health_capacity = LEAST(100, health_capacity + FLOOR(LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.institution_id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000.0))::integer)
-     WHERE status = 'active'`,
-  );
-
   return {
     proposalsClosed: closedProposals.rows.length,
-    citiesUpdated: 1,
+    citiesUpdated: 0,
   };
 }

@@ -11,6 +11,6 @@ test('dividends record surplus controls and post one V2 batch', () => {
   assert.match(engine, /earth_post_settlement_batch/);
   assert.match(engine, /tax_obligations/);
   assert.match(engine, /bank_loans/);
-  assert.match(engine, /institution_budgets/);
+  assert.match(engine, /institution_budget_lines/);
   assert.doesNotMatch(engine, /postEconomicCreditTransfer|transferCredits/);
 });

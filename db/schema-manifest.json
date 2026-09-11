@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 315,
+  "migrationVersion": 338,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -72,11 +72,6 @@
       "institution_id",
       "to_status",
       "correlation_id"
-    ],
-    "budgets": [
-      "id",
-      "institution_id",
-      "amount"
     ],
     "global_bank_deposits": [
       "id",
@@ -200,16 +195,104 @@
       "beneficiary_economic_id",
       "created_at"
     ],
-    "institution_budgets": [
+    "fiscal_periods": [
+      "id",
+      "period_type",
+      "start_game_day",
+      "end_game_day",
+      "status"
+    ],
+    "budget_categories": [
+      "id",
+      "institution_kind",
+      "category_code",
+      "mandatory",
+      "spending_class",
+      "priority",
+      "rules"
+    ],
+    "institution_budget_lines": [
+      "id",
       "institution_id",
-      "game_period",
-      "category",
+      "fiscal_period_id",
+      "category_id",
       "authorized_units",
       "committed_units",
       "spent_units",
+      "status",
       "rule_version",
+      "created_game_day",
       "created_at",
       "updated_at"
+    ],
+    "institution_budget_commitments": [
+      "id",
+      "institution_id",
+      "budget_line_id",
+      "commitment_type",
+      "source_type",
+      "source_id",
+      "original_units",
+      "remaining_units",
+      "status",
+      "created_game_day",
+      "due_game_day",
+      "created_at",
+      "updated_at"
+    ],
+    "institution_spending_journals": [
+      "id",
+      "institution_id",
+      "budget_line_id",
+      "commitment_id",
+      "source_account_id",
+      "recipient_account_id",
+      "amount_units",
+      "purpose",
+      "source_type",
+      "source_id",
+      "economic_transaction_id",
+      "correlation_id",
+      "game_day",
+      "created_at"
+    ],
+    "institution_grants": [
+      "id",
+      "grantor_institution_id",
+      "recipient_institution_id",
+      "budget_line_id",
+      "commitment_id",
+      "amount_units",
+      "grant_type",
+      "status",
+      "correlation_id",
+      "created_game_day",
+      "paid_game_day",
+      "created_at",
+      "updated_at"
+    ],
+    "grant_restrictions": [
+      "id", "grant_id", "recipient_institution_id", "budget_line_id", "category_id",
+      "original_units", "remaining_units", "status", "created_game_day", "created_at", "updated_at"
+    ],
+    "institution_budget_allocations": [
+      "id", "parent_institution_id", "child_institution_id", "parent_budget_line_id", "child_budget_line_id",
+      "fiscal_period_id", "category_id", "authorized_units", "funded_units", "status", "rule_version", "created_game_day", "updated_at"
+    ],
+    "institution_revenue_summary": [
+      "institution_id", "fiscal_period_id", "game_day", "taxes_received", "service_revenue", "grants_received", "license_income", "other_income", "created_at", "updated_at"
+    ],
+    "institution_fiscal_budget_forecasts": [
+      "institution_id", "fiscal_period_id", "opening_cash_units", "forecast_revenue_units", "minimum_closing_reserve_units", "recommended_spending_ceiling_units", "authorized_spending_units", "actual_revenue_units", "actual_spending_units", "planned_deficit_units", "fiscal_surplus_deficit_units", "rule_version", "created_at", "updated_at"
+    ],
+    "city_service_capacity_daily": [
+      "city_id", "game_day", "housing_capacity", "energy_capacity", "connectivity_capacity", "health_capacity", "service_demand", "coverage_ratio", "created_at", "updated_at"
+    ],
+    "public_service_projects": [
+      "id", "institution_id", "city_id", "provider_building_id", "service_type", "budget_line_id", "commitment_id", "recipient_account_id", "authorized_units", "funded_units", "status", "rule_version", "created_game_day", "completed_game_day", "created_at", "updated_at"
+    ],
+    "institution_governance_roles": [
+      "id", "institution_id", "human_id", "role_code", "status", "source_type", "source_id", "effective_from_game_day", "effective_to_game_day", "created_at"
     ],
     "institution_bailouts": [
       "id",
@@ -1172,7 +1255,7 @@
       "created_at"
     ],
     "owner_financial_summary": ["owner_economic_id", "game_day", "liquid_credit_units", "escrowed_credit_units", "deposit_principal_units", "deposit_interest_units", "loan_liabilities_units", "tax_arrears_units", "net_financial_position_units", "updated_at"],
-    "institution_financial_summary": ["institution_id", "institution_kind", "game_day", "treasury_units", "operations_units", "reserve_units", "committed_spending_units", "debt_units", "tax_receivables_units", "distributable_surplus_units", "updated_at"],
+    "institution_financial_summary": ["institution_id", "institution_kind", "game_day", "treasury_units", "operations_units", "reserve_units", "committed_spending_units", "debt_units", "tax_receivables_units", "distributable_surplus_units", "period_revenue_units", "period_spending_units", "budget_authorized_units", "budget_committed_units", "budget_spent_units", "arrears_units", "mandatory_commitments_units", "surplus_deficit_units", "liquidity_days", "research_commitments_units", "city_support_commitments_units", "dividend_capacity_units", "updated_at"],
     "tax_daily_summary": ["game_day", "assessed_units", "paid_units", "arrears_units", "waived_units", "obligation_count", "updated_at"],
     "bankruptcy_estate_assets": [
       "id",

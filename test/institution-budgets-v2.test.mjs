@@ -9,7 +9,7 @@ test('institution budgets authorize spending without becoming accounts', () => {
   assert.match(migration, /CREATE TABLE IF NOT EXISTS institution_budgets/);
   for (const field of ['authorized_units', 'committed_units', 'spent_units', 'rule_version', 'game_period']) assert.match(migration, new RegExp(field));
   assert.match(migration, /CREDIT remains exclusively in Economy V2 accounts/);
-  assert.match(finance, /institution_budgets/);
+  assert.match(finance, /institution_budget_lines/);
   assert.match(finance, /spent_units/);
   assert.match(finance, /earth_post_transaction/);
 });

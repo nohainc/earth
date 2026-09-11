@@ -12,13 +12,13 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '315_economy_v2_institution_treasury_authority.sql');
+  assert.equal(files.at(-1), '338_budget_integrity_checks.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 315, 'Manifest version must match latest migration version (315)');
+  assert.equal(manifest.migrationVersion, 338, 'Manifest version must match latest migration version (338)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 315/);
+  assert.match(schema, /reconciled through migration 338/);
   assert.ok(manifest.requiredTables.technology_catalog, 'Technology V2 catalog must be in the canonical manifest');
   for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');

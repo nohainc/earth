@@ -3,14 +3,20 @@ import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { marketAccount, releaseReservation } from './market-escrow.ts';
 import { centsToMoney, moneyToCents, taxToCents } from './money.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
+import { spendBudget } from './institution-spending.ts';
+import { canPerformInstitutionAction } from './institution-authorization.ts';
+
+function canonicalBudgetCategory(category: string): string {
+  const normalized = category.trim().toUpperCase().replace(/[-\s]+/g, '_');
+  return ({ PUBLIC_SERVICES: 'ESSENTIAL_SERVICES', MAINTENANCE: 'ESSENTIAL_SERVICES', ESSENTIAL_SERVICE: 'ESSENTIAL_SERVICES' } as Record<string, string>)[normalized] ?? normalized;
+}
 
 export async function publicSpending(
   repository: PostgresRepository,
   input: { actorId: string; cityId: string; category: string; amount: number; correlationId: string },
 ): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const role = await tx.query("SELECT id FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [input.cityId, input.actorId]);
-    if (!role.rows[0]) throw new Error('Institution administrator permission is required');
+    if (!(await canPerformInstitutionAction(tx, input.actorId, input.cityId, 'APPROVE_SPENDING'))) throw new Error('Institution spending permission is required');
     const amountCents = moneyToCents(input.amount);
     const amount = centsToMoney(amountCents);
     const world = await tx.query<{ game_day: number }>("SELECT game_day FROM world_state WHERE id = 'WORLD'");
@@ -22,11 +28,11 @@ export async function publicSpending(
     if (cityState.rows[0]?.status === 'receivership' && !input.category.startsWith('essential_service')) {
       throw new Error('City receivership permits essential-service spending only');
     }
-    const budget = await tx.query<{ authorized_units: string; spent_units: string; committed_units: string }>(
-      'SELECT authorized_units, spent_units, committed_units FROM institution_budgets WHERE institution_id = $1 AND game_period = $2 AND category = $3 FOR UPDATE',
-      [input.cityId, day, input.category],
+    const budget = await tx.query<{ id: string; authorized_units: string; spent_units: string; committed_units: string }>(
+      'SELECT id, authorized_units, spent_units, committed_units FROM institution_budget_lines WHERE institution_id = $1 AND fiscal_period_id = (SELECT earth_fiscal_period_for_day($2)) AND category_id = (SELECT id FROM budget_categories WHERE institution_kind = $3 AND category_code = $4) FOR UPDATE',
+      [input.cityId, day, 'CITY', canonicalBudgetCategory(input.category)],
     );
-    if (!budget.rows[0] || BigInt(budget.rows[0].authorized_units) - BigInt(budget.rows[0].spent_units) < amountCents) throw new Error('Spending exceeds the institution budget');
+    if (!budget.rows[0] || BigInt(budget.rows[0].authorized_units) - BigInt(budget.rows[0].committed_units) - BigInt(budget.rows[0].spent_units) < amountCents) throw new Error('Spending exceeds the institution budget');
     const accounts = await tx.query<{ owner_id: string; account_id: string; balance: string }>(
       `SELECT o.id AS owner_id, a.id AS account_id, a.balance::TEXT AS balance
          FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
@@ -39,21 +45,25 @@ export async function publicSpending(
     const cityAccount = accounts.rows.find((row) => row.owner_id === input.cityId);
     if (!city.rows[0] || !oucAccount || !cityAccount) throw new Error('V2 OUC or city treasury account is unavailable');
     if (BigInt(oucAccount.balance) < amountCents) throw new Error('OUC treasury cannot fund this spending');
-    const posting = await tx.query<{ transaction_id: string }>(
-      `SELECT transaction_id FROM earth_post_transaction($1,$2,$3,$4,$5,$6,$7,$8::jsonb)`,
-      [input.correlationId, day, 0, 'public_spending', 'ouc', input.cityId, 'finance-v2', JSON.stringify([
-        { account_id: oucAccount.account_id, delta: (-amountCents).toString(), reason_code: 'PUBLIC_SPENDING' },
-        { account_id: cityAccount.account_id, delta: amountCents.toString(), reason_code: 'PUBLIC_SPENDING' },
-      ])],
-    );
-    await tx.query('UPDATE institution_budgets SET committed_units = committed_units + $1, spent_units = spent_units + $1, updated_at = CURRENT_TIMESTAMP WHERE institution_id = $2 AND game_period = $3 AND category = $4', [amountCents, input.cityId, day, input.category]);
+    const posting = await spendBudget(tx, {
+      institutionId: input.cityId,
+      budgetLineId: budget.rows[0].id,
+      sourceAccountId: oucAccount.account_id,
+      recipientAccountId: cityAccount.account_id,
+      amountUnits: amountCents,
+      purpose: 'PUBLIC_SPENDING',
+      sourceType: 'ouc_treasury',
+      sourceId: input.cityId,
+      correlationId: input.correlationId,
+      gameDay: day,
+    });
     await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), day, 'public_spending', `OUC funding reached ${input.cityId}`, toNanoMarkup({ cityId: input.cityId, category: input.category, amount, correlationId: input.correlationId, actorId: input.actorId })]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), input.actorId, 'finance', 'Public spending recorded', `${amount} Credits were routed from the OUC treasury to ${input.cityId} for ${input.category}.`, input.correlationId]);
     const members = await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 AND human_id <> $2', [input.cityId, input.actorId]);
     for (const member of members.rows) {
       await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6)', [crypto.randomUUID(), member.human_id, 'finance', 'City funding received', `${amount} Credits were routed to ${input.cityId} for ${input.category}.`, input.correlationId]);
     }
-    return { ok: true, amount: Number(amount), cityId: input.cityId, category: input.category, gameDay: day, transactionId: posting.rows[0]?.transaction_id, correlationId: input.correlationId };
+    return { ok: true, amount: Number(amount), cityId: input.cityId, category: input.category, gameDay: day, transactionId: posting.transactionId, correlationId: input.correlationId };
   });
 }
 
@@ -160,8 +170,7 @@ export async function recoverInstitution(repository: PostgresRepository, input: 
   return repository.transaction(async (tx) => {
     const institution = await tx.query<{ id: string; kind: 'CITY' | 'CORPORATION' }>("SELECT id, kind FROM institutions WHERE id = $1 AND kind IN ('CITY','CORPORATION') FOR UPDATE", [input.institutionId]);
     if (!institution.rows[0]) throw new Error('Recoverable institution not found');
-    const role = await tx.query("SELECT id FROM institutions WHERE id = $1 AND administrator_human_id = $2 AND status = 'active'", [input.institutionId, input.humanId]);
-    if (!role.rows[0]) throw new Error('Institution administrator permission is required');
+    if (!(await canPerformInstitutionAction(tx, input.humanId, input.institutionId, 'TRANSFER_TO_RESERVE'))) throw new Error('Institution recovery permission is required');
     const state = await tx.query<{ status: string }>("SELECT status FROM financial_states WHERE institution_id = $1 AND status IN ('distressed','insolvent') FOR UPDATE", [input.institutionId]);
     if (!state.rows[0]) throw new Error('Institution is not currently in a recoverable crisis state');
     const amountCents = moneyToCents(input.amount);

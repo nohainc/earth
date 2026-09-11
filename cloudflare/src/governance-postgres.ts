@@ -6,7 +6,8 @@ import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
 import { startCorporationBuildingResearchInTransaction } from './corporation-building-research-postgres.ts';
-import { proposalActionHandler, validateProposalActionSnapshot } from './proposal-actions.ts';
+import { isFinancialProposalAction, proposalActionHandler, validateProposalActionSnapshot } from './proposal-actions.ts';
+import { executeProposalFinancialAction } from './proposal-finance-actions.ts';
 import { attemptProposalFunding } from './proposal-funding.ts';
 
 export function politicalMaturityReached(currentGameDay: number, eligibilityGameDay: number): boolean {
@@ -56,6 +57,20 @@ function jsonObject(value: unknown): Record<string, unknown> {
     try { return fromNanoMarkup<Record<string, unknown>>(value); } catch (_error) { return {}; }
   }
   return {};
+}
+
+function financialActionType(targetCategory: string | null | undefined): string | null {
+  return ({
+    approve_budget: 'APPROVE_BUDGET',
+    amend_budget: 'AMEND_BUDGET',
+    major_project: 'AUTHORIZE_MAJOR_PROJECT',
+    authorize_grant: 'AUTHORIZE_GRANT',
+    grant: 'AUTHORIZE_GRANT',
+    change_tax_charter: 'CHANGE_TAX_CHARTER',
+    transfer_reserve: 'TRANSFER_RESERVE',
+    declare_dividend: 'DECLARE_DIVIDEND',
+    approve_bailout: 'APPROVE_BAILOUT',
+  } as Record<string, string>)[String(targetCategory ?? '').trim().toLowerCase()] ?? null;
 }
 
 const COMMON_GOVERNANCE_DEFAULTS = {
@@ -263,12 +278,14 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       resourceOutputType: fallback.resourceOutputType,
       resourceOutputAmount: fallback.resourceOutputAmount,
     } : {
-      actionType: input.targetCategory === 'technology' || input.targetCategory === 'research' ? 'start_research' : input.targetCategory ? 'amend_rule' : 'generic',
+      actionType: financialActionType(input.targetCategory) ?? (input.targetCategory === 'technology' || input.targetCategory === 'research' ? 'start_research' : input.targetCategory ? 'amend_rule' : 'generic'),
+      ...(input.targetValue ?? {}),
       researchProjectId,
       buildingType: input.targetValue?.buildingType ?? input.targetValue?.building_type,
       targetCategory: input.targetCategory,
       baseRuleVersionId: baseTargetRule.rows[0]?.id ?? null,
       targetValue: input.targetValue ?? {},
+      rulesVersion: baseTargetRule.rows[0]?.rules_version ?? baseTargetRule.rows[0]?.id ?? 'proposal-finance-v1',
     };
     const contractHash = await snapshotHash(governanceSnapshot, actionSnapshot);
     const actionHandler = validateProposalActionSnapshot(actionSnapshot);
@@ -485,6 +502,12 @@ export async function executeProposal(repository: PostgresRepository, input: { p
     const action = jsonObject(current.action_snapshot);
     const actionHandler = proposalActionHandler(action.actionType);
     await actionHandler.validateExecution({ repository: tx, proposal: current as Record<string, unknown>, action, gameDay: day });
+    if (isFinancialProposalAction(action.actionType)) {
+      const result = await executeProposalFinancialAction(tx, current as Record<string, unknown>, action, day);
+      await tx.query("UPDATE proposals SET status = 'closed', executed_at = CURRENT_TIMESTAMP, execution_status = 'completed' WHERE id = $1", [current.id]);
+      await tx.query("UPDATE proposal_actions SET execution_status = 'completed', completed_game_day = $2, result_json = $3 WHERE proposal_id = $1 AND sequence = 1", [current.id, day, JSON.stringify(result)]);
+      return { ok: true, executionStatus: 'completed', result, proposal: (await tx.query('SELECT * FROM proposals WHERE id = $1', [current.id])).rows[0] };
+    }
     await tx.query(
       `UPDATE proposal_actions
        SET execution_status = 'running', started_game_day = $2

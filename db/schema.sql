@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 315.
+-- Canonical fresh-install schema, reconciled through migration 338.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -702,21 +702,291 @@ CREATE TABLE IF NOT EXISTS tax_rule_versions (
 );
 CREATE INDEX IF NOT EXISTS tax_rule_versions_effective_idx ON tax_rule_versions(tax_rule_id, effective_from_game_day DESC);
 
-CREATE TABLE IF NOT EXISTS institution_budgets (
+CREATE TABLE IF NOT EXISTS fiscal_periods (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  period_type TEXT NOT NULL CHECK (period_type IN ('MONTH', 'QUARTER', 'YEAR', 'SPECIAL')),
+  start_game_day BIGINT NOT NULL CHECK (start_game_day >= 1),
+  end_game_day BIGINT NOT NULL CHECK (end_game_day >= start_game_day),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('PLANNED', 'ACTIVE', 'CLOSED', 'CANCELLED')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (start_game_day, end_game_day)
+);
+
+CREATE TABLE IF NOT EXISTS budget_categories (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_kind TEXT NOT NULL CHECK (institution_kind IN ('CITY', 'CORPORATION', 'OUC', 'GLOBAL_BANK')),
+  category_code TEXT NOT NULL CHECK (category_code = UPPER(category_code)),
+  mandatory BOOLEAN NOT NULL DEFAULT FALSE,
+  spending_class TEXT NOT NULL DEFAULT 'DISCRETIONARY' CHECK (spending_class IN ('MANDATORY', 'DISCRETIONARY')),
+  priority SMALLINT NOT NULL DEFAULT 100 CHECK (priority >= 0),
+  rules JSONB NOT NULL DEFAULT '{}'::JSONB,
+  UNIQUE (institution_kind, category_code)
+);
+INSERT INTO budget_categories (institution_kind, category_code, mandatory, priority) VALUES
+  ('CITY', 'ESSENTIAL_SERVICES', TRUE, 10), ('CITY', 'INFRASTRUCTURE', FALSE, 30),
+  ('CITY', 'HEALTH', TRUE, 20), ('CITY', 'ENERGY', TRUE, 20), ('CITY', 'CONNECTIVITY', TRUE, 20),
+  ('CITY', 'HOUSING', TRUE, 20), ('CITY', 'RESEARCH', FALSE, 70), ('CITY', 'PUBLIC_SAFETY', FALSE, 40),
+  ('CITY', 'TRANSFERS', FALSE, 80), ('CITY', 'DEBT_SERVICE', TRUE, 5), ('CITY', 'EMERGENCY', FALSE, 1),
+  ('CORPORATION', 'OPERATIONS', TRUE, 20), ('CORPORATION', 'CAPEX', FALSE, 40),
+  ('CORPORATION', 'RESEARCH', FALSE, 60), ('CORPORATION', 'LICENSING', FALSE, 70),
+  ('CORPORATION', 'EXPANSION', FALSE, 80), ('CORPORATION', 'CITY_SUPPORT', FALSE, 50),
+  ('CORPORATION', 'DEBT_SERVICE', TRUE, 5), ('CORPORATION', 'DIVIDENDS', FALSE, 90),
+  ('CORPORATION', 'RESERVE_ALLOCATION', TRUE, 10)
+ON CONFLICT (institution_kind, category_code) DO NOTHING;
+UPDATE budget_categories SET spending_class = CASE WHEN mandatory THEN 'MANDATORY' ELSE 'DISCRETIONARY' END;
+INSERT INTO budget_categories (institution_kind, category_code, mandatory, priority, rules)
+VALUES ('CORPORATION', 'RESERVE', TRUE, 10, '{"minimum_reserve_bps":1000}'::JSONB)
+ON CONFLICT (institution_kind, category_code) DO NOTHING;
+
+CREATE OR REPLACE FUNCTION earth_corporation_distributable_surplus(p_institution_id TEXT, p_game_day BIGINT)
+RETURNS BIGINT LANGUAGE plpgsql STABLE AS $$
+DECLARE v_owner_economic_id BIGINT; cash_units BIGINT; required_reserve_units BIGINT; mandatory_commitments BIGINT; tax_due BIGINT; loan_due BIGINT;
+BEGIN
+  SELECT economic_id INTO v_owner_economic_id FROM owner_registry WHERE id = p_institution_id AND owner_type = 'corporation' AND status = 'active';
+  IF v_owner_economic_id IS NULL THEN RETURN 0; END IF;
+  SELECT COALESCE(balance, 0) INTO cash_units FROM economic_accounts WHERE economic_accounts.owner_economic_id = v_owner_economic_id AND asset_id = 1 AND account_type = 3 AND is_default_settlement AND status = 'active';
+  required_reserve_units := (cash_units * 1000) / 10000;
+  SELECT COALESCE(SUM(c.remaining_units), 0) INTO mandatory_commitments FROM institution_budget_commitments c JOIN institution_budget_lines l ON l.id = c.budget_line_id JOIN budget_categories bc ON bc.id = l.category_id WHERE l.institution_id = p_institution_id AND c.status IN ('ACTIVE', 'PARTIALLY_PAID') AND bc.mandatory AND c.due_game_day <= p_game_day;
+  SELECT COALESCE(SUM(amount_units), 0) INTO tax_due FROM tax_obligations WHERE taxpayer_economic_id = v_owner_economic_id AND status IN ('DUE', 'PARTIAL', 'ARREARS');
+  SELECT COALESCE(SUM(LEAST(outstanding_principal_units + accrued_interest_units, accrued_interest_units + CASE WHEN remaining_installments > 0 THEN (outstanding_principal_units + remaining_installments - 1) / remaining_installments ELSE 0 END)), 0) INTO loan_due FROM bank_loans WHERE borrower_economic_id = v_owner_economic_id AND status IN ('CURRENT', 'GRACE', 'DELINQUENT', 'RESTRUCTURED') AND next_payment_game_day <= p_game_day;
+  RETURN GREATEST(0, cash_units - mandatory_commitments - tax_due - loan_due - required_reserve_units);
+END;
+$$;
+
+CREATE TABLE IF NOT EXISTS institution_budget_lines (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   institution_id TEXT NOT NULL REFERENCES institutions(id),
-  game_period BIGINT NOT NULL CHECK (game_period >= 0),
-  category TEXT NOT NULL,
+  fiscal_period_id BIGINT NOT NULL REFERENCES fiscal_periods(id),
+  category_id BIGINT NOT NULL REFERENCES budget_categories(id),
   authorized_units BIGINT NOT NULL CHECK (authorized_units >= 0),
   committed_units BIGINT NOT NULL DEFAULT 0 CHECK (committed_units >= 0),
   spent_units BIGINT NOT NULL DEFAULT 0 CHECK (spent_units >= 0),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('DRAFT', 'ACTIVE', 'FROZEN', 'CLOSED', 'CANCELLED')),
+  rule_version TEXT NOT NULL,
+  created_game_day BIGINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (institution_id, fiscal_period_id, category_id),
+  CHECK (authorized_units >= committed_units + spent_units)
+);
+CREATE INDEX IF NOT EXISTS institution_budget_lines_period_idx ON institution_budget_lines(fiscal_period_id, institution_id, category_id);
+
+CREATE TABLE IF NOT EXISTS institution_budget_commitments (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  commitment_type TEXT NOT NULL CHECK (commitment_type IN ('CONSTRUCTION_PROJECT', 'TECHNOLOGY_LICENSE', 'RESEARCH_PROJECT', 'PUBLIC_SERVICE_CONTRACT', 'GRANT', 'LOAN_PAYMENT')),
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  original_units BIGINT NOT NULL CHECK (original_units > 0),
+  remaining_units BIGINT NOT NULL CHECK (remaining_units >= 0 AND remaining_units <= original_units),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'PARTIALLY_PAID', 'SETTLED', 'CANCELLED', 'EXPIRED')),
+  created_game_day BIGINT NOT NULL CHECK (created_game_day >= 1),
+  due_game_day BIGINT NOT NULL CHECK (due_game_day >= created_game_day),
+  priority_class SMALLINT NOT NULL DEFAULT 100 CHECK (priority_class >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (budget_line_id, commitment_type, source_type, source_id)
+);
+CREATE INDEX IF NOT EXISTS institution_budget_commitments_due_idx ON institution_budget_commitments(status, due_game_day, institution_id);
+CREATE INDEX IF NOT EXISTS institution_budget_commitments_line_idx ON institution_budget_commitments(budget_line_id, status);
+
+CREATE TABLE IF NOT EXISTS institution_spending_journals (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  commitment_id BIGINT REFERENCES institution_budget_commitments(id),
+  source_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  recipient_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  amount_units BIGINT NOT NULL CHECK (amount_units > 0),
+  purpose TEXT NOT NULL,
+  source_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  economic_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE,
+  game_day BIGINT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS institution_spending_journals_institution_idx ON institution_spending_journals(institution_id, game_day DESC);
+
+CREATE TABLE IF NOT EXISTS institution_grants (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  grantor_institution_id TEXT NOT NULL REFERENCES institutions(id),
+  recipient_institution_id TEXT NOT NULL REFERENCES institutions(id),
+  budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  commitment_id BIGINT REFERENCES institution_budget_commitments(id),
+  amount_units BIGINT NOT NULL CHECK (amount_units > 0),
+  grant_type TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'APPROVED' CHECK (status IN ('APPROVED', 'PAID', 'CANCELLED')),
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_game_day BIGINT NOT NULL CHECK (created_game_day >= 1),
+  paid_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (grantor_institution_id <> recipient_institution_id)
+);
+CREATE INDEX IF NOT EXISTS institution_grants_status_idx ON institution_grants(status, grantor_institution_id, recipient_institution_id);
+
+CREATE TABLE IF NOT EXISTS grant_restrictions (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  grant_id BIGINT NOT NULL REFERENCES institution_grants(id),
+  recipient_institution_id TEXT NOT NULL REFERENCES institutions(id),
+  budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  category_id BIGINT NOT NULL REFERENCES budget_categories(id),
+  original_units BIGINT NOT NULL CHECK (original_units > 0),
+  remaining_units BIGINT NOT NULL CHECK (remaining_units >= 0 AND remaining_units <= original_units),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'EXHAUSTED', 'CANCELLED')),
+  created_game_day BIGINT NOT NULL CHECK (created_game_day >= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (grant_id, budget_line_id),
+  CHECK (recipient_institution_id <> '')
+);
+CREATE INDEX IF NOT EXISTS grant_restrictions_spending_idx ON grant_restrictions(recipient_institution_id, budget_line_id, status);
+
+CREATE TABLE IF NOT EXISTS institution_budget_allocations (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  parent_institution_id TEXT NOT NULL REFERENCES institutions(id),
+  child_institution_id TEXT NOT NULL REFERENCES institutions(id),
+  parent_budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  child_budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  fiscal_period_id BIGINT NOT NULL REFERENCES fiscal_periods(id),
+  category_id BIGINT NOT NULL REFERENCES budget_categories(id),
+  authorized_units BIGINT NOT NULL CHECK (authorized_units >= 0),
+  funded_units BIGINT NOT NULL DEFAULT 0 CHECK (funded_units >= 0),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('DRAFT', 'ACTIVE', 'CLOSED', 'CANCELLED')),
+  rule_version TEXT NOT NULL,
+  created_game_day BIGINT NOT NULL CHECK (created_game_day >= 1),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (parent_institution_id, child_institution_id, fiscal_period_id, category_id),
+  CHECK (parent_institution_id <> child_institution_id),
+  CHECK (funded_units <= authorized_units)
+);
+CREATE INDEX IF NOT EXISTS institution_budget_allocations_child_idx ON institution_budget_allocations(child_institution_id, fiscal_period_id, category_id);
+
+CREATE TABLE IF NOT EXISTS institution_revenue_summary (
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  fiscal_period_id BIGINT NOT NULL REFERENCES fiscal_periods(id),
+  game_day BIGINT NOT NULL,
+  taxes_received BIGINT NOT NULL DEFAULT 0,
+  service_revenue BIGINT NOT NULL DEFAULT 0,
+  grants_received BIGINT NOT NULL DEFAULT 0,
+  license_income BIGINT NOT NULL DEFAULT 0,
+  other_income BIGINT NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (institution_id, game_day)
+);
+
+CREATE OR REPLACE FUNCTION earth_refresh_institution_revenue_summary(p_institution_id TEXT, p_game_day BIGINT)
+RETURNS VOID LANGUAGE SQL AS $$
+  INSERT INTO institution_revenue_summary (institution_id, fiscal_period_id, game_day, taxes_received, service_revenue, grants_received, license_income, other_income)
+  SELECT $1, earth_fiscal_period_for_day($2), $2,
+    COALESCE(SUM(e.delta) FILTER (WHERE upper(e.reason_code) LIKE '%TAX%'), 0),
+    COALESCE(SUM(e.delta) FILTER (WHERE upper(e.reason_code) LIKE '%SERVICE%'), 0),
+    COALESCE(SUM(e.delta) FILTER (WHERE upper(e.reason_code) LIKE '%GRANT%'), 0),
+    COALESCE(SUM(e.delta) FILTER (WHERE upper(e.reason_code) LIKE '%LICENSE%'), 0),
+    COALESCE(SUM(e.delta) FILTER (WHERE upper(e.reason_code) NOT LIKE '%TAX%' AND upper(e.reason_code) NOT LIKE '%SERVICE%' AND upper(e.reason_code) NOT LIKE '%GRANT%' AND upper(e.reason_code) NOT LIKE '%LICENSE%'), 0)
+  FROM economic_entries e JOIN economic_accounts a ON a.id = e.account_id JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+  WHERE o.id = $1 AND e.game_day = $2 AND e.delta > 0
+  ON CONFLICT (institution_id, game_day) DO UPDATE SET fiscal_period_id = EXCLUDED.fiscal_period_id, taxes_received = EXCLUDED.taxes_received, service_revenue = EXCLUDED.service_revenue, grants_received = EXCLUDED.grants_received, license_income = EXCLUDED.license_income, other_income = EXCLUDED.other_income, updated_at = CURRENT_TIMESTAMP;
+$$;
+
+CREATE TABLE IF NOT EXISTS institution_fiscal_budget_forecasts (
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  fiscal_period_id BIGINT NOT NULL REFERENCES fiscal_periods(id),
+  opening_cash_units BIGINT NOT NULL DEFAULT 0,
+  forecast_revenue_units BIGINT NOT NULL DEFAULT 0 CHECK (forecast_revenue_units >= 0),
+  minimum_closing_reserve_units BIGINT NOT NULL DEFAULT 0 CHECK (minimum_closing_reserve_units >= 0),
+  recommended_spending_ceiling_units BIGINT NOT NULL DEFAULT 0 CHECK (recommended_spending_ceiling_units >= 0),
+  authorized_spending_units BIGINT NOT NULL DEFAULT 0 CHECK (authorized_spending_units >= 0),
+  actual_revenue_units BIGINT NOT NULL DEFAULT 0 CHECK (actual_revenue_units >= 0),
+  actual_spending_units BIGINT NOT NULL DEFAULT 0 CHECK (actual_spending_units >= 0),
+  planned_deficit_units BIGINT NOT NULL DEFAULT 0,
+  fiscal_surplus_deficit_units BIGINT NOT NULL DEFAULT 0,
   rule_version TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  PRIMARY KEY (institution_id, game_period, category),
-  CHECK (authorized_units >= committed_units),
-  CHECK (committed_units >= spent_units)
+  PRIMARY KEY (institution_id, fiscal_period_id)
 );
-CREATE INDEX IF NOT EXISTS institution_budgets_period_idx ON institution_budgets(game_period, institution_id, category);
+
+CREATE OR REPLACE FUNCTION earth_set_budget_revenue_forecast(
+  p_institution_id TEXT, p_fiscal_period_id BIGINT, p_forecast_revenue_units BIGINT,
+  p_minimum_closing_reserve_units BIGINT, p_authorized_spending_units BIGINT, p_rule_version TEXT
+)
+RETURNS TABLE (institution_id TEXT, fiscal_period_id BIGINT, recommended_spending_ceiling_units BIGINT, authorized_spending_units BIGINT)
+LANGUAGE plpgsql AS $$
+DECLARE v_owner_economic_id BIGINT; v_opening_cash_units BIGINT; v_recommended_units BIGINT;
+BEGIN
+  IF p_forecast_revenue_units < 0 OR p_minimum_closing_reserve_units < 0 OR p_authorized_spending_units < 0 THEN RAISE EXCEPTION 'Budget forecast values cannot be negative'; END IF;
+  IF NULLIF(p_rule_version, '') IS NULL THEN RAISE EXCEPTION 'Budget forecast rule version is required'; END IF;
+  SELECT o.economic_id INTO v_owner_economic_id FROM institutions i JOIN owner_registry o ON o.id = i.id WHERE i.id = p_institution_id AND o.status = 'active';
+  IF v_owner_economic_id IS NULL THEN RAISE EXCEPTION 'Institution % has no active economic owner', p_institution_id; END IF;
+  SELECT COALESCE(SUM(a.balance), 0) INTO v_opening_cash_units FROM economic_accounts a WHERE a.owner_economic_id = v_owner_economic_id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active';
+  v_recommended_units := GREATEST(0, v_opening_cash_units + p_forecast_revenue_units - p_minimum_closing_reserve_units);
+  INSERT INTO institution_fiscal_budget_forecasts (institution_id, fiscal_period_id, opening_cash_units, forecast_revenue_units, minimum_closing_reserve_units, recommended_spending_ceiling_units, authorized_spending_units, rule_version)
+  VALUES (p_institution_id, p_fiscal_period_id, v_opening_cash_units, p_forecast_revenue_units, p_minimum_closing_reserve_units, v_recommended_units, p_authorized_spending_units, p_authorized_spending_units - p_forecast_revenue_units, p_rule_version)
+  ON CONFLICT (institution_id, fiscal_period_id) DO UPDATE SET opening_cash_units = EXCLUDED.opening_cash_units, forecast_revenue_units = EXCLUDED.forecast_revenue_units, minimum_closing_reserve_units = EXCLUDED.minimum_closing_reserve_units, recommended_spending_ceiling_units = EXCLUDED.recommended_spending_ceiling_units, authorized_spending_units = EXCLUDED.authorized_spending_units, rule_version = EXCLUDED.rule_version, updated_at = CURRENT_TIMESTAMP;
+  RETURN QUERY SELECT p_institution_id, p_fiscal_period_id, v_recommended_units, p_authorized_spending_units;
+END; $$;
+
+CREATE OR REPLACE FUNCTION earth_refresh_fiscal_budget_forecast(p_institution_id TEXT, p_fiscal_period_id BIGINT)
+RETURNS TABLE (institution_id TEXT, fiscal_period_id BIGINT, actual_revenue_units BIGINT, actual_spending_units BIGINT, fiscal_surplus_deficit_units BIGINT)
+LANGUAGE plpgsql AS $$
+DECLARE v_actual_revenue_units BIGINT; v_actual_spending_units BIGINT;
+BEGIN
+  SELECT COALESCE(SUM(r.taxes_received + r.service_revenue + r.grants_received + r.license_income + r.other_income), 0) INTO v_actual_revenue_units FROM institution_revenue_summary r WHERE r.institution_id = p_institution_id AND r.fiscal_period_id = p_fiscal_period_id;
+  SELECT COALESCE(SUM(l.spent_units), 0) INTO v_actual_spending_units FROM institution_budget_lines l WHERE l.institution_id = p_institution_id AND l.fiscal_period_id = p_fiscal_period_id;
+  UPDATE institution_fiscal_budget_forecasts f SET actual_revenue_units = v_actual_revenue_units, actual_spending_units = v_actual_spending_units, fiscal_surplus_deficit_units = v_actual_revenue_units - v_actual_spending_units, updated_at = CURRENT_TIMESTAMP WHERE f.institution_id = p_institution_id AND f.fiscal_period_id = p_fiscal_period_id;
+  IF NOT FOUND THEN RAISE EXCEPTION 'No fiscal budget forecast exists for institution % and period %', p_institution_id, p_fiscal_period_id; END IF;
+  RETURN QUERY SELECT p_institution_id, p_fiscal_period_id, v_actual_revenue_units, v_actual_spending_units, v_actual_revenue_units - v_actual_spending_units;
+END; $$;
+
+CREATE OR REPLACE FUNCTION earth_reserve_budget_commitment()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE available_units BIGINT; line_institution_id TEXT;
+BEGIN
+  SELECT institution_id, authorized_units - committed_units - spent_units
+    INTO line_institution_id, available_units
+    FROM institution_budget_lines WHERE id = NEW.budget_line_id FOR UPDATE;
+  IF line_institution_id IS NULL THEN RAISE EXCEPTION 'Budget line % does not exist', NEW.budget_line_id; END IF;
+  IF line_institution_id <> NEW.institution_id THEN RAISE EXCEPTION 'Commitment institution does not match budget line'; END IF;
+  IF NEW.remaining_units <> NEW.original_units THEN RAISE EXCEPTION 'New budget commitment must start fully outstanding'; END IF;
+  IF NEW.original_units > available_units THEN RAISE EXCEPTION 'Budget commitment exceeds available authority on line %', NEW.budget_line_id; END IF;
+  UPDATE institution_budget_lines SET committed_units = committed_units + NEW.original_units, updated_at = CURRENT_TIMESTAMP WHERE id = NEW.budget_line_id;
+  RETURN NEW;
+END;
+$$;
+CREATE TRIGGER institution_budget_commitments_reserve_trigger
+AFTER INSERT ON institution_budget_commitments
+FOR EACH ROW EXECUTE FUNCTION earth_reserve_budget_commitment();
+
+CREATE OR REPLACE FUNCTION earth_pay_budget_commitment(p_commitment_id BIGINT, p_payment_units BIGINT)
+RETURNS TABLE (commitment_id BIGINT, paid_units BIGINT, remaining_units BIGINT)
+LANGUAGE plpgsql AS $$
+DECLARE c institution_budget_commitments%ROWTYPE;
+BEGIN
+  IF p_payment_units <= 0 THEN RAISE EXCEPTION 'Budget commitment payment must be positive'; END IF;
+  SELECT * INTO c FROM institution_budget_commitments WHERE id = p_commitment_id FOR UPDATE;
+  IF c.id IS NULL OR c.status NOT IN ('ACTIVE', 'PARTIALLY_PAID') THEN RAISE EXCEPTION 'Budget commitment % is not payable', p_commitment_id; END IF;
+  IF p_payment_units > c.remaining_units THEN RAISE EXCEPTION 'Payment exceeds remaining budget commitment %', p_commitment_id; END IF;
+  UPDATE institution_budget_lines SET committed_units = committed_units - p_payment_units, spent_units = spent_units + p_payment_units, updated_at = CURRENT_TIMESTAMP WHERE id = c.budget_line_id;
+  UPDATE institution_budget_commitments SET remaining_units = remaining_units - p_payment_units, status = CASE WHEN remaining_units - p_payment_units = 0 THEN 'SETTLED' ELSE 'PARTIALLY_PAID' END, updated_at = CURRENT_TIMESTAMP WHERE id = p_commitment_id;
+  RETURN QUERY SELECT p_commitment_id, p_payment_units, c.remaining_units - p_payment_units;
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_cancel_budget_commitment(p_commitment_id BIGINT)
+RETURNS BIGINT LANGUAGE plpgsql AS $$
+DECLARE c institution_budget_commitments%ROWTYPE;
+BEGIN
+  SELECT * INTO c FROM institution_budget_commitments WHERE id = p_commitment_id FOR UPDATE;
+  IF c.id IS NULL OR c.status NOT IN ('ACTIVE', 'PARTIALLY_PAID') THEN RETURN 0; END IF;
+  UPDATE institution_budget_lines SET committed_units = committed_units - c.remaining_units, updated_at = CURRENT_TIMESTAMP WHERE id = c.budget_line_id;
+  UPDATE institution_budget_commitments SET remaining_units = 0, status = 'CANCELLED', updated_at = CURRENT_TIMESTAMP WHERE id = p_commitment_id;
+  RETURN c.remaining_units;
+END;
+$$;
 
 CREATE TABLE IF NOT EXISTS institution_bailouts (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
@@ -1283,6 +1553,113 @@ CREATE TABLE IF NOT EXISTS building_settlement_journals (
 );
 CREATE INDEX IF NOT EXISTS idx_bldg_journal_city_day ON building_settlement_journals(city_id, day DESC);
 
+CREATE OR REPLACE FUNCTION earth_provision_institution_accounts(p_institution_id TEXT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE v_owner_economic_id BIGINT; v_owner_type TEXT; v_count INTEGER;
+BEGIN
+  SELECT economic_id, owner_type INTO v_owner_economic_id, v_owner_type FROM owner_registry WHERE id = p_institution_id AND status = 'active';
+  IF v_owner_economic_id IS NULL OR v_owner_type NOT IN ('city', 'corporation') THEN RAISE EXCEPTION 'Institution % has no active city/corporation economic owner', p_institution_id; END IF;
+  INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, status, legacy_account_id)
+  SELECT v_owner_economic_id, 1, t.account_type, t.account_type = 3, 'active', format('institution:%s:%s', p_institution_id, t.account_type)
+  FROM (VALUES (3), (4), (5)) AS t(account_type)
+  WHERE NOT EXISTS (SELECT 1 FROM economic_accounts a WHERE a.owner_economic_id = v_owner_economic_id AND a.asset_id = 1 AND a.account_type = t.account_type AND a.status = 'active');
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END; $$;
+
+CREATE TABLE IF NOT EXISTS institution_governance_roles (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  human_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
+  role_code TEXT NOT NULL CHECK (role_code IN ('CITY_MAYOR', 'INFRASTRUCTURE_PLANNER', 'CORPORATION_EXECUTIVE', 'CORPORATION_TREASURER', 'RECEIVERSHIP_RECEIVER')),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'ENDED', 'REVOKED')),
+  source_type TEXT NOT NULL DEFAULT 'CHARTER' CHECK (source_type IN ('CHARTER', 'PROPOSAL', 'EMERGENCY')),
+  source_id TEXT,
+  effective_from_game_day BIGINT NOT NULL DEFAULT 0,
+  effective_to_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (institution_id, human_id, role_code, effective_from_game_day),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
+);
+CREATE INDEX IF NOT EXISTS institution_governance_roles_active_idx ON institution_governance_roles (institution_id, human_id, role_code) WHERE status = 'ACTIVE';
+
+CREATE OR REPLACE FUNCTION earth_can_perform_institution_action(p_human_id TEXT, p_institution_id TEXT, p_action TEXT, p_game_day BIGINT DEFAULT NULL)
+RETURNS BOOLEAN LANGUAGE plpgsql STABLE AS $$
+DECLARE v_day BIGINT := COALESCE(p_game_day, (SELECT game_day FROM world_state WHERE id = 'WORLD'), 0);
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM institution_governance_roles r JOIN humans h ON h.id = r.human_id AND h.life_status = 'active' AND h.account_status = 'active' JOIN institutions i ON i.id = r.institution_id AND i.status = 'active' WHERE r.human_id = p_human_id AND r.institution_id = p_institution_id AND r.status = 'ACTIVE' AND r.effective_from_game_day <= v_day AND (r.effective_to_game_day IS NULL OR r.effective_to_game_day >= v_day) AND r.role_code = ANY (CASE upper(p_action) WHEN 'SET_BUDGET' THEN ARRAY['CITY_MAYOR','INFRASTRUCTURE_PLANNER','CORPORATION_EXECUTIVE'] WHEN 'CREATE_COMMITMENT' THEN ARRAY['CITY_MAYOR','INFRASTRUCTURE_PLANNER','CORPORATION_EXECUTIVE','CORPORATION_TREASURER'] WHEN 'APPROVE_SPENDING' THEN ARRAY['CITY_MAYOR','INFRASTRUCTURE_PLANNER','CORPORATION_EXECUTIVE','CORPORATION_TREASURER'] WHEN 'TRANSFER_TO_RESERVE' THEN ARRAY['CITY_MAYOR','CORPORATION_EXECUTIVE','CORPORATION_TREASURER'] WHEN 'AUTHORIZE_GRANT' THEN ARRAY['CITY_MAYOR','CORPORATION_EXECUTIVE','CORPORATION_TREASURER'] WHEN 'CHANGE_TAX_RULE' THEN ARRAY['CITY_MAYOR','INFRASTRUCTURE_PLANNER','CORPORATION_EXECUTIVE','CORPORATION_TREASURER'] WHEN 'DECLARE_DIVIDEND' THEN ARRAY['CORPORATION_EXECUTIVE','CORPORATION_TREASURER'] ELSE ARRAY[]::TEXT[] END)) OR (upper(p_action) IN ('APPROVE_SPENDING','TRANSFER_TO_RESERVE') AND EXISTS (SELECT 1 FROM institution_governance_roles r WHERE r.institution_id = p_institution_id AND r.human_id = p_human_id AND r.role_code = 'RECEIVERSHIP_RECEIVER' AND r.status = 'ACTIVE'));
+END; $$;
+
+CREATE TABLE IF NOT EXISTS city_service_capacity_daily (
+  city_id TEXT NOT NULL REFERENCES cities(id) ON DELETE CASCADE,
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  housing_capacity BIGINT NOT NULL DEFAULT 0 CHECK (housing_capacity >= 0),
+  energy_capacity BIGINT NOT NULL DEFAULT 0 CHECK (energy_capacity >= 0),
+  connectivity_capacity BIGINT NOT NULL DEFAULT 0 CHECK (connectivity_capacity >= 0),
+  health_capacity BIGINT NOT NULL DEFAULT 0 CHECK (health_capacity >= 0),
+  service_demand BIGINT NOT NULL DEFAULT 0 CHECK (service_demand >= 0),
+  coverage_ratio NUMERIC(12,6) NOT NULL DEFAULT 0 CHECK (coverage_ratio >= 0 AND coverage_ratio <= 1),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (city_id, game_day)
+);
+CREATE INDEX IF NOT EXISTS city_service_capacity_daily_day_idx ON city_service_capacity_daily (game_day, city_id);
+
+CREATE OR REPLACE FUNCTION earth_refresh_city_service_capacity_daily(p_game_day BIGINT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE v_count INTEGER;
+BEGIN
+  INSERT INTO city_service_capacity_daily (city_id, game_day, housing_capacity, energy_capacity, connectivity_capacity, health_capacity, service_demand, coverage_ratio)
+  SELECT c.id, p_game_day,
+    COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'HOUSING' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0),
+    COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'ENERGY' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0),
+    COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'CONNECTIVITY' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0),
+    COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'HEALTH' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0),
+    GREATEST(0, c.residents),
+    CASE WHEN c.residents <= 0 THEN 1 ELSE LEAST(1, LEAST(COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'HOUSING' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0)::NUMERIC / c.residents, COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'ENERGY' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0)::NUMERIC / c.residents, COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'CONNECTIVITY' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0)::NUMERIC / c.residents, COALESCE(SUM(j.service_capacity_units) FILTER (WHERE upper(cat.service_type) = 'HEALTH' AND upper(j.status_after) IN ('ACTIVE', 'DEGRADED')), 0)::NUMERIC / c.residents)) END
+  FROM cities c LEFT JOIN building_settlement_journals j ON j.city_id = c.id AND j.day = p_game_day LEFT JOIN buildings b ON b.id = j.building_id LEFT JOIN building_catalog cat ON cat.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
+  GROUP BY c.id, c.residents
+  ON CONFLICT (city_id, game_day) DO UPDATE SET housing_capacity = EXCLUDED.housing_capacity, energy_capacity = EXCLUDED.energy_capacity, connectivity_capacity = EXCLUDED.connectivity_capacity, health_capacity = EXCLUDED.health_capacity, service_demand = EXCLUDED.service_demand, coverage_ratio = EXCLUDED.coverage_ratio, updated_at = CURRENT_TIMESTAMP;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END; $$;
+
+CREATE TABLE IF NOT EXISTS public_service_projects (
+  id TEXT PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  city_id TEXT NOT NULL REFERENCES cities(id),
+  provider_building_id TEXT NOT NULL REFERENCES buildings(id),
+  service_type TEXT NOT NULL CHECK (service_type IN ('HOUSING', 'ENERGY', 'CONNECTIVITY', 'HEALTH')),
+  budget_line_id BIGINT NOT NULL REFERENCES institution_budget_lines(id),
+  commitment_id BIGINT REFERENCES institution_budget_commitments(id),
+  recipient_account_id BIGINT REFERENCES economic_accounts(id),
+  authorized_units BIGINT NOT NULL DEFAULT 0 CHECK (authorized_units >= 0),
+  funded_units BIGINT NOT NULL DEFAULT 0 CHECK (funded_units >= 0 AND funded_units <= authorized_units),
+  status TEXT NOT NULL DEFAULT 'PROPOSED' CHECK (status IN ('PROPOSED', 'APPROVED', 'ACTIVE', 'COMPLETED', 'CANCELLED')),
+  rule_version TEXT NOT NULL,
+  created_game_day BIGINT NOT NULL CHECK (created_game_day >= 0),
+  completed_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (provider_building_id, service_type, budget_line_id)
+);
+CREATE INDEX IF NOT EXISTS public_service_projects_city_day_idx ON public_service_projects (city_id, status, created_game_day);
+
+CREATE OR REPLACE FUNCTION earth_create_public_service_project(p_id TEXT, p_institution_id TEXT, p_provider_building_id TEXT, p_service_type TEXT, p_budget_line_id BIGINT, p_authorized_units BIGINT, p_rule_version TEXT, p_created_game_day BIGINT)
+RETURNS public_service_projects LANGUAGE plpgsql AS $$
+DECLARE v_project public_service_projects; v_city_id TEXT; v_catalog_service_type TEXT; v_catalog_mode TEXT; v_category_code TEXT;
+BEGIN
+  IF p_authorized_units < 0 OR NULLIF(p_rule_version, '') IS NULL THEN RAISE EXCEPTION 'Invalid public service project terms'; END IF;
+  SELECT c.id INTO v_city_id FROM cities c WHERE c.id = p_institution_id AND c.institution_id = p_institution_id;
+  IF v_city_id IS NULL THEN RAISE EXCEPTION 'Institution % is not a city', p_institution_id; END IF;
+  SELECT b.city_id, upper(cat.service_type), upper(cat.service_mode) INTO v_city_id, v_catalog_service_type, v_catalog_mode FROM buildings b JOIN building_catalog cat ON cat.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.id = p_provider_building_id AND b.city_id = p_institution_id;
+  IF v_city_id IS NULL OR v_catalog_service_type <> upper(p_service_type) OR v_catalog_mode <> 'PUBLIC_CONTRACT' THEN RAISE EXCEPTION 'Building % is not a matching public service provider', p_provider_building_id; END IF;
+  SELECT bc.category_code INTO v_category_code FROM institution_budget_lines l JOIN budget_categories bc ON bc.id = l.category_id WHERE l.id = p_budget_line_id AND l.institution_id = p_institution_id FOR UPDATE;
+  IF v_category_code IS NULL OR (upper(p_service_type) = 'HEALTH' AND v_category_code NOT IN ('HEALTH', 'ESSENTIAL_SERVICES')) OR (upper(p_service_type) <> 'HEALTH' AND v_category_code <> upper(p_service_type)) THEN RAISE EXCEPTION 'Budget line % is not eligible for % service', p_budget_line_id, p_service_type; END IF;
+  INSERT INTO public_service_projects (id, institution_id, city_id, provider_building_id, service_type, budget_line_id, authorized_units, rule_version, created_game_day) VALUES (p_id, p_institution_id, p_institution_id, p_provider_building_id, upper(p_service_type), p_budget_line_id, p_authorized_units, p_rule_version, p_created_game_day) RETURNING * INTO v_project;
+  RETURN v_project;
+END; $$;
+
 CREATE UNLOGGED TABLE IF NOT EXISTS building_settlement_physical_effects (
   building_id TEXT NOT NULL REFERENCES buildings(id) ON DELETE CASCADE,
   game_day BIGINT NOT NULL,
@@ -1521,29 +1898,52 @@ CREATE TABLE IF NOT EXISTS house_affiliations (
 CREATE INDEX IF NOT EXISTS house_affiliations_city_idx ON house_affiliations(city_id, status);
 CREATE INDEX IF NOT EXISTS house_affiliations_corporation_idx ON house_affiliations(corporation_id, status);
 
-CREATE OR REPLACE FUNCTION earth_sync_house_affiliation()
-RETURNS TRIGGER LANGUAGE plpgsql AS $$
-DECLARE v_house_id TEXT;
+CREATE OR REPLACE FUNCTION earth_set_house_affiliation(p_house_id TEXT, p_city_id TEXT, p_corporation_id TEXT, p_joined_game_day BIGINT, p_rank INTEGER DEFAULT 0)
+RETURNS house_affiliations LANGUAGE plpgsql AS $$
+DECLARE v_result house_affiliations;
 BEGIN
-  IF TG_OP IN ('INSERT', 'UPDATE') THEN
-    SELECT house_id INTO v_house_id FROM humans WHERE id = NEW.human_id;
-    IF v_house_id IS NOT NULL THEN
-      INSERT INTO house_affiliations (house_id, city_id, corporation_id, joined_game_day, status)
-      VALUES (v_house_id, NEW.city_id, NEW.corporation_id, NEW.joined_game_day, 'ACTIVE')
-      ON CONFLICT (house_id) DO UPDATE SET city_id = EXCLUDED.city_id, corporation_id = EXCLUDED.corporation_id, status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP;
-    END IF;
-  ELSE
-    SELECT house_id INTO v_house_id FROM humans WHERE id = OLD.human_id;
-    IF v_house_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM memberships m JOIN humans h ON h.id = m.human_id WHERE h.house_id = v_house_id AND (m.city_id IS NOT NULL OR m.corporation_id IS NOT NULL)) THEN
-      UPDATE house_affiliations SET status = 'INACTIVE', updated_at = CURRENT_TIMESTAMP WHERE house_id = v_house_id;
-    END IF;
-  END IF;
-  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
-  RETURN NEW;
+  IF NOT EXISTS (SELECT 1 FROM houses WHERE id = p_house_id) THEN RAISE EXCEPTION 'House % does not exist', p_house_id; END IF;
+  IF p_city_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM cities WHERE id = p_city_id) THEN RAISE EXCEPTION 'City % does not exist', p_city_id; END IF;
+  IF p_corporation_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM corporations WHERE id = p_corporation_id) THEN RAISE EXCEPTION 'Corporation % does not exist', p_corporation_id; END IF;
+  INSERT INTO house_affiliations (house_id, city_id, corporation_id, joined_game_day, rank, status)
+  VALUES (p_house_id, p_city_id, p_corporation_id, p_joined_game_day, COALESCE(p_rank, 0), 'ACTIVE')
+  ON CONFLICT (house_id) DO UPDATE SET city_id = EXCLUDED.city_id, corporation_id = EXCLUDED.corporation_id, joined_game_day = EXCLUDED.joined_game_day, rank = EXCLUDED.rank, status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP
+  RETURNING * INTO v_result;
+  RETURN v_result;
 END;
 $$;
-DROP TRIGGER IF EXISTS memberships_house_affiliation_trigger ON memberships;
-CREATE TRIGGER memberships_house_affiliation_trigger AFTER INSERT OR UPDATE OF city_id, corporation_id, joined_game_day OR DELETE ON memberships FOR EACH ROW EXECUTE FUNCTION earth_sync_house_affiliation();
+CREATE OR REPLACE FUNCTION earth_project_house_affiliation_to_memberships(p_house_id TEXT)
+RETURNS VOID LANGUAGE plpgsql AS $$
+DECLARE v_human_id TEXT; v_affiliation house_affiliations;
+BEGIN
+  SELECT current_human_id INTO v_human_id FROM houses WHERE id = p_house_id FOR UPDATE;
+  SELECT * INTO v_affiliation FROM house_affiliations WHERE house_id = p_house_id AND status = 'ACTIVE';
+  IF v_human_id IS NULL OR v_affiliation.house_id IS NULL THEN RETURN; END IF;
+  DELETE FROM memberships m USING humans h WHERE m.human_id = h.id AND h.house_id = p_house_id AND m.human_id <> v_human_id;
+  INSERT INTO memberships (human_id, city_id, corporation_id, joined_game_day) VALUES (v_human_id, v_affiliation.city_id, v_affiliation.corporation_id, v_affiliation.joined_game_day)
+  ON CONFLICT (human_id) DO UPDATE SET city_id = EXCLUDED.city_id, corporation_id = EXCLUDED.corporation_id, joined_game_day = EXCLUDED.joined_game_day;
+END;
+$$;
+CREATE OR REPLACE VIEW house_membership_compatibility AS
+SELECT h.current_human_id AS human_id, a.house_id, a.city_id, a.corporation_id, a.joined_game_day, a.rank, a.status
+FROM houses h JOIN house_affiliations a ON a.house_id = h.id
+WHERE h.current_human_id IS NOT NULL AND a.status = 'ACTIVE';
+CREATE OR REPLACE VIEW city_population_summary AS
+SELECT c.id AS city_id, COUNT(a.house_id)::INTEGER AS active_house_count
+FROM cities c LEFT JOIN house_affiliations a ON a.city_id = c.id AND a.status = 'ACTIVE'
+GROUP BY c.id;
+CREATE OR REPLACE VIEW corporation_membership_summary AS
+SELECT c.id AS corporation_id, COUNT(a.house_id)::INTEGER AS active_house_count
+FROM corporations c LEFT JOIN house_affiliations a ON a.corporation_id = c.id AND a.status = 'ACTIVE'
+GROUP BY c.id;
+CREATE OR REPLACE FUNCTION earth_refresh_population_projections(p_corporation_id TEXT DEFAULT NULL, p_city_id TEXT DEFAULT NULL)
+RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE corporations c SET member_count = s.active_house_count FROM corporation_membership_summary s WHERE c.id = s.corporation_id AND (p_corporation_id IS NULL OR c.id = p_corporation_id);
+  UPDATE cities c SET residents = s.active_house_count FROM city_population_summary s WHERE c.id = s.city_id AND (p_city_id IS NULL OR c.id = p_city_id);
+END;
+$$;
+SELECT earth_refresh_population_projections();
 
 CREATE TABLE IF NOT EXISTS membership_events (
   id TEXT PRIMARY KEY,
@@ -1571,14 +1971,6 @@ CREATE TABLE IF NOT EXISTS corporation_membership_requests (
 );
 CREATE INDEX IF NOT EXISTS idx_corp_req_corp ON corporation_membership_requests(corporation_id, status);
 CREATE INDEX IF NOT EXISTS idx_corp_req_human ON corporation_membership_requests(human_id, status);
-
-CREATE TABLE IF NOT EXISTS budgets (
-  id TEXT PRIMARY KEY,
-  institution_id TEXT NOT NULL REFERENCES institutions(id),
-  category TEXT NOT NULL,
-  amount NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (amount >= 0),
-  game_day BIGINT NOT NULL
-);
 
 CREATE TABLE IF NOT EXISTS civic_dividend_payouts (
   id UUID PRIMARY KEY,
@@ -1723,6 +2115,18 @@ CREATE TABLE IF NOT EXISTS institution_financial_summary (
   debt_units BIGINT NOT NULL DEFAULT 0,
   tax_receivables_units BIGINT NOT NULL DEFAULT 0,
   distributable_surplus_units BIGINT NOT NULL DEFAULT 0,
+  period_revenue_units BIGINT NOT NULL DEFAULT 0,
+  period_spending_units BIGINT NOT NULL DEFAULT 0,
+  budget_authorized_units BIGINT NOT NULL DEFAULT 0,
+  budget_committed_units BIGINT NOT NULL DEFAULT 0,
+  budget_spent_units BIGINT NOT NULL DEFAULT 0,
+  arrears_units BIGINT NOT NULL DEFAULT 0,
+  mandatory_commitments_units BIGINT NOT NULL DEFAULT 0,
+  surplus_deficit_units BIGINT NOT NULL DEFAULT 0,
+  liquidity_days NUMERIC(20,4),
+  research_commitments_units BIGINT NOT NULL DEFAULT 0,
+  city_support_commitments_units BIGINT NOT NULL DEFAULT 0,
+  dividend_capacity_units BIGINT NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -3026,3 +3430,166 @@ CREATE TABLE IF NOT EXISTS earth_schema_migrations (
   applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   checksum TEXT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS institution_financial_events (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  game_day BIGINT NOT NULL,
+  event_type TEXT NOT NULL,
+  amount_units BIGINT NOT NULL DEFAULT 0 CHECK (amount_units >= 0),
+  budget_line_id BIGINT REFERENCES institution_budget_lines(id),
+  economic_transaction_id BIGINT REFERENCES economic_transactions(id),
+  source_id TEXT,
+  actor_human_id TEXT REFERENCES humans(id),
+  proposal_id TEXT,
+  correlation_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (institution_id, event_type, correlation_id)
+);
+CREATE INDEX IF NOT EXISTS institution_financial_events_timeline_idx ON institution_financial_events(institution_id, game_day DESC, id DESC);
+CREATE INDEX IF NOT EXISTS institution_financial_events_transaction_idx ON institution_financial_events(economic_transaction_id);
+CREATE OR REPLACE FUNCTION earth_record_institution_financial_event(p_institution_id TEXT, p_game_day BIGINT, p_event_type TEXT, p_amount_units BIGINT DEFAULT 0, p_budget_line_id BIGINT DEFAULT NULL, p_economic_transaction_id BIGINT DEFAULT NULL, p_source_id TEXT DEFAULT NULL, p_actor_human_id TEXT DEFAULT NULL, p_proposal_id TEXT DEFAULT NULL, p_correlation_id TEXT DEFAULT NULL)
+RETURNS BIGINT LANGUAGE SQL AS $$
+  INSERT INTO institution_financial_events (institution_id, game_day, event_type, amount_units, budget_line_id, economic_transaction_id, source_id, actor_human_id, proposal_id, correlation_id)
+  VALUES ($1,$2,$3,COALESCE($4,0),$5,$6,$7,$8,$9,COALESCE($10, format('%s:%s:%s', $1, $3, $2)))
+  ON CONFLICT (institution_id, event_type, correlation_id) DO UPDATE SET amount_units = EXCLUDED.amount_units
+  RETURNING id;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_apply_financial_budget_policy(p_institution_id TEXT, p_status TEXT)
+RETURNS VOID LANGUAGE SQL AS $$
+  UPDATE institution_budget_lines l
+     SET status = CASE
+       WHEN c.spending_class = 'DISCRETIONARY' AND lower(p_status) IN ('distressed','fiscal_stress','receivership','restructuring','insolvent','liquidation','recovery') THEN 'FROZEN'
+       WHEN c.spending_class = 'MANDATORY' AND l.status = 'FROZEN' THEN 'ACTIVE'
+       ELSE l.status
+     END, updated_at = CURRENT_TIMESTAMP
+    FROM budget_categories c
+   WHERE l.category_id = c.id AND l.institution_id = p_institution_id;
+$$;
+CREATE OR REPLACE FUNCTION earth_financial_state_budget_policy()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF TG_OP = 'INSERT' OR NEW.status IS DISTINCT FROM OLD.status THEN
+    PERFORM earth_apply_financial_budget_policy(NEW.institution_id, NEW.status);
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS financial_states_budget_policy_trigger ON financial_states;
+CREATE TRIGGER financial_states_budget_policy_trigger AFTER INSERT OR UPDATE OF status ON financial_states
+FOR EACH ROW EXECUTE FUNCTION earth_financial_state_budget_policy();
+SELECT earth_apply_financial_budget_policy(institution_id, status) FROM financial_states;
+
+CREATE OR REPLACE FUNCTION earth_set_budget_commitment_priority()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  SELECT c.priority INTO NEW.priority_class FROM institution_budget_lines l JOIN budget_categories c ON c.id = l.category_id WHERE l.id = NEW.budget_line_id;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS institution_budget_commitment_priority_trigger ON institution_budget_commitments;
+CREATE TRIGGER institution_budget_commitment_priority_trigger BEFORE INSERT OR UPDATE OF budget_line_id ON institution_budget_commitments
+FOR EACH ROW EXECUTE FUNCTION earth_set_budget_commitment_priority();
+
+-- Finance V2 Plan 31: institutional financial projection refresh.
+CREATE OR REPLACE FUNCTION earth_refresh_daily_financial_projections(p_game_day BIGINT)
+RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+  INSERT INTO institution_financial_summary (institution_id, institution_kind, game_day, treasury_units, operations_units, reserve_units)
+  SELECT i.id, i.kind, p_game_day,
+    COALESCE(SUM(a.balance) FILTER (WHERE a.asset_id = 1 AND a.account_type = 3), 0),
+    COALESCE(SUM(a.balance) FILTER (WHERE a.asset_id = 1 AND a.account_type = 4), 0),
+    COALESCE(SUM(a.balance) FILTER (WHERE a.asset_id = 1 AND a.account_type = 5), 0)
+  FROM institutions i JOIN owner_registry o ON o.id = i.id
+  LEFT JOIN economic_accounts a ON a.owner_economic_id = o.economic_id AND a.status = 'active'
+  WHERE i.status = 'active'
+  GROUP BY i.id, i.kind
+  ON CONFLICT (institution_id) DO UPDATE SET institution_kind = EXCLUDED.institution_kind, game_day = EXCLUDED.game_day,
+    treasury_units = EXCLUDED.treasury_units, operations_units = EXCLUDED.operations_units, reserve_units = EXCLUDED.reserve_units,
+    updated_at = CURRENT_TIMESTAMP;
+  PERFORM earth_refresh_institution_financial_projection_fields(p_game_day);
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION earth_refresh_institution_financial_projection_fields(p_game_day BIGINT)
+RETURNS VOID LANGUAGE SQL AS $$
+WITH period AS (
+  SELECT id, end_game_day FROM fiscal_periods
+  WHERE p_game_day BETWEEN start_game_day AND end_game_day
+  ORDER BY start_game_day DESC LIMIT 1
+), metrics AS (
+  SELECT i.id AS institution_id,
+    COALESCE((SELECT SUM(r.taxes_received + r.service_revenue + r.grants_received + r.license_income + r.other_income) FROM institution_revenue_summary r, period p WHERE r.institution_id = i.id AND r.fiscal_period_id = p.id), 0) AS revenue,
+    COALESCE((SELECT SUM(l.spent_units) FROM institution_budget_lines l, period p WHERE l.institution_id = i.id AND l.fiscal_period_id = p.id), 0) AS spending,
+    COALESCE((SELECT SUM(l.authorized_units) FROM institution_budget_lines l, period p WHERE l.institution_id = i.id AND l.fiscal_period_id = p.id), 0) AS authorized,
+    COALESCE((SELECT SUM(l.committed_units) FROM institution_budget_lines l, period p WHERE l.institution_id = i.id AND l.fiscal_period_id = p.id), 0) AS committed,
+    COALESCE((SELECT SUM(l.spent_units) FROM institution_budget_lines l, period p WHERE l.institution_id = i.id AND l.fiscal_period_id = p.id), 0) AS spent,
+    COALESCE((SELECT SUM(c.remaining_units) FROM institution_budget_commitments c JOIN institution_budget_lines l ON l.id = c.budget_line_id JOIN budget_categories bc ON bc.id = l.category_id WHERE c.institution_id = i.id AND c.status IN ('ACTIVE','PARTIALLY_PAID') AND bc.mandatory), 0) AS mandatory,
+    COALESCE((SELECT SUM(c.remaining_units) FROM institution_budget_commitments c JOIN institution_budget_lines l ON l.id = c.budget_line_id JOIN budget_categories bc ON bc.id = l.category_id WHERE c.institution_id = i.id AND c.status IN ('ACTIVE','PARTIALLY_PAID') AND bc.category_code = 'RESEARCH'), 0) AS research,
+    COALESCE((SELECT SUM(c.remaining_units) FROM institution_budget_commitments c JOIN institution_budget_lines l ON l.id = c.budget_line_id JOIN budget_categories bc ON bc.id = l.category_id WHERE c.institution_id = i.id AND c.status IN ('ACTIVE','PARTIALLY_PAID') AND bc.category_code = 'CITY_SUPPORT'), 0) AS city_support,
+    COALESCE((SELECT SUM(t.amount_units) FROM tax_obligations t WHERE t.taxpayer_economic_id = o.economic_id AND t.status IN ('ARREARS','PARTIAL')), 0) AS arrears,
+    COALESCE((SELECT SUM(t.amount_units) FROM tax_obligations t WHERE t.beneficiary_economic_id = o.economic_id AND t.status IN ('DUE','PARTIAL','ARREARS')), 0) AS receivables,
+    COALESCE((SELECT end_game_day FROM period), p_game_day) AS period_end
+  FROM institutions i JOIN owner_registry o ON o.id = i.id
+)
+UPDATE institution_financial_summary s SET
+  period_revenue_units = m.revenue, period_spending_units = m.spending,
+  budget_authorized_units = m.authorized, budget_committed_units = m.committed, budget_spent_units = m.spent,
+  arrears_units = m.arrears, mandatory_commitments_units = m.mandatory,
+  surplus_deficit_units = m.revenue - m.spending,
+  tax_receivables_units = m.receivables,
+  liquidity_days = CASE WHEN m.mandatory > 0 THEN ROUND((s.treasury_units + s.operations_units + s.reserve_units)::NUMERIC / (m.mandatory::NUMERIC / GREATEST(1, m.period_end - p_game_day + 1)), 4) ELSE NULL END,
+  research_commitments_units = m.research, city_support_commitments_units = m.city_support,
+  dividend_capacity_units = CASE WHEN s.institution_kind = 'CORPORATION' THEN earth_corporation_distributable_surplus(s.institution_id, p_game_day) ELSE 0 END,
+  updated_at = CURRENT_TIMESTAMP
+FROM metrics m WHERE s.institution_id = m.institution_id;
+$$;
+
+CREATE OR REPLACE VIEW institution_financial_projections AS
+SELECT s.institution_id, s.institution_kind, s.game_day,
+  s.treasury_units AS cash_treasury_units, s.operations_units AS cash_operations_units, s.reserve_units AS cash_reserve_units,
+  s.period_revenue_units, s.period_spending_units, s.budget_authorized_units, s.budget_committed_units, s.budget_spent_units,
+  s.tax_receivables_units AS tax_receivable_units, s.arrears_units, s.mandatory_commitments_units, s.surplus_deficit_units,
+  s.liquidity_days, COALESCE(fs.status, 'active') AS financial_state,
+  s.distributable_surplus_units, s.research_commitments_units, s.city_support_commitments_units, s.dividend_capacity_units,
+  s.updated_at
+FROM institution_financial_summary s LEFT JOIN financial_states fs ON fs.institution_id = s.institution_id;
+
+CREATE INDEX IF NOT EXISTS institution_financial_summary_game_day_idx ON institution_financial_summary(game_day, institution_kind);
+
+CREATE OR REPLACE FUNCTION earth_reject_receivership_discretionary_commitment()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE v_status TEXT; v_spending_class TEXT;
+BEGIN
+  SELECT fs.status, bc.spending_class INTO v_status, v_spending_class
+  FROM institution_budget_lines l JOIN budget_categories bc ON bc.id = l.category_id
+  LEFT JOIN financial_states fs ON fs.institution_id = l.institution_id
+  WHERE l.id = NEW.budget_line_id;
+  IF lower(COALESCE(v_status, '')) = 'receivership' AND v_spending_class = 'DISCRETIONARY' THEN
+    RAISE EXCEPTION 'Receivership City cannot create discretionary budget commitments';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS institution_budget_commitments_receivership_trigger ON institution_budget_commitments;
+CREATE TRIGGER institution_budget_commitments_receivership_trigger BEFORE INSERT ON institution_budget_commitments
+FOR EACH ROW EXECUTE FUNCTION earth_reject_receivership_discretionary_commitment();
+
+ALTER FUNCTION earth_integrity_report() RENAME TO earth_integrity_report_base;
+CREATE OR REPLACE FUNCTION earth_integrity_report()
+RETURNS TABLE(check_name TEXT, invalid_count BIGINT) LANGUAGE SQL AS $$
+  SELECT * FROM earth_integrity_report_base()
+  UNION ALL SELECT 'budget_authority_exceeded', COUNT(*) FROM institution_budget_lines WHERE authorized_units < committed_units + spent_units
+  UNION ALL SELECT 'negative_budget_units', COUNT(*) FROM institution_budget_lines WHERE authorized_units < 0 OR committed_units < 0 OR spent_units < 0
+  UNION ALL SELECT 'negative_commitment_remaining', COUNT(*) FROM institution_budget_commitments WHERE remaining_units < 0
+  UNION ALL SELECT 'commitment_remaining_exceeds_original', COUNT(*) FROM institution_budget_commitments WHERE remaining_units > original_units
+  UNION ALL SELECT 'spending_event_without_economic_transaction', COUNT(*) FROM institution_financial_events WHERE event_type = 'SPENDING' AND economic_transaction_id IS NULL
+  UNION ALL SELECT 'spending_event_without_budget_category', COUNT(*) FROM institution_financial_events e LEFT JOIN institution_budget_lines l ON l.id = e.budget_line_id WHERE e.event_type = 'SPENDING' AND l.id IS NULL
+  UNION ALL SELECT 'institution_spending_without_financial_event', COUNT(*) FROM institution_spending_journals j LEFT JOIN institution_financial_events e ON e.institution_id = j.institution_id AND e.event_type = 'SPENDING' AND e.economic_transaction_id = j.economic_transaction_id WHERE e.id IS NULL
+  UNION ALL SELECT 'institution_transaction_without_financial_event', COUNT(*) FROM economic_transactions t LEFT JOIN institution_financial_events e ON e.economic_transaction_id = t.id WHERE t.rules_version = 'institution-budget-v2' AND e.id IS NULL
+  UNION ALL SELECT 'grant_received_counted_as_spending', COUNT(*) FROM institution_financial_events e JOIN institution_spending_journals j ON j.institution_id = e.institution_id AND j.economic_transaction_id = e.economic_transaction_id WHERE e.event_type = 'GRANT_RECEIVED'
+  UNION ALL SELECT 'dissolved_corporation_active_commitment', COUNT(*) FROM institution_budget_commitments c JOIN institutions i ON i.id = c.institution_id WHERE i.kind = 'CORPORATION' AND i.status = 'dissolved' AND c.status IN ('ACTIVE','PARTIALLY_PAID')
+  UNION ALL SELECT 'receivership_discretionary_commitment', COUNT(*) FROM institution_budget_commitments c JOIN institution_budget_lines l ON l.id = c.budget_line_id JOIN budget_categories bc ON bc.id = l.category_id JOIN financial_states fs ON fs.institution_id = c.institution_id WHERE fs.status = 'receivership' AND bc.spending_class = 'DISCRETIONARY' AND c.status IN ('ACTIVE','PARTIALLY_PAID')
+  UNION ALL SELECT 'reserve_transfer_unbalanced', COUNT(*) FROM (SELECT t.id FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id WHERE t.transaction_kind = 'RESERVE_TRANSFER' GROUP BY t.id HAVING COUNT(*) < 2 OR SUM(e.delta) <> 0) x;
+$$;

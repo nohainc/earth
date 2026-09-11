@@ -27,6 +27,9 @@ export type DailySettlementPhaseHandlers = {
   cityCorporateIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
   globalBank: (context: DailySettlementPhaseContext) => Promise<unknown>;
   bankHealth: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  mandatoryBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  scheduledBudgetPayments: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  cityServiceProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
   cityDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
   budgetDividendEligibility: (context: DailySettlementPhaseContext) => Promise<unknown>;
   patentExpirations: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -56,8 +59,11 @@ export function createDailySettlementPhaseRegistry(
     { id: 'city_corporate_income_tax', order: 90, shardMode: 'all', execute: handlers.cityCorporateIncomeTax },
     { id: 'global_bank', order: 100, shardMode: 'all', execute: handlers.globalBank },
     { id: 'bank_health', order: 110, shardMode: 'all', execute: handlers.bankHealth },
-    { id: 'life_maintenance', order: 115, shardMode: 'all', execute: handlers.lifeMaintenance },
-    { id: 'city_dynamics', order: 120, shardMode: 'all', execute: handlers.cityDynamics },
+    { id: 'mandatory_budget_payments', order: 115, shardMode: 'all', execute: handlers.mandatoryBudgetPayments },
+    { id: 'scheduled_budget_payments', order: 116, shardMode: 'all', execute: handlers.scheduledBudgetPayments },
+    { id: 'life_maintenance', order: 118, shardMode: 'all', execute: handlers.lifeMaintenance },
+    { id: 'city_service_projections', order: 120, shardMode: 'all', execute: handlers.cityServiceProjections },
+    { id: 'city_dynamics', order: 125, shardMode: 'all', execute: handlers.cityDynamics },
     { id: 'research_and_progress', order: 126, shardMode: 'all', execute: handlers.researchAndProgress },
     { id: 'budget_dividend_eligibility', order: 130, shardMode: 'all', execute: handlers.budgetDividendEligibility },
     { id: 'financial_states', order: 140, shardMode: 'all', execute: handlers.financialStates },

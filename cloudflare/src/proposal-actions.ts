@@ -14,6 +14,33 @@ export interface ProposalActionHandler {
   validateExecution(context: ProposalActionContext): Promise<void>;
 }
 
+const FINANCIAL_ACTIONS = new Set([
+  'APPROVE_BUDGET', 'AMEND_BUDGET', 'AUTHORIZE_MAJOR_PROJECT', 'AUTHORIZE_GRANT',
+  'CHANGE_TAX_CHARTER', 'TRANSFER_RESERVE', 'DECLARE_DIVIDEND', 'APPROVE_BAILOUT',
+]);
+
+function financialSnapshotValue(action: Record<string, unknown>, key: string): unknown {
+  if (action[key] !== undefined) return action[key];
+  const target = action.targetValue;
+  return target && typeof target === 'object' ? (target as Record<string, unknown>)[key] : undefined;
+}
+
+const financialHandler: ProposalActionHandler = {
+  actionType: 'financial',
+  version: 1,
+  validateCreation: (action) => {
+    const actionType = String(action.actionType ?? '');
+    if (!FINANCIAL_ACTIONS.has(actionType)) throw new Error(`Unsupported financial proposal action: ${actionType}`);
+    if (!financialSnapshotValue(action, 'categoryCode') && ['APPROVE_BUDGET', 'AMEND_BUDGET'].includes(actionType)) throw new Error(`${actionType} requires a category snapshot`);
+    if (financialSnapshotValue(action, 'amountUnits') === undefined && ['AUTHORIZE_MAJOR_PROJECT', 'AUTHORIZE_GRANT', 'TRANSFER_RESERVE', 'DECLARE_DIVIDEND', 'APPROVE_BAILOUT'].includes(actionType)) throw new Error(`${actionType} requires an amount snapshot`);
+  },
+  validateExecution: async ({ action }) => {
+    const actionType = String(action.actionType ?? '');
+    const amount = financialSnapshotValue(action, 'amountUnits');
+    if (amount !== undefined && (typeof amount !== 'string' && typeof amount !== 'number' || BigInt(String(amount)) < 0n)) throw new Error(`${actionType} amount must be a non-negative integer`);
+  },
+};
+
 const genericHandler: ProposalActionHandler = {
   actionType: 'generic',
   version: 1,
@@ -55,6 +82,7 @@ const handlers = new Map<string, ProposalActionHandler>([
   [constructCivicBuildingHandler.actionType, constructCivicBuildingHandler],
   [startResearchHandler.actionType, startResearchHandler],
   [amendRuleHandler.actionType, amendRuleHandler],
+  ...Array.from(FINANCIAL_ACTIONS, (actionType) => [actionType, financialHandler] as const),
 ]);
 
 export function proposalActionHandler(actionType: unknown): ProposalActionHandler {
@@ -65,4 +93,8 @@ export function validateProposalActionSnapshot(action: Record<string, unknown>):
   const handler = proposalActionHandler(action.actionType);
   handler.validateCreation(action);
   return handler;
+}
+
+export function isFinancialProposalAction(actionType: unknown): boolean {
+  return FINANCIAL_ACTIONS.has(String(actionType ?? ''));
 }

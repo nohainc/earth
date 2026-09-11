@@ -176,6 +176,7 @@ test('leaving a corporation also clears the affiliated city', async () => {
 
 test('corporation executives can update the corporation tax charter', async () => {
   const client = new MockDbClient({
+    'SELECT EXISTS (': { rows: [{ allowed: true }], rowCount: 1 },
     'SELECT id FROM institutions': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
@@ -193,6 +194,7 @@ test('corporation executives can update the corporation tax charter', async () =
 
 test('corporation executives can adopt an unclaimed city', async () => {
   const client = new MockDbClient({
+    'SELECT EXISTS (': { rows: [{ allowed: true }], rowCount: 1 },
     'SELECT id FROM institutions': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT id FROM corporations': { rows: [{ id: 'CORP-01' }], rowCount: 1 },
     'SELECT cities.id, cities.corporation_id, corporations.admission_policy FROM cities': { rows: [{ id: 'CITY-02', corporation_id: null }], rowCount: 1 },
