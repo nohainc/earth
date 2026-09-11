@@ -1,23 +1,32 @@
 import type { PostgresRepository } from './repository.ts';
+import { moneyToCents, centsToMoney } from './money.ts';
 export async function listBankDeposits(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
   const deposits = await repository.query(
-    `SELECT id, principal, daily_rate, accrued_interest, start_game_day, start_game_minute,
-            maturity_game_day, maturity_game_minute,
-            last_settled_game_day, status, created_at
-       FROM global_bank_deposits WHERE human_id = $1 ORDER BY created_at DESC`,
+    `SELECT d.id, d.principal_units, d.accrued_interest_units, d.rate_bps,
+            d.rate_rule_version, d.start_total_game_minute, d.maturity_total_game_minute,
+            d.status, d.created_transaction_id, d.payout_transaction_id, d.correlation_id, d.created_at
+       FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
+      WHERE o.id = $1 ORDER BY d.created_at DESC`,
     [humanId],
   );
-  return { deposits: deposits.rows };
+  return { deposits: deposits.rows.map((row) => ({
+    ...row,
+    principal: centsToMoney(BigInt(String(row.principal_units))),
+    accruedInterest: centsToMoney(BigInt(String(row.accrued_interest_units))),
+    rateBps: row.rate_bps,
+    startTotalGameMinute: row.start_total_game_minute,
+    maturityTotalGameMinute: row.maturity_total_game_minute,
+  })) };
 }
 
 export async function createBankDeposit(repository: PostgresRepository, input: { humanId: string; amount: number; termDays: number; correlationId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
     const id = `DEP-${input.correlationId}`;
     const result = await tx.query(
-      'SELECT * FROM earth_create_bank_deposit($1, $2, $3, $4, $5)',
-      [id, input.humanId, input.amount, input.termDays, input.correlationId],
+      'SELECT * FROM earth_create_v2_bank_deposit($1, $2, $3, $4, $5)',
+      [id, input.humanId, moneyToCents(input.amount).toString(), input.termDays, input.correlationId],
     );
-    return { ok: true, deposit: result.rows[0] };
+    return { ok: true, deposit: result.rows[0], alreadyProcessed: false };
   });
 }
 

@@ -25,12 +25,15 @@ export type DailySettlementPhaseHandlers = {
   buildingPatentLicenses: (context: DailySettlementPhaseContext) => Promise<unknown>;
   cityCorporateIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
   globalBank: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  bankHealth: (context: DailySettlementPhaseContext) => Promise<unknown>;
   cityDynamics: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  budgetDividendEligibility: (context: DailySettlementPhaseContext) => Promise<unknown>;
   patentExpirations: (context: DailySettlementPhaseContext) => Promise<unknown>;
   researchAndProgress: (context: DailySettlementPhaseContext) => Promise<unknown>;
   lifecycle: (context: DailySettlementPhaseContext) => Promise<unknown>;
   financialStates: (context: DailySettlementPhaseContext) => Promise<unknown>;
   institutionDissolution: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  financialProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
   rankingsSnapshot: (context: DailySettlementPhaseContext) => Promise<unknown>;
   endOfDaySnapshots: (context: DailySettlementPhaseContext) => Promise<unknown>;
 };
@@ -49,12 +52,15 @@ export function createDailySettlementPhaseRegistry(
     { id: 'building_patent_licenses', order: 70, shardMode: 'all', execute: handlers.buildingPatentLicenses },
     { id: 'city_corporate_income_tax', order: 80, shardMode: 'all', execute: handlers.cityCorporateIncomeTax },
     { id: 'global_bank', order: 90, shardMode: 'all', execute: handlers.globalBank },
-    { id: 'city_dynamics', order: 100, shardMode: 'all', execute: handlers.cityDynamics },
-    { id: 'patent_expirations', order: 105, shardMode: 'all', execute: handlers.patentExpirations },
-    { id: 'research_and_progress', order: 110, shardMode: 'all', execute: handlers.researchAndProgress },
-    { id: 'lifecycle', order: 120, shardMode: 'all', execute: handlers.lifecycle },
+    { id: 'bank_health', order: 100, shardMode: 'all', execute: handlers.bankHealth },
+    { id: 'city_dynamics', order: 110, shardMode: 'all', execute: handlers.cityDynamics },
+    { id: 'patent_expirations', order: 115, shardMode: 'all', execute: handlers.patentExpirations },
+    { id: 'research_and_progress', order: 116, shardMode: 'all', execute: handlers.researchAndProgress },
+    { id: 'budget_dividend_eligibility', order: 120, shardMode: 'all', execute: handlers.budgetDividendEligibility },
+    { id: 'lifecycle', order: 125, shardMode: 'all', execute: handlers.lifecycle },
     { id: 'financial_states', order: 130, shardMode: 'all', execute: handlers.financialStates },
     { id: 'institution_dissolution', order: 140, shardMode: 'all', execute: handlers.institutionDissolution },
+    { id: 'financial_projections', order: 145, shardMode: 'all', execute: handlers.financialProjections },
     { id: 'rankings_snapshot', order: 150, shardMode: 'all', execute: handlers.rankingsSnapshot },
     { id: 'end_of_day_snapshots', order: 160, shardMode: 'all', execute: handlers.endOfDaySnapshots },
   ];

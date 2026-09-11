@@ -7,6 +7,11 @@ class FakeRepository {
 
   async query(sql, params) {
     this.calls.push({ sql, params });
+    if (sql.includes('economic_account_migrations')) return { rows: [
+      { legacy_account_id: input.debitAccount, economic_account_id: '101' },
+      { legacy_account_id: input.creditAccount, economic_account_id: '102' },
+    ] };
+    if (sql.includes('earth_post_transaction')) return { rows: this.row ? [{ transaction_id: input.ledgerId, created: this.row.already_processed !== true }] : [] };
     return { rows: this.row ? [this.row] : [] };
   }
 }
@@ -39,18 +44,7 @@ test('financial adapter delegates one atomic transfer and maps PostgreSQL result
     amount: '12.34',
     alreadyProcessed: false,
   });
-  assert.match(repository.calls[0].sql, /earth_transfer_credits/);
-  assert.deepEqual(repository.calls[0].params, [
-    input.ledgerId,
-    input.gameDay,
-    input.debitAccount,
-    input.creditAccount,
-    input.amount,
-    input.reasonType,
-    input.reasonId,
-    input.ruleVersion,
-    input.correlationId,
-  ]);
+  assert.match(repository.calls[1].sql, /earth_post_transaction/);
 });
 
 test('financial adapter preserves idempotent replay result', async () => {
@@ -68,4 +62,9 @@ test('financial adapter preserves idempotent replay result', async () => {
 
 test('financial adapter fails closed when the database returns no result', async () => {
   await assert.rejects(() => transferCredits(new FakeRepository(null), input), /returned no result/);
+});
+
+test('financial adapter has no legacy transfer fallback', async () => {
+  const source = await import('node:fs/promises').then((fs) => fs.readFile(new URL('../cloudflare/src/financial-postgres.ts', import.meta.url), 'utf8'));
+  assert.doesNotMatch(source, /earth_transfer_credits|await transferCredits\(repository, input\)/);
 });

@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 210.
+-- Canonical fresh-install schema, reconciled through migration 232.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -342,7 +342,10 @@ INSERT INTO economic_account_types (id, code, allows_negative, is_system_type, d
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO owner_registry (id, owner_type, source_id, economic_id)
-VALUES ('SYSTEM', 'system', 'SYSTEM', 2), ('OUC', 'system', 'OUC', 1)
+VALUES ('SYSTEM', 'system', 'SYSTEM', 2), ('OUC', 'system', 'OUC', 1),
+       ('SYSTEM-MONETARY-AUTHORITY', 'system', 'SYSTEM-MONETARY-AUTHORITY', DEFAULT),
+       ('SYSTEM-MONETARY-RETIREMENT', 'system', 'SYSTEM-MONETARY-RETIREMENT', DEFAULT),
+       ('SYSTEM-GLOBAL-BANK', 'system', 'SYSTEM-GLOBAL-BANK', DEFAULT)
 ON CONFLICT (id) DO NOTHING;
 INSERT INTO owner_registry (id, owner_type, source_id)
 SELECT id, 'human', id FROM humans
@@ -377,13 +380,69 @@ CREATE INDEX IF NOT EXISTS ledger_entries_correlation_idx ON ledger_entries(corr
 CREATE TABLE IF NOT EXISTS financial_states (
   institution_id TEXT PRIMARY KEY,
   institution_kind TEXT NOT NULL CHECK (institution_kind IN ('CITY','CORPORATION')),
-  status TEXT NOT NULL CHECK (status IN ('active','distressed','insolvent','bankrupt','dissolved')),
+  status TEXT NOT NULL CHECK (status IN ('active','distressed','fiscal_stress','receivership','recovery','restructuring','insolvent','liquidation','bankrupt','dissolved')),
   since_game_day BIGINT NOT NULL,
   recovery_game_day BIGINT,
   last_reason TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS financial_states_status_idx ON financial_states(status, institution_kind);
+
+CREATE TABLE IF NOT EXISTS city_fiscal_proceedings (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  city_id TEXT NOT NULL REFERENCES cities(id),
+  debtor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  status TEXT NOT NULL CHECK (status IN ('FISCAL_STRESS','RECEIVERSHIP','RECOVERY','ACTIVE','FAILED')),
+  opened_game_day BIGINT NOT NULL,
+  recovery_game_day BIGINT,
+  resolved_game_day BIGINT,
+  due_obligations_units BIGINT NOT NULL DEFAULT 0,
+  treasury_units BIGINT NOT NULL DEFAULT 0,
+  recovery_plan JSONB NOT NULL DEFAULT '{}'::JSONB,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (city_id, status)
+);
+
+CREATE TABLE IF NOT EXISTS corporation_insolvency_proceedings (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  debtor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  status TEXT NOT NULL CHECK (status IN ('RESTRUCTURING','INSOLVENT','LIQUIDATION','DISSOLVED','FAILED')),
+  opened_game_day BIGINT NOT NULL,
+  liquidation_game_day BIGINT,
+  resolved_game_day BIGINT,
+  liabilities_units BIGINT NOT NULL DEFAULT 0,
+  estate_value_units BIGINT NOT NULL DEFAULT 0,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (institution_id, status)
+);
+
+CREATE TABLE IF NOT EXISTS corporation_estate_assets (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  proceeding_id BIGINT NOT NULL REFERENCES corporation_insolvency_proceedings(id) ON DELETE CASCADE,
+  account_id BIGINT,
+  asset_id SMALLINT,
+  asset_units BIGINT NOT NULL DEFAULT 0,
+  liquidation_value_units BIGINT NOT NULL DEFAULT 0,
+  source_kind TEXT NOT NULL CHECK (source_kind IN ('economic_account','building','resource')),
+  source_id TEXT NOT NULL,
+  UNIQUE (proceeding_id, source_kind, source_id)
+);
+
+CREATE TABLE IF NOT EXISTS corporation_creditor_claims (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  proceeding_id BIGINT NOT NULL REFERENCES corporation_insolvency_proceedings(id) ON DELETE CASCADE,
+  creditor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  obligation_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  priority SMALLINT NOT NULL,
+  amount_units BIGINT NOT NULL DEFAULT 0,
+  paid_units BIGINT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'DUE' CHECK (status IN ('DUE','PARTIAL','PAID','WRITTEN_OFF')),
+  UNIQUE (proceeding_id, obligation_type, source_id)
+);
 
 CREATE TABLE IF NOT EXISTS bankruptcy_events (
   id TEXT PRIMARY KEY,
@@ -400,13 +459,55 @@ CREATE UNIQUE INDEX IF NOT EXISTS bankruptcy_events_correlation_idx ON bankruptc
 
 CREATE TABLE IF NOT EXISTS personal_financial_states (
   human_id TEXT PRIMARY KEY REFERENCES humans(id),
-  status TEXT NOT NULL CHECK (status IN ('active','distressed','insolvent','bankrupt')),
+  status TEXT NOT NULL CHECK (status IN ('active','distressed','insolvent','insolvency_proceeding','bankrupt')),
   since_game_day BIGINT NOT NULL,
   protected_credits NUMERIC(20,2) NOT NULL DEFAULT 100,
   last_reason TEXT NOT NULL DEFAULT '',
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS personal_financial_status_idx ON personal_financial_states(status, since_game_day);
+
+CREATE TABLE IF NOT EXISTS bankruptcy_proceedings (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  debtor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  human_id TEXT NOT NULL REFERENCES humans(id),
+  status TEXT NOT NULL CHECK (status IN ('OPEN', 'FROZEN', 'RESOLVED', 'FAILED')),
+  opened_game_day BIGINT NOT NULL,
+  resolved_game_day BIGINT,
+  due_obligations_units BIGINT NOT NULL DEFAULT 0,
+  liabilities_units BIGINT NOT NULL DEFAULT 0,
+  realizable_assets_units BIGINT NOT NULL DEFAULT 0,
+  liquid_assets_units BIGINT NOT NULL DEFAULT 0,
+  estate_value_units BIGINT NOT NULL DEFAULT 0,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bankruptcy_estate_assets (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  proceeding_id BIGINT NOT NULL REFERENCES bankruptcy_proceedings(id) ON DELETE CASCADE,
+  account_id BIGINT,
+  asset_id SMALLINT,
+  asset_units BIGINT NOT NULL DEFAULT 0,
+  liquidation_value_units BIGINT NOT NULL DEFAULT 0,
+  protected BOOLEAN NOT NULL DEFAULT FALSE,
+  source_kind TEXT NOT NULL CHECK (source_kind IN ('economic_account', 'building', 'resource')),
+  source_id TEXT NOT NULL,
+  UNIQUE (proceeding_id, source_kind, source_id)
+);
+
+CREATE TABLE IF NOT EXISTS bankruptcy_claims (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  proceeding_id BIGINT NOT NULL REFERENCES bankruptcy_proceedings(id) ON DELETE CASCADE,
+  creditor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  obligation_type TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  priority SMALLINT NOT NULL,
+  amount_units BIGINT NOT NULL DEFAULT 0 CHECK (amount_units >= 0),
+  paid_units BIGINT NOT NULL DEFAULT 0 CHECK (paid_units >= 0 AND paid_units <= amount_units),
+  status TEXT NOT NULL DEFAULT 'DUE' CHECK (status IN ('DUE', 'PARTIAL', 'PAID', 'WRITTEN_OFF')),
+  UNIQUE (proceeding_id, obligation_type, source_id)
+);
 
 CREATE TABLE IF NOT EXISTS tax_rules (
   id TEXT PRIMARY KEY,
@@ -415,6 +516,55 @@ CREATE TABLE IF NOT EXISTS tax_rules (
   rate NUMERIC(10,6) NOT NULL CHECK (rate >= 0 AND rate <= 1),
   active BOOLEAN NOT NULL DEFAULT TRUE,
   version INTEGER NOT NULL DEFAULT 1
+);
+
+CREATE TABLE IF NOT EXISTS tax_rule_versions (
+  id TEXT PRIMARY KEY,
+  tax_rule_id TEXT NOT NULL REFERENCES tax_rules(id),
+  scope TEXT NOT NULL,
+  category TEXT NOT NULL,
+  version INTEGER NOT NULL CHECK (version > 0),
+  effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  rate_bps INTEGER NOT NULL CHECK (rate_bps BETWEEN 0 AND 10000),
+  tax_base_definition TEXT NOT NULL,
+  beneficiary_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (tax_rule_id, version),
+  UNIQUE (tax_rule_id, effective_from_game_day),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
+);
+CREATE INDEX IF NOT EXISTS tax_rule_versions_effective_idx ON tax_rule_versions(tax_rule_id, effective_from_game_day DESC);
+
+CREATE TABLE IF NOT EXISTS institution_budgets (
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  game_period BIGINT NOT NULL CHECK (game_period >= 0),
+  category TEXT NOT NULL,
+  authorized_units BIGINT NOT NULL CHECK (authorized_units >= 0),
+  committed_units BIGINT NOT NULL DEFAULT 0 CHECK (committed_units >= 0),
+  spent_units BIGINT NOT NULL DEFAULT 0 CHECK (spent_units >= 0),
+  rule_version TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (institution_id, game_period, category),
+  CHECK (authorized_units >= committed_units),
+  CHECK (committed_units >= spent_units)
+);
+CREATE INDEX IF NOT EXISTS institution_budgets_period_idx ON institution_budgets(game_period, institution_id, category);
+
+CREATE TABLE IF NOT EXISTS institution_bailouts (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  bailout_kind TEXT NOT NULL CHECK (bailout_kind IN ('FISCAL', 'MONETARY')),
+  amount_units BIGINT NOT NULL CHECK (amount_units > 0),
+  source_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  target_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  economic_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id),
+  governance_authorization TEXT,
+  reason TEXT NOT NULL,
+  game_day BIGINT NOT NULL,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS net_worth_snapshots (
@@ -477,6 +627,32 @@ CREATE INDEX IF NOT EXISTS economic_accounts_shard_lookup_idx
   ON economic_accounts (settlement_shard, asset_id, account_type, status)
   WHERE settlement_shard IS NOT NULL;
 
+INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, legacy_account_id)
+SELECT o.economic_id, 1, t.id, FALSE,
+       CASE t.id WHEN 7 THEN 'monetary-issuance' ELSE 'monetary-retirement' END
+FROM owner_registry o
+JOIN economic_account_types t ON t.id = CASE
+  WHEN o.id = 'SYSTEM-MONETARY-AUTHORITY' THEN 7
+  WHEN o.id = 'SYSTEM-MONETARY-RETIREMENT' THEN 8
+END
+WHERE o.id IN ('SYSTEM-MONETARY-AUTHORITY', 'SYSTEM-MONETARY-RETIREMENT')
+  AND NOT EXISTS (SELECT 1 FROM economic_accounts a WHERE a.legacy_account_id = CASE t.id WHEN 7 THEN 'monetary-issuance' ELSE 'monetary-retirement' END);
+
+INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, legacy_account_id)
+SELECT o.economic_id, 1, t.account_type, t.account_type = 3,
+       CASE WHEN o.id = 'OUC' THEN 'account-ouc-' || CASE t.account_type WHEN 3 THEN 'treasury' WHEN 4 THEN 'operations' ELSE 'reserve' END
+            ELSE CASE t.account_type WHEN 10 THEN 'account-global-corporate-bank' ELSE 'account-global-bank-operations' END END
+FROM owner_registry o
+CROSS JOIN (VALUES (3), (4), (5)) t(account_type)
+WHERE o.id = 'OUC'
+  AND NOT EXISTS (SELECT 1 FROM economic_accounts a WHERE a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = t.account_type)
+UNION ALL
+SELECT o.economic_id, 1, t.account_type, FALSE,
+       CASE t.account_type WHEN 10 THEN 'account-global-corporate-bank' ELSE 'account-global-bank-operations' END
+FROM owner_registry o CROSS JOIN (VALUES (10), (4)) t(account_type)
+WHERE o.id = 'SYSTEM-GLOBAL-BANK'
+  AND NOT EXISTS (SELECT 1 FROM economic_accounts a WHERE a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = t.account_type);
+
 CREATE TABLE IF NOT EXISTS economic_account_migrations (
   legacy_account_id TEXT PRIMARY KEY,
   economic_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
@@ -485,6 +661,13 @@ CREATE TABLE IF NOT EXISTS economic_account_migrations (
   account_semantics TEXT NOT NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, legacy_account_id)
+SELECT o.economic_id, 1, t.account_type, FALSE,
+       'account-' || lower(o.owner_type) || '-' || o.id || CASE t.account_type WHEN 4 THEN '-operations' ELSE '-reserve' END
+FROM owner_registry o CROSS JOIN (VALUES (4), (5)) t(account_type)
+WHERE o.owner_type IN ('city', 'corporation')
+  AND NOT EXISTS (SELECT 1 FROM economic_accounts a WHERE a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = t.account_type);
 
 CREATE SEQUENCE IF NOT EXISTS economic_transactions_id_seq
   AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
@@ -531,6 +714,19 @@ CREATE TABLE IF NOT EXISTS economic_owner_totals (
   food_received BIGINT NOT NULL DEFAULT 0, food_spent BIGINT NOT NULL DEFAULT 0,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TABLE IF NOT EXISTS monetary_supply_snapshots (
+  game_day BIGINT PRIMARY KEY CHECK (game_day >= 0),
+  issued_total_units BIGINT NOT NULL CHECK (issued_total_units >= 0),
+  retired_total_units BIGINT NOT NULL CHECK (retired_total_units >= 0),
+  circulating_units BIGINT NOT NULL CHECK (circulating_units >= 0),
+  escrow_units BIGINT NOT NULL CHECK (escrow_units >= 0),
+  bank_reserve_units BIGINT NOT NULL CHECK (bank_reserve_units >= 0),
+  institution_reserve_units BIGINT NOT NULL CHECK (institution_reserve_units >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (issued_total_units >= retired_total_units)
+);
+CREATE INDEX IF NOT EXISTS monetary_supply_snapshots_day_idx ON monetary_supply_snapshots (game_day DESC);
 
 CREATE SEQUENCE IF NOT EXISTS settlement_rate_segments_id_seq
   AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
@@ -893,7 +1089,38 @@ CREATE TABLE IF NOT EXISTS civic_dividend_payouts (
   payout_executed_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE (city_id, day)
 );
+ALTER TABLE civic_dividend_payouts
+  ADD COLUMN IF NOT EXISTS economic_transaction_id BIGINT REFERENCES economic_transactions(id),
+  ADD COLUMN IF NOT EXISTS committed_obligations_units BIGINT NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS required_reserve_units BIGINT NOT NULL DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS distributable_units BIGINT NOT NULL DEFAULT 0;
 CREATE INDEX IF NOT EXISTS idx_civic_div_city_day ON civic_dividend_payouts(city_id, day DESC);
+
+CREATE TABLE IF NOT EXISTS dividend_settlement_runs (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  payer_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  beneficiary_kind TEXT NOT NULL CHECK (beneficiary_kind IN ('CITY_RESIDENT', 'CORPORATION_SHAREHOLDER')),
+  game_day BIGINT NOT NULL,
+  gross_surplus_units BIGINT NOT NULL DEFAULT 0,
+  committed_obligations_units BIGINT NOT NULL DEFAULT 0,
+  required_reserve_units BIGINT NOT NULL DEFAULT 0,
+  distributable_units BIGINT NOT NULL DEFAULT 0,
+  economic_transaction_id BIGINT REFERENCES economic_transactions(id),
+  status TEXT NOT NULL CHECK (status IN ('COMPLETED', 'NO_SURPLUS', 'INSUFFICIENT_SURPLUS')),
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (payer_owner_economic_id, beneficiary_kind, game_day)
+);
+
+CREATE OR REPLACE VIEW financial_obligations AS
+SELECT l.id::TEXT AS source_id, l.borrower_economic_id AS debtor_economic_id, bank.economic_id AS creditor_economic_id,
+  'BANK_LOAN'::TEXT AS obligation_type, l.outstanding_principal_units AS principal_due_units, l.accrued_interest_units AS interest_due_units,
+  COALESCE(l.next_payment_game_day, l.origination_total_game_minute / 1440) AS due_game_day, 20 AS priority_class, l.status
+FROM bank_loans l JOIN owner_registry bank ON bank.id = 'SYSTEM-GLOBAL-BANK'
+WHERE l.status NOT IN ('REPAID', 'WRITTEN_OFF')
+UNION ALL
+SELECT t.id::TEXT, t.taxpayer_economic_id, t.beneficiary_economic_id, 'TAX'::TEXT, t.amount_units, 0::BIGINT, t.game_day, 10, t.status
+FROM tax_obligations t WHERE t.status NOT IN ('PAID', 'WAIVED');
 
 CREATE TABLE IF NOT EXISTS global_bank_deposits (
   id TEXT PRIMARY KEY,
@@ -924,6 +1151,214 @@ CREATE TABLE IF NOT EXISTS global_bank_loans (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+CREATE TABLE IF NOT EXISTS bank_deposits (
+  id TEXT PRIMARY KEY,
+  depositor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  principal_units BIGINT NOT NULL CHECK (principal_units > 0),
+  accrued_interest_units BIGINT NOT NULL DEFAULT 0 CHECK (accrued_interest_units >= 0),
+  rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0 AND rate_bps <= 5000),
+  rate_rule_version TEXT NOT NULL,
+  start_total_game_minute BIGINT NOT NULL CHECK (start_total_game_minute >= 0),
+  maturity_total_game_minute BIGINT NOT NULL CHECK (maturity_total_game_minute > start_total_game_minute),
+  early_withdrawal_allowed BOOLEAN NOT NULL DEFAULT FALSE,
+  early_withdrawal_penalty_bps INTEGER NOT NULL DEFAULT 0 CHECK (early_withdrawal_penalty_bps BETWEEN 0 AND 10000),
+  rules_snapshot JSONB NOT NULL DEFAULT '{}'::JSONB,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'MATURED', 'WITHDRAWN', 'ROLLED_OVER', 'DEFAULTED')),
+  created_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id),
+  payout_transaction_id BIGINT REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE,
+  deposit_protection_limit_units BIGINT NOT NULL DEFAULT 10000,
+  deposit_protection_rule_version TEXT NOT NULL DEFAULT 'deposit-protection-v1',
+  last_interest_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS deposit_protection_rules (
+  id TEXT PRIMARY KEY,
+  protection_limit_units BIGINT NOT NULL DEFAULT 0,
+  rule_version TEXT NOT NULL,
+  effective_from_game_day BIGINT NOT NULL,
+  effective_to_game_day BIGINT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS deposit_protection_claims (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  deposit_id TEXT NOT NULL REFERENCES bank_deposits(id),
+  depositor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  protection_limit_units BIGINT NOT NULL,
+  insured_amount_units BIGINT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'PENDING',
+  fiscal_transaction_id BIGINT REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS owner_financial_summary (
+  owner_economic_id BIGINT PRIMARY KEY REFERENCES owner_registry(economic_id),
+  game_day BIGINT NOT NULL,
+  liquid_credit_units BIGINT NOT NULL DEFAULT 0,
+  escrowed_credit_units BIGINT NOT NULL DEFAULT 0,
+  deposit_principal_units BIGINT NOT NULL DEFAULT 0,
+  deposit_interest_units BIGINT NOT NULL DEFAULT 0,
+  loan_liabilities_units BIGINT NOT NULL DEFAULT 0,
+  tax_arrears_units BIGINT NOT NULL DEFAULT 0,
+  net_financial_position_units BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS institution_financial_summary (
+  institution_id TEXT PRIMARY KEY REFERENCES institutions(id),
+  institution_kind TEXT NOT NULL,
+  game_day BIGINT NOT NULL,
+  treasury_units BIGINT NOT NULL DEFAULT 0,
+  operations_units BIGINT NOT NULL DEFAULT 0,
+  reserve_units BIGINT NOT NULL DEFAULT 0,
+  committed_spending_units BIGINT NOT NULL DEFAULT 0,
+  debt_units BIGINT NOT NULL DEFAULT 0,
+  tax_receivables_units BIGINT NOT NULL DEFAULT 0,
+  distributable_surplus_units BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tax_daily_summary (
+  game_day BIGINT PRIMARY KEY,
+  assessed_units BIGINT NOT NULL DEFAULT 0,
+  paid_units BIGINT NOT NULL DEFAULT 0,
+  arrears_units BIGINT NOT NULL DEFAULT 0,
+  waived_units BIGINT NOT NULL DEFAULT 0,
+  obligation_count BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS bank_deposits_owner_status_idx ON bank_deposits(depositor_economic_id, status, maturity_total_game_minute);
+CREATE INDEX IF NOT EXISTS bank_deposits_maturity_idx ON bank_deposits(status, maturity_total_game_minute);
+
+CREATE TABLE IF NOT EXISTS bank_loans (
+  id TEXT PRIMARY KEY,
+  borrower_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  borrower_type TEXT NOT NULL CHECK (borrower_type IN ('human', 'city', 'corporation')),
+  original_principal_units BIGINT NOT NULL CHECK (original_principal_units > 0),
+  outstanding_principal_units BIGINT NOT NULL CHECK (outstanding_principal_units >= 0),
+  accrued_interest_units BIGINT NOT NULL DEFAULT 0 CHECK (accrued_interest_units >= 0),
+  rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0 AND rate_bps <= 5000),
+  rate_rule_version TEXT NOT NULL,
+  origination_total_game_minute BIGINT NOT NULL CHECK (origination_total_game_minute >= 0),
+  installment_interval_days INTEGER NOT NULL DEFAULT 1 CHECK (installment_interval_days > 0),
+  next_payment_game_day BIGINT,
+  remaining_installments INTEGER NOT NULL DEFAULT 0 CHECK (remaining_installments >= 0),
+  grace_period_days INTEGER NOT NULL DEFAULT 0 CHECK (grace_period_days >= 0),
+  max_missed_payments INTEGER NOT NULL DEFAULT 3 CHECK (max_missed_payments >= 0),
+  status TEXT NOT NULL DEFAULT 'CURRENT' CHECK (status IN ('CURRENT', 'GRACE', 'DELINQUENT', 'DEFAULTED', 'RESTRUCTURED', 'REPAID', 'WRITTEN_OFF')),
+  origination_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE,
+  last_interest_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS bank_loans_borrower_status_idx ON bank_loans(borrower_economic_id, status);
+CREATE INDEX IF NOT EXISTS bank_loans_payment_idx ON bank_loans(status, next_payment_game_day);
+
+CREATE TABLE IF NOT EXISTS global_bank_rules (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  version TEXT NOT NULL UNIQUE,
+  effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  minimum_liquidity_ratio NUMERIC(20,8) NOT NULL CHECK (minimum_liquidity_ratio >= 0),
+  minimum_capital_ratio NUMERIC(20,8) NOT NULL CHECK (minimum_capital_ratio >= 0),
+  maximum_single_borrower_exposure_units BIGINT NOT NULL CHECK (maximum_single_borrower_exposure_units > 0),
+  maximum_total_lending_ratio NUMERIC(20,8) NOT NULL CHECK (maximum_total_lending_ratio >= 0),
+  deposit_rate_bps INTEGER NOT NULL CHECK (deposit_rate_bps BETWEEN 0 AND 5000),
+  loan_rate_bps INTEGER NOT NULL CHECK (loan_rate_bps BETWEEN 0 AND 5000),
+  grace_period_days INTEGER NOT NULL CHECK (grace_period_days >= 0),
+  default_threshold_days INTEGER NOT NULL CHECK (default_threshold_days >= grace_period_days),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS global_bank_rules_effective_range_uq
+  ON global_bank_rules(effective_from_game_day, version);
+INSERT INTO global_bank_rules (
+  version, effective_from_game_day, minimum_liquidity_ratio, minimum_capital_ratio,
+  maximum_single_borrower_exposure_units, maximum_total_lending_ratio,
+  deposit_rate_bps, loan_rate_bps, grace_period_days, default_threshold_days
+) VALUES ('global-bank-v2', 0, 0.20, 0.08, 100000000, 2.00, 10, 500, 2, 7)
+ON CONFLICT (version) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS bank_loan_payments (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  loan_id TEXT NOT NULL REFERENCES bank_loans(id), transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE, payment_units BIGINT NOT NULL CHECK (payment_units > 0),
+  interest_units BIGINT NOT NULL CHECK (interest_units >= 0), principal_units BIGINT NOT NULL CHECK (principal_units >= 0),
+  game_day BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS bank_settlement_journals (
+  game_day BIGINT PRIMARY KEY,
+  economic_transaction_id BIGINT REFERENCES economic_transactions(id),
+  loans_accrued BIGINT NOT NULL DEFAULT 0,
+  deposits_accrued BIGINT NOT NULL DEFAULT 0,
+  loan_payments BIGINT NOT NULL DEFAULT 0,
+  deposit_payouts BIGINT NOT NULL DEFAULT 0,
+  loan_payment_units BIGINT NOT NULL DEFAULT 0,
+  deposit_payout_units BIGINT NOT NULL DEFAULT 0,
+  status TEXT NOT NULL CHECK (status IN ('COMPLETED', 'LIQUIDITY_CONSTRAINED')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS tax_obligations (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  taxpayer_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  beneficiary_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  tax_type TEXT NOT NULL CHECK (tax_type IN ('basic_levy', 'personal_income', 'corporate_income', 'market_transaction', 'property', 'building')),
+  tax_base_units BIGINT NOT NULL CHECK (tax_base_units >= 0),
+  rate_bps INTEGER NOT NULL CHECK (rate_bps >= 0 AND rate_bps <= 10000),
+  amount_units BIGINT NOT NULL CHECK (amount_units > 0),
+  rule_version TEXT NOT NULL,
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  status TEXT NOT NULL DEFAULT 'DUE' CHECK (status IN ('DUE', 'PAID', 'PARTIAL', 'ARREARS', 'WAIVED')),
+  payment_transaction_id BIGINT REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+);
+CREATE INDEX IF NOT EXISTS tax_obligations_payment_idx ON tax_obligations(status, game_day, taxpayer_economic_id);
+
+CREATE TABLE IF NOT EXISTS global_bank_balance_sheet (
+  game_day BIGINT PRIMARY KEY CHECK (game_day >= 0),
+  reserve_units BIGINT NOT NULL CHECK (reserve_units >= 0),
+  performing_loans_units BIGINT NOT NULL CHECK (performing_loans_units >= 0),
+  impaired_loans_units BIGINT NOT NULL CHECK (impaired_loans_units >= 0),
+  interest_receivable_units BIGINT NOT NULL CHECK (interest_receivable_units >= 0),
+  deposit_principal_units BIGINT NOT NULL CHECK (deposit_principal_units >= 0),
+  deposit_interest_payable_units BIGINT NOT NULL CHECK (deposit_interest_payable_units >= 0),
+  withdrawals_payable_units BIGINT NOT NULL CHECK (withdrawals_payable_units >= 0),
+  assets_units BIGINT NOT NULL, liabilities_units BIGINT NOT NULL, equity_units BIGINT NOT NULL,
+  liquidity_ratio NUMERIC(20,8), capital_ratio NUMERIC(20,8),
+  status TEXT NOT NULL CHECK (status IN ('healthy', 'illiquid', 'liquidity_stress', 'undercapitalized', 'insolvent', 'resolution')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS global_bank_resolution_state (
+  id SMALLINT PRIMARY KEY CHECK (id = 1),
+  status TEXT NOT NULL CHECK (status IN ('NORMAL','LIQUIDITY_STRESS','UNDERCAPITALIZED','INSOLVENT','RESOLUTION')),
+  as_of_game_day BIGINT NOT NULL,
+  reason TEXT NOT NULL DEFAULT '',
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS global_bank_resolution_events (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  game_day BIGINT NOT NULL,
+  from_status TEXT,
+  to_status TEXT NOT NULL,
+  action TEXT NOT NULL,
+  amount_units BIGINT NOT NULL DEFAULT 0,
+  economic_transaction_id BIGINT,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS global_bank_balance_sheet_status_idx ON global_bank_balance_sheet (status, game_day DESC);
 CREATE INDEX IF NOT EXISTS global_bank_loans_corporation_idx ON global_bank_loans(corporation_id, status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS global_bank_settlement_journals (

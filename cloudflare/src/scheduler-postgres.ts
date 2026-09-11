@@ -163,51 +163,71 @@ async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise
 }
 
 async function settleCityCorporateIncomeTax(tx: PostgresRepository, day: number): Promise<number> {
-  const cities = await tx.query<{ id: string; corporation_id: string; charter_rules: string | null; gross_income: string }>(`
+  const businessRule = await tx.query<{ id: string; rate_bps: number; version: number }>(
+    `SELECT id, rate_bps, version FROM tax_rule_versions
+      WHERE tax_rule_id = 'TAX-OUC-BUSINESS'
+        AND effective_from_game_day <= $1
+        AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
+      ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day]);
+  if (!businessRule.rows[0]) throw new Error('Business tax rule is unavailable for settlement day');
+  const cities = await tx.query<{ id: string; corporation_id: string; charter_rules: string | null; gross_income: string; city_economic_id: string; corporation_economic_id: string }>(`
     SELECT c.id, c.corporation_id, corporation_institution.charter_rules,
+      city_owner.economic_id AS city_economic_id, corporation_owner.economic_id AS corporation_economic_id,
       COALESCE((SELECT SUM(l.amount) FROM ledger_entries l
         WHERE l.credit_account = 'account-city-' || c.id
           AND l.game_day = $1 AND l.reason_type = 'civic_utility_revenue'), 0) AS gross_income
     FROM cities c
+    JOIN owner_registry city_owner ON city_owner.id = c.id AND city_owner.owner_type = 'city' AND city_owner.status = 'active'
     JOIN corporations corp ON corp.id = c.corporation_id
+    JOIN owner_registry corporation_owner ON corporation_owner.id = corp.id AND corporation_owner.owner_type = 'corporation' AND corporation_owner.status = 'active'
     JOIN institutions corporation_institution ON corporation_institution.id = corp.institution_id
     WHERE c.corporation_id IS NOT NULL
   `, [day]);
-  let settled = 0;
+  const ouc = await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = 'OUC'");
+  if (!ouc.rows[0]) throw new Error('OUC tax beneficiary is unavailable');
+  let assessed = 0;
   for (const city of cities.rows) {
-    const rate = charterRate(city.charter_rules, 'incomeTaxBps') ?? 0;
+    const rate = charterRate(city.charter_rules, 'incomeTaxBps') ?? Number(businessRule.rows[0].rate_bps) / 10000;
     const gross = moneyToCents(city.gross_income);
     const taxCents = rate > 0 && gross > 0n ? rateAmountToCents(gross, String(rate), 1) : 0n;
     if (taxCents <= 0n) continue;
     const correlationId = `CITY-CORP-INCOME-TAX-${city.id}-${day}`;
-    const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE reason_type = 'city_corporate_income_tax' AND correlation_id = $1", [correlationId]);
-    if (prior.rows[0]) continue;
-    await postEconomicCreditTransfer(tx, {
-      ledgerId: crypto.randomUUID(), gameDay: day,
-      debitAccount: `account-city-${city.id}`,
-      creditAccount: `account-corporation-${city.corporation_id}`,
-      amount: centsToMoney(taxCents), reasonType: 'city_corporate_income_tax',
-      reasonId: city.id, ruleVersion: 'city-corporate-income-tax-v1', correlationId,
-    });
-    settled += 1;
+    await tx.query(`INSERT INTO tax_obligations
+      (taxpayer_economic_id, beneficiary_economic_id, tax_type, tax_base_units, rate_bps, amount_units, rule_version, game_day, correlation_id)
+      VALUES ($1, $2, 'corporate_income', $3, $4, $5, 'city-corporate-income-tax-v1', $6, $7)
+      ON CONFLICT (correlation_id) DO NOTHING`,
+      [city.city_economic_id, city.corporation_economic_id, gross, Math.round(rate * 10000), taxCents, businessRule.rows[0].id, day, correlationId]);
+    assessed += 1;
   }
-  return settled;
+  const settled = await tx.query<{ obligations_paid: string }>('SELECT * FROM earth_settle_v2_tax_obligations($1)', [day]);
+  return assessed + Number(settled.rows[0]?.obligations_paid ?? 0);
 }
 
 async function settleBasicLevy(tx: PostgresRepository, day: number): Promise<void> {
-  const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true");
+  const rule = await tx.query<{ id: string; rate_bps: number; version: number }>(
+    `SELECT id, rate_bps, version FROM tax_rule_versions
+      WHERE tax_rule_id = 'TAX-OUC-BASIC'
+        AND effective_from_game_day <= $1
+        AND (effective_to_game_day IS NULL OR effective_to_game_day >= $1)
+      ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`, [day]);
   const world = await tx.query<{ living_cost_index: string }>("SELECT living_cost_index FROM world_state WHERE id = 'WORLD'");
   if (!rule.rows[0]) return;
   const levyBaseCents = compoundRateAmountToCents(10000n, String(world.rows[0]?.living_cost_index ?? '1'));
-  const humans = await tx.query<{ id: string; account_id: string; balance: string; city_charter: string | null; corporation_charter: string | null }>("SELECT humans.id, account_balances.account_id, account_balances.balance, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM humans JOIN account_balances ON account_balances.owner_id = humans.id AND account_balances.currency = 'CREDIT' LEFT JOIN memberships ON memberships.human_id = humans.id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE humans.life_status = 'active'");
+  const ouc = await tx.query<{ economic_id: string }>("SELECT economic_id FROM owner_registry WHERE id = 'OUC'");
+  if (!ouc.rows[0]) throw new Error('OUC tax beneficiary is unavailable');
+  const humans = await tx.query<{ id: string; economic_id: string; city_charter: string | null; corporation_charter: string | null }>("SELECT humans.id, owner.economic_id, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM humans JOIN owner_registry owner ON owner.id = humans.id LEFT JOIN memberships ON memberships.human_id = humans.id LEFT JOIN institutions city_institution ON city_institution.id = memberships.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = memberships.corporation_id WHERE humans.life_status = 'active' AND owner.status = 'active'");
   for (const human of humans.rows) {
-    const effectiveIncomeRate = effectiveRate(human.city_charter, human.corporation_charter, 'incomeTaxBps', rule.rows[0].rate);
+    const effectiveIncomeRate = effectiveRate(human.city_charter, human.corporation_charter, 'incomeTaxBps', String(Number(rule.rows[0].rate_bps) / 10000));
     const levyCents = rateAmountToCents(levyBaseCents, effectiveIncomeRate, 1);
-    const levy = centsToMoney(levyCents);
+    if (levyCents <= 0n) continue;
     const correlationId = `BASIC-LEVY-${human.id}-${day}-v${rule.rows[0].version}`;
-    if (levyCents <= 0n || moneyToCents(human.balance) < levyCents || (await tx.query('SELECT 1 FROM ledger_entries WHERE reason_type = \'basic_levy\' AND correlation_id = $1', [correlationId])).rows[0]) continue;
-    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: human.account_id, creditAccount: 'account-ouc-treasury', amount: levy, reasonType: 'basic_levy', reasonId: human.id, ruleVersion: `tax-v${rule.rows[0].version}`, correlationId });
+    await tx.query(`INSERT INTO tax_obligations
+      (taxpayer_economic_id, beneficiary_economic_id, tax_type, tax_base_units, rate_bps, amount_units, rule_version, game_day, correlation_id)
+      VALUES ($1, $2, 'basic_levy', $3, $4, $5, $6, $7, $8)
+      ON CONFLICT (correlation_id) DO NOTHING`,
+      [human.economic_id, ouc.rows[0].economic_id, levyBaseCents, Math.round(Number(effectiveIncomeRate) * 10000), levyCents, rule.rows[0].id, day, correlationId]);
   }
+  await tx.query('SELECT * FROM earth_settle_v2_tax_obligations($1)', [day]);
 }
 
 async function runAiMaintenance(tx: PostgresRepository, day: number): Promise<void> {
@@ -538,14 +558,24 @@ async function settleBuildingPatentLicenses(tx: PostgresRepository, day: number)
 }
 
 async function updateFinancialStates(tx: PostgresRepository, day: number): Promise<void> {
-  const candidates = await tx.query<{ id: string; kind: string; value: string; current: string }>("SELECT id, 'CITY' AS kind, treasury AS value, 'active' AS current FROM cities UNION ALL SELECT id, 'CORPORATION' AS kind, treasury AS value, 'active' AS current FROM corporations");
+  const candidates = await tx.query<{ id: string; kind: string; value: string; due_units: string; liabilities_units: string; realizable_assets_units: string; current: string }>(`SELECT i.id, i.kind,
+      COALESCE((SELECT a.balance FROM economic_accounts a WHERE a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)::TEXT AS value,
+      COALESCE((SELECT SUM(principal_due_units + interest_due_units) FROM financial_obligations f WHERE f.debtor_economic_id = o.economic_id AND f.due_game_day <= $1 AND f.status NOT IN ('PAID', 'WAIVED')), 0)::TEXT AS due_units,
+      COALESCE((SELECT SUM(principal_due_units + interest_due_units) FROM financial_obligations f WHERE f.debtor_economic_id = o.economic_id AND f.status NOT IN ('PAID', 'WAIVED')), 0)::TEXT AS liabilities_units,
+      COALESCE((SELECT SUM(a.balance) FROM economic_accounts a WHERE a.owner_economic_id = o.economic_id AND a.status = 'active' AND a.account_type NOT IN (7, 8)), 0)::TEXT AS realizable_assets_units,
+      'active' AS current
+    FROM institutions i JOIN owner_registry o ON o.id = i.id AND o.owner_type IN ('city', 'corporation') AND o.status = 'active'
+    WHERE i.kind IN ('CITY', 'CORPORATION')`, [day]);
   for (const candidate of candidates.rows) {
     const existing = await tx.query<{ status: string; since_game_day: number }>('SELECT status, since_game_day FROM financial_states WHERE institution_id = $1 FOR UPDATE', [candidate.id]);
     const current = existing.rows[0]?.status ?? candidate.current;
-    if (current === 'dissolved') continue;
-    const numeric = Number(candidate.value);
-    const target = numeric <= 0
-      ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed')
+    if (current === 'dissolved' || current === 'liquidation' || current === 'bankrupt') continue;
+    const unableToService = BigInt(candidate.value) < BigInt(candidate.due_units);
+    const materiallyInsolvent = BigInt(candidate.liabilities_units) > BigInt(candidate.realizable_assets_units);
+    const target = current === 'restructuring'
+      ? (day - Number(existing.rows[0]?.since_game_day ?? day) >= 7 ? 'insolvent' : 'restructuring')
+      : unableToService && materiallyInsolvent
+        ? (existing.rows[0] && day - Number(existing.rows[0].since_game_day) >= 7 ? 'insolvent' : 'distressed')
       : 'active';
     if (target === current && existing.rows[0]) continue;
     const reason = target === 'active' ? 'Positive operating position restored' : 'Operating reserve is depleted';
@@ -755,12 +785,15 @@ export async function runResumableSettlementDay(
     buildingPatentLicenses: ({ tx }) => settleBuildingPatentLicenses(tx, day),
     cityCorporateIncomeTax: ({ tx }) => settleCityCorporateIncomeTax(tx, day),
     globalBank: ({ tx }) => settleGlobalBank(tx, day),
+    bankHealth: ({ tx }) => tx.query('SELECT earth_evaluate_global_bank_resolution($1)', [day]),
     cityDynamics: ({ tx }) => processCityDynamics(tx, day),
+    budgetDividendEligibility: ({ tx }) => settleCivicDividends(tx, day),
     patentExpirations: ({ tx }) => processPatentExpirations(tx, day),
     researchAndProgress: ({ tx }) => settleResearchAndProgress(tx, day),
     lifecycle: ({ tx }) => settleLifecycle(tx, day),
     financialStates: ({ tx }) => updateFinancialStates(tx, day),
     institutionDissolution: ({ tx }) => dissolveInstitutions(tx, day),
+    financialProjections: ({ tx }) => tx.query('SELECT earth_refresh_daily_financial_projections($1)', [day]),
     rankingsSnapshot: ({ tx }) => snapshotRankings(tx, day),
     endOfDaySnapshots: ({ tx }) => captureEndOfDaySnapshots(tx, day),
   });

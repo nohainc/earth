@@ -349,6 +349,12 @@ const worker = {
       const response = await handleRealEstateRoutes(request, env, url, viewer);
       if (response) return response;
     }
+    if (url.pathname.startsWith('/api/finance')) {
+      const viewer = await currentHuman(request, env);
+      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+      const response = await handleFinanceRoutes(request, env, url, viewer, (targetEnv, humanId, otp) => sensitiveActionAllowed(targetEnv, humanId, otp));
+      if (response) return response;
+    }
     if (url.pathname.startsWith('/api/comm/')) {
       const response = await communicationsRoutes(request, env, url);
       if (response) return response;
@@ -479,7 +485,9 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const result = await withRepository(env, async (repository) => {
         const [account, state, buildings] = await Promise.all([
-          repository.query("SELECT account_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
+          repository.query(`SELECT a.id::TEXT AS account_id, 'CREDIT' AS currency, (a.balance / 100.0) AS balance
+                              FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+                             WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.id]),
           repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
           repository.query("SELECT id, name, status FROM buildings WHERE owner_id = $1 AND ownership_class = 'private'", [viewer.id]),
         ]);
@@ -510,7 +518,9 @@ const worker = {
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const result = await withRepository(env, async (repository) => {
         const [account, rules] = await Promise.all([
-          repository.query("SELECT account_id, owner_id, balance, currency FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [viewer.id]),
+          repository.query(`SELECT a.id::TEXT AS account_id, o.id AS owner_id, (a.balance / 100.0) AS balance, 'CREDIT' AS currency
+                              FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
+                             WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.id]),
           repository.query('SELECT scope, category, rate, version FROM tax_rules WHERE active = true ORDER BY id'),
         ]);
         return { account: account.rows[0] ?? null, taxRules: rules.rows };
@@ -527,7 +537,7 @@ const worker = {
     }
 
     if (url.pathname === '/api/finance/liquidity' && request.method === 'GET') {
-      const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM account_balances WHERE currency = 'CREDIT') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
+      const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM economic_accounts WHERE asset_id = 1 AND account_type NOT IN (7, 8) AND status = 'active') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
       const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
       return Response.json({ activeHumans, moneySupply: supply, livingCostIndex, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'planetscale-postgres' });
     }

@@ -12,13 +12,14 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '210_market_integrity_report.sql');
+  assert.equal(files.at(-1), '232_finance_v2_invariants.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 210, 'Manifest version must match latest migration version (210)');
+  assert.equal(manifest.migrationVersion, 232, 'Manifest version must match latest migration version (232)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 210/);
+  assert.match(schema, /reconciled through migration 232/);
+  for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');
   for (const check of ['open_order_without_escrow', 'orphan_market_escrow', 'buy_reservation_below_required_maximum', 'position_collateral_mismatch', 'market_economic_transaction_unbalanced']) assert.match(marketIntegrity, new RegExp(check));
   assert.doesNotMatch(schema, /reserved_credits/);
