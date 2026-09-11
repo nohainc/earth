@@ -8,6 +8,7 @@ import {
   challengeProposal,
   resolveConstitutionalAppeal,
   resolveProposalsInTransaction,
+  evaluateProposalVote,
 } from '../cloudflare/src/governance-postgres.ts';
 
 class MockDbClient {
@@ -40,12 +41,16 @@ test('proposal resolution counts only active members of its own institution', as
       rows: [{ genesis_at: new Date(Date.now() - 20 * 86400000).toISOString(), simulated_day_offset: 0 }],
       rowCount: 1,
     },
-    "SELECT id, institution_id, quorum, approval_threshold FROM proposals": {
-      rows: [{ id: 'CITY-VOTE-1', institution_id: 'CITY-1', quorum: '0.25', approval_threshold: '0.5' }],
+    "SELECT id, institution_id, quorum, approval_threshold, eligible_voter_count FROM proposals WHERE decision_status": {
+      rows: [{ id: 'CITY-VOTE-1', institution_id: 'CITY-1', quorum: '0.25', approval_threshold: '0.5', eligible_voter_count: null }],
       rowCount: 1,
     },
-    'SELECT choice, COALESCE(SUM(weight), 0) AS weight FROM ballots': {
-      rows: [{ choice: 'support', weight: '1' }],
+    'SELECT support_weight, oppose_weight, abstain_weight, voter_count FROM proposal_vote_totals': {
+      rows: [{ support_weight: '1', oppose_weight: '0', abstain_weight: '0', voter_count: '1' }],
+      rowCount: 1,
+    },
+    'SELECT COUNT(DISTINCT human_id) AS count FROM ballots': {
+      rows: [{ count: '1' }],
       rowCount: 1,
     },
     'JOIN institutions i ON i.id = $1': {
@@ -68,6 +73,21 @@ test('proposal resolution counts only active members of its own institution', as
   assert.equal(resolution.params[0], 'passed');
 });
 
+test('proposal quorum uses human participation, while approval uses weighted votes', () => {
+  assert.equal(evaluateProposalVote({
+    voters: 13, eligibleHumans: 100, supportWeight: 26, opposeWeight: 0,
+    quorum: 0.25, approvalThreshold: 0.5,
+  }).quorumMet, false);
+  assert.equal(evaluateProposalVote({
+    voters: 25, eligibleHumans: 100, supportWeight: 25, opposeWeight: 0,
+    quorum: 0.25, approvalThreshold: 0.5,
+  }).passed, true);
+  assert.equal(evaluateProposalVote({
+    voters: 100, eligibleHumans: 100, supportWeight: 60, opposeWeight: 40,
+    quorum: 0.25, approvalThreshold: 0.6,
+  }).passed, true);
+});
+
 test('challengeProposal files constitutional challenge for passed proposal', async () => {
   const client = new MockDbClient({
     'SELECT details FROM world_events': { rows: [], rowCount: 0 },
@@ -79,6 +99,7 @@ test('challengeProposal files constitutional challenge for passed proposal', asy
     'SELECT id, life_status FROM humans': { rows: [{ id: 'H-01', life_status: 'active' }], rowCount: 1 },
     'SELECT city_id FROM memberships': { rows: [{ city_id: 'INST-01' }], rowCount: 1 },
     'SELECT 1 FROM memberships': { rows: [{ '1': 1 }], rowCount: 1 },
+    'SELECT 1 FROM proposal_challenge_authorities': { rows: [{ '1': 1 }], rowCount: 1 },
     'SELECT game_day FROM world_state': { rows: [{ game_day: 100 }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);

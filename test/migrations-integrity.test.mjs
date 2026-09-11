@@ -12,13 +12,33 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '186_scheduler_run_observability.sql');
+  assert.equal(files.at(-1), '194_proposal_limits_and_challenges.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 186, 'Manifest version must match latest migration version (186)');
+  assert.equal(manifest.migrationVersion, 194, 'Manifest version must match latest migration version (194)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 186/);
+  assert.match(schema, /reconciled through migration 194/);
+  assert.ok(manifest.requiredTables.proposal_challenge_authorities, 'Manifest must contain challenge authorities');
+  assert.ok(manifest.requiredIndexes.includes('proposals_active_conflict_idx'), 'Manifest must contain active conflict protection');
+  assert.ok(manifest.requiredTables.proposals.includes('decision_status'), 'Proposals must expose decision status');
+  assert.ok(manifest.requiredTables.governance_rules.includes('effective_from_game_day'), 'Governance rules must expose effective start day');
+  const effectiveRanges = fs.readFileSync(path.resolve('db/migrations/192_governance_rule_effective_ranges.sql'), 'utf8');
+  assert.match(effectiveRanges, /effective_to_game_day/);
+  assert.ok(manifest.requiredTables.proposal_action_requirements, 'Manifest must contain proposal action requirements');
+  const stateMachine = fs.readFileSync(path.resolve('db/migrations/193_proposal_state_machine.sql'), 'utf8');
+  assert.match(stateMachine, /decision_status/);
+  assert.ok(manifest.requiredTables.proposal_actions, 'Manifest must contain typed proposal actions');
+  assert.ok(manifest.requiredTables.proposal_vote_totals, 'Manifest must contain proposal vote totals');
+  assert.ok(manifest.requiredIndexes.includes('memberships_city_joined_human_idx'), 'Manifest must contain city electorate index');
+  const electorate = fs.readFileSync(path.resolve('db/migrations/189_proposal_electorate_aggregation.sql'), 'utf8');
+  assert.match(electorate, /ON CONFLICT \(proposal_id\) DO NOTHING/);
+  const proposalContract = fs.readFileSync(path.resolve('db/migrations/188_proposal_contract_snapshots.sql'), 'utf8');
+  assert.match(proposalContract, /governance_snapshot JSONB/);
+  assert.match(proposalContract, /action_snapshot JSONB/);
+  const proposalVoting = fs.readFileSync(path.resolve('db/migrations/187_proposal_voting_correctness.sql'), 'utf8');
+  assert.match(proposalVoting, /governance_rules_one_active_category/);
+  assert.match(proposalVoting, /ROW_NUMBER\(\)/);
   assert.ok(manifest.requiredTables.scheduler_runs, 'Manifest must contain scheduler run observability');
   const schedulerRuns = fs.readFileSync(path.resolve('db/migrations/186_scheduler_run_observability.sql'), 'utf8');
   assert.match(schedulerRuns, /CREATE TABLE IF NOT EXISTS scheduler_runs/);

@@ -68,8 +68,7 @@ export async function handleGovernanceRoutes(
       institutionId?: string;
       title?: string;
       body?: string;
-      durationHours?: number;
-      ruleVersionId?: string;
+      expectedGovernanceRuleVersionId?: string;
       target?: { category?: string; value?: unknown };
       correlationId?: string;
     }>(request);
@@ -94,8 +93,7 @@ export async function handleGovernanceRoutes(
           institutionId,
           title,
           body: proposalBody,
-          durationHours: body.durationHours,
-          ruleVersionId: body.ruleVersionId,
+          expectedGovernanceRuleVersionId: body.expectedGovernanceRuleVersionId,
           targetCategory,
           targetValue: body.target?.value ?? null,
           correlationId,

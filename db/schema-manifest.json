@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 186,
+  "migrationVersion": 194,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -308,7 +308,10 @@
       "category",
       "quorum_threshold",
       "approval_threshold",
-      "implementation_delay_days"
+      "voting_period_days",
+      "implementation_delay_days",
+      "effective_from_game_day",
+      "effective_to_game_day"
     ],
     "humans": [
       "id",
@@ -459,7 +462,10 @@
       "kind",
       "status",
       "charter_rules",
-      "administrator_human_id"
+      "administrator_human_id",
+      "max_active_proposals_per_creator",
+      "max_active_proposals_per_institution",
+      "proposal_creation_cooldown_minutes"
     ],
     "ledger_entries": [
       "id",
@@ -538,13 +544,62 @@
     "proposals": [
       "id",
       "institution_id",
+      "decision_status",
+      "conflict_key",
       "status",
       "execution_status",
       "closes_game_day",
       "closes_game_minute",
       "implementation_game_day",
       "implementation_game_minute",
+      "governance_snapshot",
+      "action_snapshot",
+      "proposal_schema_version",
+      "action_handler_version",
+      "snapshot_hash",
+      "eligible_voter_count",
+      "eligibility_cutoff_game_day",
       "updated_at"
+    ],
+    "proposal_vote_totals": [
+      "proposal_id",
+      "voter_count",
+      "support_count",
+      "oppose_count",
+      "abstain_count",
+      "support_weight",
+      "oppose_weight",
+      "abstain_weight",
+      "updated_at"
+    ],
+    "proposal_actions": [
+      "id",
+      "proposal_id",
+      "sequence",
+      "action_type",
+      "handler_version",
+      "payload_snapshot",
+      "execution_status",
+      "started_game_day",
+      "completed_game_day",
+      "result_json",
+      "correlation_id"
+    ],
+    "proposal_action_requirements": [
+      "id",
+      "proposal_action_id",
+      "asset_id",
+      "required_units",
+      "source_owner_economic_id",
+      "source_account_type",
+      "requirement_kind"
+    ],
+    "proposal_challenge_authorities": [
+      "institution_id",
+      "human_id",
+      "role_code",
+      "status",
+      "granted_game_day"
     ],
     "economy_shadow_openings": [
       "game_day",
@@ -838,6 +893,7 @@
     ]
   ],
   "requiredIndexes": [
+    "governance_rules_one_active_category",
     "idx_resource_ledger_owner_day",
     "idx_resource_ledger_reason",
     "idx_resource_ledger_resource_day",
@@ -907,6 +963,9 @@
     "idx_futures_settlement",
     "idx_proposals_institution_status",
     "idx_gov_rules_inst_cat",
-    "idx_notifications_unread"
+    "idx_notifications_unread",
+    "proposals_active_conflict_idx",
+    "memberships_city_joined_human_idx",
+    "memberships_corporation_joined_human_idx"
   ]
 }

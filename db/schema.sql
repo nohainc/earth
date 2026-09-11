@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 186.
+-- Canonical fresh-install schema, reconciled through migration 194.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -750,7 +750,10 @@ CREATE TABLE IF NOT EXISTS institutions (
   kind TEXT NOT NULL CHECK (kind IN ('OUC','CORPORATION','CITY')),
   name TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'active',
-  administrator_human_id TEXT REFERENCES humans(id)
+  administrator_human_id TEXT REFERENCES humans(id),
+  max_active_proposals_per_creator INTEGER NOT NULL DEFAULT 5,
+  max_active_proposals_per_institution INTEGER NOT NULL DEFAULT 50,
+  proposal_creation_cooldown_minutes INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS cities (
@@ -978,6 +981,8 @@ CREATE TABLE IF NOT EXISTS proposals (
   title TEXT NOT NULL,
   body TEXT NOT NULL,
   status TEXT NOT NULL DEFAULT 'open',
+  decision_status TEXT NOT NULL DEFAULT 'scheduled' CHECK (decision_status IN ('scheduled','voting','passed','rejected','no_quorum','cancelled')),
+  conflict_key TEXT,
   opens_at TIMESTAMPTZ NOT NULL,
   opens_game_day BIGINT,
   opens_game_minute INTEGER CHECK (opens_game_minute BETWEEN 0 AND 1439),
@@ -1020,6 +1025,13 @@ CREATE TABLE IF NOT EXISTS proposals (
   funding_last_checked_day BIGINT,
   funding_block_reason TEXT,
   funding_requirements JSONB NOT NULL DEFAULT '{}'::jsonb,
+  governance_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  action_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb,
+  proposal_schema_version INTEGER NOT NULL DEFAULT 1,
+  action_handler_version INTEGER NOT NULL DEFAULT 1,
+  snapshot_hash TEXT,
+  eligible_voter_count BIGINT,
+  eligibility_cutoff_game_day BIGINT,
   CONSTRAINT proposals_single_entity_target_check CHECK (num_nonnulls(building_catalog_id, research_project_id) <= 1)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS proposals_institution_correlation_idx ON proposals(institution_id, correlation_id) WHERE correlation_id IS NOT NULL;
@@ -1030,6 +1042,54 @@ CREATE INDEX IF NOT EXISTS proposals_research_project_target_idx ON proposals(re
 CREATE INDEX IF NOT EXISTS proposals_queued_expiry_idx ON proposals (execution_status, expires_game_day) WHERE execution_status = 'queued';
 CREATE INDEX IF NOT EXISTS proposals_created_by_human_id_idx ON proposals(created_by_human_id);
 CREATE INDEX IF NOT EXISTS proposals_funding_window_idx ON proposals(execution_status, funding_due_end_day) WHERE execution_status = 'awaiting_funding';
+CREATE UNIQUE INDEX IF NOT EXISTS proposals_active_conflict_idx ON proposals(conflict_key) WHERE conflict_key IS NOT NULL AND decision_status IN ('scheduled','voting','passed');
+
+CREATE TABLE IF NOT EXISTS proposal_actions (
+  id TEXT PRIMARY KEY,
+  proposal_id TEXT NOT NULL REFERENCES proposals(id) ON DELETE CASCADE,
+  sequence INTEGER NOT NULL CHECK (sequence > 0),
+  action_type TEXT NOT NULL,
+  handler_version INTEGER NOT NULL DEFAULT 1,
+  payload_snapshot JSONB NOT NULL,
+  execution_status TEXT NOT NULL DEFAULT 'pending',
+  started_game_day BIGINT,
+  completed_game_day BIGINT,
+  result_json JSONB,
+  correlation_id TEXT NOT NULL UNIQUE,
+  UNIQUE (proposal_id, sequence)
+);
+
+CREATE TABLE IF NOT EXISTS proposal_action_requirements (
+  id TEXT PRIMARY KEY,
+  proposal_action_id TEXT NOT NULL REFERENCES proposal_actions(id) ON DELETE CASCADE,
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  required_units BIGINT NOT NULL CHECK (required_units > 0),
+  source_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  source_account_type SMALLINT NOT NULL,
+  requirement_kind TEXT NOT NULL DEFAULT 'funding',
+  UNIQUE (proposal_action_id, asset_id)
+);
+
+CREATE TABLE IF NOT EXISTS proposal_challenge_authorities (
+  institution_id TEXT NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
+  human_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
+  role_code TEXT NOT NULL CHECK (role_code IN ('constitutional_judge','judicial_delegate','ouc_court')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
+  granted_game_day BIGINT NOT NULL DEFAULT 1,
+  PRIMARY KEY (institution_id, human_id, role_code)
+);
+
+CREATE TABLE IF NOT EXISTS proposal_vote_totals (
+  proposal_id TEXT PRIMARY KEY REFERENCES proposals(id) ON DELETE CASCADE,
+  voter_count BIGINT NOT NULL DEFAULT 0 CHECK (voter_count >= 0),
+  support_count BIGINT NOT NULL DEFAULT 0 CHECK (support_count >= 0),
+  oppose_count BIGINT NOT NULL DEFAULT 0 CHECK (oppose_count >= 0),
+  abstain_count BIGINT NOT NULL DEFAULT 0 CHECK (abstain_count >= 0),
+  support_weight NUMERIC(20,3) NOT NULL DEFAULT 0,
+  oppose_weight NUMERIC(20,3) NOT NULL DEFAULT 0,
+  abstain_weight NUMERIC(20,3) NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 
 CREATE TABLE IF NOT EXISTS ballots (
   proposal_id TEXT NOT NULL REFERENCES proposals(id),
@@ -1046,6 +1106,12 @@ CREATE TABLE IF NOT EXISTS governance_rules (
   name TEXT NOT NULL,
   category TEXT NOT NULL,
   value_json JSONB NOT NULL DEFAULT '{}',
+  quorum_threshold NUMERIC(10,4) NOT NULL DEFAULT 0,
+  approval_threshold NUMERIC(10,4) NOT NULL DEFAULT 0,
+  voting_period_days INTEGER NOT NULL DEFAULT 3,
+  implementation_delay_days INTEGER NOT NULL DEFAULT 0,
+  effective_from_game_day BIGINT NOT NULL DEFAULT 1,
+  effective_to_game_day BIGINT,
   version INTEGER NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft','active','superseded','repealed')),
   created_by TEXT NOT NULL REFERENCES humans(id),
@@ -1053,6 +1119,7 @@ CREATE TABLE IF NOT EXISTS governance_rules (
   UNIQUE (institution_id, category, version)
 );
 CREATE INDEX IF NOT EXISTS idx_gov_rules_inst_cat ON governance_rules(institution_id, category, status);
+CREATE UNIQUE INDEX IF NOT EXISTS governance_rules_one_active_category ON governance_rules(institution_id, category) WHERE status = 'active';
 
 CREATE TABLE IF NOT EXISTS constitutional_rules (
   rule_key TEXT PRIMARY KEY,
@@ -1558,7 +1625,24 @@ ALTER TABLE building_catalog ADD COLUMN IF NOT EXISTS is_original BOOLEAN NOT NU
 ALTER TABLE corporation_membership_requests ADD COLUMN IF NOT EXISTS requested_game_day BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS quorum_threshold NUMERIC(10,4) NOT NULL DEFAULT 0;
 ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS approval_threshold NUMERIC(10,4) NOT NULL DEFAULT 0;
+ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS voting_period_days INTEGER NOT NULL DEFAULT 3;
 ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS implementation_delay_days INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS effective_from_game_day BIGINT NOT NULL DEFAULT 1;
+ALTER TABLE governance_rules ADD COLUMN IF NOT EXISTS effective_to_game_day BIGINT;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS governance_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS action_snapshot JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS proposal_schema_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS action_handler_version INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS snapshot_hash TEXT;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS eligible_voter_count BIGINT;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS eligibility_cutoff_game_day BIGINT;
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS decision_status TEXT NOT NULL DEFAULT 'scheduled';
+ALTER TABLE proposals ADD COLUMN IF NOT EXISTS conflict_key TEXT;
+ALTER TABLE institutions ADD COLUMN IF NOT EXISTS max_active_proposals_per_creator INTEGER NOT NULL DEFAULT 5;
+ALTER TABLE institutions ADD COLUMN IF NOT EXISTS max_active_proposals_per_institution INTEGER NOT NULL DEFAULT 50;
+ALTER TABLE institutions ADD COLUMN IF NOT EXISTS proposal_creation_cooldown_minutes INTEGER NOT NULL DEFAULT 0;
+CREATE INDEX IF NOT EXISTS memberships_city_joined_human_idx ON memberships(city_id, joined_game_day, human_id);
+CREATE INDEX IF NOT EXISTS memberships_corporation_joined_human_idx ON memberships(corporation_id, joined_game_day, human_id);
 ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS id TEXT;
 ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS part_number INTEGER;
 ALTER TABLE constitutional_rules ADD COLUMN IF NOT EXISTS rule_number TEXT;

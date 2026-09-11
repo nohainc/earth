@@ -9,7 +9,20 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
   await repository.transaction(async (tx) => {
     // A proposal submitted during D starts at the opening of D + 1.
     await tx.query(
-      "UPDATE proposals SET status = 'open' WHERE status = 'scheduled' AND voting_start_day <= $1",
+      `UPDATE proposals p
+       SET status = 'open', decision_status = 'voting',
+           eligible_voter_count = (
+             SELECT COUNT(*)
+             FROM humans h
+             JOIN memberships m ON m.human_id = h.id
+             JOIN institutions i ON i.id = p.institution_id
+             WHERE h.life_status = 'active'
+               AND m.joined_game_day <= p.voting_start_day
+               AND ((i.kind = 'CITY' AND m.city_id = p.institution_id)
+                 OR (i.kind = 'CORPORATION' AND m.corporation_id = p.institution_id))
+           ),
+           eligibility_cutoff_game_day = p.voting_start_day
+       WHERE p.status = 'scheduled' AND p.voting_start_day <= $1`,
       [completedDay + 1],
     );
 
