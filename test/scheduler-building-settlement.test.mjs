@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { PostgresRepository } from '../cloudflare/src/repository.ts';
 import {
-  advanceBuildingConstruction,
-  settleBuildingUpkeepAndRevenue,
   settleCivicDividends,
 } from '../cloudflare/src/scheduler-postgres.ts';
+import {
+  advanceBuildingConstruction,
+  settleBuildingUpkeepAndRevenue,
+} from '../cloudflare/src/building-settlement-engine.ts';
 
 class MockDbClient {
   constructor(handler) {

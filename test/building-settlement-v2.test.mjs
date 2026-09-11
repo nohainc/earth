@@ -24,5 +24,5 @@ test('V2 building settlement calculates results and emits effects without balanc
 });
 
 test('daily building phase uses the V2 effects boundary', () => {
-  assert.match(scheduler, /settleBuildingUpkeepAndRevenueV2\(tx, settlementDay\)/);
+  assert.match(scheduler, /settleBuildingUpkeepAndRevenueV2\(tx, day\)/);
 });

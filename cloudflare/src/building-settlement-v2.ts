@@ -1,4 +1,8 @@
 import type { PostgresRepository } from './repository.ts';
+import { BUILDING_SETTLEMENT_PIPELINE } from './building-settlement-pipeline.ts';
+
+// This boundary is shared with the planner/poster migration contract.
+export { BUILDING_SETTLEMENT_PIPELINE };
 
 type Account = {
   owner_id: string;

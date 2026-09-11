@@ -3,7 +3,6 @@ import { processMortality } from './lifecycle-postgres.ts';
 import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
-import { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue } from './building-settlement-engine.ts';
 import { settleBuildingUpkeepAndRevenueV2 } from './building-settlement-v2.ts';
 import { settleCivicDividends } from './civic-dividend-engine.ts';
 import { settleLifeMaintenanceInTransaction } from './life-maintenance-postgres.ts';
@@ -13,7 +12,7 @@ import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './econom
 import { createDailySettlementPhaseRegistry, type DailySettlementPhaseContext } from './daily-settlement-phases.ts';
 import { provisionEconomicEntryPartitions } from './economic-entry-partitions.ts';
 
-export { advanceBuildingConstruction, settleBuildingUpkeepAndRevenue, settleCivicDividends };
+export { settleBuildingUpkeepAndRevenueV2, settleCivicDividends };
 
 function charterRate(raw: unknown, key: string): number | null {
   if (!raw) return null;

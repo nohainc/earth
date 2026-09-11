@@ -12,13 +12,13 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '232_finance_v2_invariants.sql');
+  assert.equal(files.at(-1), '254_exclude_buildings_from_generic_profiles.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 232, 'Manifest version must match latest migration version (232)');
+  assert.equal(manifest.migrationVersion, 254, 'Manifest version must match latest migration version (254)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 232/);
+  assert.match(schema, /reconciled through migration 254/);
   for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');
   for (const check of ['open_order_without_escrow', 'orphan_market_escrow', 'buy_reservation_below_required_maximum', 'position_collateral_mismatch', 'market_economic_transaction_unbalanced']) assert.match(marketIntegrity, new RegExp(check));
@@ -117,6 +117,12 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(watermark, /CREATE OR REPLACE FUNCTION earth_settlement_watermark/);
   assert.match(watermark, /MIN\(day\) - 1/);
   assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS buildings'), 'Canonical schema.sql must define buildings');
+  assert.ok(manifest.requiredTables.building_settlement_plans, 'Manifest must contain building settlement plans');
+  assert.ok(manifest.requiredTables.building_settlement_plans.includes('allocated_inputs'));
+  assert.ok(manifest.requiredTables.building_settlement_owner_inputs, 'Manifest must contain owner shard inputs');
+  assert.ok(manifest.requiredTables.building_settlement_allocations, 'Manifest must contain allocation results');
+  assert.ok(manifest.requiredTables.building_settlement_plans.includes('operation_mode'));
+  assert.ok(manifest.requiredTables.building_settlement_physical_effects, 'Manifest must contain physical effects');
   assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS houses'), 'Canonical schema.sql must define houses');
   assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS economic_assets'), 'Canonical schema.sql must define V2 assets');
   assert.ok(schema.includes('CREATE TABLE IF NOT EXISTS economic_accounts'), 'Canonical schema.sql must define V2 accounts');

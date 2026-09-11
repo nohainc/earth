@@ -1,3 +1,9 @@
+/**
+ * Legacy compatibility fixture only. Production schedulers use
+ * building-settlement-v2.ts and no longer import this module. Remove this
+ * module together with the legacy settlement integration tests after the
+ * transition audit is complete.
+ */
 import type { PostgresRepository } from './repository.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
