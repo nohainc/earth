@@ -14,7 +14,7 @@ test('daily settlement has one ordered canonical phase registry', () => {
 
   const requiredOrder = [
     'prepare_partitions', 'profile_rebuild', 'profile_settlement',
-    'life_maintenance', 'basic_levy', 'building_settlement',
+    'life_maintenance', 'basic_levy', 'ip_license_billing', 'building_settlement',
     'city_corporate_income_tax', 'global_bank', 'bank_health', 'budget_dividend_eligibility', 'financial_projections', 'rankings_snapshot',
     'end_of_day_snapshots',
   ];

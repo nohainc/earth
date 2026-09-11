@@ -19,8 +19,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const starter = calculateStarterPackage(world.rows[0]?.living_cost_index ?? 1, economicStartIndex(referencePrice.rows[0]?.reference_price ?? 50));
     const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const accountId = `account-${humanId.toLowerCase()}`;
-    const technologyId = `TECH-${humanId.slice(2)}`;
-    const researchId = `R-${humanId.slice(2)}`;
     const assistantId = `AI-${humanId.slice(2)}-01`;
     const houseId = `HOUSE-${humanId.slice(2)}`;
     const displayName = `${input.personName} ${input.houseSurname}`;
@@ -58,8 +56,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,0,0)', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', humanId]);
     await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
-    await tx.query('INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,$2,$3,0)', [technologyId, 'Automated Assembly', humanId]);
-    await tx.query("INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,status,started_game_day) VALUES ($1,$2,$3,0,0,'active',$4)", [researchId, technologyId, humanId, worldDay]);
     await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
     await enqueueOutbox(tx, {
       eventKey: `starter-package:${humanId}`,
@@ -126,8 +122,6 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
 
     const newHumanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const newAccountId = `account-${newHumanId.toLowerCase()}`;
-    const technologyId = `TECH-${newHumanId.slice(2)}`;
-    const researchId = `R-${newHumanId.slice(2)}`;
     const cityId = input.startingCityId ?? 'CITY-0084';
     const city = (await tx.query<{ id: string; corporation_id: string | null }>('SELECT id, corporation_id FROM cities WHERE id = $1', [cityId])).rows[0];
     if (!city) throw new Error(`Starting city ${cityId} does not exist`);
@@ -168,8 +162,6 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     for (const [res, amt] of Object.entries(starter.resources)) {
       await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [newHumanId, res, amt]);
     }
-    await tx.query("INSERT INTO technologies (id,name,owner_id,progress) VALUES ($1,'Automated Assembly',$2,0) ON CONFLICT(id) DO NOTHING", [technologyId, newHumanId]);
-    await tx.query('INSERT INTO research_projects (id,technology_id,owner_id,budget,progress,started_game_day) VALUES ($1,$2,$3,2500,0,$4)', [researchId, technologyId, newHumanId, worldDay]);
     // Rebirth begins in the selected city and accepts its corporation rules
     // when that city is corporation-owned.
     await tx.query('INSERT INTO memberships (human_id,corporation_id,city_id,joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = EXCLUDED.corporation_id, city_id = EXCLUDED.city_id', [newHumanId, city.corporation_id, cityId, worldDay]);

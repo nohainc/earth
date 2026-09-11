@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 254.
+-- Canonical fresh-install schema, reconciled through migration 292.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -1012,10 +1012,33 @@ CREATE TABLE IF NOT EXISTS buildings (
   construction_started_game_day BIGINT NOT NULL,
   construction_complete_game_day BIGINT,
   construction_progress NUMERIC(5,2) NOT NULL DEFAULT 0.0 CHECK (construction_progress >= 0.0 AND construction_progress <= 100.0),
+  construction_rules_version TEXT,
+  construction_technology_modifiers JSONB NOT NULL DEFAULT '{}'::JSONB,
+  construction_base_duration_minutes BIGINT,
+  construction_duration_minutes BIGINT,
+  construction_cost_credits_units BIGINT,
+  construction_cost_material_units BIGINT,
+  construction_cost_components_units BIGINT,
+  construction_cost_compute_units BIGINT,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('under_construction','active','damaged','derelict','decommissioned')),
   operational_state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (operational_state IN ('ACTIVE', 'DEGRADED', 'OFFLINE', 'DESTROYED')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_settled_game_day BIGINT
+);
+ALTER TABLE buildings DROP CONSTRAINT IF EXISTS buildings_construction_snapshot_nonnegative_ck;
+ALTER TABLE buildings ADD CONSTRAINT buildings_construction_snapshot_nonnegative_ck CHECK (
+  construction_base_duration_minutes IS NULL OR construction_base_duration_minutes >= 0
+);
+ALTER TABLE buildings DROP CONSTRAINT IF EXISTS buildings_construction_duration_snapshot_nonnegative_ck;
+ALTER TABLE buildings ADD CONSTRAINT buildings_construction_duration_snapshot_nonnegative_ck CHECK (
+  construction_duration_minutes IS NULL OR construction_duration_minutes >= 0
+);
+ALTER TABLE buildings DROP CONSTRAINT IF EXISTS buildings_construction_cost_snapshot_nonnegative_ck;
+ALTER TABLE buildings ADD CONSTRAINT buildings_construction_cost_snapshot_nonnegative_ck CHECK (
+  COALESCE(construction_cost_credits_units, 0) >= 0
+  AND COALESCE(construction_cost_material_units, 0) >= 0
+  AND COALESCE(construction_cost_components_units, 0) >= 0
+  AND COALESCE(construction_cost_compute_units, 0) >= 0
 );
 ALTER TABLE buildings DROP CONSTRAINT IF EXISTS buildings_ownership_scope_check;
 ALTER TABLE buildings ADD CONSTRAINT buildings_ownership_scope_check CHECK (
@@ -1037,6 +1060,7 @@ CREATE TABLE IF NOT EXISTS building_settlement_journals (
   condition_start NUMERIC(10,4) NOT NULL,
   condition_end NUMERIC(10,4) NOT NULL,
   auto_repaired BOOLEAN NOT NULL DEFAULT FALSE,
+  technology_effects JSONB NOT NULL DEFAULT '{}'::JSONB,
   consumed_units JSONB NOT NULL DEFAULT '{}'::JSONB,
   produced_units JSONB NOT NULL DEFAULT '{}'::JSONB,
   rules_version TEXT NOT NULL DEFAULT 'building-economy-v2',
@@ -1687,7 +1711,7 @@ CREATE TABLE IF NOT EXISTS proposals (
   target_value_json JSONB,
   target_kind TEXT NOT NULL DEFAULT 'generic' CHECK (target_kind IN ('generic', 'building_catalog', 'research_project', 'finance_rule')),
   building_catalog_id TEXT REFERENCES building_catalog(id) ON DELETE RESTRICT,
-  research_project_id TEXT REFERENCES corporation_building_research_projects(id) ON DELETE RESTRICT,
+  research_project_id TEXT,
   executed_at TIMESTAMPTZ,
   execution_status TEXT NOT NULL DEFAULT 'not_ready' CHECK (execution_status IN ('not_ready','ready','awaiting_funding','started','executed','skipped','expired_unfunded','blocked')),
   challenge_status TEXT NOT NULL DEFAULT 'none' CHECK (challenge_status IN ('none','pending','upheld','voided')),
@@ -1822,25 +1846,240 @@ CREATE TABLE IF NOT EXISTS constitutional_rules (
 -- 9. Technology & R&D
 -- -----------------------------------------------------------------------------
 
-CREATE TABLE IF NOT EXISTS technologies (
+CREATE TABLE IF NOT EXISTS technology_catalog (
   id TEXT PRIMARY KEY,
+  code TEXT NOT NULL,
   name TEXT NOT NULL,
-  owner_id TEXT,
-  progress NUMERIC(5,2) NOT NULL DEFAULT 0,
-  version INTEGER NOT NULL DEFAULT 1,
-  metadata JSONB NOT NULL DEFAULT '{}'
+  category TEXT NOT NULL CHECK (category IN ('PRODUCTION','EFFICIENCY','CONSTRUCTION','ENERGY','MAINTENANCE','RESEARCH','SERVICES','LOGISTICS')),
+  description TEXT NOT NULL,
+  patentable BOOLEAN NOT NULL DEFAULT FALSE,
+  patent_exclusivity_days INTEGER NOT NULL DEFAULT 0 CHECK (patent_exclusivity_days >= 0),
+  research_credit_cost_units BIGINT NOT NULL CHECK (research_credit_cost_units > 0),
+  research_points_required BIGINT NOT NULL CHECK (research_points_required > 0),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('DRAFT','ACTIVE','SUPERSEDED','RETIRED')),
+  definition_version INTEGER NOT NULL DEFAULT 1 CHECK (definition_version > 0),
+  effective_from_game_day BIGINT NOT NULL DEFAULT 0 CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day),
+  CHECK (patentable OR patent_exclusivity_days = 0),
+  UNIQUE (code, effective_from_game_day),
+  UNIQUE (code, definition_version)
 );
+CREATE INDEX IF NOT EXISTS technology_catalog_effective_idx ON technology_catalog (code, effective_from_game_day DESC) WHERE status IN ('ACTIVE', 'SUPERSEDED');
 
-CREATE TABLE IF NOT EXISTS research_projects (
-  id TEXT PRIMARY KEY,
-  technology_id TEXT NOT NULL REFERENCES technologies(id),
-  owner_id TEXT NOT NULL REFERENCES humans(id),
-  budget NUMERIC(20,2) NOT NULL DEFAULT 0,
-  progress NUMERIC(10,4) NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'active',
-  started_game_day BIGINT NOT NULL,
-  focus TEXT NOT NULL DEFAULT 'efficiency' CHECK (focus IN ('efficiency','durability','safety','cost'))
+CREATE TABLE IF NOT EXISTS corporation_technology_specializations (
+  corporation_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  specialization_code TEXT NOT NULL CHECK (specialization_code IN ('INDUSTRY','ENERGY','COMPUTE','AGRICULTURE','CONSTRUCTION','SERVICES')),
+  efficiency_bonus_bps INTEGER NOT NULL DEFAULT 1000 CHECK (efficiency_bonus_bps BETWEEN 0 AND 1500),
+  effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUPERSEDED','REVOKED')),
+  rules_version TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (corporation_economic_id, effective_from_game_day),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS corporation_technology_specialization_active_idx ON corporation_technology_specializations (corporation_economic_id) WHERE status = 'ACTIVE' AND effective_to_game_day IS NULL;
+
+CREATE TABLE IF NOT EXISTS technology_prerequisites (
+  technology_id TEXT NOT NULL REFERENCES technology_catalog(id) ON DELETE CASCADE,
+  requires_technology_id TEXT NOT NULL REFERENCES technology_catalog(id) ON DELETE RESTRICT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (technology_id, requires_technology_id),
+  CHECK (technology_id <> requires_technology_id)
+);
+CREATE INDEX IF NOT EXISTS technology_prerequisites_requires_idx ON technology_prerequisites (requires_technology_id, technology_id);
+
+CREATE TABLE IF NOT EXISTS technology_effects (
+  id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  technology_id TEXT NOT NULL REFERENCES technology_catalog(id) ON DELETE CASCADE,
+  effect_type TEXT NOT NULL CHECK (effect_type IN ('PRODUCTION_OUTPUT','RESOURCE_INPUT','CONSTRUCTION_TIME','CONSTRUCTION_RESOURCE_COST','BUILDING_WEAR','REPAIR_EFFICIENCY','RESEARCH_CAPACITY','SERVICE_CAPACITY','ENERGY_INPUT')),
+  target_type TEXT NOT NULL CHECK (target_type IN ('ALL_BUILDINGS','ASSET','BUILDING','SERVICE','RESEARCH')),
+  target_key TEXT NOT NULL,
+  modifier_family TEXT NOT NULL,
+  modifier_bps INTEGER NOT NULL CHECK (modifier_bps BETWEEN -100000 AND 100000),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (technology_id, effect_type, target_type, target_key)
+);
+CREATE INDEX IF NOT EXISTS technology_effects_target_idx ON technology_effects (effect_type, target_type, target_key, technology_id);
+
+CREATE TABLE IF NOT EXISTS technology_modifier_rules (
+  family_code TEXT PRIMARY KEY,
+  effect_type TEXT NOT NULL UNIQUE,
+  stacking_mode TEXT NOT NULL DEFAULT 'ADDITIVE_BPS' CHECK (stacking_mode = 'ADDITIVE_BPS'),
+  minimum_bps INTEGER NOT NULL,
+  maximum_bps INTEGER NOT NULL,
+  effective_from_game_day BIGINT NOT NULL DEFAULT 0,
+  effective_to_game_day BIGINT,
+  definition_version INTEGER NOT NULL DEFAULT 1,
+  CHECK (minimum_bps <= maximum_bps),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
+);
+CREATE INDEX IF NOT EXISTS technology_effects_family_idx ON technology_effects (modifier_family, target_type, target_key, technology_id);
+
+CREATE TABLE IF NOT EXISTS corporation_research_projects (
+  id TEXT PRIMARY KEY,
+  corporation_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  target_type TEXT NOT NULL CHECK (target_type IN ('TECHNOLOGY','BUILDING_BLUEPRINT')),
+  target_id TEXT NOT NULL,
+  definition_version TEXT NOT NULL,
+  definition_snapshot JSONB NOT NULL DEFAULT '{}'::JSONB,
+  specialization_bonus_bps INTEGER NOT NULL DEFAULT 0 CHECK (specialization_bonus_bps BETWEEN 0 AND 1500),
+  required_research_points BIGINT NOT NULL CHECK (required_research_points > 0),
+  progress_research_points BIGINT NOT NULL DEFAULT 0 CHECK (progress_research_points >= 0),
+  credit_cost_units BIGINT NOT NULL CHECK (credit_cost_units >= 0),
+  priority INTEGER NOT NULL DEFAULT 100 CHECK (priority BETWEEN 0 AND 1000),
+  status TEXT NOT NULL DEFAULT 'QUEUED' CHECK (status IN ('QUEUED','ACTIVE','COMPLETED','CANCELLED')),
+  started_game_day BIGINT,
+  completed_game_day BIGINT,
+  funding_transaction_id BIGINT REFERENCES economic_transactions(id),
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (progress_research_points <= required_research_points),
+  CHECK (completed_game_day IS NULL OR started_game_day IS NULL OR completed_game_day >= started_game_day)
+  ,CHECK (status <> 'ACTIVE' OR funding_transaction_id IS NOT NULL)
+);
+CREATE INDEX IF NOT EXISTS corporation_research_projects_queue_idx ON corporation_research_projects (corporation_economic_id, status, priority DESC, created_at, id);
+CREATE UNIQUE INDEX IF NOT EXISTS corporation_research_projects_active_target_idx ON corporation_research_projects (corporation_economic_id, target_type, target_id) WHERE status IN ('QUEUED','ACTIVE','COMPLETED');
+CREATE UNIQUE INDEX IF NOT EXISTS corporation_research_one_active_idx ON corporation_research_projects (corporation_economic_id) WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS corporation_research_funding_idx ON corporation_research_projects (funding_transaction_id) WHERE funding_transaction_id IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS technology_patents (
+  id TEXT PRIMARY KEY,
+  technology_id TEXT NOT NULL REFERENCES technology_catalog(id),
+  owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  granted_game_day BIGINT NOT NULL CHECK (granted_game_day >= 0),
+  exclusive_through_game_day BIGINT NOT NULL CHECK (exclusive_through_game_day >= granted_game_day),
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'EXPIRED', 'REVOKED')),
+  granting_project_id TEXT NOT NULL REFERENCES corporation_research_projects(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS technology_patents_one_active_idx ON technology_patents (technology_id) WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS technology_patents_owner_idx ON technology_patents (owner_economic_id, status);
+
+CREATE TABLE IF NOT EXISTS technology_public_domain (
+  technology_id TEXT PRIMARY KEY REFERENCES technology_catalog(id),
+  effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 0),
+  source_patent_id TEXT NOT NULL REFERENCES technology_patents(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS technology_public_domain_effective_idx ON technology_public_domain (effective_from_game_day, technology_id);
+
+CREATE TABLE IF NOT EXISTS technology_license_contracts (
+  id TEXT PRIMARY KEY,
+  patent_id TEXT NOT NULL REFERENCES technology_patents(id),
+  licensor_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  licensee_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  upfront_fee_units BIGINT NOT NULL DEFAULT 0 CHECK (upfront_fee_units >= 0),
+  daily_fee_units BIGINT NOT NULL DEFAULT 0 CHECK (daily_fee_units >= 0),
+  definition_snapshot JSONB NOT NULL DEFAULT '{}'::JSONB,
+  patent_terms_snapshot JSONB NOT NULL DEFAULT '{}'::JSONB,
+  upfront_transaction_id BIGINT,
+  last_daily_transaction_id BIGINT,
+  status TEXT NOT NULL DEFAULT 'PENDING' CHECK (status IN ('PENDING', 'ACTIVE', 'SUSPENDED', 'EXPIRED', 'TERMINATED')),
+  paid_through_game_day BIGINT NOT NULL,
+  suspended_game_day BIGINT,
+  suspension_reason TEXT,
+  rules_version TEXT NOT NULL,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (licensee_economic_id <> licensor_economic_id),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day),
+  CHECK (paid_through_game_day < effective_from_game_day)
+);
+CREATE INDEX IF NOT EXISTS technology_license_contracts_licensee_idx ON technology_license_contracts (licensee_economic_id, status, effective_from_game_day, effective_to_game_day);
+CREATE INDEX IF NOT EXISTS technology_license_contracts_patent_idx ON technology_license_contracts (patent_id, status);
+
+CREATE TABLE IF NOT EXISTS technology_patent_ownership_transfers (
+  id BIGSERIAL PRIMARY KEY,
+  patent_id TEXT NOT NULL REFERENCES technology_patents(id),
+  from_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  to_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE UNIQUE INDEX IF NOT EXISTS technology_patent_ownership_transfer_once_idx ON technology_patent_ownership_transfers (patent_id, from_owner_economic_id, to_owner_economic_id);
+
+CREATE TABLE IF NOT EXISTS technology_license_payments (
+  id BIGSERIAL PRIMARY KEY,
+  contract_id TEXT NOT NULL REFERENCES technology_license_contracts(id),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  amount_units BIGINT NOT NULL CHECK (amount_units > 0),
+  transaction_id BIGINT NOT NULL,
+  correlation_id TEXT NOT NULL UNIQUE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (contract_id, game_day)
+);
+CREATE INDEX IF NOT EXISTS technology_license_payments_contract_idx ON technology_license_payments (contract_id, game_day);
+
+CREATE TABLE IF NOT EXISTS corporation_technology_access (
+  corporation_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  technology_id TEXT NOT NULL REFERENCES technology_catalog(id),
+  access_source TEXT NOT NULL CHECK (access_source IN ('RESEARCHED','LICENSED','GRANTED')),
+  source_id TEXT NOT NULL,
+  effective_from_game_day BIGINT NOT NULL CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','EXPIRED','REVOKED')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (corporation_economic_id, technology_id, access_source, source_id),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
+);
+CREATE INDEX IF NOT EXISTS corporation_technology_access_lookup_idx ON corporation_technology_access (corporation_economic_id, technology_id, effective_from_game_day, effective_to_game_day) WHERE status = 'ACTIVE';
+CREATE INDEX IF NOT EXISTS corporation_technology_access_expiry_idx ON corporation_technology_access (effective_to_game_day) WHERE status = 'ACTIVE' AND effective_to_game_day IS NOT NULL;
+
+CREATE TABLE IF NOT EXISTS corporation_technology_modifier_cache (
+  corporation_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  production_output_bps INTEGER NOT NULL DEFAULT 0,
+  material_input_bps INTEGER NOT NULL DEFAULT 0,
+  energy_input_bps INTEGER NOT NULL DEFAULT 0,
+  construction_time_bps INTEGER NOT NULL DEFAULT 0,
+  construction_cost_bps INTEGER NOT NULL DEFAULT 0,
+  wear_bps INTEGER NOT NULL DEFAULT 0,
+  repair_efficiency_bps INTEGER NOT NULL DEFAULT 0,
+  research_capacity_bps INTEGER NOT NULL DEFAULT 0,
+  service_capacity_bps INTEGER NOT NULL DEFAULT 0,
+  scoped_modifiers JSONB NOT NULL DEFAULT '{}'::JSONB,
+  technology_source_breakdown JSONB NOT NULL DEFAULT '[]'::JSONB,
+  source_count INTEGER NOT NULL DEFAULT 0 CHECK (source_count >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (corporation_economic_id, game_day)
+);
+CREATE INDEX IF NOT EXISTS corporation_technology_modifier_cache_day_idx ON corporation_technology_modifier_cache (game_day, corporation_economic_id);
+
+CREATE TABLE IF NOT EXISTS corporation_technology_modifier_invalidations (
+  corporation_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  effective_game_day BIGINT NOT NULL CHECK (effective_game_day >= 0),
+  reason_code TEXT NOT NULL,
+  source_id TEXT NOT NULL,
+  resolved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (corporation_economic_id, effective_game_day, reason_code, source_id)
+);
+CREATE INDEX IF NOT EXISTS corporation_technology_modifier_invalidations_pending_idx ON corporation_technology_modifier_invalidations (effective_game_day, corporation_economic_id) WHERE resolved_at IS NULL;
+
+ALTER TABLE building_catalog ADD COLUMN IF NOT EXISTS research_capacity_units_per_day BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE building_settlement_plans ADD COLUMN IF NOT EXISTS research_capacity_units BIGINT NOT NULL DEFAULT 0;
+ALTER TABLE building_settlement_plans ADD COLUMN IF NOT EXISTS research_points_generated BIGINT NOT NULL DEFAULT 0;
+
+CREATE TABLE IF NOT EXISTS corporation_research_capacity_daily (
+  corporation_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  base_capacity_units BIGINT NOT NULL DEFAULT 0 CHECK (base_capacity_units >= 0),
+  technology_modifier_bps INTEGER NOT NULL DEFAULT 0,
+  effective_capacity_units BIGINT NOT NULL DEFAULT 0 CHECK (effective_capacity_units >= 0),
+  source_building_count INTEGER NOT NULL DEFAULT 0 CHECK (source_building_count >= 0),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (corporation_economic_id, game_day)
+);
+CREATE INDEX IF NOT EXISTS corporation_research_capacity_day_idx ON corporation_research_capacity_daily (game_day, corporation_economic_id);
 
 CREATE TABLE IF NOT EXISTS corporate_research_pools (
   id TEXT PRIMARY KEY,
@@ -1860,31 +2099,6 @@ CREATE TABLE IF NOT EXISTS corporate_research_pools (
 );
 CREATE INDEX IF NOT EXISTS corporate_research_corp_idx ON corporate_research_pools(corporation_id, status);
 CREATE INDEX IF NOT EXISTS idx_corp_research_corp_tech ON corporate_research_pools(corporation_id, technology_key);
-
-CREATE TABLE IF NOT EXISTS human_technology_adoptions (
-  human_id TEXT NOT NULL REFERENCES humans(id),
-  technology_id TEXT NOT NULL REFERENCES technologies(id),
-  adopted_game_day BIGINT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','superseded','revoked')),
-  PRIMARY KEY (human_id, technology_id)
-);
-CREATE INDEX IF NOT EXISTS human_technology_adoptions_human_idx ON human_technology_adoptions(human_id);
-CREATE INDEX IF NOT EXISTS human_technology_adoptions_technology_idx ON human_technology_adoptions(technology_id);
-
-CREATE TABLE IF NOT EXISTS human_technology_subscriptions (
-  human_id TEXT NOT NULL REFERENCES humans(id),
-  corporation_id TEXT NOT NULL REFERENCES corporations(id),
-  technology_key TEXT NOT NULL,
-  subscription_cost_credits NUMERIC(20,2) NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','inactive')),
-  subscribed_game_day BIGINT,
-  unsubscribed_game_day BIGINT,
-  last_billed_game_day BIGINT,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (human_id, technology_key)
-);
-CREATE INDEX IF NOT EXISTS human_technology_subscriptions_human_idx
-  ON human_technology_subscriptions(human_id, status);
 
 -- -----------------------------------------------------------------------------
 -- 10. Contracts, Supply & Arbitration
@@ -2373,6 +2587,16 @@ CREATE INDEX IF NOT EXISTS settlement_anomalies_open_idx ON settlement_anomalies
 -- Reconciled late-schema extensions (migrations 088, 092, 097, 107, 157-180)
 -- ----------------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION earth_building_corporation_economic_id(p_building_id TEXT)
+RETURNS BIGINT LANGUAGE SQL STABLE AS $$
+  SELECT CASE WHEN b.ownership_class = 'private' THEN COALESCE(corporation.economic_id, owner.economic_id) ELSE owner.economic_id END
+  FROM buildings b
+  JOIN owner_registry owner ON owner.id = COALESCE(b.owner_id, b.city_id)
+  LEFT JOIN memberships membership ON membership.human_id = b.owner_id AND b.ownership_class = 'private'
+  LEFT JOIN owner_registry corporation ON corporation.id = membership.corporation_id
+  WHERE b.id = p_building_id;
+$$;
+
 CREATE TABLE IF NOT EXISTS app_error_logs (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(), created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   human_id TEXT REFERENCES humans(id) ON DELETE SET NULL, source TEXT NOT NULL,
@@ -2416,8 +2640,10 @@ CREATE TABLE IF NOT EXISTS building_catalog (
   service_mode TEXT NOT NULL DEFAULT 'PRIVATE' CHECK (service_mode IN ('PRIVATE', 'PUBLIC_CONTRACT', 'FREE')),
   operating_service_cost_units BIGINT NOT NULL DEFAULT 0,
   operating_cost_recipient_type TEXT NOT NULL DEFAULT 'NONE',
-  created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW()
+  created_at TIMESTAMPTZ DEFAULT NOW(), updated_at TIMESTAMPTZ DEFAULT NOW(),
+  CHECK (tier BETWEEN 1 AND 5)
 );
+CREATE UNIQUE INDEX IF NOT EXISTS building_catalog_type_tier_uq ON building_catalog (building_type, tier);
 
 CREATE TABLE IF NOT EXISTS building_economic_rule_versions (
   catalog_id TEXT NOT NULL REFERENCES building_catalog(id) ON DELETE CASCADE,
@@ -2442,32 +2668,9 @@ CREATE TABLE IF NOT EXISTS building_economic_rule_versions (
 CREATE INDEX IF NOT EXISTS building_economic_rule_versions_effective_idx
   ON building_economic_rule_versions (catalog_id, effective_from_game_day DESC);
 
-CREATE TABLE IF NOT EXISTS corporation_technology_projects (
-  id TEXT PRIMARY KEY, corporation_id TEXT NOT NULL REFERENCES corporations(id) ON DELETE CASCADE,
-  technology_key TEXT NOT NULL, technology_name TEXT NOT NULL,
-  research_cost_credits NUMERIC(20,2) NOT NULL CHECK (research_cost_credits > 0),
-  subscription_cost_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (subscription_cost_credits >= 0),
-  effect_key TEXT NOT NULL, progress NUMERIC(6,3) NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','completed','cancelled')),
-  started_game_day BIGINT NOT NULL, completed_game_day BIGINT, correlation_id TEXT UNIQUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (corporation_id, technology_key)
-);
-
-CREATE TABLE IF NOT EXISTS corporation_building_research_projects (
-  id TEXT PRIMARY KEY, corporation_id TEXT NOT NULL REFERENCES corporations(id), building_type TEXT NOT NULL,
-  catalog_id TEXT NOT NULL REFERENCES building_catalog(id), target_tier INTEGER NOT NULL CHECK (target_tier >= 2),
-  research_cost_credits NUMERIC(18,2) NOT NULL CHECK (research_cost_credits > 0), duration_minutes INTEGER NOT NULL CHECK (duration_minutes > 0),
-  progress NUMERIC(6,3) NOT NULL DEFAULT 0 CHECK (progress BETWEEN 0 AND 100),
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','paused','completed','cancelled')),
-  started_game_day BIGINT NOT NULL, started_game_minute INTEGER NOT NULL DEFAULT 0 CHECK (started_game_minute BETWEEN 0 AND 1439),
-  completed_game_day BIGINT, completed_game_minute INTEGER, correlation_id TEXT UNIQUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-
 CREATE TABLE IF NOT EXISTS corporation_building_unlocks (
   corporation_id TEXT NOT NULL REFERENCES corporations(id), catalog_id TEXT NOT NULL REFERENCES building_catalog(id),
-  research_project_id TEXT REFERENCES corporation_building_research_projects(id),
+  research_project_id TEXT,
   status TEXT NOT NULL DEFAULT 'unlocked' CHECK (status IN ('unlocked','revoked')),
   unlocked_game_day BIGINT NOT NULL, created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), PRIMARY KEY (corporation_id, catalog_id)
 );
@@ -2553,7 +2756,6 @@ ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS paid NUMERIC(20,2
 ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS unpaid NUMERIC(20,2) NOT NULL DEFAULT 0;
 ALTER TABLE personal_life_maintenance ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'completed';
 ALTER TABLE proposals ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
-ALTER TABLE research_projects ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW();
 ALTER TABLE human_life_conditions ADD COLUMN IF NOT EXISTS score INTEGER NOT NULL DEFAULT 100;
 ALTER TABLE human_life_conditions ADD COLUMN IF NOT EXISTS updated_game_day BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE human_life_conditions ADD COLUMN IF NOT EXISTS last_reason TEXT NOT NULL DEFAULT '';

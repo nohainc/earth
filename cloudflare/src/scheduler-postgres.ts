@@ -50,65 +50,6 @@ async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Prom
   }
 }
 
-async function settleTechnologySubscriptions(tx: PostgresRepository, day: number): Promise<void> {
-  return;
-  const subscriptions = await tx.query<{ business_id: string; owner_id: string; corporation_id: string; technology_key: string; subscription_cost_credits: string }>(`SELECT s.business_id, b.owner_id, s.corporation_id, s.technology_key, s.subscription_cost_credits
-    FROM business_technology_subscriptions s JOIN businesses b ON b.id = s.business_id
-    JOIN corporation_technology_projects p ON p.corporation_id = s.corporation_id AND p.technology_key = s.technology_key AND p.status = 'completed'
-    WHERE s.status = 'active' AND (s.last_billed_game_day IS NULL OR s.last_billed_game_day < $1)`, [day]);
-  for (const subscription of subscriptions.rows) {
-    const amount = centsToMoney(moneyToCents(subscription.subscription_cost_credits));
-    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT'", [subscription.owner_id, subscription.corporation_id]);
-    const businessAccount = accounts.rows.find((row) => row.owner_id === subscription.owner_id);
-    const corporationAccount = accounts.rows.find((row) => row.owner_id === subscription.corporation_id);
-    if (!businessAccount || !corporationAccount || moneyToCents(businessAccount.balance) < moneyToCents(amount)) {
-      await tx.query("UPDATE business_technology_subscriptions SET status = 'inactive', unsubscribed_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE business_id = $2 AND technology_key = $3", [day, subscription.business_id, subscription.technology_key]);
-      continue;
-    }
-    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: businessAccount.account_id, creditAccount: corporationAccount.account_id, amount, reasonType: 'technology_subscription', reasonId: subscription.business_id, ruleVersion: 'corporation-technology-v1', correlationId: `TECH-SUB-${subscription.business_id}-${subscription.technology_key}-${day}` });
-    await tx.query('UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3', [amount, day, subscription.business_id]);
-    await tx.query('UPDATE business_technology_subscriptions SET last_billed_game_day = $1, updated_at = CURRENT_TIMESTAMP WHERE business_id = $2 AND technology_key = $3', [day, subscription.business_id, subscription.technology_key]);
-  }
-}
-
-async function settleServiceBusinessRevenue(tx: PostgresRepository, day: number): Promise<void> {
-  return;
-  const serviceBusinesses = await tx.query<{ business_id: string; revenue: string }>(
-    "SELECT b.id AS business_id, COALESCE(SUM(e.skill * e.morale * 160 * CASE WHEN b.sector = 'it-services' AND lower(e.role) ~ '(engineer|developer|architect)' THEN 1.25 WHEN b.sector = 'consulting' AND lower(e.role) ~ '(consultant|advisor|analyst)' THEN 1.25 WHEN b.sector = 'logistics' AND lower(e.role) ~ '(dispatcher|coordinator|planner)' THEN 1.25 WHEN b.sector = 'healthcare' AND lower(e.role) ~ '(caregiver|nurse|doctor)' THEN 1.25 WHEN b.sector = 'education' AND lower(e.role) ~ '(teacher|mentor|instructor)' THEN 1.25 ELSE 1 END), 0) * CASE WHEN EXISTS (SELECT 1 FROM negotiated_contracts c WHERE c.kind = 'intellectual_service' AND c.status = 'accepted' AND c.ends_game_day > $1 AND c.proposer_business_id = b.id) THEN 1 ELSE 0.35 END * CASE WHEN b.sector IN ('it-services', 'consulting') AND COALESCE(c.connectivity_capacity / NULLIF(c.residents, 0), 0) >= 1 THEN 1.15 WHEN b.sector = 'healthcare' AND COALESCE(c.health_capacity / 100.0, 0) >= 0.8 THEN 1.15 WHEN b.sector = 'education' AND COALESCE(c.housing_capacity / NULLIF(c.residents, 0), 0) >= 1 THEN 1.10 ELSE 1 END * CASE WHEN EXISTS (SELECT 1 FROM business_technology_subscriptions s JOIN memberships tech_member ON tech_member.human_id = b.owner_id JOIN corporation_technology_projects tech_project ON tech_project.corporation_id = s.corporation_id AND tech_project.technology_key = s.technology_key AND tech_project.status = 'completed' WHERE s.business_id = b.id AND s.technology_key = 'automated_assembly' AND s.status = 'active' AND tech_member.corporation_id = s.corporation_id) THEN 1.10 ELSE 1 END AS revenue FROM businesses b JOIN business_employees e ON e.business_id = b.id AND e.status = 'active' LEFT JOIN memberships m ON m.human_id = b.owner_id LEFT JOIN cities c ON c.id = m.city_id WHERE b.status = 'active' AND b.sector IN ('it-services', 'consulting', 'logistics', 'healthcare', 'education') GROUP BY b.id, c.connectivity_capacity, c.health_capacity, c.housing_capacity, c.residents",
-    [day],
-  );
-  for (const row of serviceBusinesses.rows) {
-    const revenue = Number(row.revenue ?? 0);
-    if (revenue <= 0) continue;
-    await tx.query(
-      'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
-      [revenue, day, row.business_id],
-    );
-  }
-}
-
-async function settleInstitutionBusinessEffects(tx: PostgresRepository, day: number): Promise<void> {
-  return;
-  const businesses = await tx.query<{ business_id: string; sector: string; city_id: string | null; corporation_id: string | null; housing_capacity: string | null; energy_capacity: string | null; connectivity_capacity: string | null; health_capacity: string | null; residents: string | null }>(
-    "SELECT b.id AS business_id, b.sector, m.city_id, m.corporation_id, c.housing_capacity, c.energy_capacity, c.connectivity_capacity, c.health_capacity, c.residents FROM businesses b LEFT JOIN memberships m ON m.human_id = b.owner_id LEFT JOIN cities c ON c.id = m.city_id WHERE b.status = 'active'",
-  );
-  for (const business of businesses.rows) {
-    const residents = Math.max(1, Number(business.residents ?? 1));
-    const ratios = [
-      Number(business.housing_capacity ?? residents) / residents,
-      Number(business.energy_capacity ?? residents) / residents,
-      Number(business.connectivity_capacity ?? residents) / residents,
-      Number(business.health_capacity ?? 100) / 100,
-    ];
-    const servicePressure = Math.max(0, Math.min(...ratios));
-    if (business.city_id && servicePressure < 0.75) {
-      const disruptionCost = Math.round((0.75 - servicePressure) * 100 * 100) / 100;
-      await tx.query(
-        'UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
-        [disruptionCost, day, business.business_id],
-      );
-    }
-    if (business.corporation_id && ['it-services', 'consulting', 'logistics', 'healthcare', 'education'].includes(business.sector)) {
       const networkRevenue = 20;
       await tx.query(
         'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
@@ -435,127 +376,6 @@ async function settleServiceContracts(tx: PostgresRepository, day: number): Prom
 }
 */
 
-async function settleTechnologyRoyalties(tx: PostgresRepository, day: number): Promise<void> {
-  return;
-  return;
-  const licenses = await tx.query<{ id: string; licensor_id: string; licensee_id: string; licensee_business_id: string | null; royalty_rate: string }>("SELECT technology_licenses.id, licensor_id, licensee_id, licensee_business_id, royalty_rate FROM technology_licenses JOIN patents ON patents.id = technology_licenses.patent_id WHERE technology_licenses.status = 'active' AND patents.status = 'active' AND licensor_id <> licensee_id");
-  for (const license of licenses.rows) {
-    const royaltyCents = 0n;
-    const royalty = centsToMoney(royaltyCents);
-    if (royaltyCents <= 0n) continue;
-    const correlationId = `ROYALTY-${license.id}-${day}`;
-    if ((await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1 AND reason_type = 'technology_royalty'", [correlationId])).rows[0]) continue;
-    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT' ORDER BY owner_id FOR UPDATE", [license.licensee_id, license.licensor_id]);
-    const buyer = accounts.rows.find((row) => row.owner_id === license.licensee_id);
-    const owner = accounts.rows.find((row) => row.owner_id === license.licensor_id);
-    if (!buyer || !owner || moneyToCents(buyer.balance) < royaltyCents) {
-      await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Royalty payment pending\',$3,$4) ON CONFLICT DO NOTHING', [`ROYALTY-PENDING-${license.id}-${day}`, license.licensee_id, `The ${royalty} Credit royalty for license ${license.id} is pending until your balance is sufficient.`, license.id]);
-      continue;
-    }
-    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: day, debitAccount: buyer.account_id, creditAccount: owner.account_id, amount: royalty, reasonType: 'technology_royalty', reasonId: license.id, ruleVersion: 'technology-v3', correlationId });
-    await tx.query("UPDATE business_financials SET operating_costs = operating_costs + $1, profit = profit - $2, last_game_day = $3, updated_at = CURRENT_TIMESTAMP WHERE business_id = COALESCE($4, (SELECT id FROM businesses WHERE owner_id = $5 AND status = 'active' ORDER BY id LIMIT 1))", [royalty, royalty, day, license.licensee_business_id, license.licensee_id]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'technology\',\'Technology royalty paid\',$3,$4), ($5,$6,\'technology\',\'Technology royalty received\',$7,$4)', [crypto.randomUUID(), license.licensee_id, `${royalty} Credits paid for licensed technology usage.`, license.id, crypto.randomUUID(), license.licensor_id, `${royalty} Credits received from licensed technology usage.`]);
-  }
-}
-
-async function settleBuildingPatentLicenses(tx: PostgresRepository, day: number): Promise<void> {
-  return;
-  const licenses = await tx.query<{
-    id: string;
-    patent_id: string;
-    patent_name: string;
-    license_type: string;
-    licensee_id: string;
-    licensor_corporation_id: string;
-    building_id: string | null;
-    city_id: string | null;
-    is_permanent: boolean;
-    expiry_game_day: string;
-    royalty_per_day_crd: string;
-    status: string;
-  }>("SELECT * FROM building_patent_licenses WHERE status NOT IN ('expired', 'suspended')");
-
-  for (const lic of licenses.rows) {
-    const expiry = Number(lic.expiry_game_day);
-    const royalty = Number(lic.royalty_per_day_crd || 0);
-
-    // Check expiry transitions
-    if (!lic.is_permanent && expiry <= day) {
-      await tx.query(
-        "UPDATE building_patent_licenses SET status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-        [lic.id],
-      );
-      if (lic.building_id) {
-        await tx.query(
-          "UPDATE buildings SET patent_license_status = 'expired', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-          [lic.building_id],
-        );
-      }
-      await tx.query(
-        `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
-         VALUES ($1, $2, 'technology', 'Patent License Expired', $3, $4)
-         ON CONFLICT DO NOTHING`,
-        [
-          crypto.randomUUID(),
-          lic.licensee_id,
-          `Your license for ${lic.patent_name} has expired. Facility operates at reduced baseline efficiency (-30% output) until renewed.`,
-          lic.id,
-        ],
-      );
-      continue;
-    } else if (!lic.is_permanent && expiry - day <= 3 && lic.status !== 'renewal_window') {
-      await tx.query(
-        "UPDATE building_patent_licenses SET status = 'renewal_window', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-        [lic.id],
-      );
-      if (lic.building_id) {
-        await tx.query(
-          "UPDATE buildings SET patent_license_status = 'renewal_window', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-          [lic.building_id],
-        );
-      }
-      await tx.query(
-        `INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id)
-         VALUES ($1, $2, 'technology', 'Patent License Renewal Window Open', $3, $4)
-         ON CONFLICT DO NOTHING`,
-        [
-          crypto.randomUUID(),
-          lic.licensee_id,
-          `Your patent license for ${lic.patent_name} expires in ${expiry - day} game days. Renew now to maintain peak technological yields.`,
-          lic.id,
-        ],
-      );
-    }
-
-    // Settle daily royalties
-    if (royalty > 0) {
-      const royaltyCents = BigInt(Math.round(royalty * 100));
-      const correlationId = `BLD-PAT-ROYALTY-${lic.id}-${day}`;
-      const prior = await tx.query("SELECT 1 FROM ledger_entries WHERE correlation_id = $1", [correlationId]);
-      if (prior.rows.length === 0) {
-        const isCivic = lic.license_type === 'city_civic' && lic.city_id;
-        const payerAccount = isCivic
-          ? `account-city-${lic.city_id}`
-          : (await tx.query<{ account_id: string }>("SELECT account_id FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT'", [lic.licensee_id])).rows[0]?.account_id;
-
-        if (payerAccount) {
-          await postEconomicCreditTransfer(tx, {
-            ledgerId: crypto.randomUUID(),
-            gameDay: day,
-            debitAccount: payerAccount,
-            creditAccount: `account-corporation-${lic.licensor_corporation_id}`,
-            amount: centsToMoney(royaltyCents),
-            reasonType: 'building_patent_royalty',
-            reasonId: lic.id,
-            ruleVersion: 'patent-licensing-v1',
-            correlationId,
-          }).catch(() => undefined);
-        }
-      }
-    }
-  }
-}
-
 async function updateFinancialStates(tx: PostgresRepository, day: number): Promise<void> {
   const candidates = await tx.query<{ id: string; kind: string; value: string; due_units: string; liabilities_units: string; realizable_assets_units: string; current: string }>(`SELECT i.id, i.kind,
       COALESCE((SELECT a.balance FROM economic_accounts a WHERE a.owner_economic_id = o.economic_id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)::TEXT AS value,
@@ -586,6 +406,9 @@ async function updateFinancialStates(tx: PostgresRepository, day: number): Promi
 async function dissolveInstitutions(tx: PostgresRepository, day: number): Promise<void> {
   const candidates = await tx.query<{ id: string; kind: string; name: string }>("SELECT institutions.id, institutions.kind, institutions.name FROM institutions JOIN financial_states ON financial_states.institution_id = institutions.id WHERE financial_states.status = 'insolvent' AND $1 - financial_states.since_game_day >= 30 FOR UPDATE", [day]);
   for (const candidate of candidates.rows) {
+    if (candidate.kind === 'CORPORATION') {
+      await tx.query('SELECT earth_transfer_dissolved_corporation_ip($1, $2, $3)', [candidate.id, day, `corporation-ip-registry:${candidate.id}:${day}`]);
+    }
     const members = candidate.kind === 'CITY'
       ? await tx.query<{ human_id: string }>('SELECT human_id FROM memberships WHERE city_id = $1 FOR UPDATE', [candidate.id])
       : candidate.kind === 'CORPORATION'
@@ -665,18 +488,6 @@ async function processCityDynamics(tx: PostgresRepository, day: number): Promise
   }
 }
 
-async function processPatentExpirations(tx: PostgresRepository, day: number): Promise<void> {
-  return;
-  const expiredPatents = await tx.query<{ id: string; technology_id: string }>("SELECT id, technology_id FROM patents WHERE expiry_game_day <= $1 AND status = 'active'", [day]);
-  if (expiredPatents.rows.length > 0) {
-    await tx.query("UPDATE patents SET status = 'expired' WHERE expiry_game_day <= $1 AND status = 'active'", [day]);
-    await tx.query("UPDATE technology_licenses SET status = 'expired' WHERE patent_id = ANY($1::text[]) AND status = 'active'", [expiredPatents.rows.map((p) => p.id)]);
-    for (const patent of expiredPatents.rows) {
-      await tx.query("INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,'patent.expired','Patent entered public domain',$3) ON CONFLICT (id) DO NOTHING", [`PATENT-EXPIRED-${patent.id}`, day, toNanoMarkup({ patentId: patent.id, technologyId: patent.technology_id })]);
-    }
-  }
-}
-
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
   // Buildings are the productive assets; machine-based production was retired in migration 069.
   void tx; void day;
@@ -739,10 +550,7 @@ async function runResumablePhase(
 }
 
 async function settleResearchAndProgress(tx: PostgresRepository, day: number): Promise<void> {
-  await tx.query("UPDATE research_projects SET progress = LEAST(100, progress + CASE WHEN budget > 0 THEN 1 ELSE 0 END) WHERE status = 'active'");
-  await tx.query("UPDATE technologies SET progress = LEAST(100, progress + CASE WHEN EXISTS (SELECT 1 FROM research_projects WHERE technology_id = technologies.id AND budget > 0 AND status = 'active') THEN 1 ELSE 0 END)");
-  await tx.query("UPDATE cities SET housing_capacity = housing_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'housing' ORDER BY game_day DESC LIMIT 1), 0) / 1000), energy_capacity = energy_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'energy' ORDER BY game_day DESC LIMIT 1), 0) / 1000), connectivity_capacity = connectivity_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category = 'connectivity' ORDER BY game_day DESC LIMIT 1), 0) / 1000), health_capacity = health_capacity + LEAST(5, COALESCE((SELECT amount FROM budgets WHERE institution_id = cities.id AND category IN ('health','public-services','maintenance') ORDER BY game_day DESC LIMIT 1), 0) / 1000)");
-  await tx.query('UPDATE budgets SET amount = GREATEST(0, amount - 100), game_day = $1 WHERE amount > 0', [day]);
+  await tx.query('SELECT earth_settle_research_and_progress_v2($1)', [day]);
 }
 
 async function settleLifecycle(tx: PostgresRepository, day: number): Promise<void> {
@@ -780,14 +588,18 @@ export async function runResumableSettlementDay(
     profileSettlement: ({ tx }) => applyPreparedSettlementProfiles(tx, day),
     lifeMaintenance: ({ tx }) => settleLifeMaintenanceInTransaction(tx, day),
     basicLevy: ({ tx }) => settleBasicLevy(tx, day),
-    buildingSettlement: ({ tx }) => settleBuildingUpkeepAndRevenueV2(tx, day),
-    buildingPatentLicenses: ({ tx }) => settleBuildingPatentLicenses(tx, day),
+    ipLicenseBilling: ({ tx }) => tx.query('SELECT earth_settle_technology_license_fees($1)', [day]),
+    buildingSettlement: async ({ tx }) => {
+      await tx.query('SELECT earth_rebuild_corporation_technology_modifier_cache($1)', [day]);
+      await tx.query('SELECT earth_refresh_technology_modifier_sources($1)', [day]);
+      return settleBuildingUpkeepAndRevenueV2(tx, day);
+    },
     cityCorporateIncomeTax: ({ tx }) => settleCityCorporateIncomeTax(tx, day),
     globalBank: ({ tx }) => settleGlobalBank(tx, day),
     bankHealth: ({ tx }) => tx.query('SELECT earth_evaluate_global_bank_resolution($1)', [day]),
     cityDynamics: ({ tx }) => processCityDynamics(tx, day),
     budgetDividendEligibility: ({ tx }) => settleCivicDividends(tx, day),
-    patentExpirations: ({ tx }) => processPatentExpirations(tx, day),
+    patentExpirations: ({ tx }) => tx.query('SELECT earth_finalize_technology_public_domain($1)', [day]),
     researchAndProgress: ({ tx }) => settleResearchAndProgress(tx, day),
     lifecycle: ({ tx }) => settleLifecycle(tx, day),
     financialStates: ({ tx }) => updateFinancialStates(tx, day),

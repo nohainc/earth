@@ -8,6 +8,54 @@ import {
   type OperatingPolicy,
   type OwnershipClass,
 } from './real-estate-catalog.ts';
+
+type ConstructionTechnologySnapshot = {
+  rulesVersion: string | null;
+  modifiers: Record<string, number>;
+};
+
+function constructionModifier(
+  modifiers: Record<string, number>,
+  effectType: string,
+  targetKey: string,
+): number {
+  return Number(
+    modifiers[`${effectType}:ASSET:${targetKey}`]
+      ?? modifiers[`${effectType}:ASSET:ALL`]
+      ?? modifiers[`${effectType}:ALL_BUILDINGS:ALL`]
+      ?? modifiers[`${effectType}:ALL:ALL`]
+      ?? 0,
+  );
+}
+
+async function resolveConstructionTechnology(
+  tx: PostgresRepository,
+  ownerId: string,
+  gameDay: number,
+): Promise<ConstructionTechnologySnapshot> {
+  const result = await tx.query<{
+    economic_id: string;
+    rules_version: string | null;
+    modifiers: Record<string, number> | null;
+  }>(
+    `SELECT o.economic_id::TEXT AS economic_id,
+            c.rules_version,
+            COALESCE(c.scoped_modifiers, '{}'::JSONB) AS modifiers
+       FROM memberships m
+       JOIN owner_registry o ON o.id = m.corporation_id
+       LEFT JOIN corporation_technology_modifier_cache c
+         ON c.corporation_economic_id = o.economic_id
+        AND c.game_day = $2
+      WHERE m.human_id = $1
+        AND m.corporation_id IS NOT NULL
+      ORDER BY m.joined_game_day DESC NULLS LAST, m.corporation_id
+      LIMIT 1`,
+    [ownerId, gameDay],
+  );
+  const row = result.rows[0];
+  if (!row) return { rulesVersion: null, modifiers: {} };
+  return { rulesVersion: row.rules_version, modifiers: row.modifiers ?? {} };
+}
 export interface DistrictZoningSummary {
   cityId: string;
   cityName: string;
@@ -151,7 +199,8 @@ export async function purchasePrivatePlotAndConstruct(
       `SELECT id, building_type, name, tier, ownership_class, slot_footprint,
               cost_credits, cost_materials, output_credits, output_energy, output_food,
               output_materials, output_components, output_compute, upkeep_energy,
-              upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_credits
+              upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_credits,
+              construction_days, construction_minutes
          FROM building_catalog WHERE id = $1 AND tier = 1 AND is_active = true`,
       [`${input.buildingType}-t1`],
     )).rows[0];
@@ -201,8 +250,27 @@ export async function purchasePrivatePlotAndConstruct(
       );
     }
 
+    const world = await tx.query<{ genesis_at: string; simulated_day_offset: number }>(
+      "SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'",
+    );
+    const authTime = getAuthoritativeGameTime({
+      genesisAt: world.rows[0]?.genesis_at,
+      simulatedDayOffset: world.rows[0]?.simulated_day_offset,
+    });
+    const day = authTime.gameDay;
+    const technology = await resolveConstructionTechnology(tx, input.ownerId, day);
+    const techModifier = (effectType: string, targetKey: string): number =>
+      constructionModifier(technology.modifiers, effectType, targetKey);
+    const constructionTimeMultiplier = Math.max(0, 10000 + techModifier('CONSTRUCTION_TIME', 'ALL')) / 10000;
+    const constructionCostMultiplier = (asset: string): number =>
+      Math.max(0, 10000 + techModifier('CONSTRUCTION_RESOURCE_COST', asset)) / 10000;
+    const creditCostUnits = BigInt(Math.max(0, Math.round(spec.baseCreditCost * 100 * constructionCostMultiplier('CREDIT'))));
+    const materialCostUnits = BigInt(Math.max(0, Math.round(spec.baseMaterialCost * 1_000_000 * constructionCostMultiplier('MATERIAL'))));
+    const componentsCostUnits = BigInt(Math.max(0, Math.round(Number(catalogRow.cost_components ?? 0) * 1_000_000 * constructionCostMultiplier('COMPONENTS'))));
+    const computeCostUnits = BigInt(Math.max(0, Math.round(Number(catalogRow.cost_compute ?? 0) * 1_000_000 * constructionCostMultiplier('COMPUTE'))));
+
     // Check Credits
-    const creditCostCents = BigInt(Math.round(spec.baseCreditCost * 100));
+    const creditCostCents = creditCostUnits;
     const account = await tx.query<{ account_id: string; balance: string }>(
       "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
       [input.ownerId],
@@ -212,15 +280,6 @@ export async function purchasePrivatePlotAndConstruct(
     }
 
     // Check Materials
-    const materialCost = spec.baseMaterialCost;
-    const world = await tx.query<{ genesis_at: string; simulated_day_offset: number }>(
-      "SELECT genesis_at, simulated_day_offset FROM world_state WHERE id = 'WORLD'",
-    );
-    const authTime = getAuthoritativeGameTime({
-      genesisAt: world.rows[0]?.genesis_at,
-      simulatedDayOffset: world.rows[0]?.simulated_day_offset,
-    });
-    const day = authTime.gameDay;
     const buildingId = `BLD-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
 
     // Transfer Credits (60% to City Treasury, 25% to Corp Treasury if affiliated, 15% to OUC)
@@ -240,28 +299,47 @@ export async function purchasePrivatePlotAndConstruct(
     });
 
     // Deduct Materials with guaranteed ledger audit
-    if (materialCost > 0) {
+    if (materialCostUnits > 0n) {
       await postEconomicResourceMutation(tx, {
         ownerId: input.ownerId,
         resource: 'material',
-        delta: -materialCost,
+        delta: -Number(materialCostUnits) / 1_000_000,
         reasonType: 'building_construction',
         reasonId: buildingId,
         correlationId: `${input.correlationId}:material`,
         gameDay: day,
       });
     }
+    if (componentsCostUnits > 0n) {
+      await postEconomicResourceMutation(tx, {
+        ownerId: input.ownerId,
+        resource: 'components',
+        delta: -Number(componentsCostUnits) / 1_000_000,
+        reasonType: 'building_construction',
+        reasonId: buildingId,
+        correlationId: `${input.correlationId}:components`,
+        gameDay: day,
+      });
+    }
+    if (computeCostUnits > 0n) {
+      await postEconomicResourceMutation(tx, {
+        ownerId: input.ownerId,
+        resource: 'compute',
+        delta: -Number(computeCostUnits) / 1_000_000,
+        reasonType: 'building_construction',
+        reasonId: buildingId,
+        correlationId: `${input.correlationId}:compute`,
+        gameDay: day,
+      });
+    }
 
     // Private building construction starts immediately upon purchase and runs for
     // the exact duration in continuous game minutes (1 real second = 1 game minute).
-    const catalogRes = await tx.query<{ construction_days: number; construction_minutes: number }>(
-      'SELECT construction_days, construction_minutes FROM building_catalog WHERE id = $1',
-      [`${input.buildingType}-t${spec.tier || 1}`],
-    );
-    const constructionDays = Math.max(1, Number(catalogRes.rows[0]?.construction_days ?? spec.slotFootprint ?? 1));
-    const durationMinutes = catalogRes.rows[0]?.construction_minutes && Number(catalogRes.rows[0].construction_minutes) > 0
-      ? Number(catalogRes.rows[0].construction_minutes)
+    const constructionDays = Math.max(1, Number(catalogRow.construction_days ?? spec.slotFootprint ?? 1));
+    const baseDurationMinutes = catalogRow.construction_minutes && Number(catalogRow.construction_minutes) > 0
+      ? Number(catalogRow.construction_minutes)
       : constructionDays * 1440;
+    const durationMinutes = Math.max(1, Math.round(baseDurationMinutes * constructionTimeMultiplier));
     const startMinute = authTime.totalGameMinutes;
     const completeMinute = startMinute + durationMinutes;
     const startDay = day;
@@ -282,8 +360,12 @@ export async function purchasePrivatePlotAndConstruct(
         construction_started_minute, construction_complete_minute,
         construction_start_day, construction_duration_days, construction_due_end_day,
         construction_progress,
+        construction_rules_version, construction_technology_modifiers,
+        construction_base_duration_minutes, construction_duration_minutes,
+        construction_cost_credits_units, construction_cost_material_units,
+        construction_cost_components_units, construction_cost_compute_units,
         status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 0.0, 'under_construction', $24)`,
+      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 0.0, $24, $25, $26, $27, $28, $29, $30, $31, 'under_construction', $32)`,
       [
         buildingId,
         citizenCityId,
@@ -306,8 +388,16 @@ export async function purchasePrivatePlotAndConstruct(
         startMinute,
         completeMinute,
         startDay,
-        constructionDays,
+        Math.ceil(durationMinutes / 1440),
         completeDay,
+        technology.rulesVersion,
+        technology.modifiers,
+        baseDurationMinutes,
+        durationMinutes,
+        creditCostUnits.toString(),
+        materialCostUnits.toString(),
+        componentsCostUnits.toString(),
+        computeCostUnits.toString(),
         day,
       ],
     );

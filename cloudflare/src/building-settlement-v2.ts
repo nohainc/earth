@@ -38,6 +38,9 @@ type Building = {
   economic_output_multiplier: string | null;
   economic_cost_multiplier: string | null;
   economic_decay_multiplier: string | null;
+  condition_efficiency: string | null;
+  technology_modifiers: Record<string, number> | null;
+  technology_source_breakdown: Array<Record<string, unknown>> | null;
 };
 
 export type BuildingSettlementResult = {
@@ -178,9 +181,15 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
       COALESCE(bc.output_compute, CASE WHEN b.resource_output_type = 'compute' THEN b.resource_output_amount ELSE 0 END, 0) AS output_compute,
       (SELECT MAX(e.effective_output_multiplier)::NUMERIC FROM earth_calculate_building_economics(b.id) e) AS economic_output_multiplier,
       (SELECT MAX(e.effective_cost_multiplier)::NUMERIC FROM earth_calculate_building_economics(b.id) e) AS economic_cost_multiplier,
-      (SELECT p.decay_multiplier FROM economic_policy_rules p WHERE p.code = b.operating_policy) AS economic_decay_multiplier
+      (SELECT p.decay_multiplier FROM economic_policy_rules p WHERE p.code = b.operating_policy) AS economic_decay_multiplier,
+      earth_condition_efficiency(b.condition, COALESCE(bc.condition_curve_version, 'v1')) AS condition_efficiency,
+      COALESCE(cache.scoped_modifiers, '{}'::JSONB) AS technology_modifiers,
+      COALESCE(cache.technology_source_breakdown, '[]'::JSONB) AS technology_source_breakdown
     FROM buildings b
     LEFT JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
+    LEFT JOIN corporation_technology_modifier_cache cache
+      ON cache.corporation_economic_id = earth_building_corporation_economic_id(b.id)
+     AND cache.game_day = $1
     WHERE b.status = 'active'
     ORDER BY b.id`, [day]);
 
@@ -228,20 +237,36 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
     const economicOwner = ownerClass === 'civic' ? building.city_id : building.owner_id;
     if (!economicOwner) continue;
     const costMultiplier = Number(building.economic_cost_multiplier ?? 1);
+    const technologyModifiers = building.technology_modifiers ?? {};
+    const modifier = (effectType: string, targetType: string, targetKey: string): number =>
+      Number(technologyModifiers[`${effectType}:${targetType}:${targetKey}`]
+        ?? technologyModifiers[`${effectType}:${targetType}:ALL`]
+        ?? technologyModifiers[`${effectType}:ALL_BUILDINGS:ALL`]
+        ?? technologyModifiers[`${effectType}:ALL:ALL`]
+        ?? 0);
     const outputMultiplier = Number(building.economic_output_multiplier ?? 1);
+    const inputMultiplier = (asset: string): number => Math.max(0,
+      10000
+      + modifier('RESOURCE_INPUT', 'ASSET', asset)
+      + (asset === 'ENERGY' ? modifier('ENERGY_INPUT', 'ALL_BUILDINGS', 'ALL') : 0),
+    ) / 10000;
+    const conditionEfficiency = Math.max(0, Number(building.condition_efficiency ?? 1));
     const upkeep: Record<string, number> = {
-      energy: Number(building.upkeep_energy) * costMultiplier,
-      food: Number(building.upkeep_food) * costMultiplier,
-      materials: Number(building.upkeep_materials) * costMultiplier,
-      components: Number(building.upkeep_components) * costMultiplier,
-      compute: Number(building.upkeep_compute) * costMultiplier,
+      energy: Number(building.upkeep_energy) * costMultiplier * inputMultiplier('ENERGY'),
+      food: Number(building.upkeep_food) * costMultiplier * inputMultiplier('FOOD'),
+      materials: Number(building.upkeep_materials) * costMultiplier * inputMultiplier('MATERIAL'),
+      components: Number(building.upkeep_components) * costMultiplier * inputMultiplier('COMPONENTS'),
+      compute: Number(building.upkeep_compute) * costMultiplier * inputMultiplier('COMPUTE'),
     };
     const productionOutput: Record<string, number> = {};
     for (const [name, value] of Object.entries({ ENERGY: building.output_energy, FOOD: building.output_food, MATERIAL: building.output_materials, COMPONENTS: building.output_components, COMPUTE: building.output_compute })) {
-      const amount = Number(value ?? 0) * outputMultiplier;
+      const amount = Number(value ?? 0) * outputMultiplier * conditionEfficiency
+        * Math.max(0, 10000 + modifier('PRODUCTION_OUTPUT', 'ASSET', name)) / 10000;
       if (amount > 0) productionOutput[name] = amount;
     }
-    const serviceCapacity = Number(building.output_credits ?? 0) * outputMultiplier;
+    const serviceCapacity = Number(building.output_credits ?? 0) * outputMultiplier
+      * conditionEfficiency
+      * Math.max(0, 10000 + modifier('SERVICE_CAPACITY', 'SERVICE', 'ALL')) / 10000;
     const ownerCredit = byOwnerAsset.get(key(economicOwner, 1));
     const ops = accounts.get(`${building.city_id ?? 'SYSTEM'}:1:4`) ?? byOwnerAsset.get(key(building.city_id ?? 'SYSTEM', 1)) ?? ownerCredit;
     const revenueRecipient = ownerCredit;
@@ -258,8 +283,12 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
     const result = physicalResult.canOperate && (available.get(key(economicOwner, 1)) ?? 0) >= opCost
       ? physicalResult
       : { ...physicalResult, canOperate: false, productionOutput: {}, customerDemand: 0, actualSales: 0, actualRevenue: 0, conditionDelta: -(repaired ? 6 : 8) };
+    const wearMultiplier = Math.max(0, 10000 + modifier('BUILDING_WEAR', 'ALL_BUILDINGS', 'ALL')) / 10000;
+    const repairEfficiencyMultiplier = Math.max(0, 10000 + modifier('REPAIR_EFFICIENCY', 'ALL_BUILDINGS', 'ALL')) / 10000;
+    const baseWear = result.canOperate ? Number(building.economic_decay_multiplier ?? 1) : (repaired ? 6 : 8);
+    const conditionDelta = -baseWear * wearMultiplier + (repaired ? repairEfficiencyMultiplier : 0);
     if (!result.canOperate) {
-      const finalCondition = Math.max(0, Number(building.condition) + result.conditionDelta);
+      const finalCondition = Math.max(0, Number(building.condition) + conditionDelta);
       await tx.query('UPDATE buildings SET condition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [finalCondition, building.id]);
     } else {
       for (const [resource, amount] of Object.entries(result.paidUpkeep)) {
@@ -299,15 +328,15 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
         addEffect(effects, system(assetId, 7), -units(amount, assetId), 'building_output_issuance', building.id);
         addEffect(effects, recipient, units(amount, assetId), 'building_output', building.id);
       }
-      const conditionDelta = -(Number(building.economic_decay_multiplier ?? 1));
       await tx.query('UPDATE buildings SET condition = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [Math.max(0, Number(building.condition) + conditionDelta), building.id]);
     }
     await tx.query(`INSERT INTO building_settlement_journals
       (id, building_id, city_id, day, ownership_class, gross_revenue_crd, operating_costs_crd, net_surplus_crd,
-       condition_start, condition_end, auto_repaired)
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)
-      ON CONFLICT (building_id, day) DO UPDATE SET condition_end = EXCLUDED.condition_end, auto_repaired = EXCLUDED.auto_repaired`,
-      [`JOURNAL-${building.id}-${day}`, building.id, building.city_id, day, ownerClass, result.actualSales, opCost, Math.max(0, result.actualSales - opCost), Number(building.condition), Math.max(0, Number(building.condition) + (result.canOperate ? -Number(building.economic_decay_multiplier ?? 1) : result.conditionDelta)), repaired]);
+       condition_start, condition_end, auto_repaired, technology_effects)
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12)
+      ON CONFLICT (building_id, day) DO UPDATE SET condition_end = EXCLUDED.condition_end,
+        auto_repaired = EXCLUDED.auto_repaired, technology_effects = EXCLUDED.technology_effects`,
+      [`JOURNAL-${building.id}-${day}`, building.id, building.city_id, day, ownerClass, result.actualSales, opCost, Math.max(0, result.actualSales - opCost), Number(building.condition), Math.max(0, Number(building.condition) + conditionDelta), repaired, JSON.stringify({ modifiers: technologyModifiers, sources: building.technology_source_breakdown ?? [] })]);
   }
   await insertEffects(tx, day, effects);
 }

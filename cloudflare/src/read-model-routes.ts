@@ -38,7 +38,11 @@ export async function handleReadModelRoutes(
     const result = await withRepository(env, async (repository) => {
       const [world, technology] = await Promise.all([
         repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
-        repository.query('SELECT progress FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewer.id]),
+        repository.query(`SELECT ROUND(p.progress_research_points * 100.0 / NULLIF(p.required_research_points, 0), 2) AS progress
+          FROM corporation_research_projects p
+          JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+          WHERE m.human_id = $1 AND p.target_type = 'TECHNOLOGY'
+          ORDER BY p.created_at DESC LIMIT 1`, [viewer.id]),
       ]);
       return {
         activity: [

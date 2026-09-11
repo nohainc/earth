@@ -46,41 +46,6 @@ export async function processEndOfDayAutomation(repository: PostgresRepository, 
       );
     }
 
-    const completedResearch = await tx.query<{ corporation_id: string; catalog_id: string; id: string }>(
-      `UPDATE corporation_building_research_projects
-       SET status = 'completed', progress = 100, research_completed_day = $1, completed_game_day = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE status = 'active' AND research_due_end_day <= $1
-       RETURNING corporation_id, catalog_id, id`,
-      [completedDay],
-    );
-    for (const project of completedResearch.rows) {
-      await tx.query('UPDATE building_catalog SET is_active = true, updated_at = CURRENT_TIMESTAMP WHERE id = $1', [project.catalog_id]);
-      await tx.query(
-        `INSERT INTO corporation_building_unlocks (corporation_id, catalog_id, research_project_id, unlocked_game_day)
-         VALUES ($1,$2,$3,$4)
-         ON CONFLICT (corporation_id, catalog_id) DO UPDATE
-           SET status = 'unlocked', research_project_id = EXCLUDED.research_project_id, unlocked_game_day = EXCLUDED.unlocked_game_day`,
-        [project.corporation_id, project.catalog_id, project.id, completedDay],
-      );
-      await tx.query(
-        'SELECT earth_economic_state_changed($1, $2, $3, $4, $5)',
-        [project.corporation_id, project.id, 'building_technology_upgrade', completedDay, 0],
-      );
-    }
-
-    const completedTechnologies = await tx.query<{ corporation_id: string; id: string; technology_key: string }>(
-      `UPDATE corporation_technology_projects
-       SET status = 'completed', progress = 100, completed_game_day = $1, updated_at = CURRENT_TIMESTAMP
-       WHERE status = 'active' AND research_due_end_day <= $1
-       RETURNING corporation_id, id, technology_key`,
-      [completedDay],
-    );
-    for (const technology of completedTechnologies.rows) {
-      await tx.query(
-        'SELECT earth_economic_state_changed($1, $2, $3, $4, $5)',
-        [technology.corporation_id, technology.id, 'technology_upgrade', completedDay, 0],
-      );
-    }
     await resolveProposalsInTransaction(tx, completedDay);
   });
 

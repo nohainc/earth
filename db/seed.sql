@@ -17,10 +17,6 @@ insert into corporations (id, institution_id, member_count, treasury, constituti
 values ('CORP-001', 'CORP-001', 0, 0, 1)
 on conflict (id) do nothing;
 
-insert into technologies (id, name, owner_id, progress)
-values ('TECH-001', 'Building Systems Optimization', 'H-0044', 72)
-on conflict (id) do nothing;
-
 insert into world_state (id, game_day, game_minute, health, market_batch_seconds)
 values ('WORLD', 184, 462, 68, 498)
 on conflict (id) do nothing;
@@ -49,10 +45,6 @@ on conflict (business_id) do nothing;
 insert into business_constitutions (business_id, updated_by, updated_game_day)
 values ('B-1048', 'H-0044', 184)
 on conflict (business_id) do nothing;
-
-insert into research_projects (id, technology_id, owner_id, budget, progress, status, started_game_day)
-values ('R-1048-01', 'TECH-001', 'H-0044', 120, 25, 'active', 180)
-on conflict (id) do nothing;
 
 -- Local UI/API test fixtures. IDs are namespaced so this block is safe to re-run
 -- and easy to remove from a disposable local database.

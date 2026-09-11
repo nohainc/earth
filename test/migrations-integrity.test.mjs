@@ -12,13 +12,14 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '254_exclude_buildings_from_generic_profiles.sql');
+  assert.equal(files.at(-1), '292_deterministic_patent_race_resolution.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 254, 'Manifest version must match latest migration version (254)');
+  assert.equal(manifest.migrationVersion, 292, 'Manifest version must match latest migration version (292)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 254/);
+  assert.match(schema, /reconciled through migration 292/);
+  assert.ok(manifest.requiredTables.technology_catalog, 'Technology V2 catalog must be in the canonical manifest');
   for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');
   for (const check of ['open_order_without_escrow', 'orphan_market_escrow', 'buy_reservation_below_required_maximum', 'position_collateral_mismatch', 'market_economic_transaction_unbalanced']) assert.match(marketIntegrity, new RegExp(check));
@@ -129,7 +130,6 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.ok(!schema.includes('character_lineage'), 'Canonical schema.sql must not include dropped character_lineage');
   assert.ok(!schema.includes('asset_ownership_events'), 'Canonical schema.sql must not include dropped asset_ownership_events');
   assert.ok(manifest.requiredTables.building_settlement_journals, 'Manifest must contain building_settlement_journals');
-  assert.ok(manifest.requiredTables.human_technology_subscriptions, 'Manifest must contain human technology subscriptions');
   assert.ok(manifest.requiredTables.owner_registry.includes('economic_id'), 'Owner registry must expose compact economic IDs');
   assert.ok(manifest.requiredUniqueConstraints.some((key) => key.join(':') === 'owner_registry:economic_id'), 'Economic IDs must be unique');
   assert.ok(manifest.requiredTables.economic_assets, 'Manifest must contain the V2 asset catalog');
@@ -230,7 +230,7 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(invalidation, /earth_record_rate_change/);
   assert.match(fs.readFileSync(path.resolve('cloudflare/src/real-estate-postgres.ts'), 'utf8'), /earth_economic_state_changed/);
   assert.match(fs.readFileSync(path.resolve('cloudflare/src/daily-automation.ts'), 'utf8'), /construction_completed/);
-  assert.match(fs.readFileSync(path.resolve('cloudflare/src/daily-automation.ts'), 'utf8'), /technology_upgrade/);
+  assert.match(fs.readFileSync(path.resolve('db/migrations/289_research_scheduler_v2.sql'), 'utf8'), /RESEARCH_COMPLETED/);
   assert.match(fs.readFileSync(path.resolve('cloudflare/src/lifecycle-postgres.ts'), 'utf8'), /ownership_transfer_in/);
   const buildingEconomics = fs.readFileSync(path.resolve('db/migrations/175_canonical_building_economics.sql'), 'utf8');
   assert.match(buildingEconomics, /CREATE OR REPLACE FUNCTION earth_calculate_building_economics/);

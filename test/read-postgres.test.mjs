@@ -50,7 +50,7 @@ test('listNotifications queries user notifications and counts unread', async () 
 
 test('listTechnology scopes corporation research to the current human', async () => {
   const client = new MockDbClient({
-    'FROM corporation_technology_projects': { rows: [{ id: 'PROJECT-1', corporation_id: 'CORP-001' }], rowCount: 1 },
+    'FROM corporation_research_projects p': { rows: [{ id: 'PROJECT-1', corporation_economic_id: 1001 }], rowCount: 1 },
   });
   const repo = new PostgresRepository(client);
 

@@ -1,6 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { postEconomicCreditTransfer } from './financial-postgres.ts';
-import { centsToMoney, moneyToCents } from './money.ts';
+import { moneyToCents } from './money.ts';
 
 type ResearchInput = { humanId: string; buildingType: string; correlationId: string };
 
@@ -45,7 +44,9 @@ function researchDurationDays(slotFootprint: number, tier: number, _ownershipCla
 
 export async function startCorporationBuildingResearchInTransaction(tx: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
     const corporationId = await corporationForHuman(tx, input.humanId);
-    const prior = await tx.query('SELECT * FROM corporation_building_research_projects WHERE corporation_id = $1 AND correlation_id = $2', [corporationId, input.correlationId]);
+    const prior = await tx.query(`SELECT p.* FROM corporation_research_projects p
+      JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+      WHERE o.id = $1 AND p.correlation_id = $2`, [corporationId, input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, project: prior.rows[0], correlationId: input.correlationId };
     await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`corp-building-research:${corporationId}:${input.buildingType}`]);
 
@@ -68,14 +69,17 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     );
     if (!previous.rows[0]) throw new Error('Building blueprint not found');
     const targetTier = priorTier + 1;
+    if (targetTier > 5) throw new Error(`No predefined building tier remains after Tier ${priorTier}`);
     const targetCatalogId = `${input.buildingType}-t${targetTier}`;
-    // Serialize global catalog creation across corporations. Each corporation
-    // still has its own research project, but only one shared blueprint row
-    // may ever be created for a building type and tier.
-    await tx.query('SELECT pg_advisory_xact_lock(hashtext($1))', [`building-catalog:${input.buildingType}:${targetTier}`]);
-    const existingCatalog = await tx.query('SELECT * FROM building_catalog WHERE id = $1', [targetCatalogId]);
+    // Tiers are authored in the catalog. Research unlocks a predefined
+    // blueprint; it never generates or mutates shared catalog economics.
+    const targetCatalog = await tx.query(
+      'SELECT * FROM building_catalog WHERE id = $1 AND building_type = $2 AND tier = $3 AND tier BETWEEN 1 AND 5',
+      [targetCatalogId, input.buildingType, targetTier],
+    );
+    if (!targetCatalog.rows[0]) throw new Error(`Predefined Tier ${targetTier} blueprint is missing from the building catalog`);
     const existingProject = await tx.query(
-      "SELECT * FROM corporation_building_research_projects WHERE corporation_id = $1 AND catalog_id = $2 AND status IN ('active','paused','completed') LIMIT 1",
+      "SELECT p.* FROM corporation_research_projects p JOIN owner_registry o ON o.economic_id = p.corporation_economic_id WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' AND p.target_id = $2 AND p.status IN ('QUEUED','ACTIVE','COMPLETED') LIMIT 1",
       [corporationId, targetCatalogId],
     );
     if (existingProject.rows[0]) {
@@ -93,57 +97,37 @@ export async function startCorporationBuildingResearchInTransaction(tx: Postgres
     const projectId = `CBR-${crypto.randomUUID().slice(0, 10).toUpperCase()}`;
 
     const isPrivate = previous.rows[0].ownership_class === 'private';
-    let debitAccountId: string;
+    const payerOwnerId = isPrivate ? input.humanId : corporationId;
+    const fundingAccounts = await tx.query<{ debit_account_id: string; research_account_id: string }>(`SELECT payer.id::TEXT AS debit_account_id, service.id::TEXT AS research_account_id
+      FROM economic_accounts payer
+      JOIN owner_registry payer_owner ON payer_owner.economic_id = payer.owner_economic_id AND payer_owner.id = $1
+      JOIN owner_registry system_owner ON system_owner.id = 'SYSTEM'
+      JOIN economic_accounts service ON service.owner_economic_id = system_owner.economic_id
+        AND service.asset_id = 1 AND service.account_type = 4 AND service.status = 'active'
+      WHERE payer.asset_id = 1 AND payer.account_type IN (1, 3, 4)
+        AND payer.status = 'active'
+      ORDER BY payer.is_default_settlement DESC, payer.account_type, payer.id
+      LIMIT 1`, [payerOwnerId]);
+    if (!fundingAccounts.rows[0]) throw new Error(`V2 funding account requires ${cost} Credits for this research`);
 
-    if (isPrivate) {
-      const personalAccount = await tx.query<{ account_id: string; balance: string }>(
-        "SELECT account_id, balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' FOR UPDATE",
-        [input.humanId],
-      );
-      if (!personalAccount.rows[0] || moneyToCents(personalAccount.rows[0].balance) < moneyToCents(cost)) {
-        throw new Error(`Personal account requires ${cost} Credits for this research`);
-      }
-      debitAccountId = personalAccount.rows[0].account_id;
-    } else {
-      const corporation = await tx.query<{ account_id: string; balance: string }>(
-        "SELECT account_id, balance FROM account_balances WHERE account_id = $1 AND currency = 'CREDIT' FOR UPDATE",
-        [`account-corporation-${corporationId}`],
-      );
-      if (!corporation.rows[0] || moneyToCents(corporation.rows[0].balance) < moneyToCents(cost)) {
-        throw new Error(`Corporation Treasury requires ${cost} Credits for this research`);
-      }
-      debitAccountId = corporation.rows[0].account_id;
-    }
-
-    if (!existingCatalog.rows[0]) {
-      await tx.query(
-        `INSERT INTO building_catalog (
-          id, building_type, name, tier, prev_catalog_id, category, ownership_class, slot_footprint,
-          cost_credits, cost_energy, cost_food, cost_materials, cost_components, cost_compute,
-          output_credits, output_energy, output_food, output_materials, output_components, output_compute,
-          upkeep_credits, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
-          operating_credits, operating_energy, operating_food, operating_materials, operating_components, operating_compute,
-          description, construction_days, construction_minutes, is_active, research_project_id
-        )
-        SELECT $1, building_type, name || ' · Tier ' || $2::text, $2::integer, id, category, ownership_class, slot_footprint,
-          cost_credits * 1.70, cost_energy * 1.70, cost_food * 1.70, cost_materials * 1.70, cost_components * 1.70, cost_compute * 1.70,
-          output_credits * 1.25, output_energy * 1.25, output_food * 1.25, output_materials * 1.25, output_components * 1.25, output_compute * 1.25,
-          upkeep_credits * 1.12, upkeep_energy * 1.12, upkeep_food * 1.12, upkeep_materials * 1.12, upkeep_components * 1.12, upkeep_compute * 1.12,
-          operating_credits * 1.12, operating_energy * 1.12, operating_food * 1.12, operating_materials * 1.12, operating_components * 1.12, operating_compute * 1.12,
-          COALESCE(description, '') || ' Researched Tier ' || $2::text || ' generation.', GREATEST(1, slot_footprint * $2::integer), GREATEST(1440, slot_footprint * $2::integer * 1440), false, $3
-        FROM building_catalog WHERE id = $4`,
-        [targetCatalogId, targetTier, projectId, previous.rows[0].id],
-      );
-      await tx.query('UPDATE building_catalog SET next_catalog_id = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2', [targetCatalogId, previous.rows[0].id]);
-    }
-
-    await postEconomicCreditTransfer(tx, { ledgerId: crypto.randomUUID(), gameDay: time.game_day, debitAccount: debitAccountId, creditAccount: 'account-research-registry', amount: centsToMoney(moneyToCents(cost)), reasonType: 'corporation_building_research', reasonId: projectId, ruleVersion: 'corporation-building-research-v1', correlationId: input.correlationId });
-    await tx.query(
-      `INSERT INTO corporation_building_research_projects (id, corporation_id, building_type, catalog_id, target_tier, research_cost_credits, duration_minutes, started_game_day, started_game_minute, research_start_day, research_duration_days, research_due_end_day, correlation_id)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,0,$9,$10,$11,$12)`,
-      [projectId, corporationId, input.buildingType, targetCatalogId, targetTier, cost, durationDays * 1440, time.game_day, time.game_day + 1, durationDays, time.game_day + durationDays, input.correlationId],
+    const corporationOwner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [corporationId]);
+    if (!corporationOwner.rows[0]) throw new Error('Corporation economic owner is not provisioned');
+    const funding = await tx.query<{ transaction_id: string }>(
+      `SELECT transaction_id FROM earth_post_transaction($1,$2,1439,'RESEARCH_FUNDING','CORPORATION_RESEARCH',$3,'building-catalog-v1',$4::jsonb)`,
+      [input.correlationId, time.game_day, projectId, JSON.stringify([
+        { account_id: fundingAccounts.rows[0].debit_account_id, delta: (-BigInt(Math.round(cost * 100))).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+        { account_id: fundingAccounts.rows[0].research_account_id, delta: BigInt(Math.round(cost * 100)).toString(), reason_code: 'CORPORATION_RESEARCH_FUNDING' },
+      ])],
     );
-    return { ok: true, project: (await tx.query('SELECT * FROM corporation_building_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
+    if (!funding.rows[0]?.transaction_id) throw new Error('Research funding transaction was not created');
+    await tx.query(`INSERT INTO corporation_research_projects
+      (id, corporation_economic_id, target_type, target_id, definition_version,
+       required_research_points, progress_research_points, credit_cost_units,
+       priority, status, started_game_day, funding_transaction_id, correlation_id)
+      VALUES ($1,$2,'BUILDING_BLUEPRINT',$3,'building-catalog-v1',$4,0,$5,100,'ACTIVE',$6,$7,$8)
+      ON CONFLICT (id) DO NOTHING`,
+      [projectId, corporationOwner.rows[0].economic_id, targetCatalogId, durationDays * 100, Math.round(cost * 100), time.game_day, funding.rows[0].transaction_id, input.correlationId]);
+    return { ok: true, project: (await tx.query('SELECT * FROM corporation_research_projects WHERE id = $1', [projectId])).rows[0], catalogId: targetCatalogId, correlationId: input.correlationId };
 }
 
 export async function startCorporationBuildingResearch(repository: PostgresRepository, input: ResearchInput): Promise<Record<string, unknown>> {
@@ -155,7 +139,10 @@ export async function listCorporationBuildingResearch(repository: PostgresReposi
   const corporationId = membership.rows[0]?.corporation_id;
   if (!corporationId) return { corporationId: null, projects: [], unlocks: [] };
   const [projects, unlocks] = await Promise.all([
-    repository.query('SELECT p.*, c.name AS catalog_name FROM corporation_building_research_projects p JOIN building_catalog c ON c.id = p.catalog_id WHERE p.corporation_id = $1 ORDER BY p.created_at DESC', [corporationId]),
+    repository.query(`SELECT p.*, c.name AS catalog_name FROM corporation_research_projects p
+      JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+      JOIN building_catalog c ON c.id = p.target_id
+      WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT' ORDER BY p.created_at DESC`, [corporationId]),
     repository.query('SELECT u.*, c.name AS catalog_name, c.building_type, c.tier FROM corporation_building_unlocks u JOIN building_catalog c ON c.id = u.catalog_id WHERE u.corporation_id = $1 AND u.status = \'unlocked\' ORDER BY c.building_type, c.tier', [corporationId]),
   ]);
   return { corporationId, projects: projects.rows, unlocks: unlocks.rows };

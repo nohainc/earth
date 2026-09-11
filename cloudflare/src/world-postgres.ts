@@ -8,7 +8,7 @@ import { economicStartIndex } from './starter-package.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
 import { reconcileWorldSimulation } from './engines/simulation-orchestrator.ts';
 import { computeResourceFlows } from './engines/resource-flow-engine.ts';
-import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
+import { mapTechnologyCatalogRow } from './technology-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { getCityDistrictZoning } from './real-estate-postgres.ts';
 
@@ -27,13 +27,19 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   // the scheduled coordinator so simply logging in cannot mutate an economy.
   const flows = await computeResourceFlows(repository, viewerId);
 
-  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, viewerBallots, succession, membership, prices, ledger, resourceLedger, cityMetrics, corporationMetrics, personalFinance, technologyAdoptions, corporationTechnologyProjects, technologySubscriptions] = await Promise.all([
+  const [world, human, institutions, resources, business, technology, proposals, governanceRules, account, ballots, viewerBallots, succession, membership, prices, ledger, resourceLedger, cityMetrics, corporationMetrics, personalFinance, corporationTechnologyProjects] = await Promise.all([
     repository.query('SELECT * FROM world_state WHERE id = $1', ['WORLD']),
     repository.query('SELECT * FROM humans WHERE id = $1', [viewerId]),
     repository.query('SELECT * FROM institutions'),
     repository.query('SELECT resource, amount FROM resource_balances WHERE owner_id = $1', [viewerId]),
     repository.query('SELECT NULL::text AS id WHERE false'),
-    repository.query('SELECT * FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewerId]),
+    repository.query(`SELECT p.id, p.target_id AS technology_id,
+        CASE WHEN p.required_research_points > 0 THEN
+          ROUND(p.progress_research_points * 100.0 / p.required_research_points, 2) ELSE 0 END AS progress
+      FROM corporation_research_projects p
+      JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+      WHERE m.human_id = $1 AND p.target_type = 'TECHNOLOGY'
+      ORDER BY p.created_at DESC LIMIT 1`, [viewerId]),
     repository.query(`
       SELECT p.*, COALESCE(h.display_name, 'Citizen') AS creator_name
       FROM proposals p
@@ -56,10 +62,9 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     // when a newly joined corporation was not present in a stale snapshot.
     repository.query("SELECT c.*, i.name FROM corporations c JOIN memberships m ON m.corporation_id = c.id JOIN institutions i ON i.id = c.institution_id WHERE m.human_id = $1 LIMIT 1", [viewerId]),
     repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewerId]),
-    repository.query("SELECT a.human_id, a.technology_id, a.adopted_game_day, t.name AS technology_name FROM human_technology_adoptions a JOIN technologies t ON t.id = a.technology_id WHERE a.human_id = $1 ORDER BY a.adopted_game_day DESC", [viewerId]),
-    repository.query("SELECT p.* FROM corporation_technology_projects p JOIN memberships m ON m.corporation_id = p.corporation_id WHERE m.human_id = $1 ORDER BY p.created_at DESC", [viewerId]).catch(() => ({ rows: [] })),
-    repository.query("SELECT s.* FROM human_technology_subscriptions s WHERE s.human_id = $1 ORDER BY s.technology_key", [viewerId]),
+    repository.query("SELECT p.* FROM corporation_research_projects p JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id) WHERE m.human_id = $1 ORDER BY p.created_at DESC", [viewerId]).catch(() => ({ rows: [] })),
   ]);
+  const technologyCatalog = await repository.query("SELECT DISTINCT ON (tc.code) tc.id, tc.code, tc.name, tc.category, tc.description, tc.patentable, tc.patent_exclusivity_days, tc.research_credit_cost_units::TEXT, tc.research_points_required::TEXT, tc.status, tc.definition_version, tc.effective_from_game_day, tc.effective_to_game_day, (SELECT COALESCE(jsonb_agg(jsonb_build_object('effectType', e.effect_type, 'modifierFamily', e.modifier_family, 'targetType', e.target_type, 'targetKey', e.target_key, 'modifierBps', e.modifier_bps) ORDER BY e.id), '[]'::JSONB) FROM technology_effects e WHERE e.technology_id = tc.id) AS effects FROM technology_catalog tc WHERE tc.status = 'ACTIVE' AND tc.effective_from_game_day <= $1 AND (tc.effective_to_game_day IS NULL OR tc.effective_to_game_day >= $1) ORDER BY tc.code, tc.effective_from_game_day DESC, tc.definition_version DESC", [Number(world.rows[0]?.game_day ?? 0)]).catch(() => ({ rows: [] }));
   const houseProgress = await repository.query<{ generation: number; house_name: string | null; epitaph: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }>(`SELECT COALESCE(MAX(hlr.generation), 1)::integer AS generation, MAX(h.house_name) AS house_name,
       MAX(hlr.epitaph) FILTER (WHERE hlr.human_id = $1) AS epitaph,
       COUNT(DISTINCT hp.id)::integer AS perks_count, COUNT(DISTINCT hh.id)::integer AS heirlooms_count, COALESCE(MAX(h.legacy_points), 0)::integer AS legacy_points
@@ -82,9 +87,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const corporationBuildingResearch = corporation?.id
     ? await Promise.all([
         repository.query(`SELECT p.*, c.name AS catalog_name
-          FROM corporation_building_research_projects p
-          JOIN building_catalog c ON c.id = p.catalog_id
-          WHERE p.corporation_id = $1
+          FROM corporation_research_projects p
+          JOIN building_catalog c ON c.id = p.target_id
+          JOIN owner_registry o ON o.economic_id = p.corporation_economic_id
+          WHERE o.id = $1 AND p.target_type = 'BUILDING_BLUEPRINT'
           ORDER BY p.created_at DESC`, [corporation.id]).catch(() => ({ rows: [] })),
         repository.query(`SELECT u.*, c.name AS catalog_name, c.building_type, c.tier
           FROM corporation_building_unlocks u
@@ -469,7 +475,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     buildingCatalog: buildingCatalogRows,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, my_vote: viewerVotes[String(proposal.id)] ?? null, ballots: {} })), rules: governanceRules.rows },
-    technology: { research: technology.rows[0] ?? {}, catalog: TECHNOLOGY_CATALOG_DETAILS, adopted: technologyAdoptions.rows, corporationProjects: corporationTechnologyProjects.rows, subscriptions: technologySubscriptions.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,
+    technology: { research: technology.rows[0] ?? {}, catalog: technologyCatalog.rows.map(mapTechnologyCatalogRow), corporationProjects: corporationTechnologyProjects.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), citizens: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })), humans: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[2].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },

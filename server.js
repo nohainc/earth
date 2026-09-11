@@ -2337,61 +2337,8 @@ async function command(path, body, req = null) {
   }
 
   if (path.endsWith('/patent') || path.endsWith('/license')) {
+    // Percentage royalties are not supported; V2 uses fixed corporation fees.
     throw new ApiError('Patents and technology licensing have been retired', 404, 'NOT_FOUND');
-  }
-
-  if ((path === '/api/technology/me/patent' || path === '/api/technology/TECH-001/patent') && body.method === 'POST') {
-    if (!resolveSession(req)) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
-    const player = human('amara', req);
-    if ((state.technology.research.progress || 0) < 100) throw new ApiError('Research must reach 100% before patent grant', 409, 'CONFLICT');
-    const patentId = `PAT-${state.technology.research.id || 'TECH-001'}`;
-    const patent = {
-      id: patentId,
-      technology_id: state.technology.research.id || 'TECH-001',
-      name: state.technology.research.name,
-      owner_id: player.id || 'H-0044',
-      granted_game_day: state.clock.day,
-      expiry_game_day: state.clock.day + 3650,
-      status: 'active',
-    };
-    state.patents = state.patents || [];
-    if (!state.patents.find((p) => p.id === patentId)) state.patents.push(patent);
-    state.technology.activePatents = state.patents.length;
-    publish('technology.patent_granted', patent);
-    const result = { ok: true, patent, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
-  }
-
-  if ((path === '/api/technology/me/license' || path === '/api/technology/TECH-001/license') && body.method === 'POST') {
-    if (!resolveSession(req)) throw new ApiError('Human is not authorized for this action', 401, 'AUTHENTICATION_REQUIRED');
-    const player = human('amara', req);
-    const licenseeId = body.licenseeId || player.id || 'H-0044';
-    const royaltyRate = Number(body.royaltyRate ?? 0.05);
-    const licenseFee = Number(body.licenseFee ?? 0);
-    if (!Number.isFinite(royaltyRate) || royaltyRate < 0 || royaltyRate > 1 || !Number.isFinite(licenseFee) || licenseFee < 0) throw new ApiError('Invalid license terms', 400, 'VALIDATION_ERROR');
-    const patentId = `PAT-${state.technology.research.id || 'TECH-001'}`;
-    const patent = (state.patents || []).find((candidate) => candidate.id === patentId && candidate.status === 'active');
-    if (!patent) throw new ApiError('An active patent is required before licensing', 409, 'CONFLICT');
-    const licenseId = `LIC-${patentId}-${licenseeId}`;
-    const license = {
-      id: licenseId,
-      patent_id: patentId,
-      licensor_id: player.id || 'H-0044',
-      licensee_id: licenseeId,
-      royalty_rate: royaltyRate,
-      license_fee: licenseFee,
-      status: 'active',
-    };
-    state.licenses = state.licenses || [];
-    const existingIdx = state.licenses.findIndex((l) => l.id === licenseId);
-    if (existingIdx >= 0) state.licenses[existingIdx] = license;
-    else state.licenses.push(license);
-    state.technology.activeLicenses = state.licenses.length;
-    publish('technology.licensed', license);
-    const result = { ok: true, license, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
   }
 
   // Machines

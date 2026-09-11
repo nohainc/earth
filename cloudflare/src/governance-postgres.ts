@@ -191,7 +191,9 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       const researchKey = String(input.targetValue?.researchProjectId ?? input.targetValue?.research_project_id ?? input.targetValue?.projectId ?? input.targetValue?.technologyKey ?? input.targetValue?.technology ?? '');
       if (researchKey) {
         const researchTarget = await tx.query<{ id: string }>(
-          `SELECT id FROM corporation_building_research_projects WHERE id = $1 OR catalog_id = $1 OR building_type = $1 ORDER BY created_at DESC LIMIT 1`,
+          `SELECT id FROM corporation_research_projects
+           WHERE target_type = 'BUILDING_BLUEPRINT' AND (id = $1 OR target_id = $1)
+           ORDER BY created_at DESC LIMIT 1`,
           [researchKey],
         );
         if (researchTarget.rows[0]) {

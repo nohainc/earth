@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository';
-import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
+import { mapTechnologyCatalogRow } from './technology-postgres.ts';
 import { spotInstrumentSymbol } from './market-model.ts';
 
 export async function listEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
@@ -98,7 +98,12 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       [limit]
     ),
     repository.query<{ id: string; name: string; owner_id: string; progress: number }>(
-      'SELECT id, name, owner_id, progress FROM technologies ORDER BY progress DESC LIMIT $1',
+      `SELECT p.target_id AS id, tc.name,
+          ROUND(p.progress_research_points * 100.0 / NULLIF(p.required_research_points, 0), 2) AS progress
+       FROM corporation_research_projects p
+       JOIN technology_catalog tc ON tc.id = p.target_id
+       WHERE p.target_type = 'TECHNOLOGY'
+       ORDER BY progress DESC LIMIT $1`,
       [limit]
     ),
     repository.query<{
@@ -262,8 +267,13 @@ export async function listMembershipEvents(repository: PostgresRepository, human
 }
 
 export async function listTechnology(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const projects = await repository.query('SELECT p.* FROM corporation_technology_projects p JOIN memberships m ON m.corporation_id = p.corporation_id WHERE m.human_id = $1 ORDER BY p.created_at DESC', [humanId]).catch(() => ({ rows: [] }));
-  return { catalog: TECHNOLOGY_CATALOG_DETAILS, projects: projects.rows };
+  const [projects, catalog] = await Promise.all([
+    repository.query(`SELECT p.* FROM corporation_research_projects p
+      JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+      WHERE m.human_id = $1 ORDER BY p.created_at DESC`, [humanId]).catch(() => ({ rows: [] })),
+    repository.query("SELECT DISTINCT ON (tc.code) tc.id, tc.code, tc.name, tc.category, tc.description, tc.patentable, tc.patent_exclusivity_days, tc.research_credit_cost_units::TEXT, tc.research_points_required::TEXT, tc.status, tc.definition_version, tc.effective_from_game_day, tc.effective_to_game_day, (SELECT COALESCE(jsonb_agg(jsonb_build_object('effectType', e.effect_type, 'modifierFamily', e.modifier_family, 'targetType', e.target_type, 'targetKey', e.target_key, 'modifierBps', e.modifier_bps) ORDER BY e.id), '[]'::JSONB) FROM technology_effects e WHERE e.technology_id = tc.id) AS effects FROM technology_catalog tc WHERE tc.status = 'ACTIVE' AND tc.effective_from_game_day <= COALESCE((SELECT game_day FROM world_state WHERE id = 'WORLD'), 0) AND (tc.effective_to_game_day IS NULL OR tc.effective_to_game_day >= COALESCE((SELECT game_day FROM world_state WHERE id = 'WORLD'), 0)) ORDER BY tc.code, tc.effective_from_game_day DESC, tc.definition_version DESC").catch(() => ({ rows: [] })),
+  ]);
+  return { catalog: catalog.rows.map(mapTechnologyCatalogRow), projects: projects.rows };
 }
 
 export async function listGovernanceProposals(repository: PostgresRepository): Promise<Record<string, unknown>> {

@@ -21,8 +21,8 @@ export type DailySettlementPhaseHandlers = {
   profileSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
   lifeMaintenance: (context: DailySettlementPhaseContext) => Promise<unknown>;
   basicLevy: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  ipLicenseBilling: (context: DailySettlementPhaseContext) => Promise<unknown>;
   buildingSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
-  buildingPatentLicenses: (context: DailySettlementPhaseContext) => Promise<unknown>;
   cityCorporateIncomeTax: (context: DailySettlementPhaseContext) => Promise<unknown>;
   globalBank: (context: DailySettlementPhaseContext) => Promise<unknown>;
   bankHealth: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -46,22 +46,22 @@ export function createDailySettlementPhaseRegistry(
     { id: 'prepare_partitions', order: 10, shardMode: 'all', execute: handlers.preparePartitions },
     { id: 'profile_rebuild', order: 20, shardMode: 'owner-shards', execute: handlers.rebuildProfiles },
     { id: 'profile_settlement', order: 30, shardMode: 'all', execute: handlers.profileSettlement },
-    { id: 'life_maintenance', order: 40, shardMode: 'all', execute: handlers.lifeMaintenance },
-    { id: 'basic_levy', order: 50, shardMode: 'all', execute: handlers.basicLevy },
-    { id: 'building_settlement', order: 60, shardMode: 'all', execute: handlers.buildingSettlement },
-    { id: 'building_patent_licenses', order: 70, shardMode: 'all', execute: handlers.buildingPatentLicenses },
-    { id: 'city_corporate_income_tax', order: 80, shardMode: 'all', execute: handlers.cityCorporateIncomeTax },
-    { id: 'global_bank', order: 90, shardMode: 'all', execute: handlers.globalBank },
-    { id: 'bank_health', order: 100, shardMode: 'all', execute: handlers.bankHealth },
-    { id: 'city_dynamics', order: 110, shardMode: 'all', execute: handlers.cityDynamics },
-    { id: 'patent_expirations', order: 115, shardMode: 'all', execute: handlers.patentExpirations },
-    { id: 'research_and_progress', order: 116, shardMode: 'all', execute: handlers.researchAndProgress },
-    { id: 'budget_dividend_eligibility', order: 120, shardMode: 'all', execute: handlers.budgetDividendEligibility },
-    { id: 'lifecycle', order: 125, shardMode: 'all', execute: handlers.lifecycle },
-    { id: 'financial_states', order: 130, shardMode: 'all', execute: handlers.financialStates },
-    { id: 'institution_dissolution', order: 140, shardMode: 'all', execute: handlers.institutionDissolution },
-    { id: 'financial_projections', order: 145, shardMode: 'all', execute: handlers.financialProjections },
-    { id: 'rankings_snapshot', order: 150, shardMode: 'all', execute: handlers.rankingsSnapshot },
-    { id: 'end_of_day_snapshots', order: 160, shardMode: 'all', execute: handlers.endOfDaySnapshots },
+    { id: 'patent_expirations', order: 45, shardMode: 'all', execute: handlers.patentExpirations },
+    { id: 'life_maintenance', order: 50, shardMode: 'all', execute: handlers.lifeMaintenance },
+    { id: 'basic_levy', order: 60, shardMode: 'all', execute: handlers.basicLevy },
+    { id: 'ip_license_billing', order: 65, shardMode: 'all', execute: handlers.ipLicenseBilling },
+    { id: 'building_settlement', order: 70, shardMode: 'all', execute: handlers.buildingSettlement },
+    { id: 'city_corporate_income_tax', order: 90, shardMode: 'all', execute: handlers.cityCorporateIncomeTax },
+    { id: 'global_bank', order: 100, shardMode: 'all', execute: handlers.globalBank },
+    { id: 'bank_health', order: 110, shardMode: 'all', execute: handlers.bankHealth },
+    { id: 'city_dynamics', order: 120, shardMode: 'all', execute: handlers.cityDynamics },
+    { id: 'research_and_progress', order: 126, shardMode: 'all', execute: handlers.researchAndProgress },
+    { id: 'budget_dividend_eligibility', order: 130, shardMode: 'all', execute: handlers.budgetDividendEligibility },
+    { id: 'lifecycle', order: 135, shardMode: 'all', execute: handlers.lifecycle },
+    { id: 'financial_states', order: 140, shardMode: 'all', execute: handlers.financialStates },
+    { id: 'institution_dissolution', order: 150, shardMode: 'all', execute: handlers.institutionDissolution },
+    { id: 'financial_projections', order: 155, shardMode: 'all', execute: handlers.financialProjections },
+    { id: 'rankings_snapshot', order: 160, shardMode: 'all', execute: handlers.rankingsSnapshot },
+    { id: 'end_of_day_snapshots', order: 170, shardMode: 'all', execute: handlers.endOfDaySnapshots },
   ];
 }

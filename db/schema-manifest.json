@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 254,
+  "migrationVersion": 292,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -269,8 +269,16 @@
       "resource_output_type",
       "construction_started_game_day",
       "construction_complete_game_day",
-      "construction_progress",
-      "status",
+    "construction_progress",
+    "construction_rules_version",
+    "construction_technology_modifiers",
+    "construction_base_duration_minutes",
+    "construction_duration_minutes",
+    "construction_cost_credits_units",
+    "construction_cost_material_units",
+    "construction_cost_components_units",
+    "construction_cost_compute_units",
+    "status",
       "operational_state",
       "catalog_id"
     ],
@@ -293,6 +301,7 @@
       "maintenance_wear_multiplier_ppm",
       "repair_materials_per_point_ppm",
       "repair_components_per_point_ppm",
+      "research_capacity_units_per_day",
       "service_type",
       "base_service_capacity_units",
       "default_price_credit_units",
@@ -330,6 +339,7 @@
       "condition_start",
       "condition_end",
       "auto_repaired",
+      "technology_effects",
       "consumed_units",
       "produced_units",
       "rules_version",
@@ -474,6 +484,8 @@
       "repair_points_bp",
       "maintenance_fulfillment_ppm",
       "repair_target_condition_bp"
+      ,"research_capacity_units"
+      ,"research_points_generated"
     ],
     "building_settlement_owner_inputs": [
       "owner_economic_id",
@@ -491,19 +503,6 @@
       "requested_units",
       "allocated_units",
       "allocation_remainder"
-    ],
-    "human_technology_adoptions": [
-      "human_id",
-      "technology_id",
-      "adopted_game_day",
-      "status"
-    ],
-    "human_technology_subscriptions": [
-      "human_id",
-      "corporation_id",
-      "technology_key",
-      "status",
-      "last_billed_game_day"
     ],
     "cities": [
       "id",
@@ -566,25 +565,6 @@
       "treasury",
       "capital_city_id",
       "admission_policy"
-    ],
-    "corporation_technology_projects": [
-      "id",
-      "corporation_id",
-      "technology_key",
-      "research_cost_credits",
-      "progress",
-      "status"
-    ],
-    "corporation_building_research_projects": [
-      "id",
-      "corporation_id",
-      "building_type",
-      "catalog_id",
-      "target_tier",
-      "progress",
-      "status",
-      "started_game_day",
-      "duration_minutes"
     ],
     "corporation_building_unlocks": [
       "corporation_id",
@@ -1278,13 +1258,6 @@
       "ranking_type",
       "rank"
     ],
-    "research_projects": [
-      "id",
-      "technology_id",
-      "owner_id",
-      "progress",
-      "updated_at"
-    ],
     "resource_balances": [
       "owner_id",
       "resource",
@@ -1326,14 +1299,155 @@
       "category",
       "rate"
     ],
-    "technologies": [
+    "technology_catalog": [
       "id",
+      "code",
       "name",
-      "progress",
-      "version",
-      "required_compute",
-      "cost_credits",
+      "category",
+      "description",
+      "patentable",
+      "patent_exclusivity_days",
+      "research_credit_cost_units",
+      "research_points_required",
+      "status",
+      "definition_version",
+      "effective_from_game_day",
+      "effective_to_game_day"
+    ],
+    "technology_prerequisites": [
+      "technology_id",
+      "requires_technology_id",
+      "created_at"
+    ],
+    "corporation_technology_specializations": [
+      "corporation_economic_id",
+      "specialization_code",
+      "efficiency_bonus_bps",
+      "effective_from_game_day",
+      "effective_to_game_day",
+      "status",
+      "rules_version",
+      "created_at"
+    ],
+    "technology_patents": [
+      "id",
+      "technology_id",
+      "owner_economic_id",
+      "granted_game_day",
+      "exclusive_through_game_day",
+      "status",
+      "granting_project_id",
+      "created_at"
+    ],
+    "technology_public_domain": [
+      "technology_id",
+      "effective_from_game_day",
+      "source_patent_id",
+      "created_at"
+    ],
+    "technology_license_contracts": [
+      "id",
+      "patent_id",
+      "licensor_economic_id",
+      "licensee_economic_id",
+      "effective_from_game_day",
+      "effective_to_game_day",
+      "upfront_fee_units",
+      "daily_fee_units",
+      "definition_snapshot",
+      "patent_terms_snapshot",
+      "status",
+      "paid_through_game_day",
+      "rules_version",
+      "correlation_id",
+      "created_at"
+    ],
+    "technology_patent_ownership_transfers": [
+      "id",
+      "patent_id",
+      "from_owner_economic_id",
+      "to_owner_economic_id",
+      "game_day",
+      "correlation_id",
+      "created_at"
+    ],
+    "technology_effects": [
+      "id",
+      "technology_id",
+      "effect_type",
+      "target_type",
+      "target_key",
+      "modifier_family",
+      "modifier_bps"
+    ],
+    "corporation_technology_modifier_invalidations": [
+      "corporation_economic_id",
+      "effective_game_day",
+      "reason_code",
+      "source_id",
+      "resolved_at",
+      "created_at"
+    ],
+    "technology_modifier_rules": [
+      "family_code",
+      "effect_type",
+      "stacking_mode",
+      "minimum_bps",
+      "maximum_bps",
+      "effective_from_game_day",
+      "effective_to_game_day",
+      "definition_version"
+    ],
+    "corporation_research_projects": [
+      "id",
+      "corporation_economic_id",
+      "target_type",
+      "target_id",
+      "definition_version",
+      "definition_snapshot",
+      "specialization_bonus_bps",
+      "required_research_points",
+      "progress_research_points",
+      "credit_cost_units",
+      "priority",
+      "status",
+      "started_game_day",
+      "completed_game_day",
+      "funding_transaction_id",
+      "correlation_id"
+    ],
+    "corporation_research_capacity_daily": [
+      "corporation_economic_id",
+      "game_day",
+      "base_capacity_units",
+      "technology_modifier_bps",
+      "effective_capacity_units",
+      "source_building_count"
+    ],
+    "corporation_technology_access": [
+      "corporation_economic_id",
+      "technology_id",
+      "access_source",
+      "source_id",
+      "effective_from_game_day",
+      "effective_to_game_day",
       "status"
+    ],
+    "corporation_technology_modifier_cache": [
+      "corporation_economic_id",
+      "game_day",
+      "production_output_bps",
+      "material_input_bps",
+      "energy_input_bps",
+      "construction_time_bps",
+      "construction_cost_bps",
+      "wear_bps",
+      "repair_efficiency_bps",
+      "research_capacity_bps",
+      "service_capacity_bps",
+      "scoped_modifiers",
+      "technology_source_breakdown",
+      "source_count"
     ],
     "scheduler_tick_logs": [
       "id",
@@ -1470,7 +1584,6 @@
       "human_id"
     ],
     [
-      "human_technology_adoptions",
       "human_id",
       "technology_id"
     ],
@@ -1537,7 +1650,6 @@
     "idx_commodity_futures_buyer",
     "idx_market_ohlc_commodity_day",
     "idx_net_worth_human_day",
-    "corporation_technology_projects_status_idx",
     "idx_ai_rec_feedback_human",
     "idx_scheduler_tick_logs_day",
     "personal_life_maintenance_human_day_idx",
@@ -1587,6 +1699,16 @@
     "scheduler_runs_started_idx",
     "scheduler_runs_status_idx",
     "idx_corp_research_corp_tech",
+    "technology_catalog_effective_idx",
+    "technology_effects_target_idx",
+    "technology_effects_family_idx",
+    "corporation_research_projects_queue_idx",
+    "corporation_research_capacity_day_idx",
+    "corporation_research_one_active_idx",
+    "corporation_research_funding_idx",
+    "corporation_technology_access_lookup_idx",
+    "corporation_technology_access_expiry_idx",
+    "corporation_technology_modifier_cache_day_idx",
     "idx_futures_settlement",
     "idx_proposals_institution_status",
     "idx_gov_rules_inst_cat",

@@ -3,7 +3,7 @@ import { authorityMode, withRepository } from './repository';
 import { cancelMarketOrder as cancelMarketOrderPostgres, listMarketOrders as listMarketOrdersPostgres, submitMarketOrder as submitMarketOrderPostgres } from './market-postgres';
 import { declarePersonalInsolvency as declarePersonalInsolvencyPostgres, publicSpending as publicSpendingPostgres, recoverInstitution as recoverInstitutionPostgres, settleTax as settleTaxPostgres } from './finance-postgres';
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, liquidateExpiredEstates as liquidateExpiredEstatesPostgres, registerSuccessor as registerSuccessorPostgres, settleInheritance as settleInheritancePostgres } from './lifecycle-postgres';
-import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
+import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
 import { castVote as castVotePostgres, createProposal as createProposalPostgres } from './governance-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
@@ -153,7 +153,11 @@ async function worldActivityFromPostgres(request: Request, env: Env): Promise<Re
   const result = await withRepository(env, async (repository) => {
     const [world, technology] = await Promise.all([
       repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
-      repository.query('SELECT progress FROM technologies WHERE owner_id = $1 ORDER BY id LIMIT 1', [viewer.id]),
+      repository.query(`SELECT ROUND(p.progress_research_points * 100.0 / NULLIF(p.required_research_points, 0), 2) AS progress
+        FROM corporation_research_projects p
+        JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
+        WHERE m.human_id = $1 AND p.target_type = 'TECHNOLOGY'
+        ORDER BY p.created_at DESC LIMIT 1`, [viewer.id]),
     ]);
     return { activity: [{ type: 'world_clock', day: world.rows[0]?.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 }] };
   });
@@ -427,21 +431,6 @@ const worker = {
       const result = await withRepository(env, (repository) => listTechnologyPostgres(repository, viewer.id));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/technology/adopt' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ technologyId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const technologyId = parsed.value.technologyId?.trim();
-      if (!technologyId) return Response.json({ ok: false, error: 'Technology is required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => adoptTechnologyPostgres(repository, { humanId: viewer.id, technologyId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Technology adoption failed' }, { status: 409 });
-      }
     }
     if (url.pathname === '/api/technology/projects' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
