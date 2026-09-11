@@ -68,7 +68,7 @@ test('world snapshot contains the EARTH core entities', async () => {
   assert.equal(body.institutions.corporation.kind, 'CORPORATION');
 });
 
-test('market order settles at the canonical market price and writes a ledger entry', async () => {
+test('market order cannot be settled manually by a player', async () => {
   const orderPayload = { product: 'components', quantity: 12, limitPrice: 120, correlationId: 'order-retry-001' };
   const orderResponse = await request('/api/market/orders', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(orderPayload) });
   assert.equal(orderResponse.status, 200);
@@ -76,11 +76,7 @@ test('market order settles at the canonical market price and writes a ledger ent
   assert.equal(retryResponse.body.order.id, orderResponse.body.order.id);
   assert.equal(retryResponse.body.state.market.orders.length, 1);
   const settlement = await request('/api/market/settle', { method: 'POST' });
-  assert.equal(settlement.body.result.fills.length, 1);
-  assert.equal(settlement.body.result.fills[0].price, 118.7);
-  assert.equal(settlement.body.state.ledgerEntries.length, 1);
-  assert.equal(settlement.body.state.market.orders[0].status, 'filled');
-  assert.equal(settlement.body.state.resources.components, 98);
+  assert.equal(settlement.status, 404);
 });
 
 test('governance starts without an implicit seed proposal', async () => {

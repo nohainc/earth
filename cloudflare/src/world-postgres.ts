@@ -197,7 +197,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
       }).catch(() => ({ rows: [] })),
     ]),
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
-    repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
+    repository.query('SELECT i.symbol AS product, SUM(f.quantity_units) AS traded_quantity_units, MAX(f.price_units) AS last_price_units, MAX(f.created_at) AS last_trade_at FROM market_fills f JOIN market_instruments i ON i.id = f.instrument_id GROUP BY i.symbol ORDER BY i.symbol'),
     repository.query("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = $1 AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50", [viewerId]),
     repository.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE owner_id = $1 ORDER BY id', [viewerId]),
     repository.query(`

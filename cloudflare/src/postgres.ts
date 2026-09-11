@@ -45,7 +45,7 @@ export async function probePostgres(binding?: HyperdriveBinding): Promise<Postgr
        FROM information_schema.tables
        WHERE table_schema = 'public'
          AND table_name IN (
-           'humans', 'ledger_entries', 'market_orders', 'market_trades',
+           'humans', 'ledger_entries', 'market_orders', 'market_fills',
            'auth_credentials', 'auth_sessions', 'life_events',
            'ownership_events',
            'earth_schema_migrations'

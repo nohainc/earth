@@ -1,12 +1,14 @@
 import type { PostgresRepository } from './repository.ts';
-import { settleMarket } from './market-postgres.ts';
+import { settleMarketBatch } from './market-postgres.ts';
+import { GAME_DAY_MINUTES, gamePosition, marketBatchRange } from './market-time.ts';
+import { listActiveMarketInstruments, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
+import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
+import { refreshMarketCandles } from './market-candles.ts';
+import { settleDueDeliveryFutures } from './market-futures-settlement.ts';
 
-const PRODUCTS = ['food', 'material', 'components', 'energy', 'compute'];
-const BATCH_GAME_MINUTES = 60;
+export type MarketBatchResult = { batchesProcessed: number; tradesCreated: number; futuresSettled: number; busy: boolean };
 
-export type MarketBatchResult = { batchesProcessed: number; tradesCreated: number; busy: boolean };
-
-/** Process immutable hourly game-time batches, including batches missed by Cron. */
+/** Process immutable market batches in strict order, including batches missed by Cron. */
 export async function processDueMarketBatches(
   repository: PostgresRepository,
   safeProcessedGameDay: number,
@@ -14,75 +16,84 @@ export async function processDueMarketBatches(
   leaseOwner = `market-scheduler:${crypto.randomUUID()}`,
 ): Promise<MarketBatchResult> {
   const startedAt = Date.now();
-  const maxBatch = Math.floor((safeProcessedGameDay * 1440 + 1439) / BATCH_GAME_MINUTES);
+  const maxBatch = Math.ceil((safeProcessedGameDay * GAME_DAY_MINUTES) / MARKET_BATCH_GAME_MINUTES) - 1;
+  const instruments = await listActiveMarketInstruments(repository);
   let batchesProcessed = 0;
   let tradesCreated = 0;
+  let settledFutures = 0;
   let busy = false;
 
-  for (const product of PRODUCTS) {
-    const last = await repository.query<{ batch_id: string | null }>(
-      `SELECT COALESCE(
-               (SELECT MIN(expected.batch_id)
-                  FROM generate_series(0, $2) AS expected(batch_id)
-                 WHERE NOT EXISTS (
-                   SELECT 1 FROM market_batch_runs r
-                    WHERE r.product = $1 AND r.batch_id = expected.batch_id AND r.status = 'completed'
-                 )),
-               $2 + 1
-             )::text AS batch_id`, [product, maxBatch],
+  while (Date.now() - startedAt < workBudgetMs) {
+    const next = await repository.query<{ batch_id: string }>(
+      `SELECT (COALESCE(MAX(id) FILTER (WHERE status = 'completed'), -1) + 1)::TEXT AS batch_id
+         FROM market_batches`,
     );
-    let batchId = Number(last.rows[0]?.batch_id ?? maxBatch + 1);
-    while (batchId <= maxBatch && Date.now() - startedAt < workBudgetMs) {
+    const batchId = Number(next.rows[0]?.batch_id ?? 0);
+    // The due-batch boundary is equivalent to: batchId <= maxBatch.
+    if (batchId > maxBatch) break;
+    const range = marketBatchRange(batchId, MARKET_BATCH_GAME_MINUTES);
+    const batchGameDay = gamePosition(range.startMinute).gameDay;
+    const batchRulesVersion = instruments[0]?.rules_version ?? 'market-v2';
+    const batchRulesSnapshot = JSON.stringify({ rulesVersion: batchRulesVersion, batchDurationMinutes: MARKET_BATCH_GAME_MINUTES });
+    await repository.query(
+      `INSERT INTO market_batches (id, start_total_game_minute, end_total_game_minute, status, rules_version, rules_snapshot)
+       VALUES ($1,$2,$3,'clearing',$4,$5::JSONB)
+       ON CONFLICT (id) DO UPDATE SET status = CASE WHEN market_batches.status = 'pending' THEN 'clearing' ELSE market_batches.status END,
+                                      started_at = COALESCE(market_batches.started_at, CURRENT_TIMESTAMP)`,
+      [batchId, range.startMinute, range.endMinute, batchRulesVersion, batchRulesSnapshot],
+    );
+    let batchComplete = true;
+    for (const instrument of instruments) {
+      if (Date.now() - startedAt >= workBudgetMs) { batchComplete = false; break; }
       const claim = await repository.query<{ claimed: boolean; status: string }>(
-        'SELECT * FROM earth_claim_market_batch($1,$2,$3,300)', [batchId, product, leaseOwner],
+        'SELECT * FROM earth_claim_market_batch_instrument($1,$2,$3,300)', [batchId, instrument.id, leaseOwner],
       );
       if (!claim.rows[0]?.claimed) {
         if (claim.rows[0]?.status === 'busy') busy = true;
-        break;
+        if (claim.rows[0]?.status !== 'completed') batchComplete = false;
+        continue;
       }
-
-      const batchGameDay = Math.floor((batchId * BATCH_GAME_MINUTES) / 1440);
+      const before = await rebuildMarketInstrumentState(repository, instrument.id);
       await repository.query(
-        `UPDATE market_prices
-            SET price = GREATEST(1, LEAST(1000000, ROUND((price *
-              (1.0 + LEAST(0.05, GREATEST(-0.05,
-                (demand - supply) / GREATEST(1.0, supply + demand)))))::numeric, 2))),
-                game_day = $2, last_market_batch_id = $3
-          WHERE product = $1 AND COALESCE(last_market_batch_id, -1) < $3`,
-        [product, batchGameDay, batchId],
+        `UPDATE market_batch_instruments
+            SET eligible_order_count = (SELECT COUNT(*) FROM market_orders WHERE instrument_id = $2 AND eligible_batch_id <= $1 AND status IN ('open','partial')),
+                previous_price_units = $3
+          WHERE batch_id = $1 AND instrument_id = $2 AND lease_owner = $4`,
+        [batchId, instrument.id, before.last_clearing_price_units, leaseOwner],
       );
-
-      let ordersProcessed = 0;
-      let tradesCreatedForBatch = 0;
-      let exhausted = false;
-      while (!exhausted && Date.now() - startedAt < workBudgetMs) {
-        const result = await settleMarket(repository, product, batchGameDay);
-        ordersProcessed += 1;
-        if (!result.filled) exhausted = true;
-        else { tradesCreatedForBatch += 1; tradesCreated += 1; }
-      }
-      if (!exhausted) {
+      const result = await settleMarketBatch(repository, instrument.product, batchId, batchGameDay, instrument.id);
+      if (result.filled) {
+        tradesCreated += Number(result.fillCount ?? 0);
         await repository.query(
-          `UPDATE market_batch_runs
-              SET status = 'pending', orders_processed = orders_processed + $3,
-                  trades_created = trades_created + $4, lease_owner = NULL,
-                  lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-            WHERE batch_id = $1 AND product = $2 AND status = 'running' AND lease_owner = $5`,
-          [batchId, product, ordersProcessed, tradesCreatedForBatch, leaseOwner],
+          `UPDATE market_batch_instruments
+              SET fill_count = fill_count + $3, volume_units = volume_units + $4, economic_transaction_id = $5,
+                  clearing_price_units = $6
+            WHERE batch_id = $1 AND instrument_id = $2 AND lease_owner = $7`,
+          [batchId, instrument.id, Number(result.fillCount ?? 0), String(result.quantityUnits ?? 0), result.economicTransactionId ?? null, result.clearingPriceUnits ?? null, leaseOwner],
         );
-        break;
       }
       await repository.query(
-        `UPDATE market_batch_runs
-            SET status = 'completed', completed_at = CURRENT_TIMESTAMP,
-                orders_processed = orders_processed + $3, trades_created = trades_created + $4,
-                lease_owner = NULL, lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
-          WHERE batch_id = $1 AND product = $2 AND status = 'running' AND lease_owner = $5`,
-        [batchId, product, ordersProcessed, tradesCreatedForBatch, leaseOwner],
+        `UPDATE market_batch_instruments
+            SET status = 'completed', completed_at = CURRENT_TIMESTAMP, lease_owner = NULL, lease_expires_at = NULL,
+                clearing_price_units = COALESCE(clearing_price_units, (SELECT last_clearing_price_units FROM market_instrument_state WHERE instrument_id = $2))
+          WHERE batch_id = $1 AND instrument_id = $2 AND status = 'clearing' AND lease_owner = $4`,
+        [batchId, instrument.id, instrument.product, leaseOwner],
       );
-      batchesProcessed += 1;
-      batchId += 1;
+      const after = await rebuildMarketInstrumentState(repository, instrument.id);
+      await refreshMarketPriceProjection(repository, instrument, after, batchGameDay);
+      await refreshMarketCandles(repository, instrument.id, batchId);
     }
+    if (!batchComplete) break;
+    const completed = await repository.query(
+      `UPDATE market_batches
+          SET status = 'completed', completed_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND status = 'clearing'
+          AND NOT EXISTS (SELECT 1 FROM market_batch_instruments WHERE batch_id = $1 AND status <> 'completed')`,
+      [batchId],
+    );
+    if (completed.rowCount !== 1) { busy = true; break; }
+    batchesProcessed += 1;
   }
-  return { batchesProcessed, tradesCreated, busy };
+  if (Date.now() - startedAt < workBudgetMs) settledFutures = await settleDueDeliveryFutures(repository, safeProcessedGameDay, workBudgetMs - (Date.now() - startedAt));
+  return { batchesProcessed, tradesCreated, futuresSettled: settledFutures, busy };
 }

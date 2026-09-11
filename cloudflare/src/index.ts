@@ -1,6 +1,6 @@
 import { DurableObject } from 'cloudflare:workers';
 import { authorityMode, withRepository } from './repository';
-import { cancelMarketOrder as cancelMarketOrderPostgres, listMarketOrders as listMarketOrdersPostgres, settleMarket as settleMarketPostgres, submitMarketOrder as submitMarketOrderPostgres } from './market-postgres';
+import { cancelMarketOrder as cancelMarketOrderPostgres, listMarketOrders as listMarketOrdersPostgres, submitMarketOrder as submitMarketOrderPostgres } from './market-postgres';
 import { declarePersonalInsolvency as declarePersonalInsolvencyPostgres, publicSpending as publicSpendingPostgres, recoverInstitution as recoverInstitutionPostgres, settleTax as settleTaxPostgres } from './finance-postgres';
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, liquidateExpiredEstates as liquidateExpiredEstatesPostgres, registerSuccessor as registerSuccessorPostgres, settleInheritance as settleInheritancePostgres } from './lifecycle-postgres';
 import { adoptTechnology as adoptTechnologyPostgres, createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
@@ -19,7 +19,8 @@ import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { communicationsRoutes } from './communications-routes';
 import { getHouseOverview, unlockHousePerk, equipHouseHeirloom, forgeHouseHeirloom, updateHouseMotto } from './house-postgres.ts';
-import { listCommodityDerivativesAndOHLC, createFuturesListing, matchFuturesContract, cancelFuturesListing } from './derivatives-postgres.ts';
+import { listCommodityDerivativesAndOHLC } from './derivatives-postgres.ts';
+import { cancelDeliveryFutureListing, createDeliveryFutureListing, submitDeliveryFutureBuy } from './market-futures.ts';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { listSocialDirectory } from './social-directory-postgres.ts';
@@ -35,6 +36,7 @@ import { handleRealEstateRoutes } from './real-estate-routes.ts';
 import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
 import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 import { handleEconomicRoutes } from './economic-routes.ts';
+import { handleMarketApiRoutes } from './market-api.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -545,6 +547,9 @@ const worker = {
     const houseResponse = await handleHouseRoutes(request, env, url);
     if (houseResponse) return houseResponse;
 
+    const marketApiResponse = await handleMarketApiRoutes(request, env, url);
+    if (marketApiResponse) return marketApiResponse;
+
     if (url.pathname === '/api/market/derivatives' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
       const commodity = url.searchParams.get('commodity') || 'energy';
@@ -571,8 +576,8 @@ const worker = {
       const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
 
       try {
-        const result = await withRepository(env, (repository) => createFuturesListing(repository, {
-          sellerId: viewer.id,
+        const result = await withRepository(env, (repository) => createDeliveryFutureListing(repository, {
+          humanId: viewer.id,
           commodity,
           size,
           strikePrice,
@@ -596,9 +601,9 @@ const worker = {
       const correlationId = resolveIdempotencyKey(request);
 
       try {
-        const result = await withRepository(env, (repository) => matchFuturesContract(repository, {
-          buyerId: viewer.id,
-          contractId,
+        const result = await withRepository(env, (repository) => submitDeliveryFutureBuy(repository, {
+          humanId: viewer.id,
+          orderId: contractId,
           correlationId,
         }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -617,9 +622,9 @@ const worker = {
       if (!contractId) return Response.json({ ok: false, error: 'Contract ID is required' }, { status: 400 });
 
       try {
-        const result = await withRepository(env, (repository) => cancelFuturesListing(repository, {
-          sellerId: viewer.id,
-          contractId,
+        const result = await withRepository(env, (repository) => cancelDeliveryFutureListing(repository, {
+          humanId: viewer.id,
+          orderId: contractId,
         }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -715,7 +720,7 @@ const worker = {
       const result = await withRepository(env, async (repository) => {
         const [rows, trades, rule] = await Promise.all([
           repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
-          repository.query('SELECT product, SUM(quantity) AS traded_quantity, MAX(clearing_price) AS last_price, MAX(created_at) AS last_trade_at FROM market_trades GROUP BY product ORDER BY product'),
+          repository.query('SELECT i.symbol AS product, SUM(f.quantity_units) AS traded_quantity_units, MAX(f.price_units) AS last_price_units, MAX(f.created_at) AS last_trade_at FROM market_fills f JOIN market_instruments i ON i.id = f.instrument_id GROUP BY i.symbol ORDER BY i.symbol'),
           repository.query("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1"),
         ]);
         const feeRate = Number(rule.rows[0]?.rate ?? 0);
@@ -761,20 +766,6 @@ const worker = {
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market order cancellation failed' }, { status: 404 });
-      }
-    }
-    if (url.pathname === '/api/market/settle' && request.method === 'POST') {
-      const parsed = await parseJsonBody<{ product?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const product = body.product;
-      if (!['food', 'material', 'components', 'energy', 'compute'].includes(product ?? '')) return Response.json({ ok: false, error: 'Unknown product' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => settleMarketPostgres(repository, product!));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market settlement failed' }, { status: 409 });
       }
     }
     if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {

@@ -15,7 +15,7 @@ if (!functions.includes('CREATE OR REPLACE FUNCTION earth_transfer_credits')) fa
 if (schema.includes('character_lineage')) failures.push('db/schema.sql must not include dropped character_lineage');
 if (schema.includes('asset_ownership_events')) failures.push('db/schema.sql must not include dropped asset_ownership_events');
 if (latestMigrationVersion < manifest.migrationVersion) failures.push(`expected migration version ${manifest.migrationVersion} or newer, found ${latestMigrationVersion}`);
-if (!schema.includes('reconciled through migration 194')) failures.push('db/schema.sql must be reconciled through migration 194');
+if (!schema.includes(`reconciled through migration ${manifest.migrationVersion}`)) failures.push(`db/schema.sql must be reconciled through migration ${manifest.migrationVersion}`);
 
 if (failures.length) throw new Error(`Schema verification failed:\n- ${failures.join('\n- ')}`);
 console.log(JSON.stringify({ ok: true, totalMigrations: migrationNames.length, manifestVersion: manifest.migrationVersion, latestMigration: migrationNames.at(-1) }, null, 2));

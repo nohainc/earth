@@ -16,12 +16,12 @@ test('scheduled actions use game-time leases and atomic claims', () => {
 
 test('market execution is attached to persisted hourly batches', () => {
   const marketScheduler = fs.readFileSync(path.resolve('cloudflare/src/market-scheduler.ts'), 'utf8');
-  const migration = fs.readFileSync(path.resolve('db/migrations/184_scheduled_actions_and_market_batches.sql'), 'utf8');
-  assert.match(migration, /CREATE TABLE IF NOT EXISTS market_batch_runs/);
-  assert.match(migration, /PRIMARY KEY \(batch_id, product\)/);
+  const migration = fs.readFileSync(path.resolve('db/migrations/198_market_clearing_batches.sql'), 'utf8');
+  assert.match(migration, /CREATE TABLE IF NOT EXISTS market_batches/);
+  assert.match(migration, /PRIMARY KEY \(batch_id, instrument_id\)/);
   assert.match(marketScheduler, /processDueMarketBatches/);
   assert.match(marketScheduler, /batchId <= maxBatch/);
-  assert.match(marketScheduler, /MIN\(expected\.batch_id\)/);
-  assert.match(marketScheduler, /settleMarket\(repository, product, batchGameDay\)/);
-  assert.match(marketScheduler, /last_market_batch_id/);
+  assert.match(marketScheduler, /FROM market_batches/);
+  assert.match(marketScheduler, /settleMarketBatch\(repository, instrument\.product, batchId, batchGameDay, instrument\.id\)/);
+  assert.match(marketScheduler, /market_batch_instruments/);
 });

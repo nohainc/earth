@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 194.
+-- Canonical fresh-install schema, reconciled through migration 210.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -291,6 +291,34 @@ INSERT INTO economic_assets (id, code, unit_scale, scale, decimals, is_currency)
   (1, 'CREDIT', 100, 100, 2, TRUE), (2, 'MATERIAL', 1000000, 1000000, 6, FALSE),
   (3, 'COMPONENTS', 1000000, 1000000, 6, FALSE), (4, 'ENERGY', 1000000, 1000000, 6, FALSE),
   (5, 'COMPUTE', 1000000, 1000000, 6, FALSE), (6, 'FOOD', 1000000, 1000000, 6, FALSE)
+ON CONFLICT (id) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS market_instruments (
+  id TEXT PRIMARY KEY,
+  symbol TEXT NOT NULL UNIQUE,
+  instrument_type TEXT NOT NULL CHECK (instrument_type IN ('SPOT', 'DELIVERY_FUTURE')),
+  base_asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  quote_asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  expiry_total_game_minute BIGINT,
+  lot_size_units BIGINT NOT NULL CHECK (lot_size_units > 0),
+  price_tick_units BIGINT NOT NULL CHECK (price_tick_units > 0),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active', 'halted', 'closed', 'expired', 'settled')),
+  rules_version TEXT NOT NULL DEFAULT 'market-v2',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (instrument_type = 'SPOT' OR expiry_total_game_minute IS NOT NULL),
+  CHECK (instrument_type = 'DELIVERY_FUTURE' OR expiry_total_game_minute IS NULL)
+);
+CREATE INDEX IF NOT EXISTS market_instruments_active_symbol_idx ON market_instruments (status, symbol);
+CREATE INDEX IF NOT EXISTS market_instruments_expiry_idx ON market_instruments (expiry_total_game_minute) WHERE instrument_type = 'DELIVERY_FUTURE';
+INSERT INTO market_instruments
+  (id, symbol, instrument_type, base_asset_id, quote_asset_id, expiry_total_game_minute, lot_size_units, price_tick_units, status, rules_version)
+VALUES
+  ('SPOT-MATERIAL', 'SPOT-MATERIAL', 'SPOT', 2, 1, NULL, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-COMPONENTS', 'SPOT-COMPONENTS', 'SPOT', 3, 1, NULL, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-ENERGY', 'SPOT-ENERGY', 'SPOT', 4, 1, NULL, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-COMPUTE', 'SPOT-COMPUTE', 'SPOT', 5, 1, NULL, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-FOOD', 'SPOT-FOOD', 'SPOT', 6, 1, NULL, 1000000, 1, 'active', 'market-v2')
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS economic_account_types (
@@ -599,9 +627,13 @@ CREATE TABLE IF NOT EXISTS market_prices (
   price NUMERIC(20,6) NOT NULL CHECK (price > 0),
   supply NUMERIC(20,6) NOT NULL DEFAULT 0,
   demand NUMERIC(20,6) NOT NULL DEFAULT 0,
-  game_day BIGINT NOT NULL
+  game_day BIGINT NOT NULL,
+  price_units BIGINT,
+  supply_units BIGINT NOT NULL DEFAULT 0,
+  demand_units BIGINT NOT NULL DEFAULT 0
 );
 
+CREATE SEQUENCE IF NOT EXISTS market_order_sequence;
 CREATE TABLE IF NOT EXISTS market_orders (
   id UUID PRIMARY KEY,
   human_id TEXT NOT NULL REFERENCES humans(id),
@@ -612,57 +644,32 @@ CREATE TABLE IF NOT EXISTS market_orders (
   status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','partial','filled','rejected','cancelled')),
   side TEXT NOT NULL DEFAULT 'buy' CHECK (side IN ('buy','sell')),
   correlation_id TEXT,
-  reserved_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (reserved_credits >= 0),
+
+  quantity_units BIGINT,
+  limit_price_units BIGINT,
+  filled_quantity_units BIGINT NOT NULL DEFAULT 0,
+  reserved_quote_units BIGINT NOT NULL DEFAULT 0,
+  owner_economic_id BIGINT,
+  instrument_id TEXT,
+  filled_units BIGINT,
+  eligible_batch_id BIGINT,
+  sequence_no BIGINT,
+  escrow_account_id BIGINT,
+  reserved_base_units BIGINT NOT NULL DEFAULT 0,
+  buyer_fee_bps INTEGER NOT NULL DEFAULT 0,
+  seller_fee_bps INTEGER NOT NULL DEFAULT 0,
+  rules_version TEXT NOT NULL DEFAULT 'market-v2',
+  rules_snapshot JSONB NOT NULL DEFAULT '{}'::JSONB,
+  submitted_game_day BIGINT,
+  submitted_game_minute INTEGER,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS market_orders_book_idx ON market_orders(product, status, limit_price, created_at);
 CREATE INDEX IF NOT EXISTS market_orders_matching_idx ON market_orders(product, side, status, limit_price, created_at);
-CREATE INDEX IF NOT EXISTS market_orders_reserved_idx ON market_orders(human_id, side, status, reserved_credits);
+CREATE INDEX IF NOT EXISTS market_orders_reserved_idx ON market_orders(human_id, side, status, reserved_quote_units);
+CREATE INDEX IF NOT EXISTS market_orders_instrument_batch_idx ON market_orders(instrument_id, eligible_batch_id, status, limit_price_units, sequence_no);
+CREATE INDEX IF NOT EXISTS market_orders_owner_idx ON market_orders(owner_economic_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS market_orders_human_correlation_idx ON market_orders(human_id, correlation_id) WHERE correlation_id IS NOT NULL;
-
-CREATE TABLE IF NOT EXISTS market_trades (
-  id UUID PRIMARY KEY,
-  order_id UUID NOT NULL REFERENCES market_orders(id),
-  product TEXT NOT NULL,
-  quantity NUMERIC(20,6) NOT NULL CHECK (quantity > 0),
-  clearing_price NUMERIC(20,2) NOT NULL CHECK (clearing_price > 0),
-  game_day BIGINT NOT NULL,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_market_trades_order ON market_trades(order_id);
-
-CREATE TABLE IF NOT EXISTS market_ohlc_snapshots (
-  id UUID PRIMARY KEY,
-  commodity TEXT NOT NULL CHECK (commodity IN ('material','components','energy','compute','food')),
-  game_day BIGINT NOT NULL,
-  open_price NUMERIC(20,6) NOT NULL,
-  high_price NUMERIC(20,6) NOT NULL,
-  low_price NUMERIC(20,6) NOT NULL,
-  close_price NUMERIC(20,6) NOT NULL,
-  volume NUMERIC(20,6) NOT NULL DEFAULT 0,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  UNIQUE (commodity, game_day)
-);
-CREATE INDEX IF NOT EXISTS idx_market_ohlc_commodity_day ON market_ohlc_snapshots(commodity, game_day DESC);
-
-CREATE TABLE IF NOT EXISTS commodity_futures_contracts (
-  id UUID PRIMARY KEY,
-  buyer_id TEXT NOT NULL REFERENCES humans(id),
-  seller_id TEXT REFERENCES humans(id),
-  commodity TEXT NOT NULL CHECK (commodity IN ('material','components','energy','compute','food')),
-  contract_size NUMERIC(20,6) NOT NULL CHECK (contract_size > 0),
-  strike_price NUMERIC(20,6) NOT NULL CHECK (strike_price > 0),
-  expiry_game_day BIGINT NOT NULL,
-  premium NUMERIC(20,2) NOT NULL DEFAULT 0,
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open','active','exercised','expired','cancelled')),
-  created_game_day BIGINT NOT NULL,
-  settled_game_day BIGINT,
-  settled_pnl NUMERIC(20,2),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_futures_participant ON commodity_futures_contracts(buyer_id, seller_id, status);
-CREATE INDEX IF NOT EXISTS idx_futures_expiry ON commodity_futures_contracts(status, expiry_game_day);
-CREATE INDEX IF NOT EXISTS idx_futures_settlement ON commodity_futures_contracts(commodity, status, expiry_game_day);
 
 CREATE TABLE IF NOT EXISTS daily_settlement_profiles (
   owner_id TEXT PRIMARY KEY,
@@ -1203,7 +1210,7 @@ CREATE INDEX IF NOT EXISTS human_technology_subscriptions_human_idx
 
 /* RETIRED: negotiated_contracts, contract_disputes, supply_contracts,
    contract_escrow_vaults, and contract_delivery_ticks are removed by
-   migration 121. Market futures remain in commodity_futures_contracts. */
+   migration 121. Market futures use the V2 derivative obligations model. */
 /*
 CREATE TABLE IF NOT EXISTS negotiated_contracts (
   id TEXT PRIMARY KEY,
@@ -1506,6 +1513,168 @@ CREATE TABLE IF NOT EXISTS market_batch_runs (
 );
 CREATE INDEX IF NOT EXISTS market_batch_runs_status_idx ON market_batch_runs(status, batch_id);
 
+CREATE TABLE IF NOT EXISTS market_batches (
+  id BIGINT PRIMARY KEY,
+  start_total_game_minute BIGINT NOT NULL,
+  end_total_game_minute BIGINT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'clearing', 'completed', 'failed')),
+  rules_version TEXT NOT NULL DEFAULT 'market-v2',
+  rules_snapshot JSONB NOT NULL DEFAULT '{}'::JSONB,
+  started_at TIMESTAMPTZ,
+  completed_at TIMESTAMPTZ,
+  CHECK (start_total_game_minute >= 0 AND end_total_game_minute > start_total_game_minute)
+);
+CREATE TABLE IF NOT EXISTS market_batch_instruments (
+  batch_id BIGINT NOT NULL REFERENCES market_batches(id),
+  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
+  status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'clearing', 'completed', 'failed')),
+  lease_owner TEXT, lease_expires_at TIMESTAMPTZ,
+  eligible_order_count BIGINT NOT NULL DEFAULT 0, fill_count BIGINT NOT NULL DEFAULT 0, volume_units BIGINT NOT NULL DEFAULT 0,
+  previous_price_units BIGINT, clearing_price_units BIGINT, economic_transaction_id BIGINT,
+  started_at TIMESTAMPTZ, completed_at TIMESTAMPTZ, error_message TEXT,
+  PRIMARY KEY (batch_id, instrument_id)
+);
+CREATE INDEX IF NOT EXISTS market_batches_status_idx ON market_batches(status, id);
+CREATE INDEX IF NOT EXISTS market_batch_instruments_lease_idx ON market_batch_instruments(status, lease_expires_at);
+
+CREATE OR REPLACE FUNCTION earth_guard_market_order_rules()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.rules_version IS DISTINCT FROM NEW.rules_version
+     OR OLD.buyer_fee_bps IS DISTINCT FROM NEW.buyer_fee_bps
+     OR OLD.seller_fee_bps IS DISTINCT FROM NEW.seller_fee_bps
+     OR OLD.rules_snapshot IS DISTINCT FROM NEW.rules_snapshot THEN
+    RAISE EXCEPTION 'market order rules are immutable after acceptance';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS market_orders_rules_immutable ON market_orders;
+CREATE TRIGGER market_orders_rules_immutable
+BEFORE UPDATE OF rules_version, buyer_fee_bps, seller_fee_bps, rules_snapshot ON market_orders
+FOR EACH ROW EXECUTE FUNCTION earth_guard_market_order_rules();
+
+CREATE OR REPLACE FUNCTION earth_guard_market_batch_rules()
+RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.rules_version IS DISTINCT FROM NEW.rules_version
+     OR OLD.rules_snapshot IS DISTINCT FROM NEW.rules_snapshot THEN
+    RAISE EXCEPTION 'market batch rules are immutable after creation';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS market_batches_rules_immutable ON market_batches;
+CREATE TRIGGER market_batches_rules_immutable
+BEFORE UPDATE OF rules_version, rules_snapshot ON market_batches
+FOR EACH ROW EXECUTE FUNCTION earth_guard_market_batch_rules();
+
+CREATE TABLE IF NOT EXISTS market_fills (
+  id UUID PRIMARY KEY,
+  batch_id BIGINT NOT NULL REFERENCES market_batches(id),
+  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
+  buy_order_id UUID NOT NULL REFERENCES market_orders(id),
+  sell_order_id UUID NOT NULL REFERENCES market_orders(id),
+  quantity_units BIGINT NOT NULL CHECK (quantity_units > 0),
+  price_units BIGINT NOT NULL CHECK (price_units > 0),
+  quote_units BIGINT NOT NULL CHECK (quote_units >= 0),
+  fee_units BIGINT NOT NULL DEFAULT 0 CHECK (fee_units >= 0),
+  buyer_economic_id BIGINT,
+  seller_economic_id BIGINT,
+  gross_quote_units BIGINT,
+  buyer_fee_units BIGINT NOT NULL DEFAULT 0,
+  seller_fee_units BIGINT NOT NULL DEFAULT 0,
+  economic_transaction_id BIGINT,
+  sequence_no BIGINT,
+  game_day BIGINT,
+  game_minute INTEGER,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (batch_id, buy_order_id, sell_order_id)
+);
+CREATE INDEX IF NOT EXISTS market_fills_instrument_idx ON market_fills(instrument_id, batch_id);
+CREATE INDEX IF NOT EXISTS market_fills_transaction_idx ON market_fills(economic_transaction_id);
+CREATE INDEX IF NOT EXISTS market_fills_buyer_idx ON market_fills(buyer_economic_id, game_day);
+CREATE INDEX IF NOT EXISTS market_fills_seller_idx ON market_fills(seller_economic_id, game_day);
+
+CREATE TABLE IF NOT EXISTS market_instrument_state (
+  instrument_id TEXT PRIMARY KEY REFERENCES market_instruments(id),
+  last_completed_batch_id BIGINT,
+  last_clearing_price_units BIGINT,
+  best_bid_units BIGINT,
+  best_ask_units BIGINT,
+  open_buy_units BIGINT NOT NULL DEFAULT 0,
+  open_sell_units BIGINT NOT NULL DEFAULT 0,
+  rolling_volume_units BIGINT NOT NULL DEFAULT 0,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+INSERT INTO market_instrument_state (instrument_id, last_clearing_price_units)
+SELECT i.id, p.price_units
+  FROM market_instruments i
+  JOIN market_prices p ON p.product = lower(regexp_replace(i.symbol, '^SPOT-', ''))
+ WHERE i.instrument_type = 'SPOT'
+ON CONFLICT (instrument_id) DO UPDATE
+  SET last_clearing_price_units = COALESCE(market_instrument_state.last_clearing_price_units, EXCLUDED.last_clearing_price_units);
+CREATE INDEX IF NOT EXISTS market_instrument_state_updated_idx ON market_instrument_state(updated_at);
+
+CREATE TABLE IF NOT EXISTS market_candles (
+  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
+  interval_kind TEXT NOT NULL CHECK (interval_kind IN ('hourly', 'daily')),
+  period_id BIGINT NOT NULL,
+  open_price_units BIGINT NOT NULL CHECK (open_price_units > 0),
+  high_price_units BIGINT NOT NULL CHECK (high_price_units > 0),
+  low_price_units BIGINT NOT NULL CHECK (low_price_units > 0),
+  close_price_units BIGINT NOT NULL CHECK (close_price_units > 0),
+  volume_units BIGINT NOT NULL CHECK (volume_units >= 0),
+  fill_count BIGINT NOT NULL CHECK (fill_count >= 0),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (instrument_id, interval_kind, period_id)
+);
+CREATE INDEX IF NOT EXISTS market_candles_lookup_idx ON market_candles(instrument_id, interval_kind, period_id DESC);
+
+CREATE TABLE IF NOT EXISTS market_delivery_obligations (
+  fill_id UUID PRIMARY KEY REFERENCES market_fills(id),
+  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
+  batch_id BIGINT NOT NULL REFERENCES market_batches(id),
+  buyer_order_id UUID NOT NULL REFERENCES market_orders(id),
+  seller_order_id UUID NOT NULL REFERENCES market_orders(id),
+  buyer_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  seller_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  quantity_units BIGINT NOT NULL CHECK (quantity_units > 0),
+  agreed_price_units BIGINT NOT NULL CHECK (agreed_price_units > 0),
+  expiry_total_game_minute BIGINT NOT NULL CHECK (expiry_total_game_minute > 0),
+  buyer_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  seller_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'delivered', 'defaulted', 'cancelled')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  settled_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS market_delivery_obligations_expiry_idx ON market_delivery_obligations(status, expiry_total_game_minute);
+CREATE INDEX IF NOT EXISTS market_delivery_obligations_instrument_idx ON market_delivery_obligations(instrument_id, status, expiry_total_game_minute);
+
+CREATE TABLE IF NOT EXISTS derivative_obligations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
+  originating_fill_id UUID NOT NULL REFERENCES market_fills(id),
+  long_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  short_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
+  quantity_units BIGINT NOT NULL CHECK (quantity_units > 0),
+  delivery_price_units BIGINT NOT NULL CHECK (delivery_price_units > 0),
+  long_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  short_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
+  expiry_total_game_minute BIGINT NOT NULL CHECK (expiry_total_game_minute > 0),
+  expiry_batch_id BIGINT NOT NULL CHECK (expiry_batch_id >= 0),
+  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settling', 'settled', 'cancelled')),
+  settlement_transaction_id BIGINT REFERENCES economic_transactions(id),
+  created_game_day BIGINT NOT NULL,
+  created_game_minute INTEGER NOT NULL CHECK (created_game_minute BETWEEN 0 AND 1439),
+  settled_game_day BIGINT,
+  settled_game_minute INTEGER CHECK (settled_game_minute BETWEEN 0 AND 1439),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  UNIQUE (originating_fill_id)
+);
+CREATE INDEX IF NOT EXISTS derivative_obligations_expiry_idx ON derivative_obligations(status, expiry_total_game_minute);
+CREATE INDEX IF NOT EXISTS derivative_obligations_owner_idx ON derivative_obligations(long_owner_economic_id, short_owner_economic_id, status);
+
 CREATE TABLE IF NOT EXISTS settlement_anomalies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   game_day BIGINT,
@@ -1670,7 +1839,6 @@ ALTER TABLE technologies ADD COLUMN IF NOT EXISTS cost_credits NUMERIC(20,2) NOT
 ALTER TABLE technologies ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE world_state ADD COLUMN IF NOT EXISTS last_scheduler_at TIMESTAMPTZ;
 ALTER TABLE world_state ADD COLUMN IF NOT EXISTS daily_settlement_mode TEXT NOT NULL DEFAULT 'profile_resources';
-ALTER TABLE commodity_futures_contracts ADD COLUMN IF NOT EXISTS seller_human_id TEXT REFERENCES humans(id);
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS commodity_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS equity_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS real_estate_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;

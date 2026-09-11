@@ -648,10 +648,6 @@ async function processPatentExpirations(tx: PostgresRepository, day: number): Pr
   }
 }
 
-async function ensureMarketLiquidity(tx: PostgresRepository, day: number): Promise<void> {
-  await tx.query("UPDATE market_prices SET supply = GREATEST(supply, 10), demand = GREATEST(demand, 10), game_day = $1 WHERE supply <= 1 OR demand <= 1", [day]);
-}
-
 async function settleProduction(tx: PostgresRepository, day: number): Promise<number> {
   // Buildings are the productive assets; machine-based production was retired in migration 069.
   void tx; void day;
@@ -891,7 +887,6 @@ export async function runWorldSchedulerTick(repository: PostgresRepository, idem
     const nextDay = Number(watermark.rows[0]?.settlement_watermark ?? 0) + 1;
     const settlementDay = active && nextDay < day ? nextDay : null;
     if (settlementDay !== null) pendingResumableSettlementDay = settlementDay;
-    await ensureMarketLiquidity(tx, day);
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
     await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM buildings WHERE status = 'active') * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     const productionEvents = await settleProduction(tx, day);

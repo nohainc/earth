@@ -700,50 +700,6 @@ function advanceDay() {
   return result;
 }
 
-function settleMarket() {
-  const eligible = state.market.orders.filter((o) => o.status === 'open');
-  const fills = [];
-  for (const product of Object.keys(state.market.products)) {
-    const book = eligible.filter((o) => o.product === product).sort((a, b) => a.createdAt - b.createdAt);
-    const market = state.market.products[product];
-      let supply = market.supply;
-      let demand = market.demand;
-      for (const order of book) {
-      const isSell = order.side === 'sell';
-      if (isSell ? demand <= 0 : supply <= 0) break;
-      const fill = Math.min(order.quantity, isSell ? demand : supply);
-      const price = isSell
-        ? money(Math.max(order.limitPrice, market.price))
-        : money(Math.min(order.limitPrice, market.price));
-      const total = money(fill * price);
-      const actor = human(order.humanId);
-      if (!isSell && actor.credits < total) {
-          order.status = 'rejected';
-          continue;
-      }
-      if (isSell) {
-        actor.credits += money(total * (1 - 0.005));
-        state.market.products[product].supply += fill;
-        demand -= fill;
-        appendLedger({ debit: 'central-market', credit: order.humanId, amount: money(total * (1 - 0.005)), reason: 'market_sale', correlationId: order.id });
-      } else {
-        actor.credits -= total;
-        state.resources[product] += fill;
-        supply -= fill;
-        appendLedger({ debit: order.humanId, credit: 'central-market', amount: total, reason: 'market_order', correlationId: order.id });
-      }
-      order.filled = fill;
-      order.status = fill === order.quantity ? 'filled' : 'partial';
-      if (database) void database.saveOrder(order).catch((error) => console.error('settlement persistence failed', error.message));
-      fills.push({ orderId: order.id, product, quantity: fill, price, total });
-    }
-  }
-  state.market.lastSettlement = { day: state.clock.day, fills };
-  if (database) void database.saveResources(state.resources).catch((error) => console.error('market inventory persistence failed', error.message));
-  publish('market.batch_settled', state.market.lastSettlement);
-  return state.market.lastSettlement;
-}
-
 async function command(path, body, req = null) {
   const correlationId = body.correlationId || body.idempotencyKey || req?.headers?.['idempotency-key'] || req?.headers?.['x-request-id'];
   // The sole retained /api/social route is a neutral directory used by
@@ -2283,12 +2239,6 @@ async function command(path, body, req = null) {
     state.market.orders.push(order);
     if (database) void database.saveOrder(order).catch((error) => console.error('order persistence failed', error.message));
     const result = { ok: true, order, state: snapshot() };
-    if (correlationId) commandResults.set(correlationId, result);
-    return result;
-  }
-
-  if (path === '/api/market/settle' && body.method === 'POST') {
-    const result = { ok: true, result: settleMarket(), state: snapshot() };
     if (correlationId) commandResults.set(correlationId, result);
     return result;
   }

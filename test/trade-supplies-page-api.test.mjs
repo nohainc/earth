@@ -49,9 +49,8 @@ test('Tier 3 trade API places and settles a buy order at the clearing price', as
   orderId = placed.body.order.id;
   assert.equal(placed.body.order.side, 'buy');
   const settled = await request('/api/market/settle', { method: 'POST', body: { product: 'components' } });
-  assert.equal(settled.response.status, 200);
-  assert.equal(settled.body.result.fills[0].price, 118.7);
-  assert.equal(settled.body.state.market.orders.find((order) => order.id === orderId).status, 'filled');
+  assert.equal(settled.response.status, 404);
+  assert.equal(placed.body.order.status, 'open');
 });
 
 test('Tier 4 trade API validates side, inventory, and quantity boundaries', async () => {
@@ -67,8 +66,8 @@ test('Tier 5 trade API supports sell settlement and owned-order cancellation ref
   const sold = await request('/api/market/orders', { method: 'POST', body: { product: 'energy', side: 'sell', quantity: 2, limitPrice: 0.5 } });
   assert.equal(sold.response.status, 200);
   const settled = await request('/api/market/settle', { method: 'POST', body: { product: 'energy' } });
-  assert.equal(settled.response.status, 200);
-  assert.equal(settled.body.state.market.orders.find((order) => order.id === sold.body.order.id).status, 'filled');
+  assert.equal(settled.response.status, 404);
+  assert.equal(sold.body.order.status, 'open');
   const pending = await request('/api/market/orders', { method: 'POST', body: { product: 'energy', side: 'sell', quantity: 1, limitPrice: 0.5 } });
   const cancelled = await request(`/api/market/orders/${pending.body.order.id}`, { method: 'DELETE' });
   assert.equal(cancelled.response.status, 200);

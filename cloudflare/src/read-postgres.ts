@@ -1,10 +1,11 @@
 import type { PostgresRepository } from './repository';
 import { TECHNOLOGY_CATALOG_DETAILS } from './technology-postgres.ts';
+import { spotInstrumentSymbol } from './market-model.ts';
 
 export async function listEvents(repository: PostgresRepository, humanId: string, limit: number): Promise<Record<string, unknown>> {
   const [ledger, trades, proposals, publicNews] = await Promise.all([
     repository.query('SELECT id, created_at AS occurred_at, reason_type AS type, amount, game_day, debit_account AS actor FROM ledger_entries ORDER BY created_at DESC LIMIT $1', [limit]),
-    repository.query("SELECT id, created_at AS occurred_at, 'market_trade' AS type, quantity AS amount, game_day, product AS actor FROM market_trades ORDER BY created_at DESC LIMIT $1", [limit]),
+    repository.query("SELECT id, created_at AS occurred_at, 'market_trade' AS type, quantity_units AS amount, game_day, instrument_id AS actor FROM market_fills ORDER BY created_at DESC LIMIT $1", [limit]),
     repository.query("SELECT id, opens_at AS occurred_at, 'proposal_opened' AS type, 0 AS amount, EXTRACT(EPOCH FROM opens_at)::integer AS game_day, institution_id AS actor FROM proposals ORDER BY opens_at DESC LIMIT $1", [limit]),
     repository.query("SELECT id, created_at AS occurred_at, event_type, title, details, game_day FROM world_events WHERE event_type NOT IN ('world_clock', 'scheduled_tick') AND LOWER(COALESCE(title, '')) NOT LIKE '%public world announcement%' ORDER BY created_at DESC LIMIT $1", [limit]),
   ]);
@@ -33,14 +34,16 @@ export async function markAllNotificationsRead(repository: PostgresRepository, h
 }
 
 export async function auditWorld(repository: PostgresRepository, humanId: string): Promise<Record<string, unknown>> {
-  const [balances, ledger, succession, corporations, cities] = await Promise.all([
+  const [balances, ledger, succession, corporations, cities, market] = await Promise.all([
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account'),
     repository.query<{ count: string }>('SELECT COUNT(*)::integer AS count FROM succession_plans WHERE human_id = $1', [humanId]),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM corporations WHERE member_count != (SELECT COUNT(*) FROM memberships WHERE memberships.corporation_id = corporations.id)'),
     repository.query<{ invalid: string }>('SELECT COUNT(*)::integer AS invalid FROM cities WHERE residents != (SELECT COUNT(*) FROM memberships WHERE memberships.city_id = cities.id)'),
+    repository.query<{ check_name: string; invalid_count: string }>('SELECT check_name, invalid_count FROM earth_market_integrity_report()'),
   ]);
-  const checks = { balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(ledger.rows[0]?.invalid ?? 0) === 0, oneSuccessionPlanPerHuman: Number(succession.rows[0]?.count ?? 0) <= 1, corporationMemberCountsConsistent: Number(corporations.rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(cities.rows[0]?.invalid ?? 0) === 0 };
+  const marketChecks = Object.fromEntries(market.rows.map((row) => [row.check_name, Number(row.invalid_count) === 0]));
+  const checks = { balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(ledger.rows[0]?.invalid ?? 0) === 0, oneSuccessionPlanPerHuman: Number(succession.rows[0]?.count ?? 0) <= 1, corporationMemberCountsConsistent: Number(corporations.rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(cities.rows[0]?.invalid ?? 0) === 0, market: Object.values(marketChecks).every(Boolean) };
   return { ok: Object.values(checks).every(Boolean), checks };
 }
 
@@ -370,13 +373,26 @@ export async function listCemeteryProfiles(repository: PostgresRepository, query
 
 export async function listMarketPriceHistory(repository: PostgresRepository, product: string, limitDays = 30): Promise<Record<string, unknown>> {
   const boundedDays = Math.max(1, Math.min(365, limitDays));
-  const current = await repository.query<{ price: string; supply: string; demand: string }>('SELECT price, supply, demand FROM market_prices WHERE product = $1', [product]);
-  const history = await repository.query<{ game_day: number; score: string }>('SELECT game_day, score AS price FROM rankings_snapshots WHERE ranking_type = $1 ORDER BY game_day DESC LIMIT $2', [`market_price_${product}`, boundedDays]);
+  const current = await repository.query<{ price_units: string | null; supply_units: string; demand_units: string }>(
+    `SELECT s.last_clearing_price_units AS price_units, s.open_sell_units AS supply_units, s.open_buy_units AS demand_units
+       FROM market_instrument_state s
+       JOIN market_instruments i ON i.id = s.instrument_id
+      WHERE i.symbol = $1 AND i.instrument_type = 'SPOT'`,
+    [spotInstrumentSymbol(product)],
+  );
+  const history = await repository.query<{ game_day: string; price_units: string }>(
+    `SELECT period_id AS game_day, close_price_units AS price_units
+       FROM market_candles c
+       JOIN market_instruments i ON i.id = c.instrument_id
+      WHERE i.symbol = $1 AND c.interval_kind = 'daily'
+      ORDER BY period_id DESC LIMIT $2`,
+    [spotInstrumentSymbol(product), boundedDays],
+  );
   return {
     product,
-    currentPrice: Number(current.rows[0]?.price ?? 1),
-    supply: Number(current.rows[0]?.supply ?? 0),
-    demand: Number(current.rows[0]?.demand ?? 0),
-    history: history.rows.map((row) => ({ gameDay: Number(row.game_day), price: Number(row.price) })),
+    currentPrice: Number(current.rows[0]?.price_units ?? 1000) / 100,
+    supply: Number(current.rows[0]?.supply_units ?? 0) / 1_000_000,
+    demand: Number(current.rows[0]?.demand_units ?? 0) / 1_000_000,
+    history: history.rows.reverse().map((row) => ({ gameDay: Number(row.game_day), price: Number(row.price_units) / 100 })),
   };
 }
