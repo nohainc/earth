@@ -17,6 +17,8 @@ export interface ProposalActionHandler {
 const FINANCIAL_ACTIONS = new Set([
   'APPROVE_BUDGET', 'AMEND_BUDGET', 'AUTHORIZE_MAJOR_PROJECT', 'AUTHORIZE_GRANT',
   'CHANGE_TAX_CHARTER', 'TRANSFER_RESERVE', 'DECLARE_DIVIDEND', 'APPROVE_BAILOUT',
+  'AMEND_TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX',
+  'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX',
 ]);
 
 function financialSnapshotValue(action: Record<string, unknown>, key: string): unknown {
@@ -33,11 +35,21 @@ const financialHandler: ProposalActionHandler = {
     if (!FINANCIAL_ACTIONS.has(actionType)) throw new Error(`Unsupported financial proposal action: ${actionType}`);
     if (!financialSnapshotValue(action, 'categoryCode') && ['APPROVE_BUDGET', 'AMEND_BUDGET'].includes(actionType)) throw new Error(`${actionType} requires a category snapshot`);
     if (financialSnapshotValue(action, 'amountUnits') === undefined && ['AUTHORIZE_MAJOR_PROJECT', 'AUTHORIZE_GRANT', 'TRANSFER_RESERVE', 'DECLARE_DIVIDEND', 'APPROVE_BAILOUT'].includes(actionType)) throw new Error(`${actionType} requires an amount snapshot`);
+    if (['AMEND_TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(actionType)) {
+      for (const key of ['taxRuleId', 'baseVersionId', 'oldRateBps', 'newRateBps', 'taxBase', 'beneficiaryEconomicId', 'effectiveDay', 'scope', 'category']) {
+        if (financialSnapshotValue(action, key) === undefined) throw new Error(`${actionType} requires ${key} in its immutable snapshot`);
+      }
+    }
   },
-  validateExecution: async ({ action }) => {
+  validateExecution: async ({ action, gameDay }) => {
     const actionType = String(action.actionType ?? '');
     const amount = financialSnapshotValue(action, 'amountUnits');
     if (amount !== undefined && (typeof amount !== 'string' && typeof amount !== 'number' || BigInt(String(amount)) < 0n)) throw new Error(`${actionType} amount must be a non-negative integer`);
+    if (['AMEND_TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(actionType)) {
+      const rate = financialSnapshotValue(action, 'newRateBps');
+      if (!Number.isInteger(Number(rate)) || Number(rate) < 0 || Number(rate) > 10000) throw new Error(`${actionType} newRateBps must be between 0 and 10000`);
+      if (Number(financialSnapshotValue(action, 'effectiveDay')) < gameDay + 1) throw new Error(`${actionType} must take effect after the settlement day`);
+    }
   },
 };
 

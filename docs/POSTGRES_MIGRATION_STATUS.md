@@ -33,7 +33,7 @@ database.
 | Research, patents, licenses, royalties | Implemented | License uniqueness and ledger correlation parity |
 | Personal finance, taxation, liquidity, recovery | Implemented | Numeric precision and non-negative balance invariants |
 | Businesses, shares, constitutions, managers, statements, taxes | Implemented | Share ownership and financial statement reconciliation |
-| AI assistants and service effects | Implemented | Policy/authority boundaries and cost ledger parity |
+| Service effects | Implemented | Policy/authority boundaries and cost ledger parity |
 | Notifications, audit, activity, SSE/WebSocket | Implemented | Read-model rebuild and event ordering verification |
 | Transactional side effects and retry delivery | Implemented | PostgreSQL outbox, row-lock claiming, retry delay, and post-publish acknowledgement |
 | Game-time governance windows | Implemented | Migration 007 stores proposal close and implementation boundaries as game day/minute |

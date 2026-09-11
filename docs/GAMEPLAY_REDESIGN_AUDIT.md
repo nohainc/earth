@@ -1,5 +1,9 @@
 # Gameplay Redesign Audit
 
+Status: HISTORICAL. This is an evidence record for an earlier redesign pass;
+it is not an active gameplay specification. Use the canonical documents in
+`DOCUMENT_STATUS.md` for current rules.
+
 This checklist tracks the implementation of the management-first redesign.
 Status is intentionally evidence-based: **implemented** means visible in the
 current client and supported by the current domain data; **partial** means the

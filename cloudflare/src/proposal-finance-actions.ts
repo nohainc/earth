@@ -62,5 +62,28 @@ export async function executeProposalFinancialAction(
       commitmentId: payload(action, 'commitmentId') ? String(payload(action, 'commitmentId')) : undefined,
     });
   }
+  if (['AMEND_TAX_RULE', 'SET_PERSONAL_INCOME_TAX', 'SET_CORPORATE_INCOME_TAX', 'SET_BASIC_LEVY', 'SET_MARKET_TRANSACTION_TAX'].includes(actionType)) {
+    const taxRuleId = required(action, 'taxRuleId');
+    const baseVersionId = required(action, 'baseVersionId');
+    const oldRateBps = Number(required(action, 'oldRateBps'));
+    const newRateBps = Number(required(action, 'newRateBps'));
+    const taxBase = required(action, 'taxBase');
+    const beneficiaryEconomicId = required(action, 'beneficiaryEconomicId');
+    const effectiveDay = Number(required(action, 'effectiveDay'));
+    const base = await tx.query<{ id: string; tax_rule_id: string; rate_bps: number; tax_base_definition: string; beneficiary_economic_id: string }>(
+      `SELECT id, tax_rule_id, rate_bps, tax_base_definition, beneficiary_economic_id::TEXT
+       FROM tax_rule_versions WHERE id = $1 FOR SHARE`, [baseVersionId],
+    );
+    const current = base.rows[0];
+    if (!current || current.tax_rule_id !== taxRuleId || Number(current.rate_bps) !== oldRateBps || current.tax_base_definition !== taxBase || current.beneficiary_economic_id !== beneficiaryEconomicId) {
+      throw new Error('STALE_CONFLICT: tax rule no longer matches the proposal base version');
+    }
+    if (effectiveDay <= gameDay) throw new Error('Tax changes become effective on a future game day');
+    const created = await tx.query<{ earth_create_tax_rule_version: string }>(
+      'SELECT earth_create_tax_rule_version($1,$2,$3,$4,$5,$6,$7,$8) AS earth_create_tax_rule_version',
+      [taxRuleId, required(action, 'scope').toUpperCase(), required(action, 'category'), newRateBps, taxBase, beneficiaryEconomicId, effectiveDay, String(proposal.id)],
+    );
+    return { ok: true, actionType, taxRuleId, baseVersionId, newVersionId: created.rows[0]?.earth_create_tax_rule_version, effectiveDay };
+  }
   throw new Error(`${actionType} is typed but has no V2 executor yet`);
 }

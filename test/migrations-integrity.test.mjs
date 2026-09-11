@@ -12,13 +12,26 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '342_remove_futures_market_schema.sql');
+  assert.equal(files.at(-1), '350_remove_building_decay_policy.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 342, 'Manifest version must match latest migration version (342)');
+  assert.equal(manifest.migrationVersion, 350, 'Manifest version must match latest migration version (350)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 342/);
+  assert.match(schema, /reconciled through migration 350/);
+  assert.match(fs.readFileSync(path.resolve('db/migrations/349_remove_obsolete_building_credit_output.sql'), 'utf8'), /DROP COLUMN IF EXISTS output_credits/);
+  assert.doesNotMatch(schema, /output_credits NUMERIC/);
+  assert.doesNotMatch(schema, /decay_multiplier NUMERIC/);
+  assert.ok(manifest.requiredTables.tax_governance_rules, 'Tax constitution rulebook must be in the manifest');
+  assert.match(fs.readFileSync(path.resolve('db/migrations/348_tax_constitution_governance.sql'), 'utf8'), /earth_create_tax_rule_version/);
+  assert.ok(manifest.requiredTables.economic_research_balance_benchmarks, 'Research balance benchmarks must be in the manifest');
+  assert.match(fs.readFileSync(path.resolve('db/migrations/347_research_building_balance_model.sql'), 'utf8'), /technology_economic_balance_model/);
+  assert.match(fs.readFileSync(path.resolve('db/migrations/346_economic_loop_analysis.sql'), 'utf8'), /economic_recipe_cycles/);
+  assert.match(fs.readFileSync(path.resolve('db/migrations/345_building_operating_cost_model.sql'), 'utf8'), /building_operating_cost_model/);
+  assert.match(fs.readFileSync(path.resolve('db/migrations/344_construction_time_economics.sql'), 'utf8'), /construction_real_minutes/);
+  assert.ok(manifest.requiredTables.economic_reference_prices, 'Balance model must define versioned reference prices');
+  assert.match(fs.readFileSync(path.resolve('db/migrations/343_economic_balance_model.sql'), 'utf8'), /building_economic_balance_model/);
+  assert.match(fs.readFileSync(path.resolve('db/migrations/343_economic_balance_model.sql'), 'utf8'), /building_tier_balance_flags/);
   assert.ok(manifest.requiredTables.technology_catalog, 'Technology V2 catalog must be in the canonical manifest');
   for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');

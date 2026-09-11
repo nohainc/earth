@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 342.
+-- Canonical fresh-install schema, reconciled through migration 350.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -1369,16 +1369,15 @@ CREATE TABLE IF NOT EXISTS economic_policy_rules (
   code TEXT PRIMARY KEY,
   output_multiplier NUMERIC(8,4) NOT NULL CHECK (output_multiplier >= 0),
   cost_multiplier NUMERIC(8,4) NOT NULL CHECK (cost_multiplier >= 0),
-  decay_multiplier NUMERIC(8,4) NOT NULL CHECK (decay_multiplier >= 0),
   is_selectable BOOLEAN NOT NULL DEFAULT TRUE,
   description TEXT NOT NULL
 );
-INSERT INTO economic_policy_rules (code, output_multiplier, cost_multiplier, decay_multiplier, description) VALUES
-  ('balanced', 1.00, 1.00, 1.00, 'Normal production and operating costs'),
-  ('high_output', 1.30, 1.40, 1.75, 'Higher output with higher operating cost and wear'),
-  ('eco_reserve', 0.75, 0.70, 0.50, 'Reduced output and costs with lower wear'),
-  ('halted', 0.00, 0.20, 0.10, 'Production halted with minimum operating cost and low residual wear'),
-  ('overclock', 1.60, 1.90, 3.00, 'Extreme output with extreme operating cost and wear')
+INSERT INTO economic_policy_rules (code, output_multiplier, cost_multiplier, description) VALUES
+  ('balanced', 1.00, 1.00, 'Normal production and operating costs'),
+  ('high_output', 1.30, 1.40, 'Higher output with higher operating cost'),
+  ('eco_reserve', 0.75, 0.70, 'Reduced output and costs'),
+  ('halted', 0.00, 0.20, 'Production halted with minimum operating cost'),
+  ('overclock', 1.60, 1.90, 'Extreme output with extreme operating cost')
 ON CONFLICT (code) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS economic_ownership_classes (
@@ -3191,7 +3190,7 @@ CREATE TABLE IF NOT EXISTS building_catalog (
   cost_credits NUMERIC(18,6) DEFAULT 0, cost_energy NUMERIC(18,6) DEFAULT 0,
   cost_food NUMERIC(18,6) DEFAULT 0, cost_materials NUMERIC(18,6) DEFAULT 0,
   cost_components NUMERIC(18,6) DEFAULT 0, cost_compute NUMERIC(18,6) DEFAULT 0,
-  output_credits NUMERIC(18,6) DEFAULT 0, output_energy NUMERIC(18,6) DEFAULT 0,
+  output_energy NUMERIC(18,6) DEFAULT 0,
   output_food NUMERIC(18,6) DEFAULT 0, output_materials NUMERIC(18,6) DEFAULT 0,
   output_components NUMERIC(18,6) DEFAULT 0, output_compute NUMERIC(18,6) DEFAULT 0,
   upkeep_credits NUMERIC(18,6) DEFAULT 0, upkeep_energy NUMERIC(18,6) DEFAULT 0,
@@ -3214,6 +3213,26 @@ CREATE TABLE IF NOT EXISTS building_catalog (
   CHECK (tier BETWEEN 1 AND 5)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS building_catalog_type_tier_uq ON building_catalog (building_type, tier);
+
+-- Development/balance reference values. These are not market prices and never
+-- participate in live account settlement.
+CREATE TABLE IF NOT EXISTS economic_reference_prices (
+  asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
+  reference_price_credit_units BIGINT NOT NULL CHECK (reference_price_credit_units >= 0),
+  effective_from_game_day BIGINT NOT NULL DEFAULT 0 CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  balance_version TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (asset_id, effective_from_game_day),
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
+);
+INSERT INTO economic_reference_prices (asset_id, reference_price_credit_units, effective_from_game_day, balance_version) VALUES
+  (1, 100, 0, 'balance-v1'), (2, 40000, 0, 'balance-v1'),
+  (3, 80000, 0, 'balance-v1'), (4, 10000, 0, 'balance-v1'),
+  (5, 20000, 0, 'balance-v1'), (6, 5000, 0, 'balance-v1')
+ON CONFLICT (asset_id, effective_from_game_day) DO NOTHING;
+CREATE INDEX IF NOT EXISTS economic_reference_prices_effective_idx
+  ON economic_reference_prices (asset_id, effective_from_game_day DESC);
 
 CREATE TABLE IF NOT EXISTS building_economic_rule_versions (
   catalog_id TEXT NOT NULL REFERENCES building_catalog(id) ON DELETE CASCADE,
@@ -3505,3 +3524,209 @@ RETURNS TABLE(check_name TEXT, invalid_count BIGINT) LANGUAGE SQL AS $$
   UNION ALL SELECT 'receivership_discretionary_commitment', COUNT(*) FROM institution_budget_commitments c JOIN institution_budget_lines l ON l.id = c.budget_line_id JOIN budget_categories bc ON bc.id = l.category_id JOIN financial_states fs ON fs.institution_id = c.institution_id WHERE fs.status = 'receivership' AND bc.spending_class = 'DISCRETIONARY' AND c.status IN ('ACTIVE','PARTIALLY_PAID')
   UNION ALL SELECT 'reserve_transfer_unbalanced', COUNT(*) FROM (SELECT t.id FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id WHERE t.transaction_kind = 'RESERVE_TRANSFER' GROUP BY t.id HAVING COUNT(*) < 2 OR SUM(e.delta) <> 0) x;
 $$;
+
+CREATE TABLE IF NOT EXISTS tax_governance_rules (
+  scope TEXT NOT NULL CHECK (scope IN ('OUC', 'CITY', 'CORPORATION')),
+  category TEXT NOT NULL,
+  minimum_rate_bps INTEGER NOT NULL DEFAULT 0 CHECK (minimum_rate_bps >= 0),
+  maximum_rate_bps INTEGER NOT NULL CHECK (maximum_rate_bps >= minimum_rate_bps AND maximum_rate_bps <= 10000),
+  allowed_tax_base_definitions JSONB NOT NULL CHECK (jsonb_typeof(allowed_tax_base_definitions) = 'array'),
+  beneficiary_scope TEXT NOT NULL CHECK (beneficiary_scope IN ('OUC', 'CITY', 'CORPORATION')),
+  rules_version TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (scope, category)
+);
+INSERT INTO tax_governance_rules (scope, category, maximum_rate_bps, allowed_tax_base_definitions, beneficiary_scope, rules_version) VALUES
+  ('OUC', 'basic_levy', 2000, '["fixed_daily_obligation"]', 'OUC', 'tax-constitution-v1'),
+  ('OUC', 'personal_income', 3000, '["positive_realized_daily_income"]', 'OUC', 'tax-constitution-v1'),
+  ('OUC', 'market_transaction', 1000, '["external_market_trade"]', 'OUC', 'tax-constitution-v1'),
+  ('CITY', 'personal_income', 3000, '["positive_realized_daily_income"]', 'CITY', 'tax-constitution-v1'),
+  ('CITY', 'property', 2500, '["assessed_property_value"]', 'CITY', 'tax-constitution-v1'),
+  ('CITY', 'building', 2500, '["assessed_building_value"]', 'CITY', 'tax-constitution-v1'),
+  ('CORPORATION', 'corporate_income', 4000, '["positive_realized_daily_taxable_profit"]', 'CORPORATION', 'tax-constitution-v1'),
+  ('CORPORATION', 'market_transaction', 1000, '["external_market_trade"]', 'CORPORATION', 'tax-constitution-v1')
+ON CONFLICT (scope, category) DO NOTHING;
+ALTER TABLE tax_rule_versions ADD COLUMN IF NOT EXISTS authorization_proposal_id TEXT REFERENCES proposals(id);
+
+CREATE OR REPLACE FUNCTION earth_validate_tax_rule_governance()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE rule tax_governance_rules%ROWTYPE;
+BEGIN
+  SELECT * INTO rule FROM tax_governance_rules WHERE scope = NEW.scope AND category = NEW.category;
+  IF NOT FOUND THEN RAISE EXCEPTION 'Tax scope/category is not constitutionally permitted: %/%', NEW.scope, NEW.category; END IF;
+  IF NEW.rate_bps < rule.minimum_rate_bps OR NEW.rate_bps > rule.maximum_rate_bps THEN RAISE EXCEPTION 'Tax rate exceeds constitutional range for %/%', NEW.scope, NEW.category; END IF;
+  IF NOT (rule.allowed_tax_base_definitions ? NEW.tax_base_definition) THEN RAISE EXCEPTION 'Tax base is not permitted for %/%', NEW.scope, NEW.category; END IF;
+  IF NEW.authorization_proposal_id IS NULL THEN RAISE EXCEPTION 'New tax rule versions require an approved proposal'; END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS tax_rule_versions_governance_trigger ON tax_rule_versions;
+CREATE TRIGGER tax_rule_versions_governance_trigger BEFORE INSERT ON tax_rule_versions
+FOR EACH ROW EXECUTE FUNCTION earth_validate_tax_rule_governance();
+
+CREATE OR REPLACE FUNCTION earth_create_tax_rule_version(
+  p_tax_rule_id TEXT, p_scope TEXT, p_category TEXT, p_rate_bps INTEGER,
+  p_tax_base_definition TEXT, p_beneficiary_economic_id BIGINT,
+  p_effective_from_game_day BIGINT, p_authorization_proposal_id TEXT
+)
+RETURNS TEXT LANGUAGE plpgsql AS $$
+DECLARE next_version INTEGER; latest_day BIGINT; new_id TEXT;
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM proposals WHERE id = p_authorization_proposal_id AND decision_status = 'passed') THEN RAISE EXCEPTION 'Tax change requires a passed proposal'; END IF;
+  SELECT COALESCE(MAX(version), 0) + 1, COALESCE(MAX(effective_from_game_day), -1) INTO next_version, latest_day FROM tax_rule_versions WHERE tax_rule_id = p_tax_rule_id;
+  IF p_effective_from_game_day <= latest_day THEN RAISE EXCEPTION 'Tax rule versions cannot be retroactive or overlap'; END IF;
+  new_id := p_tax_rule_id || '-v' || next_version;
+  INSERT INTO tax_rule_versions (id, tax_rule_id, scope, category, version, effective_from_game_day, rate_bps, tax_base_definition, beneficiary_economic_id, authorization_proposal_id)
+  VALUES (new_id, p_tax_rule_id, p_scope, p_category, next_version, p_effective_from_game_day, p_rate_bps, p_tax_base_definition, p_beneficiary_economic_id, p_authorization_proposal_id);
+  RETURN new_id;
+END;
+$$;
+
+-- Read-only balance diagnostics. Reference values are deliberately separate
+-- from market prices and are never used by settlement.
+CREATE OR REPLACE VIEW building_economic_balance_model AS
+WITH p AS (
+  SELECT bc.*,
+    COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = 2 ORDER BY effective_from_game_day DESC LIMIT 1), 0) AS material_price,
+    COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = 3 ORDER BY effective_from_game_day DESC LIMIT 1), 0) AS components_price,
+    COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = 4 ORDER BY effective_from_game_day DESC LIMIT 1), 0) AS energy_price,
+    COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = 5 ORDER BY effective_from_game_day DESC LIMIT 1), 0) AS compute_price,
+    COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = 6 ORDER BY effective_from_game_day DESC LIMIT 1), 0) AS food_price,
+    COALESCE((SELECT balance_version FROM economic_reference_prices ORDER BY effective_from_game_day DESC LIMIT 1), 'balance-v1') AS balance_version
+  FROM building_catalog bc
+), v AS (
+  SELECT p.*,
+    ROUND(COALESCE(cost_credits, 0) * 100 + COALESCE(cost_materials, 0) * material_price + COALESCE(cost_components, 0) * components_price + COALESCE(cost_energy, 0) * energy_price + COALESCE(cost_compute, 0) * compute_price + COALESCE(cost_food, 0) * food_price) AS construction_reference_value,
+    ROUND(COALESCE(upkeep_materials, 0) * material_price + COALESCE(upkeep_components, 0) * components_price + COALESCE(upkeep_energy, 0) * energy_price + COALESCE(upkeep_compute, 0) * compute_price + COALESCE(upkeep_food, 0) * food_price) AS daily_resource_input_value,
+    COALESCE(NULLIF(operating_service_cost_units, 0), ROUND(COALESCE(operating_credits, 0) * 100)) AS daily_credit_operating_cost,
+    ROUND(COALESCE(output_materials, 0) * material_price + COALESCE(output_components, 0) * components_price + COALESCE(output_energy, 0) * energy_price + COALESCE(output_compute, 0) * compute_price + COALESCE(output_food, 0) * food_price) AS daily_output_reference_value,
+    COALESCE(base_service_capacity_units, 0) * COALESCE(default_price_credit_units, 0) AS service_revenue_reference_value
+  FROM p
+)
+SELECT v.*,
+  daily_resource_input_value + daily_credit_operating_cost AS total_daily_cost,
+  daily_output_reference_value + service_revenue_reference_value AS expected_daily_revenue,
+  daily_output_reference_value - daily_resource_input_value AS gross_margin,
+  daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost AS operating_margin,
+  CASE WHEN daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost > 0 THEN ROUND(construction_reference_value::NUMERIC / (daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost)) END AS payback_game_days,
+  CASE WHEN daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost > 0 THEN ROUND(construction_reference_value::NUMERIC / (daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost) * 0.4, 2) END AS payback_real_hours,
+  CASE WHEN construction_reference_value > 0 THEN ROUND((daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost)::NUMERIC / construction_reference_value, 8) END AS return_on_capital_per_day,
+  CASE WHEN slot_footprint > 0 THEN ROUND((daily_output_reference_value + service_revenue_reference_value)::NUMERIC / slot_footprint, 2) END AS output_per_slot,
+  CASE WHEN slot_footprint > 0 THEN ROUND((daily_output_reference_value + service_revenue_reference_value - daily_resource_input_value - daily_credit_operating_cost)::NUMERIC / slot_footprint, 2) END AS profit_per_slot
+FROM v;
+
+CREATE OR REPLACE VIEW building_tier_balance_flags AS
+SELECT lower_tier.building_type AS building_family,
+  lower_tier.tier AS lower_tier, higher_tier.tier AS higher_tier,
+  higher_tier.construction_reference_value < lower_tier.construction_reference_value AS costs_less,
+  higher_tier.construction_days <= lower_tier.construction_days AS builds_no_slower,
+  higher_tier.daily_resource_input_value <= lower_tier.daily_resource_input_value AS consumes_no_more,
+  higher_tier.expected_daily_revenue >= lower_tier.expected_daily_revenue AS produces_no_less,
+  (higher_tier.construction_reference_value < lower_tier.construction_reference_value
+   AND higher_tier.construction_days <= lower_tier.construction_days
+   AND higher_tier.daily_resource_input_value <= lower_tier.daily_resource_input_value
+   AND higher_tier.expected_daily_revenue >= lower_tier.expected_daily_revenue
+   AND (higher_tier.construction_reference_value < lower_tier.construction_reference_value
+     OR higher_tier.construction_days < lower_tier.construction_days
+     OR higher_tier.daily_resource_input_value < lower_tier.daily_resource_input_value
+     OR higher_tier.expected_daily_revenue > lower_tier.expected_daily_revenue)) AS unintended_dominance
+FROM building_economic_balance_model lower_tier
+JOIN building_economic_balance_model higher_tier
+  ON higher_tier.building_type = lower_tier.building_type
+ AND higher_tier.tier > lower_tier.tier;
+
+CREATE OR REPLACE VIEW building_construction_time_model AS
+SELECT bc.id AS catalog_id, bc.building_type, bc.tier, bc.slot_footprint,
+  bc.construction_days AS construction_game_days,
+  bc.construction_days * 24 AS construction_game_hours,
+  bc.construction_days * 24 AS construction_real_minutes,
+  CASE WHEN bc.tier <= 2 AND bc.slot_footprint <= 2 THEN 'TINY_BASIC'
+       WHEN bc.tier <= 3 THEN 'ORDINARY_PRODUCTION'
+       WHEN bc.tier = 4 THEN 'ADVANCED_HIGH_TIER'
+       ELSE 'STRATEGIC_T5' END AS construction_time_class
+FROM building_catalog bc;
+
+CREATE OR REPLACE VIEW building_operating_cost_model AS
+SELECT b.id AS catalog_id, b.building_type, b.tier,
+  b.daily_credit_operating_cost, b.daily_resource_input_value,
+  b.total_daily_cost, b.daily_output_reference_value,
+  b.service_revenue_reference_value, b.expected_daily_revenue,
+  b.operating_margin,
+  CASE WHEN b.expected_daily_revenue > b.total_daily_cost THEN 'BASELINE_PROFITABLE'
+       WHEN b.expected_daily_revenue = b.total_daily_cost THEN 'BASELINE_BREAK_EVEN'
+       ELSE 'BASELINE_LOSS_MAKER' END AS baseline_status,
+  jsonb_build_object('credit_operating_expense', b.daily_credit_operating_cost,
+    'resource_inputs_reference_value', b.daily_resource_input_value,
+    'resource_output_reference_value', b.daily_output_reference_value,
+    'service_revenue_reference_value', b.service_revenue_reference_value,
+    'maintenance_model', 'included_in_credit_operating_expense') AS cost_explanation,
+  CASE WHEN b.construction_reference_value > 0
+    THEN ROUND(b.operating_margin::NUMERIC / b.construction_reference_value, 8)
+    ELSE NULL END AS return_on_capital_per_day
+FROM building_economic_balance_model b;
+
+CREATE OR REPLACE VIEW economic_recipe_edges AS
+SELECT bc.id AS catalog_id, bc.building_type, bc.tier,
+  inputs.asset_code AS input_asset, outputs.asset_code AS output_asset,
+  inputs.amount AS input_units, outputs.amount AS output_units,
+  ROUND(inputs.amount * COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = ia.id ORDER BY effective_from_game_day DESC LIMIT 1), 0)) AS input_reference_value,
+  ROUND(outputs.amount * COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = oa.id ORDER BY effective_from_game_day DESC LIMIT 1), 0)) AS output_reference_value,
+  ROUND((outputs.amount * COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = oa.id ORDER BY effective_from_game_day DESC LIMIT 1), 0)) / NULLIF(inputs.amount * COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = ia.id ORDER BY effective_from_game_day DESC LIMIT 1), 0), 0), 8) AS value_multiplier
+FROM building_catalog bc
+CROSS JOIN LATERAL (VALUES ('MATERIAL', COALESCE(bc.upkeep_materials, 0)), ('COMPONENTS', COALESCE(bc.upkeep_components, 0)), ('ENERGY', COALESCE(bc.upkeep_energy, 0)), ('COMPUTE', COALESCE(bc.upkeep_compute, 0)), ('FOOD', COALESCE(bc.upkeep_food, 0))) inputs(asset_code, amount)
+CROSS JOIN LATERAL (VALUES ('MATERIAL', COALESCE(bc.output_materials, 0)), ('COMPONENTS', COALESCE(bc.output_components, 0)), ('ENERGY', COALESCE(bc.output_energy, 0)), ('COMPUTE', COALESCE(bc.output_compute, 0)), ('FOOD', COALESCE(bc.output_food, 0))) outputs(asset_code, amount)
+JOIN economic_assets ia ON ia.code = inputs.asset_code JOIN economic_assets oa ON oa.code = outputs.asset_code
+WHERE inputs.amount > 0 AND outputs.amount > 0 AND inputs.asset_code <> outputs.asset_code;
+
+CREATE OR REPLACE VIEW economic_recipe_cycles AS
+WITH RECURSIVE walk(start_asset, current_asset, asset_path, value_multiplier, depth) AS (
+  SELECT input_asset, output_asset, ARRAY[input_asset, output_asset], value_multiplier, 1 FROM economic_recipe_edges
+  UNION ALL
+  SELECT w.start_asset, e.output_asset, w.asset_path || e.output_asset, w.value_multiplier * e.value_multiplier, w.depth + 1
+  FROM walk w JOIN economic_recipe_edges e ON e.input_asset = w.current_asset
+  WHERE w.depth < 6 AND (e.output_asset = w.start_asset OR NOT e.output_asset = ANY(w.asset_path))
+)
+SELECT start_asset, asset_path, depth, value_multiplier, value_multiplier > 1 AS exceeds_reference_value,
+  CASE WHEN value_multiplier > 1 THEN 'REVIEW_POSSIBLE_ARBITRAGE' ELSE 'NO_REFERENCE_VALUE_GROWTH' END AS assessment
+FROM walk WHERE current_asset = start_asset AND depth >= 2;
+
+CREATE OR REPLACE VIEW economic_resource_flow_coverage AS
+SELECT a.code AS asset,
+  (SELECT COUNT(*) FROM building_catalog b WHERE CASE a.code WHEN 'MATERIAL' THEN b.output_materials > 0 WHEN 'COMPONENTS' THEN b.output_components > 0 WHEN 'ENERGY' THEN b.output_energy > 0 WHEN 'COMPUTE' THEN b.output_compute > 0 WHEN 'FOOD' THEN b.output_food > 0 ELSE FALSE END) AS source_buildings,
+  (SELECT COUNT(*) FROM building_catalog b WHERE CASE a.code WHEN 'MATERIAL' THEN b.upkeep_materials > 0 OR b.cost_materials > 0 WHEN 'COMPONENTS' THEN b.upkeep_components > 0 OR b.cost_components > 0 WHEN 'ENERGY' THEN b.upkeep_energy > 0 OR b.cost_energy > 0 WHEN 'COMPUTE' THEN b.upkeep_compute > 0 OR b.cost_compute > 0 WHEN 'FOOD' THEN b.upkeep_food > 0 OR b.cost_food > 0 ELSE FALSE END) AS sink_buildings,
+  CASE WHEN a.code = 'CREDIT' THEN 0 ELSE 1 END AS explicit_system_sources,
+  CASE WHEN a.code = 'CREDIT' THEN 0 ELSE 1 END AS explicit_system_sinks,
+  a.code <> 'CREDIT' AS has_source_and_sink_model
+FROM economic_assets a;
+
+CREATE TABLE IF NOT EXISTS economic_research_balance_benchmarks (
+  benchmark_id TEXT PRIMARY KEY,
+  baseline_daily_research_capacity_units BIGINT NOT NULL CHECK (baseline_daily_research_capacity_units > 0),
+  benchmark_daily_output_units JSONB NOT NULL DEFAULT '{}'::JSONB,
+  effective_from_game_day BIGINT NOT NULL DEFAULT 0 CHECK (effective_from_game_day >= 0),
+  effective_to_game_day BIGINT,
+  balance_version TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  CHECK (effective_to_game_day IS NULL OR effective_to_game_day >= effective_from_game_day)
+);
+INSERT INTO economic_research_balance_benchmarks (benchmark_id, baseline_daily_research_capacity_units, benchmark_daily_output_units, balance_version)
+VALUES ('default', 250, '{"MATERIAL":5000,"COMPONENTS":5000,"ENERGY":5000,"COMPUTE":5000,"FOOD":5000}', 'balance-v1')
+ON CONFLICT (benchmark_id) DO NOTHING;
+
+CREATE OR REPLACE VIEW technology_economic_balance_model AS
+WITH benchmark AS (SELECT DISTINCT ON (benchmark_id) * FROM economic_research_balance_benchmarks ORDER BY benchmark_id, effective_from_game_day DESC),
+effects AS (SELECT technology_id, target_key AS asset, SUM(modifier_bps)::INTEGER AS modifier_bps FROM technology_effects WHERE effect_type = 'PRODUCTION_OUTPUT' AND target_type = 'ASSET' GROUP BY technology_id, target_key),
+impact AS (
+  SELECT t.id AS technology_id, COALESCE(SUM(ROUND((output.value::NUMERIC * COALESCE(e.modifier_bps, 0) / 10000) * COALESCE((SELECT reference_price_credit_units FROM economic_reference_prices WHERE asset_id = a.id ORDER BY effective_from_game_day DESC LIMIT 1), 0))), 0) AS expected_daily_impact_value
+  FROM technology_catalog t CROSS JOIN benchmark CROSS JOIN LATERAL jsonb_each_text(benchmark.benchmark_daily_output_units) output
+  LEFT JOIN effects e ON e.technology_id = t.id AND e.asset = output.key LEFT JOIN economic_assets a ON a.code = output.key GROUP BY t.id
+), prerequisites AS (SELECT technology_id, COUNT(*)::INTEGER AS prerequisite_count FROM technology_prerequisites GROUP BY technology_id)
+SELECT t.id AS technology_id, t.code, t.name, t.category, t.definition_version, t.research_credit_cost_units, t.research_points_required,
+  benchmark.baseline_daily_research_capacity_units,
+  CEIL(t.research_points_required::NUMERIC / benchmark.baseline_daily_research_capacity_units)::BIGINT AS expected_research_completion_days,
+  ROUND(CEIL(t.research_points_required::NUMERIC / benchmark.baseline_daily_research_capacity_units) * 0.4, 2) AS expected_real_completion_hours,
+  COALESCE(prerequisites.prerequisite_count, 0) AS prerequisite_count, impact.expected_daily_impact_value,
+  CASE WHEN impact.expected_daily_impact_value > 0 THEN ROUND(t.research_credit_cost_units::NUMERIC / impact.expected_daily_impact_value, 2) END AS economic_payback_game_days,
+  CASE WHEN impact.expected_daily_impact_value > 0 THEN ROUND(t.research_credit_cost_units::NUMERIC / impact.expected_daily_impact_value * 0.4, 2) END AS economic_payback_real_hours,
+  CASE WHEN impact.expected_daily_impact_value > 0 THEN 'REVIEW_POSITIVE_IMPACT' ELSE 'NO_MODELED_OUTPUT_IMPACT' END AS balance_assessment, benchmark.balance_version
+FROM technology_catalog t CROSS JOIN benchmark LEFT JOIN impact ON impact.technology_id = t.id LEFT JOIN prerequisites ON prerequisites.technology_id = t.id;

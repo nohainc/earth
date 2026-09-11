@@ -121,3 +121,111 @@ export function runFinanceSimulation({ days = 60, humans = 10000, cities = 100, 
   const finalSupply = people.reduce((sum, p) => sum + p.wallet, 0) + institutions.reduce((sum, i) => sum + i.treasury, 0) + bank.reserve;
   return { days, humans, cities, issued, retired, openingSupply: issued - retired, closingSupply: finalSupply, creditConserved: finalSupply === issued - retired, nonNegative: people.every((p) => p.wallet >= 0 && p.deposit >= 0 && p.debt >= 0 && p.arrears >= 0) && institutions.every((i) => i.treasury >= 0), bankSolventOrStressed: ['NORMAL', 'LIQUIDITY_STRESS', 'INSOLVENT'].includes(bank.state), bank, taxArrears: people.reduce((sum, p) => sum + p.arrears, 0), bankruptcyCases: people.filter((p) => p.debt > p.wallet + p.deposit).length };
 }
+
+const ECONOMY_RESOURCES = ['MATERIAL', 'COMPONENTS', 'ENERGY', 'COMPUTE', 'FOOD'];
+const ECONOMY_SCENARIOS = {
+  baseline: { energySupply: 1, foodDemand: 1, taxRate: 0.1, technologyGrowth: 0.001, constructionDemand: 1 },
+  'high-energy-shortage': { energySupply: 0.12, foodDemand: 1, taxRate: 0.1, technologyGrowth: 0.001, constructionDemand: 1 },
+  'high-food-demand': { energySupply: 1, foodDemand: 5, taxRate: 0.1, technologyGrowth: 0.001, constructionDemand: 1 },
+  'low-taxes': { energySupply: 1, foodDemand: 1, taxRate: 0.02, technologyGrowth: 0.001, constructionDemand: 1 },
+  'high-taxes': { energySupply: 1, foodDemand: 1, taxRate: 0.2, technologyGrowth: 0.001, constructionDemand: 1 },
+  'technology-heavy': { energySupply: 1, foodDemand: 1, taxRate: 0.1, technologyGrowth: 0.008, constructionDemand: 1 },
+  'rapid-construction': { energySupply: 1, foodDemand: 1, taxRate: 0.1, technologyGrowth: 0.001, constructionDemand: 2.5 },
+};
+
+export const ECONOMY_SIMULATION_PROFILES = {
+  small: 100,
+  medium: 10_000,
+  large: 100_000,
+};
+
+function economyRandom(seed) {
+  let state = seed >>> 0;
+  return () => { state = (state * 1664525 + 1013904223) >>> 0; return state / 0x1_0000_0000; };
+}
+
+/**
+ * Deterministic aggregate simulation for balance discovery. It deliberately
+ * models transfers and inventories in aggregate; it is a stress signal, not a
+ * forecast of one correct economy.
+ */
+export function runEconomySimulation({ days = 365, houses = 100, seed = 42, scenario = 'baseline' } = {}) {
+  if (!Number.isInteger(days) || days < 1) throw new Error('days must be a positive integer');
+  if (!Number.isInteger(houses) || houses < 1) throw new Error('houses must be a positive integer');
+  const rules = ECONOMY_SCENARIOS[scenario];
+  if (!rules) throw new Error(`Unknown economy scenario: ${scenario}`);
+  const random = economyRandom(seed);
+  const cities = Math.max(1, Math.ceil(houses / 100));
+  const corporations = Math.max(1, Math.ceil(houses / 20));
+  const buildings = Math.max(1, Math.floor(houses * 0.65));
+  const issuedCredits = houses * 100_000;
+  let creditSupply = issuedCredits;
+  let taxRevenue = 0;
+  let researchProgress = 0;
+  let completedResearch = 0;
+  let constructionStarted = 0;
+  let totalTrades = 0;
+  let priceVolatility = 0;
+  const resources = { MATERIAL: houses * 120, COMPONENTS: houses * 30, ENERGY: houses * 100, COMPUTE: houses * 25, FOOD: houses * 180 };
+  const prices = { MATERIAL: 40, COMPONENTS: 80, ENERGY: 20, COMPUTE: 50, FOOD: 12 };
+  const shortages = Object.fromEntries(ECONOMY_RESOURCES.map((resource) => [resource, 0]));
+  const wealthBuckets = [0.5, 0.8, 1, 1.3, 2].map((multiplier) => ({ multiplier, credits: houses * 100_000 * multiplier / 5 }));
+  const daily = [];
+
+  for (let day = 1; day <= days; day += 1) {
+    const tech = 1 + Math.min(0.35, day * rules.technologyGrowth);
+    const demand = {
+      MATERIAL: buildings * 12 * rules.constructionDemand,
+      COMPONENTS: buildings * 3 * rules.constructionDemand,
+      ENERGY: houses * 1.2,
+      COMPUTE: corporations * 15,
+      FOOD: houses * 2 * rules.foodDemand,
+    };
+    const production = {
+      MATERIAL: buildings * 10 * tech,
+      COMPONENTS: buildings * 4 * tech,
+      ENERGY: buildings * 9 * tech * rules.energySupply,
+      COMPUTE: corporations * 14 * tech,
+      FOOD: buildings * 14 * tech,
+    };
+    let dayShortage = 0;
+    for (const resource of ECONOMY_RESOURCES) {
+      resources[resource] += production[resource];
+      const available = resources[resource];
+      const consumed = Math.min(available, demand[resource]);
+      resources[resource] -= consumed;
+      const shortage = Math.max(0, demand[resource] - consumed);
+      shortages[resource] += shortage;
+      dayShortage += shortage;
+      const pressure = demand[resource] / Math.max(1, production[resource]);
+      const oldPrice = prices[resource];
+      prices[resource] = Math.max(1, Math.min(10_000, oldPrice * (1 + Math.max(-0.08, Math.min(0.08, (pressure - 1) * 0.035)) + (random() - 0.5) * 0.01)));
+      priceVolatility += Math.abs(prices[resource] - oldPrice) / oldPrice;
+      totalTrades += Math.floor(Math.min(production[resource], demand[resource]) / Math.max(1, resource === 'FOOD' ? 10 : 5));
+    }
+    const dailyTax = houses * 100 * rules.taxRate;
+    taxRevenue += dailyTax;
+    researchProgress += corporations * 250 * tech;
+    while (researchProgress >= corporations * 4_000) { researchProgress -= corporations * 4_000; completedResearch += corporations; }
+    constructionStarted += Math.floor(buildings * rules.constructionDemand / 30);
+    // Market, tax, and institutional flows redistribute existing CREDIT.
+    // The aggregate model therefore keeps supply exactly equal to issuance.
+    creditSupply = issuedCredits;
+    const growth = Math.max(0, (production.FOOD + production.COMPONENTS) - (demand.FOOD + demand.COMPONENTS)) * 0.1;
+    for (const bucket of wealthBuckets) bucket.credits += growth * bucket.multiplier - dailyTax * (1 / 5);
+    daily.push({ day, prices: { ...prices }, shortage: dayShortage, taxRevenue: dailyTax, completedResearch });
+  }
+  const sortedWealth = wealthBuckets.map((bucket) => bucket.credits).sort((a, b) => a - b);
+  const meanWealth = sortedWealth.reduce((sum, value) => sum + value, 0) / sortedWealth.length;
+  const wealthConcentration = sortedWealth.at(-1) / Math.max(1, meanWealth);
+  const maxPrice = Math.max(...Object.values(prices));
+  const minPrice = Math.min(...Object.values(prices));
+  const totalShortage = Object.values(shortages).reduce((sum, value) => sum + value, 0);
+  const warnings = [];
+  if (creditSupply > issuedCredits || creditSupply < issuedCredits) warnings.push('CREDIT supply changed without an explicit issuance/retirement event.');
+  if (totalShortage > houses * days * 2) warnings.push('Persistent resource shortage detected.');
+  if (maxPrice / Math.max(1, minPrice) > 20) warnings.push('Resource price divergence indicates possible instability.');
+  if (wealthConcentration > 2.5) warnings.push('Wealth concentration exceeded the review threshold.');
+  if (scenario === 'technology-heavy' && completedResearch > corporations * days / 3) warnings.push('Technology progression may be compounding too quickly.');
+  return { days, houses, cities, corporations, buildings, scenario, seed, issuedCredits, closingCreditSupply: creditSupply, creditConserved: creditSupply === issuedCredits, resources, prices, shortages, totalShortage, totalTrades, taxRevenue, completedResearch, constructionStarted, wealthDistribution: { buckets: wealthBuckets, concentrationRatio: wealthConcentration }, priceVolatility, warnings, daily: days <= 30 ? daily : undefined };
+}

@@ -197,7 +197,7 @@ export async function purchasePrivatePlotAndConstruct(
 
     const catalogRow = (await tx.query<any>(
       `SELECT id, building_type, name, tier, ownership_class, slot_footprint,
-              cost_credits, cost_materials, output_credits, output_energy, output_food,
+              cost_credits, cost_materials, output_energy, output_food,
               output_materials, output_components, output_compute, upkeep_energy,
               upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_credits,
               construction_days, construction_minutes
@@ -219,8 +219,8 @@ export async function purchasePrivatePlotAndConstruct(
       dailyComponentsUpkeep: Number(catalogRow.upkeep_components ?? 0),
       dailyComputeUpkeep: Number(catalogRow.upkeep_compute ?? 0),
       dailyStaffingCredits: Number(catalogRow.operating_credits ?? 0),
-      resourceOutputType: catalogRow.output_credits > 0 ? 'credits' : catalogRow.output_energy > 0 ? 'energy' : catalogRow.output_food > 0 ? 'food' : catalogRow.output_materials > 0 ? 'material' : catalogRow.output_components > 0 ? 'components' : 'compute',
-      resourceOutputAmount: Number(catalogRow.output_credits || catalogRow.output_energy || catalogRow.output_food || catalogRow.output_materials || catalogRow.output_components || catalogRow.output_compute || 0),
+      resourceOutputType: catalogRow.output_energy > 0 ? 'energy' : catalogRow.output_food > 0 ? 'food' : catalogRow.output_materials > 0 ? 'material' : catalogRow.output_components > 0 ? 'components' : 'compute',
+      resourceOutputAmount: Number(catalogRow.output_energy || catalogRow.output_food || catalogRow.output_materials || catalogRow.output_components || catalogRow.output_compute || 0),
     };
     if (spec.defaultOwnershipClass === 'civic') {
       throw new Error('Civic utility buildings must be procured via Democratic City Referendum');
@@ -462,14 +462,13 @@ export async function upgradeBuilding(
       cost_materials: string;
       cost_components: string;
       cost_compute: string;
-      output_credits: string;
       output_energy: string;
       output_food: string;
       output_materials: string;
       output_components: string;
       output_compute: string;
       operating_credits: string;
-    }>('SELECT id, name, research_project_id, cost_credits, cost_materials, cost_components, cost_compute, output_credits, output_energy, output_food, output_materials, output_components, output_compute, operating_credits FROM building_catalog WHERE id = $1', [`${bld.building_type}-t${nextTier}`]);
+    }>('SELECT id, name, research_project_id, cost_credits, cost_materials, cost_components, cost_compute, output_energy, output_food, output_materials, output_components, output_compute, operating_credits FROM building_catalog WHERE id = $1', [`${bld.building_type}-t${nextTier}`]);
     // Tier upgrades are catalog-driven.  The static catalog may still contain
     // legacy tier definitions, but a tier must not become usable until its
     // researched/seeded database blueprint exists (and the buildings.catalog_id
@@ -507,10 +506,9 @@ export async function upgradeBuilding(
     const upgradeCompCost = tierSpec?.upgradeComponentsCost ?? Number(targetCatalog.rows[0]?.cost_components ?? 0);
     const upgradeComputeCost = tierSpec?.upgradeComputeCost ?? Number(targetCatalog.rows[0]?.cost_compute ?? 0);
     const catalogOutput = targetCatalog.rows[0];
-    const newOutputAmount = tierSpec?.resourceOutputAmount ??
-      (tierSpec?.resourceOutputType === 'credits' || !tierSpec?.resourceOutputType
-        ? tierSpec?.dailyCreditRevenue ?? Number(catalogOutput?.output_credits ?? bld.resource_output_amount ?? 0)
-        : 0);
+    const newOutputAmount = tierSpec?.resourceOutputType && tierSpec.resourceOutputType !== 'credits'
+      ? tierSpec.resourceOutputAmount ?? Number(catalogOutput?.[`output_${tierSpec.resourceOutputType}` as keyof typeof catalogOutput] ?? bld.resource_output_amount ?? 0)
+      : 0;
     const newOpCredits = tierSpec?.dailyOperatingCredits ??
       Number(catalogOutput?.operating_credits ?? bld.daily_operating_credits ?? 0);
 

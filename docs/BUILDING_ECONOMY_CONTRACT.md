@@ -1,8 +1,14 @@
 # Building Economy Contract
 
-This is the consistency contract for Building V2. A building converts allocated
-resources and operating CREDIT into physical output, service capacity, or both.
-It never creates CREDIT merely because it is active.
+Status: CANONICAL. This is the consistency contract for Building V2. A
+building converts allocated resources and operating CREDIT into physical
+output, service capacity, or both. It never creates CREDIT merely because it
+is active.
+
+Buildings do not deteriorate through normal operation. Routine maintenance is
+included in ordinary operating expenses. Unsatisfied operating requirements
+make a building inactive for that day; they do not create damage or a repair
+obligation.
 
 ## Common settlement contract
 
@@ -16,7 +22,7 @@ It never creates CREDIT merely because it is active.
 | Technology | Corporation access is resolved through the technology modifier cache and applied to inputs/output/capacity |
 | Tiers | T1–T5 are predefined catalog rows; research unlocks a row and does not generate new economics |
 | Timing | Eligible active buildings settle once per completed game day, after license/access resolution and before downstream city dynamics |
-| Shortage | If any required input or operating CREDIT is unavailable, that building produces no physical output or service capacity for that day |
+| Shortage | If any required input or operating CREDIT is unavailable, that building is inactive and produces no physical output or service capacity for that day |
 | Accounting | Resource debits, physical credits, and explicit operating expenses are posted through the Economy V2 settlement batch |
 
 ## Catalog loop map

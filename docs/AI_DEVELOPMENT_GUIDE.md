@@ -64,7 +64,7 @@ research outcomes. PostgreSQL-backed Worker endpoints remain authoritative.
 
 ## AI recommendations
 
-AI assistants and recommendations may summarize state, identify risks, rank
+Automated recommendations may summarize state, identify risks, rank
 opportunities, and explain trade-offs. They must not silently execute economic,
 civic, ownership, or lifecycle actions. Recommendations should include:
 
@@ -90,4 +90,3 @@ Before merging AI-assisted changes, verify:
 - tests cover authorization, persistence, and the visible decision state;
 - the relevant Flutter screen remains usable at narrow and wide widths;
 - documentation explains the player value and the consequence model.
-

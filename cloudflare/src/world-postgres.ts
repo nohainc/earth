@@ -248,7 +248,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         COALESCE(bc.name, b.name) AS name,
         COALESCE(bc.category, 'commercial') AS category,
         COALESCE(bc.slot_footprint, b.slot_footprint, 1) AS slot_footprint,
-        COALESCE(bc.output_credits, CASE WHEN b.resource_output_type = 'credits' OR b.resource_output_type IS NULL THEN b.resource_output_amount ELSE 0 END, 0) AS output_credits,
+        0 AS output_credits,
         COALESCE(bc.output_energy, CASE WHEN b.resource_output_type = 'energy' THEN b.resource_output_amount ELSE 0 END, 0) AS output_energy,
         COALESCE(bc.output_food, CASE WHEN b.resource_output_type = 'food' THEN b.resource_output_amount ELSE 0 END, 0) AS output_food,
         COALESCE(bc.output_materials, CASE WHEN b.resource_output_type IN ('material', 'materials') THEN b.resource_output_amount ELSE 0 END, 0) AS output_materials,

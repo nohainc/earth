@@ -1,90 +1,64 @@
 # EARTH Building Economy V2
 
-## Plan 1: authority boundary and overlap audit
+Status: CANONICAL
+Authority: `building_catalog`, versioned building rules, Building V2 planner,
+and Economy V2 postings
 
-Building settlement is being migrated in dependency order. During the
-transition, the durable authority for value is Economy V2:
+## Core rule
 
-- `economic_accounts` holds live balances.
-- `settlement_effects` is disposable calculation state.
-- `economic_transactions` and `economic_entries` are durable postings.
-- `building_settlement_journals` records gameplay explanation and outcome.
+Buildings do not deteriorate through normal operation. Routine maintenance is
+included in normal operating expenses. If operating requirements cannot be
+satisfied, the building does not operate for that game day; it does not
+accumulate damage requiring repairs.
 
-The generic `daily_settlement_profiles` path and the building settlement path
-must not both apply the same building effect. Until the later planner and
-profile-cutover plans are complete, `earth_building_v2_integrity()` reports
-profile/building overlap risk, effects without building provenance, and
-journal/effect mismatches. A non-zero overlap-risk result is expected for
-transitional data and is a cutover blocker, not a reason to suppress the
-diagnostic.
+A building converts allocated inputs and operating expenses into physical
+output or service capacity. It never creates CREDIT merely because it is
+active. Customer-funded revenue is a transfer from an actual payer; public
+service revenue has an explicit public payer.
 
-Building catalog economics are descriptive inputs until the canonical planner
-and posting phases are complete. `output_credits` must not be treated as money
-creation; service revenue requires a funded customer transfer in a later plan.
+## Daily settlement
 
-The authority boundary is:
+Building settlement is calculated by economic-owner shard and does not mutate
+balances during planning:
 
-> Buildings describe production, consumption, service capacity and condition;
-> only Economy V2 posting primitives may mutate economic balances.
+1. Select eligible buildings and resolve the catalog/rule version for the day.
+2. Snapshot owner inputs and allocate shared resources deterministically.
+3. Calculate utilization, physical consumption, and physical production.
+4. Calculate service capacity and match customer or public demand.
+5. Calculate explicit operating expenses, including routine maintenance.
+6. Compile and validate Economy V2 effects and conservation totals.
+7. Atomically post the settlement batch.
+8. Update building operational state and write the audit journal set-wise.
 
-The V2 settlement journal is an audit/read model, not an authority. It records
-the plan's requested, allocated and consumed inputs, atomic-unit production,
-service delivery and revenue, operating costs, wear, repairs, condition and
-operational state transitions, together with the posted economic batch and
-correlation ID. It is written from staged settlement data so the explanation
-can be reproduced without using the journal as a balance source.
+Shortages are resolved before netting. A failed requirement makes the building
+inactive for that settlement period and leaves its persistent asset intact.
 
-Fixed-point settlement values use integer atomic units, PPM ratios and basis
-point condition values. The older decimal plan inputs remain only as a
-temporary compatibility surface for the preceding migrations; generated
-fixed-point columns are the canonical values for V2 posting and reconciliation.
+## Operational states
 
-Building economics are selected from `building_economic_rule_versions` by
-`effective_from_game_day`/`effective_to_game_day`. Production recipes, upkeep,
-condition curves and decay, repair costs, service capacity/pricing, and service
-matching behavior therefore remain pinned to the rules that applied on the
-settled day, even when the scheduler is catching up or replaying history.
+Buildings are `ACTIVE` when they can operate, and `INACTIVE` when requirements
+are unavailable. Inactive buildings remain eligible for the next settlement.
+There is no condition, wear, damage, repair queue, repair resource, or repair
+transaction in Building V2.
 
-The former `building-settlement-engine.ts` has been deleted. The production
-scheduler and all active building callers use `building-settlement-v2.ts`.
-Shared accounting adapters remain only where their owning subsystem has not
-completed its Economy V2 cutover.
+## Economic contract
 
-Generic `daily_settlement_profiles` are explicitly non-building profiles. They
-must not carry building production, upkeep, service, repair, or other building
-economic deltas; those effects belong exclusively to the Building V2 planner
-and economic batch. `earth_building_profile_overlap_integrity()` reports any
-nonzero generic profile or source observed in both posting paths.
+| Concern | Authority |
+|---|---|
+| Inputs | Versioned `building_catalog` requirements |
+| Operating cost | Versioned operating expense, including routine maintenance |
+| Physical output | Economy V2 resource credit to the owner or explicit recipient |
+| Services | Capacity matched to aggregate customer/public demand |
+| Revenue | Economy V2 transfer from the actual customer or public payer |
+| Ownership | House economic owner for private buildings; City/Corporation for institutional assets |
+| Technology | Corporation access and modifier cache |
+| Tiers | Predefined T1–T5 catalog rows |
+| Timing | Once per completed game day, after access resolution |
 
-## Canonical daily settlement pipeline
+## Audit boundary
 
-Building V2 uses one ordered pipeline for each eligible owner shard. The
-calculation stages do not mutate authoritative balances or building state:
+`building_settlement_journals` explain the inputs, allocation, utilization,
+output, service delivery, expense, resulting state, economic batch, and
+correlation ID. They are read/audit projections, not balance authorities.
 
-1. select eligible buildings;
-2. resolve rules/catalog versions for the settlement day;
-3. snapshot owner inputs;
-4. calculate requirements;
-5. allocate constrained owner resources;
-6. calculate input utilization;
-7. calculate start-of-day condition efficiency;
-8. calculate physical consumption;
-9. calculate physical production;
-10. calculate service capacity;
-11. match service demand;
-12. calculate customer-funded revenue;
-13. resolve explicit operating expenses;
-14. calculate operational wear;
-15. allocate repair resources;
-16. calculate repair points;
-17. calculate end-of-day condition and status;
-18. compile Economy V2 effects;
-19. validate conservation and non-negative results;
-20. atomically post the settlement batch;
-21. set-wise update building condition/status;
-22. set-wise insert settlement journals;
-23. complete building/day idempotency keys.
-
-The machine-readable ordering is maintained in
-`cloudflare/src/building-settlement-pipeline.ts`. Posting must precede building
-state, journal, and idempotency completion.
+Generic daily profiles are non-building economics. No building-origin effect
+may be posted by both systems.

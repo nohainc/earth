@@ -66,7 +66,12 @@ function financialActionType(targetCategory: string | null | undefined): string 
     major_project: 'AUTHORIZE_MAJOR_PROJECT',
     authorize_grant: 'AUTHORIZE_GRANT',
     grant: 'AUTHORIZE_GRANT',
-    change_tax_charter: 'CHANGE_TAX_CHARTER',
+    change_tax_charter: 'AMEND_TAX_RULE',
+    amend_tax_rule: 'AMEND_TAX_RULE',
+    set_personal_income_tax: 'SET_PERSONAL_INCOME_TAX',
+    set_corporate_income_tax: 'SET_CORPORATE_INCOME_TAX',
+    set_basic_levy: 'SET_BASIC_LEVY',
+    set_market_transaction_tax: 'SET_MARKET_TRANSACTION_TAX',
     transfer_reserve: 'TRANSFER_RESERVE',
     declare_dividend: 'DECLARE_DIVIDEND',
     approve_bailout: 'APPROVE_BAILOUT',
@@ -235,7 +240,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
     const catalog = buildingCatalogId
       ? (await tx.query<any>(`SELECT id, building_type, name, tier, ownership_class, slot_footprint,
           cost_credits, cost_materials, cost_energy, cost_food, cost_components, cost_compute,
-          construction_days, output_credits, output_energy, output_food, output_materials,
+          construction_days, output_energy, output_food, output_materials,
           output_components, output_compute, upkeep_energy, upkeep_food, upkeep_materials,
           upkeep_components, upkeep_compute, operating_credits
         FROM building_catalog WHERE id = $1`, [buildingCatalogId])).rows[0]
@@ -257,8 +262,8 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       dailyComponentsUpkeep: Number(catalog.upkeep_components ?? 0),
       dailyComputeUpkeep: Number(catalog.upkeep_compute ?? 0),
       dailyStaffingCredits: Number(catalog.operating_credits ?? 0),
-      resourceOutputType: catalog.output_credits > 0 ? 'credits' : catalog.output_energy > 0 ? 'energy' : catalog.output_food > 0 ? 'food' : catalog.output_materials > 0 ? 'material' : catalog.output_components > 0 ? 'components' : 'compute',
-      resourceOutputAmount: Number(catalog.output_credits || catalog.output_energy || catalog.output_food || catalog.output_materials || catalog.output_components || catalog.output_compute || 0),
+      resourceOutputType: catalog.output_energy > 0 ? 'energy' : catalog.output_food > 0 ? 'food' : catalog.output_materials > 0 ? 'material' : catalog.output_components > 0 ? 'components' : 'compute',
+      resourceOutputAmount: Number(catalog.output_energy || catalog.output_food || catalog.output_materials || catalog.output_components || catalog.output_compute || 0),
     } : fallback ? {
       actionType: 'construct_civic_building',
       buildingCatalogId,

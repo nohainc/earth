@@ -4,6 +4,12 @@ This document is the working architecture contract for future EARTH changes. It
 exists to keep the game understandable as the specification grows and to make
 each vertical slice safe to review, test, migrate, and deploy.
 
+The constitutional source of truth is [`CONSTITUTION.md`](CONSTITUTION.md),
+with shared economic mechanics in [`GAME_ECONOMY_SPEC.md`](GAME_ECONOMY_SPEC.md)
+and implementation mapping in
+[`CONSTITUTION_COMPLIANCE.md`](CONSTITUTION_COMPLIANCE.md). This document must
+not introduce rules that conflict with those three documents.
+
 ## 1. System boundaries
 
 ```text
