@@ -13,12 +13,12 @@ insert into institutions (id, kind, name) values
   ('BUS-1048', 'BUSINESS', 'Kline Works')
 on conflict (id) do nothing;
 
-insert into cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity, treasury)
-values ('CITY-0084', 'CITY-0084', 0, 100, 100, 100, 50, 0)
+insert into cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity)
+values ('CITY-0084', 'CITY-0084', 0, 100, 100, 100, 50)
 on conflict (id) do nothing;
 
-insert into corporations (id, institution_id, member_count, treasury, constitution_version)
-values ('CORP-001', 'CORP-001', 0, 0, 1)
+insert into corporations (id, institution_id, member_count, constitution_version)
+values ('CORP-001', 'CORP-001', 0, 1)
 on conflict (id) do nothing;
 
 insert into world_state (id, game_day, game_minute, health, market_batch_seconds)
@@ -75,18 +75,18 @@ values
   ('TEST-CITY-003', 'CITY', 'Cedar Reach')
 on conflict (id) do nothing;
 
-insert into cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity, treasury)
+insert into cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity)
 values
-  ('TEST-CITY-001', 'TEST-CITY-001', 2, 240, 180, 210, 165, 18500),
-  ('TEST-CITY-002', 'TEST-CITY-002', 1, 140, 260, 190, 120, 9200),
-  ('TEST-CITY-003', 'TEST-CITY-003', 1, 180, 150, 130, 205, 12750)
+  ('TEST-CITY-001', 'TEST-CITY-001', 2, 240, 180, 210, 165),
+  ('TEST-CITY-002', 'TEST-CITY-002', 1, 140, 260, 190, 120),
+  ('TEST-CITY-003', 'TEST-CITY-003', 1, 180, 150, 130, 205)
 on conflict (id) do nothing;
 
-insert into corporations (id, institution_id, member_count, treasury, constitution_version, capital_city_id, admission_policy)
+insert into corporations (id, institution_id, member_count, constitution_version, capital_city_id, admission_policy)
 values
-  ('TEST-CORP-001', 'TEST-CORP-001', 2, 78000, 3, 'TEST-CITY-001', 'open'),
-  ('TEST-CORP-002', 'TEST-CORP-002', 1, 42500, 2, 'TEST-CITY-002', 'approval'),
-  ('TEST-CORP-003', 'TEST-CORP-003', 1, 61000, 4, 'TEST-CITY-003', 'open')
+  ('TEST-CORP-001', 'TEST-CORP-001', 2, 3, 'TEST-CITY-001', 'open'),
+  ('TEST-CORP-002', 'TEST-CORP-002', 1, 2, 'TEST-CITY-002', 'approval'),
+  ('TEST-CORP-003', 'TEST-CORP-003', 1, 4, 'TEST-CITY-003', 'open')
 on conflict (id) do nothing;
 
 update cities
@@ -123,12 +123,12 @@ values
   ('CITY-0091', 'CITY', 'Helios Cooperative Harbor')
 on conflict (id) do nothing;
 
-insert into cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity, treasury)
+insert into cities (id, institution_id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity)
 values
-  ('TEST-CITY-004', 'TEST-CITY-004', 2, 220, 230, 175, 145, 16400),
-  ('TEST-CITY-005', 'TEST-CITY-005', 1, 160, 195, 220, 135, 11100),
-  ('TEST-CITY-006', 'TEST-CITY-006', 1, 200, 170, 160, 190, 13800),
-  ('CITY-0091', 'CITY-0091', 2, 180, 210, 155, 130, 7600)
+  ('TEST-CITY-004', 'TEST-CITY-004', 2, 220, 230, 175, 145),
+  ('TEST-CITY-005', 'TEST-CITY-005', 1, 160, 195, 220, 135),
+  ('TEST-CITY-006', 'TEST-CITY-006', 1, 200, 170, 160, 190),
+  ('CITY-0091', 'CITY-0091', 2, 180, 210, 155, 130)
 on conflict (id) do nothing;
 
 update cities
@@ -153,6 +153,39 @@ on conflict (human_id) do nothing;
 update corporations
 set member_count = (select count(*) from memberships where memberships.corporation_id = corporations.id)
 where id in ('CORP-001', 'TEST-CORP-001', 'TEST-CORP-002');
+
+-- Provision institutions created by later fixture sections as well. This is
+-- intentionally idempotent so the seed remains safe to rerun.
+insert into owner_registry (id, owner_type, source_id)
+select i.id, lower(i.kind), i.id
+from institutions i
+where i.kind in ('CITY', 'CORPORATION')
+on conflict (id) do nothing;
+
+insert into economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, status)
+select o.economic_id, 1, t.account_type, t.account_type = 3, 'active'
+from owner_registry o
+cross join (values (3), (4), (5)) t(account_type)
+where o.owner_type in ('city', 'corporation')
+on conflict do nothing;
+
+with fixture_treasury(owner_id, amount_units) as (
+  values
+    ('CITY-0084', 0::bigint), ('CORP-001', 0::bigint),
+    ('TEST-CITY-001', 1850000::bigint), ('TEST-CITY-002', 920000::bigint),
+    ('TEST-CITY-003', 1275000::bigint), ('TEST-CITY-004', 1640000::bigint),
+    ('TEST-CITY-005', 1110000::bigint), ('TEST-CITY-006', 1380000::bigint),
+    ('CITY-0091', 760000::bigint), ('TEST-CORP-001', 7800000::bigint),
+    ('TEST-CORP-002', 4250000::bigint), ('TEST-CORP-003', 6100000::bigint)
+)
+update economic_accounts a
+set balance = fixture.amount_units, updated_at = current_timestamp
+from fixture_treasury fixture
+join owner_registry o on o.id = fixture.owner_id
+where a.owner_economic_id = o.economic_id
+  and a.asset_id = 1
+  and a.account_type = 3
+  and a.is_default_settlement;
 
 update institutions
 set name = 'Northstar Landing'

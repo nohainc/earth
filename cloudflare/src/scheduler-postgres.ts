@@ -432,16 +432,16 @@ async function dissolveInstitutions(tx: PostgresRepository, day: number): Promis
 
 async function snapshotRankings(tx: PostgresRepository, day: number): Promise<void> {
   const [cities, corporations] = await Promise.all([
-    tx.query<{ id: string; score: string }>(`SELECT id,
+    tx.query<{ id: string; score: string }>(`SELECT c.id,
       (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
        + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
        + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
        + LEAST(1, health_capacity / 100.0) * 20
-       + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) AS score
-      FROM cities ORDER BY score DESC, residents DESC, id LIMIT 10`),
+       + LEAST(1, GREATEST(0, COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)) / 10000.0) * 10) AS score
+      FROM cities c ORDER BY score DESC, residents DESC, c.id LIMIT 10`),
     tx.query<{ id: string; score: string }>(`SELECT c.id,
       (LEAST(1, GREATEST(0, c.member_count::numeric) / 100.0) * 55
-       + LEAST(1, GREATEST(0, c.treasury::numeric) / 25000.0) * 25
+       + LEAST(1, GREATEST(0, COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)) / 25000.0) * 25
        + LEAST(1, (SELECT COUNT(*)::numeric FROM buildings b JOIN memberships m ON m.human_id = b.owner_id WHERE m.corporation_id = c.id AND b.ownership_class = 'private' AND b.status = 'active') / 10.0) * 20) AS score
       FROM corporations c ORDER BY score DESC, member_count DESC, id LIMIT 10`),
   ]);
@@ -454,7 +454,7 @@ async function snapshotRankings(tx: PostgresRepository, day: number): Promise<vo
 }
 
 async function processCityDynamics(tx: PostgresRepository, day: number): Promise<void> {
-  const cities = await tx.query<{ id: string; residents: number; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number; treasury: string }>('SELECT * FROM cities WHERE residents > 0 ORDER BY id');
+  const cities = await tx.query<{ id: string; residents: number; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number }>('SELECT id, residents, housing_capacity, energy_capacity, connectivity_capacity, health_capacity FROM cities WHERE residents > 0 ORDER BY id');
   for (const city of cities.rows) {
     const res = Math.max(1, Number(city.residents));
     if (Number(city.energy_capacity) < res) {

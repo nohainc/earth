@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 314.
+-- Canonical fresh-install schema, reconciled through migration 315.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -1149,7 +1149,6 @@ CREATE TABLE IF NOT EXISTS cities (
   energy_capacity INTEGER NOT NULL DEFAULT 0,
   connectivity_capacity INTEGER NOT NULL DEFAULT 0,
   health_capacity INTEGER NOT NULL DEFAULT 0,
-  treasury NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (treasury >= 0),
   corporation_id TEXT,
   status TEXT NOT NULL DEFAULT 'active',
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -1495,7 +1494,6 @@ CREATE TABLE IF NOT EXISTS corporations (
   id TEXT PRIMARY KEY,
   institution_id TEXT NOT NULL UNIQUE REFERENCES institutions(id),
   member_count INTEGER NOT NULL DEFAULT 0,
-  treasury NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (treasury >= 0),
   constitution_version INTEGER NOT NULL DEFAULT 1,
   capital_city_id TEXT,
   admission_policy TEXT NOT NULL DEFAULT 'open' CHECK (admission_policy IN ('open','approval','closed')),

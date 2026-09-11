@@ -134,16 +134,22 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         ORDER BY rank ASC
       `).then(async (res) => {
         if (res.rows.length > 0) return res;
-        return repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
+        return repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents,
+                 COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = cities.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0) AS treasury,
+                 cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
           FROM cities
+          JOIN owner_registry ON owner_registry.id = cities.id
           JOIN institutions city_institutions ON city_institutions.id = cities.institution_id
           ORDER BY (LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
             + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
             + LEAST(1, connectivity_capacity / GREATEST(1, residents::numeric)) * 20
             + LEAST(1, health_capacity / 100.0) * 20
             + LEAST(1, GREATEST(0, treasury::numeric) / 10000.0) * 10) DESC, residents DESC, id LIMIT 20`);
-      }).catch(() => repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents, cities.treasury, cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
+      }).catch(() => repository.query(`SELECT cities.id, city_institutions.name, city_institutions.charter_rules, cities.corporation_id, cities.residents,
+                 COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = cities.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0) AS treasury,
+                 cities.housing_capacity, cities.energy_capacity, cities.connectivity_capacity, cities.health_capacity
           FROM cities
+          JOIN owner_registry ON owner_registry.id = cities.id
           JOIN institutions city_institutions ON city_institutions.id = cities.institution_id
           ORDER BY id LIMIT 20`)),
       repository.query(`
@@ -157,19 +163,22 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
         ORDER BY rank ASC
       `).then(async (res) => {
         if (res.rows.length > 0) return res;
-        return repository.query(`SELECT c.id, c.member_count, c.treasury,
+        return repository.query(`SELECT c.id, c.member_count,
+          COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0) AS treasury,
           i.name, i.status, i.charter_rules,
           c.capital_city_id,
           cap_i.name AS capital_city_name,
           COALESCE((SELECT COUNT(*) FROM cities WHERE cities.corporation_id = c.id), 0)::integer AS city_count,
           (LEAST(1, GREATEST(0, c.member_count::numeric) / 100.0) * 55
-           + LEAST(1, GREATEST(0, c.treasury::numeric) / 25000.0) * 25
+           + LEAST(1, GREATEST(0, COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)) / 25000.0) * 25
            + LEAST(1, (SELECT COUNT(*)::numeric FROM buildings b JOIN memberships m ON m.human_id = b.owner_id WHERE m.corporation_id = c.id AND b.ownership_class = 'private' AND b.status = 'active') / 10.0) * 20) AS development_score
         FROM corporations c
         JOIN institutions i ON i.id = c.institution_id
         LEFT JOIN institutions cap_i ON cap_i.id = c.capital_city_id
         ORDER BY development_score DESC, c.member_count DESC, c.id LIMIT 10`);
-      }).catch(() => repository.query(`SELECT c.id, c.member_count, c.treasury, i.name FROM corporations c JOIN institutions i ON i.id = c.institution_id ORDER BY id LIMIT 10`)),
+      }).catch(() => repository.query(`SELECT c.id, c.member_count,
+        COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0) AS treasury,
+        i.name FROM corporations c JOIN institutions i ON i.id = c.institution_id ORDER BY c.id LIMIT 10`)),
       repository.query(`
         SELECT entity_id AS id, entity_name AS display_name, rank, rank_delta, final_score, metrics_line, sub_indexes, raw_metrics, affiliation,
                (raw_metrics->>'legacy')::integer AS legacy,
@@ -313,7 +322,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const cityFinanceRows = city?.id
     ? await Promise.all([
         repository.query('SELECT resource, amount FROM resource_balances WHERE owner_id = $1', [city.id]),
-        repository.query("SELECT balance FROM account_balances WHERE owner_id = $1 AND currency = 'CREDIT' LIMIT 1", [city.id]),
+        repository.query(`SELECT COALESCE(a.balance / 100.0, 0)::TEXT AS balance
+          FROM owner_registry o LEFT JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
+            AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'
+          WHERE o.id = $1`, [city.id]),
         repository.query(`
           SELECT
             COALESCE(SUM(amount) FILTER (WHERE credit_account = $1 AND reason_type = 'civic_utility_revenue'), 0) AS civic_building_income,
@@ -332,7 +344,13 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const cityResources = Object.fromEntries(
     cityFinanceRows[0].rows.map((row: any) => [row.resource, Number(row.amount ?? 0)]),
   );
-  const cityTreasuryBalance = Number(cityFinanceRows[1].rows[0]?.balance ?? city?.treasury ?? 0);
+  const cityTreasuryBalance = Number(cityFinanceRows[1].rows[0]?.balance ?? 0);
+  const corporationTreasuryBalance = corporation?.id
+    ? Number((await repository.query<{ balance: string }>(`SELECT COALESCE(a.balance / 100.0, 0)::TEXT AS balance
+        FROM owner_registry o LEFT JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
+          AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'
+        WHERE o.id = $1`, [corporation.id])).rows[0]?.balance ?? 0)
+    : 0;
   const cityCashflow = cityFinanceRows[2].rows[0] ?? {};
   const investmentSharesRows = investmentShares?.rows ?? [];
   const civicDividendsRows = civicDividends?.rows ?? [];
@@ -357,8 +375,8 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   };
   const serviceRatios = city ? { housing: ratio(city.housing_capacity, city.residents), energy: ratio(city.energy_capacity, city.residents), connectivity: ratio(city.connectivity_capacity, city.residents), health: ratio(city.health_capacity, 100) } : { housing: 0.75, energy: 0.75, connectivity: 0.75, health: 0.5 };
   const serviceStatus = { housing: serviceRatios.housing >= 1 ? 'normal' : serviceRatios.housing >= 0.75 ? 'basic' : 'critical', utilities: serviceRatios.energy >= 1 ? 'normal' : serviceRatios.energy >= 0.75 ? 'basic' : 'critical', connectivity: serviceRatios.connectivity >= 1 ? 'normal' : serviceRatios.connectivity >= 0.75 ? 'basic' : 'critical', health: serviceRatios.health >= 0.8 ? 'normal' : serviceRatios.health >= 0.5 ? 'basic' : 'critical' };
-  const cityQualification = city ? { activePopulation: Number(city.residents ?? 0) >= 10, housing: Number(city.housing_capacity ?? 0) >= Number(city.residents ?? 0), energy: Number(city.energy_capacity ?? 0) >= Number(city.residents ?? 0), connectivity: Number(city.connectivity_capacity ?? 0) >= Number(city.residents ?? 0), health: Number(city.health_capacity ?? 0) >= 50, treasury: Number(city.treasury ?? 0) >= 0, governance: true } : {};
-  const corporationQualification = corporation ? { activeMembership: Number(corporation.member_count ?? 0) >= 30, recognizedCity: Boolean((await repository.query('SELECT id FROM cities WHERE id = (SELECT city_id FROM memberships WHERE corporation_id = $1 AND city_id IS NOT NULL LIMIT 1)', [corporation.id])).rows[0]), treasury: Number(corporation.treasury ?? 0) >= 1000, constitution: Number(corporation.constitution_version ?? 0) >= 1, governance: true } : {};
+  const cityQualification = city ? { activePopulation: Number(city.residents ?? 0) >= 10, housing: Number(city.housing_capacity ?? 0) >= Number(city.residents ?? 0), energy: Number(city.energy_capacity ?? 0) >= Number(city.residents ?? 0), connectivity: Number(city.connectivity_capacity ?? 0) >= Number(city.residents ?? 0), health: Number(city.health_capacity ?? 0) >= 50, treasury: cityTreasuryBalance >= 0, governance: true } : {};
+  const corporationQualification = corporation ? { activeMembership: Number(corporation.member_count ?? 0) >= 30, recognizedCity: Boolean((await repository.query('SELECT id FROM cities WHERE id = (SELECT city_id FROM memberships WHERE corporation_id = $1 AND city_id IS NOT NULL LIMIT 1)', [corporation.id])).rows[0]), treasury: corporationTreasuryBalance >= 1000, constitution: Number(corporation.constitution_version ?? 0) >= 1, governance: true } : {};
   const money = Number(liquidity.rows[0]?.money_supply ?? 0);
   const activeHumans = Number(liquidity.rows[0]?.active_humans ?? 0);
   const target = activeHumans * Math.max(0.5, Number(liquidity.rows[0]?.living_cost_index ?? 1)) * 100;
@@ -383,10 +401,10 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
   const objectiveRules = Object.fromEntries(objectiveRuleRows.rows.map((row) => [row.key, Number(row.value)]));
   const objectives = evaluatePlayerObjectives({
     human: { credits: account.rows[0]?.balance ?? 0, standing: humanRow.standing ?? 0, legacy: humanRow.legacy ?? 0, voting_weight: 1, age_years: humanRow.age_years ?? 31 },
-    business: { private_building_count: buildingsRows.filter((row) => row.ownership_class === 'private' && row.status === 'active').length, valuation: 0, treasury: Number(corporation?.treasury ?? 0), profit: 0, net_income: 0 },
+    business: { private_building_count: buildingsRows.filter((row) => row.ownership_class === 'private' && row.status === 'active').length, valuation: 0, treasury: corporationTreasuryBalance, profit: 0, net_income: 0 },
     institutions: {
       city: { essential_services_index: worldRow.essential_services_index ?? 0.68, standing: humanRow.standing ?? 0 },
-      corporation: { treasury: Number(corporation?.treasury ?? 0), member_count: Number(corporation?.member_count ?? 0) },
+      corporation: { treasury: corporationTreasuryBalance, member_count: Number(corporation?.member_count ?? 0) },
     },
     governance: { voting_weight: 1 },
     technology: { research_progress: technology.rows[0]?.progress ?? 0 },

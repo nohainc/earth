@@ -59,7 +59,7 @@ export async function settleContinuousRankings(
              GREATEST(0, c.energy_capacity) AS energy_capacity,
              GREATEST(0, c.connectivity_capacity) AS connectivity_capacity,
              GREATEST(0, c.health_capacity) AS health_capacity,
-             GREATEST(0, COALESCE(c.treasury, 0)) AS treasury,
+             GREATEST(0, COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)) AS treasury,
              COALESCE(
                (SELECT i.name FROM institutions i WHERE i.id = c.corporation_id),
                (SELECT i.name FROM corporations corp JOIN institutions i ON i.id = corp.institution_id WHERE corp.id = c.corporation_id),
@@ -200,7 +200,7 @@ export async function settleContinuousRankings(
       SELECT c.id,
              i.name,
              GREATEST(0, c.member_count) AS member_count,
-             GREATEST(0, COALESCE(c.treasury, 0)) AS treasury
+             GREATEST(0, COALESCE((SELECT a.balance / 100.0 FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = c.id AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'), 0)) AS treasury
       FROM corporations c
       JOIN institutions i ON i.id = c.institution_id
       WHERE i.status = 'active'

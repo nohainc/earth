@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 314,
+  "migrationVersion": 315,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -525,7 +525,6 @@
     "cities": [
       "id",
       "institution_id",
-      "treasury",
       "status"
     ],
     "civic_dividend_payouts": [
@@ -581,7 +580,6 @@
     "corporations": [
       "id",
       "institution_id",
-      "treasury",
       "capital_city_id",
       "admission_policy"
     ],

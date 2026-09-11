@@ -75,8 +75,12 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       [limit]
     ),
     repository.query<{ id: string; residents: number; treasury: string; housing_capacity: number; energy_capacity: number; connectivity_capacity: number; health_capacity: number }>(
-      `SELECT id, residents, treasury, housing_capacity, energy_capacity, connectivity_capacity, health_capacity
-       FROM cities
+      `SELECT c.id, c.residents, COALESCE(a.balance / 100.0, 0)::TEXT AS treasury,
+              c.housing_capacity, c.energy_capacity, c.connectivity_capacity, c.health_capacity
+       FROM cities c
+       JOIN owner_registry o ON o.id = c.id
+       LEFT JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
+         AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'
        ORDER BY (
          LEAST(1, housing_capacity / GREATEST(1, residents::numeric)) * 25
          + LEAST(1, energy_capacity / GREATEST(1, residents::numeric)) * 25
@@ -88,8 +92,11 @@ export async function listRankings(repository: PostgresRepository, options: Rank
       [limit]
     ),
     repository.query<{ id: string; member_count: number; treasury: string }>(
-      `SELECT id, member_count, treasury
-       FROM corporations
+      `SELECT c.id, c.member_count, COALESCE(a.balance / 100.0, 0)::TEXT AS treasury
+       FROM corporations c
+       JOIN owner_registry o ON o.id = c.id
+       LEFT JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
+         AND a.asset_id = 1 AND a.account_type = 3 AND a.is_default_settlement AND a.status = 'active'
        ORDER BY (LEAST(1, GREATEST(0, member_count::numeric) / 100.0) * 55
                  + LEAST(1, GREATEST(0, treasury::numeric) / 25000.0) * 25
                  + LEAST(1, (SELECT COUNT(*)::numeric FROM buildings b JOIN memberships m ON m.human_id = b.owner_id WHERE m.corporation_id = corporations.id AND b.ownership_class = 'private' AND b.status = 'active') / 10.0) * 20) DESC,
