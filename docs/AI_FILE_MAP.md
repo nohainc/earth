@@ -65,7 +65,7 @@ matching PostgreSQL service.
 | Finance | `finance-routes.ts` |
 | Governance | `governance-routes.ts` |
 | Lifecycle and archive | `lifecycle-routes.ts` |
-| Market | `market-routes.ts` |
+| Market | `market-api.ts` |
 | Real estate | `real-estate-routes.ts` |
 | Social gameplay | `social-gameplay-routes.ts` |
 | Technology | `technology-routes.ts` |
@@ -82,7 +82,7 @@ matching PostgreSQL service.
 | Governance | `governance-postgres.ts` |
 | Lifecycle, succession, and death | `lifecycle-postgres.ts` |
 | Machines and production | `machines-postgres.ts`, `machines-recycling-postgres.ts`, `production-catalog.ts` |
-| Market and derivatives | `market-postgres.ts`, `derivatives-postgres.ts`, `market-rules.ts` |
+| Market | `market-postgres.ts`, `market-scheduler.ts`, `market-rules.ts` |
 | Real estate and buildings | `real-estate-postgres.ts`, `real-estate-catalog.ts` |
 | Social gameplay and communications | `social-gameplay-postgres.ts`, `communications-postgres.ts` |
 | Technology and patents | `technology-postgres.ts` |
@@ -133,7 +133,7 @@ subsystems. Start with the named engine before changing scheduler orchestration.
 | Finance | `earth_api_personal_finance.dart`, `earth_api_net_worth.dart` | `features/finance/` |
 | Governance | `earth_api_governance.dart` | `features/governance/` |
 | Lifecycle and archive | `earth_api_lifecycle.dart`, `earth_api_world.dart` | `features/lifecycle/` |
-| Market | `earth_api_market.dart`, `earth_api_derivatives.dart` | `features/market/` |
+| Market | `earth_api_market.dart` | `features/market/` |
 | Operations and businesses | `earth_api_business.dart`, `earth_api_machines.dart` | `features/operations/` |
 | Real estate | `earth_api_real_estate.dart` | `features/operations/` |
 | Research and patents | `earth_api_technology.dart` | `features/operations/` |

@@ -28,6 +28,5 @@ test('institution authorization requires explicit active governance roles', () =
 test('feature-disabled mutations are enforced at the server boundary', () => {
   const source = read('cloudflare/src/index.ts');
   assert.match(source, /featureEnabled\(env, 'spotMarket'\)/);
-  assert.match(source, /featureEnabled\(env, 'futures'\)/);
   assert.match(source, /featureEnabled\(env, 'mortality'\)/);
 });

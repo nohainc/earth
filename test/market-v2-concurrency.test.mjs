@@ -83,21 +83,11 @@ test('market cancellation and submission races have deterministic cutoffs', () =
   assert.equal(submittedDuringCatchup.eligibleBatchId <= currentBatch + 1, true);
 });
 
-test('duplicate correlations, expiry overlap, deadlock retry, and stale leases are safe', async () => {
+test('duplicate correlations, deadlock retry, and stale leases are safe', async () => {
   const batch = new BatchHarness();
   assert.equal(batch.run('worker-a', 100), 'completed');
   assert.equal(batch.run('worker-b', 100), 'completed');
   assert.equal(batch.fills, 1);
-
-  const expiry = new Set();
-  const settleExpiry = (instrumentId) => {
-    const key = `derivative-expiry:${instrumentId}`;
-    if (expiry.has(key)) return false;
-    expiry.add(key);
-    return true;
-  };
-  assert.equal(settleExpiry('ENERGY-FUT-D210'), true);
-  assert.equal(settleExpiry('ENERGY-FUT-D210'), false);
 
   let attempts = 0;
   const retryDeadlock = async () => {

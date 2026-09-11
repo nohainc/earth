@@ -475,7 +475,7 @@ class _CommandCenterState extends State<CommandCenter> {
         section == 'corporation' ||
         section == 'corporations') {
       OnboardingController.instance.completeStep('join_community');
-    } else if (section == 'market' || section == 'derivatives') {
+    } else if (section == 'market') {
       OnboardingController.instance.completeStep('first_market_decision');
     } else if (section == 'technology') {
       OnboardingController.instance.completeStep('start_enterprise');

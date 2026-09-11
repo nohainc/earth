@@ -20,7 +20,6 @@ import 'hero_card.dart';
 import 'executive_command_summary.dart';
 import 'objectives_panel.dart';
 import '../house/house_tree_dialog.dart';
-import '../market/derivatives_dialog.dart';
 import '../finance/net_worth_analytics_dialog.dart';
 import 'daily_briefing_dialog.dart';
 import '../../core/api/earth_api.dart';
@@ -37,7 +36,6 @@ String dashboardSectionTitle(String section, [EarthState? state]) =>
       'command' => 'COMMAND CENTER',
       'business' => 'BUSINESS',
       'market' => 'MARKET',
-      'derivatives' => 'FUTURES & DERIVATIVES',
       'net_worth' => 'NET WORTH ANALYTICS',
       'briefing' => 'EXECUTIVE BRIEFING',
       'messages' => 'MESSAGES',
@@ -386,15 +384,6 @@ class Dashboard extends StatelessWidget {
             busy: busy,
             priceHistory: marketHistory,
             action: action,
-          ),
-        ];
-      case 'derivatives':
-        return [
-          DerivativesDialog(
-            api: const EarthApi(),
-            state: state,
-            isPageMode: true,
-            onNavigate: onNavigate,
           ),
         ];
       case 'net_worth':

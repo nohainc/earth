@@ -14,7 +14,7 @@ coordination layer:
 - identity, authentication, owner registry, houses, lineage, and life systems;
 - cities, corporations, institutions, communities, memberships, governance,
   buildings, research, technologies, and scheduled actions;
-- markets, futures, banking, taxes, budgets, financial states, dividends,
+- markets, banking, taxes, budgets, financial states, dividends,
   rankings, snapshots, world state, events, notifications, AI, and error
   observability;
 - `daily_settlement_runs`, `daily_settlement_control`,

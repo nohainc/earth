@@ -11,7 +11,7 @@ direction exists but gameplay or backend support is incomplete.
 | --- | --- | --- |
 | Manager-oriented navigation | Implemented | The sidebar uses expandable, single-open categories including Business, Corporation, City, Life & Dynasty, and Technology. |
 | Business is a primary destination | Implemented | `Businesses & Operations` is the main management entry. |
-| Market is supporting infrastructure | Implemented | Market is renamed `Trade & Supplies`; basic signals are primary, while order books, open orders, macro liquidity, and derivatives are behind advanced disclosure. |
+| Market is supporting infrastructure | Implemented | Market is renamed `Trade & Supplies`; basic signals are primary, while order books, open orders, and macro liquidity are behind advanced disclosure. |
 | Command Center prioritizes decisions | Implemented | Executive summary, objectives, decision queue, and management quadrant are rendered as the primary Command Center content; resource flows remain secondary context. |
 | Command Center provides quick direction | Implemented | A state-aware quick-actions rail routes the player directly to business, city services, research, dynasty continuity, and messages. |
 
@@ -51,7 +51,6 @@ direction exists but gameplay or backend support is incomplete.
 | --- | --- | --- |
 | Basic trade supports production | Implemented | Market supports all five commodities and deferred orders. |
 | Advanced analytics are secondary | Implemented | Advanced market destinations are hidden from the main sidebar and order-book/analytics content is inside `ADVANCED TRADE TOOLS`. |
-| Derivatives are optional | Implemented | Derivatives are reachable through the advanced trade disclosure and are no longer primary navigation. |
 
 ## Phase 6 — Continuous world and dynasty play
 

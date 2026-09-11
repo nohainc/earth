@@ -16,7 +16,6 @@ part 'earth_api_house.dart';
 part 'earth_api_net_worth.dart';
 part 'earth_api_briefing.dart';
 part 'earth_api_real_estate.dart';
-part 'earth_api_derivatives.dart';
 
 String newClientCorrelationId(String prefix) =>
     '$prefix-${Random.secure().nextInt(0x7fffffff)}';

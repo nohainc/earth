@@ -35,10 +35,9 @@ export function assetUnitScale(assetId: number): number {
 export type MarketInstrument = {
   id: string;
   symbol: string;
-  instrument_type: 'SPOT' | 'DELIVERY_FUTURE';
+  instrument_type: 'SPOT';
   base_asset_id: number;
   quote_asset_id: number;
-  expiry_total_game_minute: number | null;
   lot_size_units: string;
   price_tick_units: string;
   status: string;
@@ -52,7 +51,7 @@ export function spotInstrumentSymbol(product: string): string {
 export async function getActiveSpotInstrument(repo: PostgresRepository, product: string): Promise<MarketInstrument | null> {
   const result = await repo.query<MarketInstrument>(
     `SELECT id, symbol, instrument_type, base_asset_id, quote_asset_id,
-            expiry_total_game_minute, lot_size_units, price_tick_units, status, rules_version
+            lot_size_units, price_tick_units, status, rules_version
        FROM market_instruments
       WHERE symbol = $1 AND instrument_type = 'SPOT' AND status = 'active'`,
     [spotInstrumentSymbol(product)],
@@ -63,8 +62,8 @@ export async function getActiveSpotInstrument(repo: PostgresRepository, product:
 export async function getActiveMarketInstrument(repo: PostgresRepository, instrumentId: string): Promise<MarketInstrument | null> {
   const result = await repo.query<MarketInstrument>(
     `SELECT id, symbol, instrument_type, base_asset_id, quote_asset_id,
-            expiry_total_game_minute, lot_size_units, price_tick_units, status, rules_version
-       FROM market_instruments WHERE id = $1 AND status = 'active'`,
+            lot_size_units, price_tick_units, status, rules_version
+       FROM market_instruments WHERE id = $1 AND instrument_type = 'SPOT' AND status = 'active'`,
     [instrumentId],
   );
   return result.rows[0] ?? null;
@@ -88,10 +87,7 @@ export async function listActiveMarketInstruments(repo: PostgresRepository): Pro
   const result = await repo.query<{ id: string; product: string; instrument_type: MarketInstrument['instrument_type']; rules_version: string }>(
     `SELECT id, lower(regexp_replace(symbol, '^SPOT-', '')) AS product, instrument_type, rules_version
        FROM market_instruments
-      WHERE instrument_type IN ('SPOT', 'DELIVERY_FUTURE') AND status = 'active'
-        AND (expiry_total_game_minute IS NULL OR expiry_total_game_minute > (
-          SELECT ((game_day - 1) * 1440 + game_minute) FROM world_state WHERE id = 'WORLD'
-        ))
+      WHERE instrument_type = 'SPOT' AND status = 'active'
       ORDER BY id`,
   );
   return result.rows;

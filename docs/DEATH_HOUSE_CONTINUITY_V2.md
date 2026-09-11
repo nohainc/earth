@@ -11,7 +11,7 @@
 
 ## Continuity rules
 
-House-owned balances, resources, buildings, market orders, escrow, derivative obligations, bank contracts, tax obligations, corporation affiliations, technology access, perks, and heirlooms survive succession unchanged. Personal offices and equipment assignments end with the deceased Human. Ballots remain historical and House-unique.
+House-owned balances, resources, buildings, market orders, escrow, bank contracts, tax obligations, corporation affiliations, technology access, perks, and heirlooms survive succession unchanged. Personal offices and equipment assignments end with the deceased Human. Ballots remain historical and House-unique.
 
 Mortality and succession are deterministic and idempotent using `death:{humanId}:{gameDay}` and `succession:{houseId}:{generation}`. The scheduler can replay a day without creating duplicate heirs, lineage records, or notifications.
 

@@ -9,11 +9,10 @@ test('market read API exposes the unified V2 resources', () => {
   for (const route of [
     '/api/market/instruments',
     '/api/market/orders/my',
-    '/api/market/positions/my',
     '/api/market/orders/',
     'book|batches|fills|candles',
   ]) assert.match(source, new RegExp(route.replaceAll('/', '\\/')));
-  for (const table of ['market_instruments', 'market_orders', 'market_batches', 'market_fills', 'market_candles', 'derivative_obligations']) {
+  for (const table of ['market_instruments', 'market_orders', 'market_batches', 'market_fills', 'market_candles']) {
     assert.match(source, new RegExp(table));
   }
   assert.match(source, /quantity_units/);

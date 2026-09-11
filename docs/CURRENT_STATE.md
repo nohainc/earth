@@ -18,7 +18,7 @@
 - Contracts: employment, supply, intellectual-service, disputes
 - House/dynasty: lineage, perks, heirlooms, succession
 - Notifications, audit log, SSE / WebSocket event fan-out
-- Daily briefing, net-worth history, market OHLC, futures/derivatives
+- Daily briefing, net-worth history, market OHLC
 - Transactional outbox delivery (emails via Cloudflare Email Service)
 - Flutter Web client fully functional at `/app`
 - Migration head 341; canonical schema and manifest are reconciled through

@@ -138,7 +138,7 @@ npm run qa
 - **Corporate Technology & Patent Licensing**: Foundational open technology + corporate patent IP licensing (private, city-wide civic, permanent).
 - **Industrial Machine Operations**: Independent tradable manufacturing assets for specialized commodity fabrication, research facilities, and logistics.
 - **Civic Governance & Quadratic Ballots**: Sovereign city charters, taxation policies, municipal megaproject procurement, and public channels.
-- **Central Commodity Market**: Live liquidity corridors, order books, OHLC data tracking, and futures delivery contracts.
+- **Central Commodity Market**: Live liquidity corridors, order books, and OHLC data tracking for spot resources.
 - **Persistent World Simulation**: Atomic financial ledger transfers, scheduled maintenance, and deterministic daily settlements.
 
 ## PostgreSQL and Flutter verification

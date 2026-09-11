@@ -12,13 +12,13 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '341_human_daily_needs_v2.sql');
+  assert.equal(files.at(-1), '342_remove_futures_market_schema.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 341, 'Manifest version must match latest migration version (341)');
+  assert.equal(manifest.migrationVersion, 342, 'Manifest version must match latest migration version (342)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 341/);
+  assert.match(schema, /reconciled through migration 342/);
   assert.ok(manifest.requiredTables.technology_catalog, 'Technology V2 catalog must be in the canonical manifest');
   for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');
@@ -30,7 +30,7 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(legacyTables, /DROP TABLE IF EXISTS commodity_futures_contracts/);
   assert.ok(!manifest.requiredTables.market_trades, 'Legacy market trades must be removed from the canonical manifest');
   assert.ok(!manifest.requiredTables.commodity_futures_contracts, 'Legacy futures contracts must be removed from the canonical manifest');
-  const marketSources = ['cloudflare/src/market-postgres.ts', 'cloudflare/src/market-futures.ts', 'cloudflare/src/market-futures-settlement.ts', 'cloudflare/src/derivatives-postgres.ts'];
+  const marketSources = ['cloudflare/src/market-postgres.ts', 'cloudflare/src/market-scheduler.ts', 'cloudflare/src/market-api.ts'];
   for (const sourcePath of marketSources) {
     const source = fs.readFileSync(path.resolve(sourcePath), 'utf8');
     assert.doesNotMatch(source, /account_balances|resource_balances|ledger_entries|resource_ledger_entries|transferCredits|mutateResourceBalance/i, `${sourcePath} must be Economy V2-only`);
@@ -56,16 +56,12 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(marketCandles, /earth_refresh_market_candles/);
   assert.match(marketCandles, /interval_kind IN \('hourly', 'daily'\)/);
   assert.match(marketCandles, /FROM market_fills/);
-  assert.ok(manifest.requiredTables.market_delivery_obligations, 'Manifest must contain delivery obligations');
-  const deliveryFutures = fs.readFileSync(path.resolve('db/migrations/203_market_delivery_futures.sql'), 'utf8');
-  assert.match(deliveryFutures, /DROP NOT NULL/);
-  assert.match(deliveryFutures, /market_delivery_obligations/);
-  assert.ok(manifest.requiredTables.derivative_obligations, 'Manifest must contain derivative positions');
-  const obligations = fs.readFileSync(path.resolve('db/migrations/204_derivative_obligations.sql'), 'utf8');
-  assert.match(obligations, /originating_fill_id/);
-  assert.match(obligations, /long_escrow_account_id/);
-  const expiry = fs.readFileSync(path.resolve('db/migrations/205_market_future_expiry_status.sql'), 'utf8');
-  assert.match(expiry, /status IN .*closed/);
+  const spotOnly = fs.readFileSync(path.resolve('db/migrations/342_remove_futures_market_schema.sql'), 'utf8');
+  assert.match(spotOnly, /DROP TABLE IF EXISTS derivative_obligations CASCADE/);
+  assert.match(spotOnly, /DROP TABLE IF EXISTS market_delivery_obligations CASCADE/);
+  assert.match(spotOnly, /market_instruments_spot_only_ck/);
+  assert.match(spotOnly, /CREATE OR REPLACE FUNCTION earth_market_integrity_report/);
+  assert.doesNotMatch(schema, /CREATE TABLE IF NOT EXISTS (market_delivery_obligations|derivative_obligations)/);
   assert.ok(manifest.requiredTables.market_batches, 'Manifest must contain canonical market batches');
   assert.ok(manifest.requiredTables.market_batch_instruments, 'Manifest must contain per-instrument batch state');
   const marketBatches = fs.readFileSync(path.resolve('db/migrations/198_market_clearing_batches.sql'), 'utf8');
@@ -81,7 +77,7 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(marketUnits, /ALTER TABLE market_orders/);
   assert.match(marketUnits, /quantity_units BIGINT/);
   assert.ok(manifest.requiredTables.market_instruments, 'Manifest must contain Market V2 instruments');
-  assert.ok(manifest.requiredTables.market_instruments.includes('expiry_total_game_minute'), 'Market instruments must support futures expiry');
+  assert.ok(manifest.requiredTables.market_instruments, 'Manifest must contain Market V2 instruments');
   assert.ok(fs.readFileSync(path.resolve('db/migrations/195_market_v2_foundation.sql'), 'utf8').includes('SPOT-MATERIAL'), 'Market V2 must seed spot instruments');
   assert.ok(manifest.requiredTables.proposal_challenge_authorities, 'Manifest must contain challenge authorities');
   assert.ok(manifest.requiredIndexes.includes('proposals_active_conflict_idx'), 'Manifest must contain active conflict protection');

@@ -40,5 +40,5 @@ test('mortality selection is bulk-loaded and does not transfer House assets per 
   assert.match(modern, /FOR UPDATE OF human/);
   assert.match(modern, /current_human_id = \$3/);
   assert.doesNotMatch(modern, /DELETE FROM (account_balances|resource_balances)/);
-  assert.doesNotMatch(modern, /UPDATE (market_orders|derivative_obligations|bank_deposits|bank_loans) SET/);
+  assert.doesNotMatch(modern, /UPDATE (market_orders|bank_deposits|bank_loans) SET/);
 });

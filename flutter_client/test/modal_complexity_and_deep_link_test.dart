@@ -5,7 +5,6 @@ import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/core/navigation_deep_link.dart';
 import 'package:earth_client/features/command_center/dashboard.dart';
 import 'package:earth_client/features/house/house_tree_dialog.dart';
-import 'package:earth_client/features/market/derivatives_dialog.dart';
 import 'package:earth_client/features/finance/net_worth_analytics_dialog.dart';
 
 void main() {
@@ -55,29 +54,6 @@ void main() {
       expect(find.byType(HouseTreeDialog), findsOneWidget);
     });
 
-    testWidgets('DerivativesDialog renders in page mode', (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: DerivativesDialog(
-                api: const EarthApi(),
-                state: sampleState,
-                isPageMode: true,
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(find.text('FINANCIAL DERIVATIVES & FUTURES TERMINAL'), findsOneWidget);
-    });
-
     testWidgets('NetWorthAnalyticsDialog renders in page mode', (tester) async {
       tester.view.physicalSize = const Size(1280, 900);
       tester.view.devicePixelRatio = 1.0;
@@ -100,41 +76,5 @@ void main() {
       expect(find.text('PERSONAL & MULTI-GENERATIONAL NET-WORTH ANALYTICS'), findsOneWidget);
     });
 
-    testWidgets('Dashboard renders derivatives section as full page', (tester) async {
-      tester.view.physicalSize = const Size(1280, 900);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.resetPhysicalSize);
-
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Scaffold(
-            body: SingleChildScrollView(
-              child: Dashboard(
-                state: sampleState,
-                busy: false,
-                selectedSection: 'derivatives',
-                sectionKeys: const {},
-                events: const [],
-                notifications: const [],
-                ownershipEvents: const [],
-                businessOwnership: const {},
-                businessFinancials: const {},
-                businessProfile: const {},
-                personalFinanceData: const {},
-                pantheon: const {},
-                membershipEvents: const [],
-                marketHistory: const {},
-                unreadNotifications: 0,
-                action: (_) async {},
-                onNavigate: (_) {},
-              ),
-            ),
-          ),
-        ),
-      );
-      await tester.pump();
-
-      expect(find.byType(DerivativesDialog), findsOneWidget);
-    });
   });
 }

@@ -1,8 +1,8 @@
 /** Central production feature registry. Values are read at the boundary so
  * routes and scheduled work cannot drift into separate flag logic. */
-export type FeatureKey = 'spotMarket' | 'bankDeposits' | 'bankLoans' | 'patents' | 'technologyLicenses' | 'futures' | 'mortality' | 'forcedLiquidation' | 'institutionDistress' | 'communities';
+export type FeatureKey = 'spotMarket' | 'bankDeposits' | 'bankLoans' | 'patents' | 'technologyLicenses' | 'mortality' | 'forcedLiquidation' | 'institutionDistress' | 'communities';
 export type FeatureConfig = Record<FeatureKey, boolean>;
-export type FeatureActivationStage = 'all' | 'baseline' | 'bank_loans' | 'mortality' | 'patents' | 'technology_licensing' | 'institution_distress' | 'delivery_futures' | 'forced_liquidation';
+export type FeatureActivationStage = 'all' | 'baseline' | 'bank_loans' | 'mortality' | 'patents' | 'technology_licensing' | 'institution_distress' | 'forced_liquidation';
 
 /** Ordered rollout gates for advanced closed-beta mechanics. */
 export const FEATURE_ACTIVATION_ORDER: ReadonlyArray<{ stage: Exclude<FeatureActivationStage, 'all' | 'baseline'>; feature: FeatureKey }> = [
@@ -11,19 +11,18 @@ export const FEATURE_ACTIVATION_ORDER: ReadonlyArray<{ stage: Exclude<FeatureAct
   { stage: 'patents', feature: 'patents' },
   { stage: 'technology_licensing', feature: 'technologyLicenses' },
   { stage: 'institution_distress', feature: 'institutionDistress' },
-  { stage: 'delivery_futures', feature: 'futures' },
   { stage: 'forced_liquidation', feature: 'forcedLiquidation' },
 ];
 
 const ENV_KEYS: Record<FeatureKey, string> = {
   spotMarket: 'FEATURE_SPOT_MARKET', bankDeposits: 'FEATURE_BANK_DEPOSITS', bankLoans: 'FEATURE_BANK_LOANS',
-  patents: 'FEATURE_PATENTS', technologyLicenses: 'FEATURE_TECH_LICENSES', futures: 'FEATURE_FUTURES',
+  patents: 'FEATURE_PATENTS', technologyLicenses: 'FEATURE_TECH_LICENSES',
   mortality: 'FEATURE_MORTALITY', forcedLiquidation: 'FEATURE_FORCED_LIQUIDATION', institutionDistress: 'FEATURE_INSTITUTION_DISTRESS', communities: 'FEATURE_COMMUNITIES',
 };
 
 const DEFAULTS: FeatureConfig = {
   spotMarket: true, bankDeposits: true, bankLoans: true, patents: true, technologyLicenses: true,
-  futures: true, mortality: true, forcedLiquidation: false, institutionDistress: true, communities: true,
+  mortality: true, forcedLiquidation: false, institutionDistress: true, communities: true,
 };
 
 function parseFlag(value: unknown, fallback: boolean): boolean {

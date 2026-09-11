@@ -13,7 +13,6 @@ type InstrumentRow = {
   instrument_type: string;
   base_asset_id: number;
   quote_asset_id: number;
-  expiry_total_game_minute: number | null;
   lot_size_units: string;
   price_tick_units: string;
   status: string;
@@ -35,7 +34,6 @@ function instrumentPayload(row: InstrumentRow): Record<string, unknown> {
     instrumentType: row.instrument_type,
     baseAsset: { id: row.base_asset_id, code: row.base_code ?? null, decimals: row.base_decimals ?? null },
     quoteAsset: { id: row.quote_asset_id, code: row.quote_code ?? null, decimals: row.quote_decimals ?? null },
-    expiryTotalGameMinute: row.expiry_total_game_minute,
     lotSize: numberUnits(row.lot_size_units, assetUnitScale(row.base_asset_id)),
     priceTick: priceUnitsToDisplayPrice(row.price_tick_units),
     status: row.status,
@@ -46,7 +44,7 @@ function instrumentPayload(row: InstrumentRow): Record<string, unknown> {
 async function findInstrument(repository: PostgresRepository, key: string): Promise<InstrumentRow | null> {
   const result = await repository.query<InstrumentRow>(
     `SELECT i.id, i.symbol, i.instrument_type, i.base_asset_id, i.quote_asset_id,
-            i.expiry_total_game_minute, i.lot_size_units::TEXT, i.price_tick_units::TEXT,
+            i.lot_size_units::TEXT, i.price_tick_units::TEXT,
             i.status, i.rules_version,
             ba.code AS base_code, ba.decimals AS base_decimals,
             qa.code AS quote_code, qa.decimals AS quote_decimals
@@ -54,6 +52,7 @@ async function findInstrument(repository: PostgresRepository, key: string): Prom
        LEFT JOIN economic_assets ba ON ba.id = i.base_asset_id
        LEFT JOIN economic_assets qa ON qa.id = i.quote_asset_id
       WHERE (i.id::TEXT = $1 OR i.symbol = $1)
+        AND i.instrument_type = 'SPOT'
         AND i.status IN ('active', 'halted', 'closed', 'expired', 'settled')
       LIMIT 1`, [key]);
   return result.rows[0] ?? null;
@@ -160,28 +159,28 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
   const instrumentsPath = path === '/api/market/instruments' && request.method === 'GET';
   const instrumentMatch = path.match(/^\/api\/market\/([^/]+)\/(book|batches|fills|candles)$/);
   const myOrders = path === '/api/market/orders/my' && request.method === 'GET';
-  const positions = path === '/api/market/positions/my' && request.method === 'GET';
   const orderPost = url.pathname === '/market/orders' && request.method === 'POST';
   const cancelMatch = path.match(/^\/api\/market\/orders\/([^/]+)\/cancel$/);
-  if (!instrumentsPath && !instrumentMatch && !myOrders && !positions && !orderPost && !(cancelMatch && request.method === 'POST')) return null;
+  if (!instrumentsPath && !instrumentMatch && !myOrders && !orderPost && !(cancelMatch && request.method === 'POST')) return null;
   if ((orderPost || (cancelMatch && request.method === 'POST')) && !featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
 
   try {
     if (instrumentsPath) {
       const result = await withRepository(env, (repository) => repository.query<InstrumentRow>(
         `SELECT i.id, i.symbol, i.instrument_type, i.base_asset_id, i.quote_asset_id,
-                i.expiry_total_game_minute, i.lot_size_units::TEXT, i.price_tick_units::TEXT,
+                i.lot_size_units::TEXT, i.price_tick_units::TEXT,
                 i.status, i.rules_version, ba.code AS base_code, ba.decimals AS base_decimals,
                 qa.code AS quote_code, qa.decimals AS quote_decimals
            FROM market_instruments i LEFT JOIN economic_assets ba ON ba.id = i.base_asset_id
            LEFT JOIN economic_assets qa ON qa.id = i.quote_asset_id
-          WHERE i.status IN ('active', 'halted', 'closed', 'expired', 'settled') ORDER BY i.symbol`));
+          WHERE i.instrument_type = 'SPOT'
+            AND i.status IN ('active', 'halted', 'closed', 'expired', 'settled') ORDER BY i.symbol`));
       if (!result) return unavailable();
       return Response.json({ instruments: result.rows.map(instrumentPayload), persistence: 'planetscale-postgres' });
     }
 
-    const viewer = myOrders || positions || orderPost || cancelMatch ? await currentHuman(request, env) : null;
-    if ((myOrders || positions || orderPost || cancelMatch) && !viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const viewer = myOrders || orderPost || cancelMatch ? await currentHuman(request, env) : null;
+    if ((myOrders || orderPost || cancelMatch) && !viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
 
     if (instrumentMatch) {
       const result = await withRepository(env, (repository) => readInstrumentRoute(repository, instrumentMatch[1], instrumentMatch[2], url));
@@ -217,29 +216,6 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
       if (!result) return unavailable();
       const order = result.order && typeof result.order === 'object' ? serializeOrder(result.order as Record<string, unknown>) : result.order;
       return Response.json({ ...result, order, persistence: 'planetscale-postgres' });
-    }
-    if (positions) {
-      const result = await withRepository(env, async (repository) => {
-        const rows = await repository.query<Record<string, unknown>>(
-          `SELECT d.id, d.instrument_id, i.symbol, i.base_asset_id, i.quote_asset_id,
-                  d.quantity_units::TEXT, d.delivery_price_units::TEXT, d.expiry_total_game_minute,
-                  d.status, d.created_game_day, d.created_game_minute, d.long_owner_economic_id,
-                  d.short_owner_economic_id, o.economic_id AS viewer_economic_id
-             FROM derivative_obligations d JOIN market_instruments i ON i.id = d.instrument_id
-             CROSS JOIN (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1)) o
-            WHERE d.status = 'open' AND (d.long_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1))
-               OR d.short_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1)))
-            ORDER BY d.expiry_total_game_minute, d.id`, [viewer!.id]);
-        return { positions: rows.rows.map((row) => ({
-          id: row.id, instrumentId: row.instrument_id, symbol: row.symbol,
-          side: String(row.long_owner_economic_id) === String(row.viewer_economic_id) ? 'long' : 'short',
-          quantity: numberUnits(row.quantity_units, assetUnitScale(Number(row.base_asset_id))),
-          deliveryPrice: priceUnitsToDisplayPrice(String(row.delivery_price_units)), expiryTotalGameMinute: row.expiry_total_game_minute,
-          status: row.status, createdGameDay: row.created_game_day, createdGameMinute: row.created_game_minute,
-        })) };
-      });
-      if (!result) return unavailable();
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (cancelMatch) {
       const result = await withRepository(env, (repository) => cancelMarketOrder(repository, { orderId: decodeURIComponent(cancelMatch[1]), humanId: viewer!.id }));

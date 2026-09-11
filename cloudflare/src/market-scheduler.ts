@@ -4,10 +4,9 @@ import { GAME_DAY_MINUTES, gamePosition, marketBatchRange } from './market-time.
 import { listActiveMarketInstruments, MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 import { refreshMarketCandles } from './market-candles.ts';
-import { settleDueDeliveryFutures } from './market-futures-settlement.ts';
 import type { FeatureConfig } from './feature-config.ts';
 
-export type MarketBatchResult = { batchesProcessed: number; tradesCreated: number; futuresSettled: number; busy: boolean };
+export type MarketBatchResult = { batchesProcessed: number; tradesCreated: number; busy: boolean };
 
 /** Process immutable market batches in strict order, including batches missed by Cron. */
 export async function processDueMarketBatches(
@@ -15,15 +14,14 @@ export async function processDueMarketBatches(
   safeProcessedGameDay: number,
   workBudgetMs = 10_000,
   leaseOwner = `market-scheduler:${crypto.randomUUID()}`,
-  features?: FeatureConfig,
+  _features?: FeatureConfig,
 ): Promise<MarketBatchResult> {
   const startedAt = Date.now();
   const maxBatch = Math.ceil((safeProcessedGameDay * GAME_DAY_MINUTES) / MARKET_BATCH_GAME_MINUTES) - 1;
   const allInstruments = await listActiveMarketInstruments(repository);
-  const instruments = allInstruments.filter((instrument) => features?.futures !== false || instrument.instrument_type !== 'DELIVERY_FUTURE');
+  const instruments = allInstruments.filter((instrument) => instrument.instrument_type === 'SPOT');
   let batchesProcessed = 0;
   let tradesCreated = 0;
-  let settledFutures = 0;
   let busy = false;
 
   while (Date.now() - startedAt < workBudgetMs) {
@@ -97,6 +95,5 @@ export async function processDueMarketBatches(
     if (completed.rowCount !== 1) { busy = true; break; }
     batchesProcessed += 1;
   }
-  if (features?.futures !== false && Date.now() - startedAt < workBudgetMs) settledFutures = await settleDueDeliveryFutures(repository, safeProcessedGameDay, workBudgetMs - (Date.now() - startedAt));
-  return { batchesProcessed, tradesCreated, futuresSettled: settledFutures, busy };
+  return { batchesProcessed, tradesCreated, busy };
 }

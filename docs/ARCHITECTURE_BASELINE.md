@@ -12,7 +12,7 @@
 | Human | `humans` | Mortal representative, personal standing and offices |
 | Economy V2 | `economic_accounts`, `economic_transactions`, `economic_entries` | Money/resource balances and ledger postings |
 | Building V2 | Building V2 planner/journal and catalog rules | Production, upkeep and services |
-| Market V2 | Instruments, orders, batches, fills and V2 escrow | Spot and delivery-future trading |
+| Market V2 | Spot instruments, orders, batches, fills and V2 escrow | Spot trading only |
 | Finance V2 | Finance contracts and projections | Banking, tax, obligations and financial state |
 | Technology/IP V2 | Technology catalog, access, patents and licenses | Corporation research and technology rights |
 | Cities | `cities` plus V2 institutional accounts | Public institutions and service consumers |
@@ -88,7 +88,7 @@ the batch scheduler and building settlement by Building V2.
 - Production feature flags are resolved centrally by
   `cloudflare/src/feature-config.ts`. Supported flags are
   `FEATURE_SPOT_MARKET`, `FEATURE_BANK_DEPOSITS`, `FEATURE_BANK_LOANS`,
-  `FEATURE_PATENTS`, `FEATURE_TECH_LICENSES`, `FEATURE_FUTURES`,
+  `FEATURE_PATENTS`, `FEATURE_TECH_LICENSES`,
   `FEATURE_MORTALITY`, `FEATURE_FORCED_LIQUIDATION` and
   `FEATURE_INSTITUTION_DISTRESS`, `FEATURE_COMMUNITIES`. Server mutation routes reject disabled features and
   scheduled processors skip their disabled work.
@@ -115,8 +115,7 @@ Closed-beta rollout may cap the central feature registry with
 4. `patents`;
 5. `technology_licensing`;
 6. `institution_distress`;
-7. `delivery_futures`;
-8. `forced_liquidation`.
+7. `forced_liquidation`.
 
 The default `all` stage preserves the current development configuration. For
 closed beta, enable one stage, observe several accelerated game years with the

@@ -7,7 +7,6 @@ const read = (path) => fs.readFileSync(path, 'utf8');
 test('full-world death scenario preserves House-owned economy and contracts', () => {
   const lifecycle = read('cloudflare/src/lifecycle-postgres.ts');
   const market = read('cloudflare/src/market-postgres.ts');
-  const derivatives = read('cloudflare/src/derivatives-postgres.ts');
   const bank = read('cloudflare/src/global-bank-postgres.ts');
   const financeSchema = read('db/migrations/216_bank_loans_v2.sql');
   const governance = read('cloudflare/src/governance-postgres.ts');
@@ -26,11 +25,9 @@ test('full-world death scenario preserves House-owned economy and contracts', ()
   assert.doesNotMatch(houseMortality, /DELETE FROM (account_balances|resource_balances)/);
   assert.doesNotMatch(houseMortality, /UPDATE buildings SET/);
 
-  // Market orders, escrow, and derivative positions remain tied to economic owners.
+  // Market orders and escrow remain tied to economic owners.
   assert.match(market, /owner_economic_id/);
   assert.match(market, /owner\.economic_id FROM humans JOIN owner_registry owner ON owner\.id = humans\.house_id/);
-  assert.match(derivatives, /long_owner_economic_id/);
-  assert.match(derivatives, /short_owner_economic_id/);
 
   // Deposits, loans, and obligations are House-owned contracts.
   assert.match(bank, /earth_private_economic_owner_id/);

@@ -199,7 +199,7 @@ insert into communities (id, name, founder_id, status, description, admission_po
 values
   ('TEST-COMM-001', 'Aurora Makers Guild', 'TEST-H-001', 'active', 'A practical community for builders, repairers, and industrial designers.', 'open'),
   ('TEST-COMM-002', 'Port Meridian Civic Lab', 'TEST-H-003', 'active', 'Residents experimenting with better civic services and shared infrastructure.', 'approval'),
-  ('TEST-COMM-003', 'Freight & Futures Circle', 'TEST-H-004', 'active', 'A discussion and trading group for logistics, markets, and long-range planning.', 'open'),
+  ('TEST-COMM-003', 'Freight & Logistics Circle', 'TEST-H-004', 'active', 'A discussion and trading group for logistics, markets, and long-range planning.', 'open'),
   ('TEST-COMM-004', 'Cedar Commons', 'TEST-H-007', 'active', 'A neighborhood commons focused on learning, health, and mutual support.', 'approval')
 on conflict (id) do nothing;
 

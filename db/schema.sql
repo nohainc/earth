@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 341.
+-- Canonical fresh-install schema, reconciled through migration 342.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -453,29 +453,25 @@ ON CONFLICT (id) DO NOTHING;
 CREATE TABLE IF NOT EXISTS market_instruments (
   id TEXT PRIMARY KEY,
   symbol TEXT NOT NULL UNIQUE,
-  instrument_type TEXT NOT NULL CHECK (instrument_type IN ('SPOT', 'DELIVERY_FUTURE')),
+  instrument_type TEXT NOT NULL CHECK (instrument_type = 'SPOT'),
   base_asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
   quote_asset_id SMALLINT NOT NULL REFERENCES economic_assets(id),
-  expiry_total_game_minute BIGINT,
   lot_size_units BIGINT NOT NULL CHECK (lot_size_units > 0),
   price_tick_units BIGINT NOT NULL CHECK (price_tick_units > 0),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('draft', 'active', 'halted', 'closed', 'expired', 'settled')),
   rules_version TEXT NOT NULL DEFAULT 'market-v2',
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  CHECK (instrument_type = 'SPOT' OR expiry_total_game_minute IS NOT NULL),
-  CHECK (instrument_type = 'DELIVERY_FUTURE' OR expiry_total_game_minute IS NULL)
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS market_instruments_active_symbol_idx ON market_instruments (status, symbol);
-CREATE INDEX IF NOT EXISTS market_instruments_expiry_idx ON market_instruments (expiry_total_game_minute) WHERE instrument_type = 'DELIVERY_FUTURE';
 INSERT INTO market_instruments
-  (id, symbol, instrument_type, base_asset_id, quote_asset_id, expiry_total_game_minute, lot_size_units, price_tick_units, status, rules_version)
+  (id, symbol, instrument_type, base_asset_id, quote_asset_id, lot_size_units, price_tick_units, status, rules_version)
 VALUES
-  ('SPOT-MATERIAL', 'SPOT-MATERIAL', 'SPOT', 2, 1, NULL, 1000000, 1, 'active', 'market-v2'),
-  ('SPOT-COMPONENTS', 'SPOT-COMPONENTS', 'SPOT', 3, 1, NULL, 1000000, 1, 'active', 'market-v2'),
-  ('SPOT-ENERGY', 'SPOT-ENERGY', 'SPOT', 4, 1, NULL, 1000000, 1, 'active', 'market-v2'),
-  ('SPOT-COMPUTE', 'SPOT-COMPUTE', 'SPOT', 5, 1, NULL, 1000000, 1, 'active', 'market-v2'),
-  ('SPOT-FOOD', 'SPOT-FOOD', 'SPOT', 6, 1, NULL, 1000000, 1, 'active', 'market-v2')
+  ('SPOT-MATERIAL', 'SPOT-MATERIAL', 'SPOT', 2, 1, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-COMPONENTS', 'SPOT-COMPONENTS', 'SPOT', 3, 1, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-ENERGY', 'SPOT-ENERGY', 'SPOT', 4, 1, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-COMPUTE', 'SPOT-COMPUTE', 'SPOT', 5, 1, 1000000, 1, 'active', 'market-v2'),
+  ('SPOT-FOOD', 'SPOT-FOOD', 'SPOT', 6, 1, 1000000, 1, 'active', 'market-v2')
 ON CONFLICT (id) DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS economic_account_types (
@@ -1016,7 +1012,7 @@ CREATE TABLE IF NOT EXISTS net_worth_snapshots (
 CREATE INDEX IF NOT EXISTS net_worth_human_day_idx ON net_worth_snapshots(human_id, game_day DESC);
 
 -- -----------------------------------------------------------------------------
--- 5. Commodity Markets & Derivatives
+-- 5. Commodity Spot Market
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS resource_balances (
@@ -2714,7 +2710,7 @@ CREATE INDEX IF NOT EXISTS idx_corp_research_corp_tech ON corporate_research_poo
 
 /* RETIRED: negotiated_contracts, contract_disputes, supply_contracts,
    contract_escrow_vaults, and contract_delivery_ticks are removed by
-   migration 121. Market futures use the V2 derivative obligations model. */
+   migration 121. */
 /*
 CREATE TABLE IF NOT EXISTS negotiated_contracts (
   id TEXT PRIMARY KEY,
@@ -3067,7 +3063,7 @@ CREATE TABLE IF NOT EXISTS market_fills (
   gross_quote_units BIGINT,
   buyer_fee_units BIGINT NOT NULL DEFAULT 0,
   seller_fee_units BIGINT NOT NULL DEFAULT 0,
-  economic_transaction_id BIGINT,
+  economic_transaction_id BIGINT NOT NULL REFERENCES economic_transactions(id),
   sequence_no BIGINT,
   game_day BIGINT,
   game_minute INTEGER,
@@ -3113,50 +3109,6 @@ CREATE TABLE IF NOT EXISTS market_candles (
   PRIMARY KEY (instrument_id, interval_kind, period_id)
 );
 CREATE INDEX IF NOT EXISTS market_candles_lookup_idx ON market_candles(instrument_id, interval_kind, period_id DESC);
-
-CREATE TABLE IF NOT EXISTS market_delivery_obligations (
-  fill_id UUID PRIMARY KEY REFERENCES market_fills(id),
-  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
-  batch_id BIGINT NOT NULL REFERENCES market_batches(id),
-  buyer_order_id UUID NOT NULL REFERENCES market_orders(id),
-  seller_order_id UUID NOT NULL REFERENCES market_orders(id),
-  buyer_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
-  seller_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
-  quantity_units BIGINT NOT NULL CHECK (quantity_units > 0),
-  agreed_price_units BIGINT NOT NULL CHECK (agreed_price_units > 0),
-  expiry_total_game_minute BIGINT NOT NULL CHECK (expiry_total_game_minute > 0),
-  buyer_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
-  seller_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'delivered', 'defaulted', 'cancelled')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  settled_at TIMESTAMPTZ
-);
-CREATE INDEX IF NOT EXISTS market_delivery_obligations_expiry_idx ON market_delivery_obligations(status, expiry_total_game_minute);
-CREATE INDEX IF NOT EXISTS market_delivery_obligations_instrument_idx ON market_delivery_obligations(instrument_id, status, expiry_total_game_minute);
-
-CREATE TABLE IF NOT EXISTS derivative_obligations (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  instrument_id TEXT NOT NULL REFERENCES market_instruments(id),
-  originating_fill_id UUID NOT NULL REFERENCES market_fills(id),
-  long_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
-  short_owner_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
-  quantity_units BIGINT NOT NULL CHECK (quantity_units > 0),
-  delivery_price_units BIGINT NOT NULL CHECK (delivery_price_units > 0),
-  long_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
-  short_escrow_account_id BIGINT NOT NULL REFERENCES economic_accounts(id),
-  expiry_total_game_minute BIGINT NOT NULL CHECK (expiry_total_game_minute > 0),
-  expiry_batch_id BIGINT NOT NULL CHECK (expiry_batch_id >= 0),
-  status TEXT NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'settling', 'settled', 'cancelled')),
-  settlement_transaction_id BIGINT REFERENCES economic_transactions(id),
-  created_game_day BIGINT NOT NULL,
-  created_game_minute INTEGER NOT NULL CHECK (created_game_minute BETWEEN 0 AND 1439),
-  settled_game_day BIGINT,
-  settled_game_minute INTEGER CHECK (settled_game_minute BETWEEN 0 AND 1439),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE (originating_fill_id)
-);
-CREATE INDEX IF NOT EXISTS derivative_obligations_expiry_idx ON derivative_obligations(status, expiry_total_game_minute);
-CREATE INDEX IF NOT EXISTS derivative_obligations_owner_idx ON derivative_obligations(long_owner_economic_id, short_owner_economic_id, status);
 
 CREATE TABLE IF NOT EXISTS settlement_anomalies (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),

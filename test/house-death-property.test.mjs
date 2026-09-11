@@ -27,7 +27,6 @@ function makeHouse(seed) {
     balances: { CREDIT: integer(rng, 1_000_000), MATERIAL: integer(rng, 1_000_000), ENERGY: integer(rng, 1_000_000) },
     buildings: Array.from({ length: integer(rng, 8) }, (_, i) => `BUILDING-${seed}-${i}`),
     orders: Array.from({ length: integer(rng, 5) }, (_, i) => ({ id: `ORDER-${seed}-${i}`, escrow: integer(rng, 100_000) })),
-    derivatives: Array.from({ length: integer(rng, 3) }, (_, i) => `POSITION-${seed}-${i}`),
     deposits: Array.from({ length: integer(rng, 3) }, (_, i) => `DEPOSIT-${seed}-${i}`),
     loans: Array.from({ length: integer(rng, 3) }, (_, i) => `LOAN-${seed}-${i}`),
     taxArrears: integer(rng, 100_000),
@@ -63,7 +62,6 @@ test('random House succession changes representation, not economic conservation'
     assert.deepEqual(house.balances, before.balances);
     assert.deepEqual(house.buildings, before.buildings);
     assert.deepEqual(house.orders, before.orders);
-    assert.deepEqual(house.derivatives, before.derivatives);
     assert.deepEqual(house.deposits, before.deposits);
     assert.deepEqual(house.loans, before.loans);
     assert.equal(house.taxArrears, before.taxArrears);

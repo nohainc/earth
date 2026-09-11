@@ -103,17 +103,6 @@ test('Market V2 seeded property scenarios preserve conservation and replay deter
   }
 });
 
-test('Market V2 expiry retry preserves fully collateralized future state', () => {
-  const obligations = Array.from({ length: 250 }, (_, index) => ({ quantity: BigInt(index + 1) * 1_000_000n, price: 125n + BigInt(index % 20) }));
-  const before = obligations.reduce((sum, item) => sum + item.quantity * item.price / 1_000_000n + item.quantity, 0n);
-  const settle = () => obligations.map((item) => ({ longCredit: 0n, shortCredit: item.quantity * item.price / 1_000_000n, longEnergy: item.quantity, shortEnergy: 0n }));
-  const first = settle();
-  const retry = settle();
-  assert.deepEqual(first, retry);
-  assert.equal(first.reduce((sum, item) => sum + item.shortCredit + item.longEnergy, 0n), before);
-  assert.ok(obligations.every((item) => item.quantity > 0n && item.price > 0n));
-});
-
 test('Market V2 includes a configurable scale benchmark with separate phases', () => {
   const benchmark = fs.readFileSync(new URL('../scripts/benchmark-market-v2.mjs', import.meta.url), 'utf8');
   assert.match(benchmark, /orderBookLoad/);

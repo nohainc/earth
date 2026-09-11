@@ -16,6 +16,9 @@ test('Market V2 uses unambiguous game-time coordinates', () => {
 test('Market V2 keeps the canonical six-asset IDs and instrument symbols', () => {
   assert.deepEqual(MARKET_ASSET_IDS, { CREDIT: 1, MATERIAL: 2, COMPONENTS: 3, ENERGY: 4, COMPUTE: 5, FOOD: 6 });
   assert.equal(spotInstrumentSymbol('material'), 'SPOT-MATERIAL');
+  assert.deepEqual(['material', 'components', 'energy', 'compute', 'food'].map(spotInstrumentSymbol), [
+    'SPOT-MATERIAL', 'SPOT-COMPONENTS', 'SPOT-ENERGY', 'SPOT-COMPUTE', 'SPOT-FOOD',
+  ]);
 });
 
 test('Market V2 derives instrument state from the authoritative book and fills', () => {
@@ -26,20 +29,17 @@ test('Market V2 derives instrument state from the authoritative book and fills',
   assert.match(migration, /FROM market_fills/);
   assert.match(fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8'), /rebuildMarketInstrumentState/);
   assert.match(fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8'), /refreshMarketCandles/);
-  const futures = fs.readFileSync('cloudflare/src/market-futures.ts', 'utf8');
-  assert.match(futures, /DELIVERY_FUTURE/);
-  assert.match(futures, /submitMarketOrder/);
-  assert.match(futures, /instrumentId/);
+  assert.match(fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8'), /instrument_type === 'SPOT'/);
+  assert.match(fs.readFileSync('cloudflare/src/market-model.ts', 'utf8'), /instrument_type = 'SPOT'/);
+  assert.equal(fs.existsSync('cloudflare/src/market-futures.ts'), false);
   assert.doesNotMatch(fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8'), /UPDATE market_prices SET [^;]*(supply|demand)/i);
   assert.equal(fs.existsSync('cloudflare/src/engines/market-engine.ts'), false);
 });
 
 test('Market V2 does not expose manual settlement endpoints', () => {
   const index = fs.readFileSync('cloudflare/src/index.ts', 'utf8');
-  const routes = fs.readFileSync('cloudflare/src/market-routes.ts', 'utf8');
   const simulator = fs.readFileSync('server.js', 'utf8');
   assert.doesNotMatch(index, /\/api\/market\/settle/);
-  assert.doesNotMatch(routes, /\/api\/market\/settle/);
   assert.doesNotMatch(simulator, /path === '\/api\/market\/settle'/);
   assert.match(fs.readFileSync('cloudflare/src/market-scheduler.ts', 'utf8'), /settleMarketBatch/);
 });

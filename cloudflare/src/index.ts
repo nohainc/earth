@@ -18,8 +18,6 @@ import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { communicationsRoutes } from './communications-routes';
 import { getHouseOverview, unlockHousePerk, equipHouseHeirloom, forgeHouseHeirloom, updateHouseMotto } from './house-postgres.ts';
-import { listCommodityDerivativesAndOHLC } from './derivatives-postgres.ts';
-import { cancelDeliveryFutureListing, createDeliveryFutureListing, submitDeliveryFutureBuy } from './market-futures.ts';
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { listSocialDirectory } from './social-directory-postgres.ts';
@@ -550,93 +548,6 @@ const worker = {
 
     const marketApiResponse = await handleMarketApiRoutes(request, env, url);
     if (marketApiResponse) return marketApiResponse;
-
-    if (url.pathname === '/api/market/derivatives' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      const commodity = url.searchParams.get('commodity') || 'energy';
-      const humanId = viewer?.id || 'H-0044';
-      try {
-        const result = await withRepository(env, (repository) => listCommodityDerivativesAndOHLC(repository, commodity, humanId));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to fetch derivatives';
-        return Response.json({ ok: false, error: message }, { status: 400 });
-      }
-    }
-
-    if (url.pathname === '/api/market/futures/create' && request.method === 'POST') {
-      if (!featureEnabled(env, 'futures')) return featureDisabledResponse('futures');
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ commodity?: string; size?: number; strikePrice?: number; durationGameMinutes?: number; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const commodity = parsed.value.commodity?.toLowerCase().trim() ?? 'energy';
-      const size = Number(parsed.value.size);
-      const strikePrice = Number(parsed.value.strikePrice);
-      const durationGameMinutes = Number(parsed.value.durationGameMinutes);
-      const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
-
-      try {
-        const result = await withRepository(env, (repository) => createDeliveryFutureListing(repository, {
-          humanId: viewer.id,
-          commodity,
-          size,
-          strikePrice,
-          durationGameMinutes,
-          correlationId,
-        }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Futures creation failed';
-        return Response.json({ ok: false, error: message }, { status: /insufficient/i.test(message) ? 409 : 400 });
-      }
-    }
-
-    if (url.pathname.startsWith('/api/market/futures/') && url.pathname.endsWith('/buy') && request.method === 'POST') {
-      if (!featureEnabled(env, 'futures')) return featureDisabledResponse('futures');
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const segments = url.pathname.split('/');
-      const contractId = segments[4];
-      if (!contractId) return Response.json({ ok: false, error: 'Contract ID is required' }, { status: 400 });
-      const correlationId = resolveIdempotencyKey(request);
-
-      try {
-        const result = await withRepository(env, (repository) => submitDeliveryFutureBuy(repository, {
-          humanId: viewer.id,
-          orderId: contractId,
-          correlationId,
-        }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Futures matching failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : (/insufficient/i.test(message) ? 409 : 400) });
-      }
-    }
-
-    if (url.pathname.startsWith('/api/market/futures/') && url.pathname.endsWith('/cancel') && request.method === 'POST') {
-      if (!featureEnabled(env, 'futures')) return featureDisabledResponse('futures');
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const segments = url.pathname.split('/');
-      const contractId = segments[4];
-      if (!contractId) return Response.json({ ok: false, error: 'Contract ID is required' }, { status: 400 });
-
-      try {
-        const result = await withRepository(env, (repository) => cancelDeliveryFutureListing(repository, {
-          humanId: viewer.id,
-          orderId: contractId,
-        }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Futures cancellation failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 400 });
-      }
-    }
 
     if (url.pathname === '/api/finance/net-worth-history' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
