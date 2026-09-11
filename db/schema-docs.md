@@ -18,7 +18,7 @@ Generated reference for core operational tables; consult the numbered migrations
 | institutions | Cities and corporations | id TEXT, kind TEXT, status TEXT |
 | memberships | Human institutional membership | human_id UUID, city_id TEXT, corporation_id TEXT |
 | proposals | Governance proposals | id TEXT, institution_id TEXT, status TEXT, closes_game_day INTEGER |
-| ballots | Governance votes | proposal_id TEXT, human_id UUID, choice TEXT, weight NUMERIC |
+| ballots | Governance votes | proposal_id TEXT, house_id TEXT, human_id UUID (casting-Human audit), choice TEXT, weight NUMERIC |
 | notifications | Player notifications | id TEXT, human_id UUID, notification_type TEXT, read_at TIMESTAMPTZ |
 | event_outbox | Reliable side-effect dispatch | id UUID, topic TEXT, payload JSONB, status TEXT |
 | ai_assistants | Player advisory assistants | id TEXT, owner_id UUID, tier TEXT, policy TEXT |

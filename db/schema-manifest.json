@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 292,
+  "migrationVersion": 314,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -29,6 +29,7 @@
     ],
     "auth_action_tokens": [
       "id",
+      "account_id",
       "human_id",
       "token_hash"
     ],
@@ -43,11 +44,26 @@
     ],
     "auth_sessions": [
       "id",
+      "account_id",
       "human_id",
       "token_hash"
     ],
+    "auth_accounts": [
+      "id",
+      "house_id",
+      "email",
+      "password_hash",
+      "password_salt",
+      "password_iterations",
+      "email_verified_at",
+      "mfa_secret",
+      "mfa_enabled",
+      "created_at",
+      "updated_at"
+    ],
     "ballots": [
       "proposal_id",
+      "house_id",
       "human_id",
       "choice"
     ],
@@ -253,6 +269,8 @@
       "id",
       "city_id",
       "owner_id",
+      "owner_economic_id",
+      "managed_by_human_id",
       "building_type",
       "name",
       "tier",
@@ -542,6 +560,7 @@
     ],
     "community_members": [
       "community_id",
+      "house_id",
       "human_id",
       "role"
     ],
@@ -583,6 +602,13 @@
     "deceased_profiles": [
       "human_id",
       "death_game_day",
+      "final_age_years",
+      "final_standing",
+      "final_legacy",
+      "corporation_id",
+      "city_id",
+      "major_titles",
+      "achievements",
       "cause_of_death",
       "epitaph",
       "house_name"
@@ -653,9 +679,44 @@
     "humans": [
       "id",
       "account_id",
+      "house_id",
       "life_status",
+      "mortality_state",
+      "activation_game_day",
       "account_status",
       "deleted_at"
+    ],
+    "house_succession_plans": [
+      "house_id",
+      "successor_name",
+      "successor_profile",
+      "registered_game_day",
+      "status",
+      "used_game_day"
+    ],
+    "succession_events": [
+      "id",
+      "house_id",
+      "predecessor_human_id",
+      "successor_human_id",
+      "death_game_day",
+      "effective_game_day",
+      "reason",
+      "predecessor_age",
+      "predecessor_standing",
+      "predecessor_legacy",
+      "house_legacy_before",
+      "house_legacy_after",
+      "rule_version",
+      "status"
+    ],
+    "house_affiliations": [
+      "house_id",
+      "city_id",
+      "corporation_id",
+      "joined_game_day",
+      "rank",
+      "status"
     ],
     "owner_registry": [
       "id",
@@ -1207,7 +1268,8 @@
       "human_id",
       "role_code",
       "status",
-      "granted_game_day"
+      "granted_game_day",
+      "revoked_effective_game_day"
     ],
     "economy_shadow_openings": [
       "game_day",
@@ -1291,7 +1353,7 @@
     "succession_plans": [
       "human_id",
       "successor_name",
-      "successor_human_id"
+      "registered_game_day"
     ],
     "tax_rules": [
       "id",
@@ -1486,22 +1548,31 @@
       "clock_mode",
       "manual_total_game_minutes",
       "last_scheduler_at",
+      "world_seed",
       "genesis_at",
       "simulated_day_offset",
       "daily_settlement_mode"
     ],
     "houses": [
       "id",
+      "account_id",
       "email",
       "house_name",
       "motto",
+      "current_human_id",
       "legacy_points",
+      "dynasty_legacy",
+      "succession_transition_until_game_day",
+      "generation",
+      "status",
       "total_wealth_generated"
     ],
     "house_lineage_records": [
       "id",
       "house_id",
       "human_id",
+      "predecessor_human_id",
+      "successor_human_id",
       "generation",
       "name",
       "lifetime_wealth",
@@ -1581,7 +1652,7 @@
     [
       "ballots",
       "proposal_id",
-      "human_id"
+      "house_id"
     ],
     [
       "human_id",
@@ -1643,6 +1714,7 @@
     "idx_houses_email",
     "idx_house_lineage_records_house",
     "idx_house_lineage_records_human",
+    "idx_house_lineage_successor",
     "idx_house_perks_house",
     "idx_house_heirlooms_house",
     "idx_commodity_futures_status",
@@ -1715,6 +1787,10 @@
     "idx_notifications_unread",
     "proposals_active_conflict_idx",
     "memberships_city_joined_human_idx",
-    "memberships_corporation_joined_human_idx"
+    "memberships_corporation_joined_human_idx",
+    "community_members_house_idx",
+    "community_members_human_idx",
+    "houses_succession_transition_idx",
+    "house_lineage_records_house_generation_idx"
   ]
 }

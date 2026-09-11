@@ -1,5 +1,5 @@
 import type { PostgresRepository } from '../repository.ts';
-import { processMortality } from '../lifecycle-postgres.ts';
+import { processHouseMortality } from '../lifecycle-postgres.ts';
 
 export interface LifecycleSettlementResult {
   humansAged: number;
@@ -33,7 +33,7 @@ export async function settleContinuousLifecycle(
     // Process mortality for elders
     for (let y = 0; y < yearsElapsed; y++) {
       const yearDay = (prevYear + y + 1) * 365;
-      await processMortality(repo, yearDay);
+      await processHouseMortality(repo, yearDay);
       mortalityEvents += 1;
     }
   }

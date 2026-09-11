@@ -72,7 +72,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     LEFT JOIN house_lineage_records hlr ON hlr.house_id = h.id
     LEFT JOIN house_perks hp ON hp.house_id = h.id
     LEFT JOIN house_heirlooms hh ON hh.house_id = h.id
-    WHERE h.email = (SELECT email FROM auth_credentials WHERE human_id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; house_name: string | null; epitaph: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }[] }));
+    WHERE h.id = (SELECT house_id FROM humans WHERE id = $1)`, [viewerId]).catch(() => ({ rows: [] as { generation: number; house_name: string | null; epitaph: string | null; perks_count: number; heirlooms_count: number; legacy_points: number }[] }));
   const corporationSharedTechnology = { rows: [] as Array<Record<string, unknown>> };
   const worldRow = world.rows[0] ?? {};
   const humanRow = human.rows[0] ?? {};

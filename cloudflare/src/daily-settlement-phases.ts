@@ -16,6 +16,7 @@ export type DailySettlementPhase = {
 };
 
 export type DailySettlementPhaseHandlers = {
+  activateSuccessors: (context: DailySettlementPhaseContext) => Promise<unknown>;
   preparePartitions: (context: DailySettlementPhaseContext) => Promise<unknown>;
   rebuildProfiles: (context: DailySettlementPhaseContext) => Promise<unknown>;
   profileSettlement: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -31,6 +32,7 @@ export type DailySettlementPhaseHandlers = {
   patentExpirations: (context: DailySettlementPhaseContext) => Promise<unknown>;
   researchAndProgress: (context: DailySettlementPhaseContext) => Promise<unknown>;
   lifecycle: (context: DailySettlementPhaseContext) => Promise<unknown>;
+  postSuccessionAccessRefresh: (context: DailySettlementPhaseContext) => Promise<unknown>;
   financialStates: (context: DailySettlementPhaseContext) => Promise<unknown>;
   institutionDissolution: (context: DailySettlementPhaseContext) => Promise<unknown>;
   financialProjections: (context: DailySettlementPhaseContext) => Promise<unknown>;
@@ -43,25 +45,27 @@ export function createDailySettlementPhaseRegistry(
   handlers: DailySettlementPhaseHandlers,
 ): readonly DailySettlementPhase[] {
   return [
+    { id: 'succession_activation', order: 5, shardMode: 'all', execute: handlers.activateSuccessors },
     { id: 'prepare_partitions', order: 10, shardMode: 'all', execute: handlers.preparePartitions },
     { id: 'profile_rebuild', order: 20, shardMode: 'owner-shards', execute: handlers.rebuildProfiles },
     { id: 'profile_settlement', order: 30, shardMode: 'all', execute: handlers.profileSettlement },
     { id: 'patent_expirations', order: 45, shardMode: 'all', execute: handlers.patentExpirations },
-    { id: 'life_maintenance', order: 50, shardMode: 'all', execute: handlers.lifeMaintenance },
-    { id: 'basic_levy', order: 60, shardMode: 'all', execute: handlers.basicLevy },
     { id: 'ip_license_billing', order: 65, shardMode: 'all', execute: handlers.ipLicenseBilling },
     { id: 'building_settlement', order: 70, shardMode: 'all', execute: handlers.buildingSettlement },
+    { id: 'basic_levy', order: 75, shardMode: 'all', execute: handlers.basicLevy },
     { id: 'city_corporate_income_tax', order: 90, shardMode: 'all', execute: handlers.cityCorporateIncomeTax },
     { id: 'global_bank', order: 100, shardMode: 'all', execute: handlers.globalBank },
     { id: 'bank_health', order: 110, shardMode: 'all', execute: handlers.bankHealth },
+    { id: 'life_maintenance', order: 115, shardMode: 'all', execute: handlers.lifeMaintenance },
     { id: 'city_dynamics', order: 120, shardMode: 'all', execute: handlers.cityDynamics },
     { id: 'research_and_progress', order: 126, shardMode: 'all', execute: handlers.researchAndProgress },
     { id: 'budget_dividend_eligibility', order: 130, shardMode: 'all', execute: handlers.budgetDividendEligibility },
-    { id: 'lifecycle', order: 135, shardMode: 'all', execute: handlers.lifecycle },
     { id: 'financial_states', order: 140, shardMode: 'all', execute: handlers.financialStates },
-    { id: 'institution_dissolution', order: 150, shardMode: 'all', execute: handlers.institutionDissolution },
-    { id: 'financial_projections', order: 155, shardMode: 'all', execute: handlers.financialProjections },
-    { id: 'rankings_snapshot', order: 160, shardMode: 'all', execute: handlers.rankingsSnapshot },
+    { id: 'lifecycle', order: 145, shardMode: 'all', execute: handlers.lifecycle },
+    { id: 'post_succession_access_refresh', order: 150, shardMode: 'all', execute: handlers.postSuccessionAccessRefresh },
+    { id: 'institution_dissolution', order: 155, shardMode: 'all', execute: handlers.institutionDissolution },
+    { id: 'financial_projections', order: 160, shardMode: 'all', execute: handlers.financialProjections },
+    { id: 'rankings_snapshot', order: 165, shardMode: 'all', execute: handlers.rankingsSnapshot },
     { id: 'end_of_day_snapshots', order: 170, shardMode: 'all', execute: handlers.endOfDaySnapshots },
   ];
 }

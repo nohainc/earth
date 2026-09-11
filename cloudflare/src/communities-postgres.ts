@@ -81,7 +81,7 @@ export async function createCommunity(
       [communityId, name, description, admissionPolicy, applicationQuestion, input.founderId],
     );
     await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'community',$2,$3,$4) ON CONFLICT (id) DO UPDATE SET name = EXCLUDED.name, description = EXCLUDED.description", [`channel-community-${communityId}`, communityId, name, `Private conversation for current members of ${name}.`]);
-    await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'founder',$3)", [communityId, input.founderId, day]);
+    await tx.query("INSERT INTO community_members (community_id, house_id, human_id, role, joined_game_day) SELECT $1, house_id, id, 'founder', $3 FROM humans WHERE id = $2", [communityId, input.founderId, day]);
     await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'community_formation')", [input.correlationId, input.founderId, communityId, day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [
       crypto.randomUUID(), input.founderId, 'community', 'Community founded', `You founded community ${communityId}.`, communityId,
@@ -195,7 +195,7 @@ export async function changeCommunityMembership(
     }
 
     await tx.query("DELETE FROM community_membership_requests WHERE community_id = $1 AND human_id = $2", [input.communityId, input.humanId]);
-    await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'member',$3) ON CONFLICT (community_id, human_id) DO UPDATE SET role = 'member', joined_game_day = $3", [input.communityId, input.humanId, day]);
+    await tx.query("INSERT INTO community_members (community_id, house_id, human_id, role, joined_game_day) SELECT $1, house_id, id, 'member', $3 FROM humans WHERE id = $2 ON CONFLICT (community_id, house_id) DO UPDATE SET human_id = EXCLUDED.human_id, role = 'member', joined_game_day = $3", [input.communityId, input.humanId, day]);
     await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'community',$2,$3,$4) ON CONFLICT (id) DO NOTHING", [`channel-community-${input.communityId}`, input.communityId, community.rows[0].name, `Private conversation for current members of ${community.rows[0].name}.`]);
     await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'voluntary_membership')", [crypto.randomUUID(), input.humanId, input.communityId, day]);
     await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,$3,$4,$5,$6) ON CONFLICT DO NOTHING', [crypto.randomUUID(), input.humanId, 'community', 'Community joined', `You joined community ${input.communityId}.`, input.communityId]);
@@ -255,7 +255,7 @@ export async function decideCommunityMembershipRequest(
 
     if (input.action === 'approve') {
       await tx.query('UPDATE community_membership_requests SET status = \'approved\', decided_game_day = $1, decided_by = $2 WHERE id = $3', [day, input.deciderId, input.requestId]);
-      await tx.query("INSERT INTO community_members (community_id, human_id, role, joined_game_day) VALUES ($1,$2,'member',$3) ON CONFLICT (community_id, human_id) DO UPDATE SET role = 'member', joined_game_day = $3", [input.communityId, applicantId, day]);
+      await tx.query("INSERT INTO community_members (community_id, house_id, human_id, role, joined_game_day) SELECT $1, house_id, id, 'member', $3 FROM humans WHERE id = $2 ON CONFLICT (community_id, house_id) DO UPDATE SET human_id = EXCLUDED.human_id, role = 'member', joined_game_day = $3", [input.communityId, applicantId, day]);
       const commName = community.rows[0].name ?? input.communityId;
       await tx.query("INSERT INTO comm_channels (id, scope, scope_id, name, description) VALUES ($1,'community',$2,$3,$4) ON CONFLICT (id) DO NOTHING", [`channel-community-${input.communityId}`, input.communityId, commName, `Private conversation for current members of ${commName}.`]);
       await tx.query("INSERT INTO membership_events (id, human_id, institution_type, institution_id, action, game_day, reason) VALUES ($1,$2,'COMMUNITY',$3,'joined',$4,'approved_application')", [crypto.randomUUID(), applicantId, input.communityId, day]);

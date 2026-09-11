@@ -5,10 +5,13 @@ import { withRepository } from './repository';
 import { rebornIdentity, claimHeirIdentity, updateDisplayName, deleteAccount } from './auth-postgres';
 
 export async function authenticatedAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
+  if ((url.pathname === '/api/auth/rebirth' || url.pathname === '/api/auth/claim-heir') && request.method === 'POST') {
+    return Response.json({ ok: false, error: 'Cross-Human inheritance is retired; House succession is automatic' }, { status: 410 });
+  }
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ authenticated: false, human: null, persistence: 'planetscale-postgres' });
-    const cred = (await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean }>('SELECT mfa_enabled FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
+    const cred = (await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean }>('SELECT a.mfa_enabled FROM auth_accounts a JOIN houses h ON h.id = a.house_id WHERE h.id = $1', [human.house_id])))?.rows[0];
     return Response.json({
       authenticated: true,
       human: {
@@ -38,7 +41,7 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const secret = bytesToBase32(crypto.getRandomValues(new Uint8Array(20)));
-    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_secret = $1, mfa_enabled = false WHERE human_id = $2', [secret, human.id]));
+    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_accounts SET mfa_secret = $1, mfa_enabled = false WHERE id = $2', [secret, human.account_id]));
     if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return Response.json({ ok: true, secret, otpauth: `otpauth://totp/EARTH:${encodeURIComponent(human.email)}?secret=${secret}&issuer=EARTH`, message: 'Scan or enter this secret in an authenticator, then confirm with a six-digit code.' });
   }
@@ -47,9 +50,9 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ code?: string }>(request);
     if (!parsed.ok) return parsed.response;
-    const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null }>('SELECT mfa_secret FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
+    const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null }>('SELECT mfa_secret FROM auth_accounts WHERE id = $1', [human.account_id])))?.rows[0];
     if (!credential?.mfa_secret || !(await validTotp(credential.mfa_secret, parsed.value.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
-    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = true WHERE human_id = $1', [human.id]));
+    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_accounts SET mfa_enabled = true WHERE id = $1', [human.account_id]));
     if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return Response.json({ ok: true, enabled: true });
   }
@@ -58,9 +61,9 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const parsed = await parseJsonBody<{ code?: string }>(request);
     if (!parsed.ok) return parsed.response;
-    const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null; mfa_enabled: boolean }>('SELECT mfa_secret, mfa_enabled FROM auth_credentials WHERE human_id = $1', [human.id])))?.rows[0];
+    const credential = (await withRepository(env, (repository) => repository.query<{ mfa_secret: string | null; mfa_enabled: boolean }>('SELECT mfa_secret, mfa_enabled FROM auth_accounts WHERE id = $1', [human.account_id])))?.rows[0];
     if (!credential?.mfa_enabled || !credential.mfa_secret || !(await validTotp(credential.mfa_secret, parsed.value.code ?? ''))) return Response.json({ ok: false, error: 'Invalid authenticator code' }, { status: 400 });
-    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_credentials SET mfa_enabled = false, mfa_secret = NULL WHERE human_id = $1', [human.id]));
+    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_accounts SET mfa_enabled = false, mfa_secret = NULL WHERE id = $1', [human.account_id]));
     if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return Response.json({ ok: true, enabled: false });
   }
@@ -69,7 +72,7 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     const token = extractToken(request);
     const currentHash = token ? await digest(token) : '';
-    const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE human_id = $1 AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC', [human.id]));
+    const sessions = await withRepository(env, (repository) => repository.query('SELECT id, created_at, expires_at, revoked_at, token_hash FROM auth_sessions WHERE account_id = $1 AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP ORDER BY created_at DESC', [human.account_id]));
     if (!sessions) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return Response.json({ sessions: sessions.rows.map(({ token_hash: _tokenHash, ...session }) => ({ ...session, current: _tokenHash === currentHash })), persistence: 'planetscale-postgres' });
   }
@@ -77,14 +80,14 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
   if (revokeSessionMatch && request.method === 'DELETE') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND human_id = $2 AND revoked_at IS NULL', [revokeSessionMatch[1], human.id]));
+    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE id = $1 AND account_id = $2 AND revoked_at IS NULL', [revokeSessionMatch[1], human.account_id]));
     if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return Response.json({ ok: result.rowCount === 1, persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/auth/sessions' && request.method === 'DELETE') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [human.id]));
+    const result = await withRepository(env, (repository) => repository.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = $1 AND revoked_at IS NULL', [human.account_id]));
     if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });
     return new Response(JSON.stringify({ ok: true }), { headers: { 'content-type': 'application/json', 'Set-Cookie': sessionCookie('', 0) } });
   }

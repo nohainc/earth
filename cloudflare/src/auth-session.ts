@@ -9,9 +9,48 @@ export { cookieValue, extractToken } from './auth-token.ts';
 import { extractTokens } from './auth-token.ts';
 export interface AuthenticatedHuman {
   id: string;
+  house_id: string;
+  account_id: string;
   display_name: string;
   email: string;
   life_status: string;
+}
+
+export interface AuthenticatedHouse {
+  id: string;
+  account_id: string;
+  current_human_id: string;
+  house_name: string;
+  economic_id: string;
+}
+
+/** Resolve the persistent player principal from the session, independent of its current Human. */
+export async function currentHouse(request: Request, env: Env): Promise<AuthenticatedHouse | null> {
+  for (const token of extractTokens(request)) {
+    const tokenHash = await digest(token);
+    const result = await withRepository(env, (repository) => repository.query<AuthenticatedHouse>(
+      `SELECT h.id, a.id AS account_id, h.current_human_id, h.house_name,
+              owner.economic_id::TEXT AS economic_id
+         FROM auth_sessions s
+         JOIN auth_accounts a ON a.id = s.account_id
+         JOIN houses h ON h.id = a.house_id
+         JOIN owner_registry owner ON owner.id = h.id AND owner.owner_type = 'house'
+        WHERE s.token_hash = $1
+          AND s.revoked_at IS NULL
+          AND s.expires_at > CURRENT_TIMESTAMP
+          AND h.status = 'ACTIVE'
+          AND h.current_human_id IS NOT NULL
+          AND owner.status = 'active'`,
+      [tokenHash],
+    ));
+    if (result?.rows[0]) return result.rows[0];
+  }
+  return null;
+}
+
+/** Resolve the House economic owner for value-bearing operations. */
+export async function houseEconomicOwner(request: Request, env: Env): Promise<AuthenticatedHouse | null> {
+  return currentHouse(request, env);
 }
 
 
@@ -30,13 +69,16 @@ export async function currentHuman(
     const tokenHash = await digest(token);
     const result = await withRepository(env, (repository) =>
       repository.query<AuthenticatedHuman>(
-        `SELECT humans.id, humans.display_name, humans.life_status, auth_credentials.email
+        `SELECT humans.id, humans.house_id, auth_sessions.account_id,
+                humans.display_name, humans.life_status, auth_accounts.email
          FROM auth_sessions
-         JOIN humans ON humans.id = auth_sessions.human_id
-         JOIN auth_credentials ON auth_credentials.human_id = humans.id
+         JOIN auth_accounts ON auth_accounts.id = auth_sessions.account_id
+         JOIN houses ON houses.id = auth_accounts.house_id
+         JOIN humans ON humans.id = houses.current_human_id
          WHERE auth_sessions.token_hash = $1
            AND auth_sessions.revoked_at IS NULL
            AND auth_sessions.expires_at > CURRENT_TIMESTAMP
+           AND houses.status = 'ACTIVE'
            AND humans.account_status = 'active'
            AND (humans.life_status = 'active' OR ($2 = 1 AND humans.life_status IN ('estate', 'deceased')) )`,
         [tokenHash, allowEstate ? 1 : 0],
@@ -54,7 +96,7 @@ export async function sensitiveActionAllowed(
 ): Promise<boolean> {
   const result = await withRepository(env, (repository) =>
     repository.query<{ mfa_enabled: boolean; mfa_secret: string | null }>(
-      'SELECT mfa_enabled, mfa_secret FROM auth_credentials WHERE human_id = $1',
+      'SELECT a.mfa_enabled, a.mfa_secret FROM auth_accounts a JOIN houses h ON h.id = a.house_id WHERE h.current_human_id = $1',
       [humanId],
     ),
   );
@@ -96,7 +138,10 @@ export async function issueActionToken(
   ).toISOString();
   const result = await withRepository(env, (repository) =>
     repository.query(
-      'INSERT INTO auth_action_tokens (id, human_id, token_hash, action, expires_at) VALUES ($1,$2,$3,$4,$5)',
+      `INSERT INTO auth_action_tokens (id, account_id, human_id, token_hash, action, expires_at)
+       SELECT $1, a.id, $2, $3, $4, $5
+       FROM auth_accounts a JOIN humans h ON h.house_id = a.house_id
+       WHERE h.id = $2`,
       [id, humanId, tokenHash, action, expires],
     ),
   );

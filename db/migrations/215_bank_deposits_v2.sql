@@ -49,7 +49,7 @@ BEGIN
   IF p_term_days IS NULL OR p_term_days < 1 OR p_term_days > 90 THEN RAISE EXCEPTION 'Deposit term must be between 1 and 90 game days'; END IF;
   IF p_correlation_id IS NULL OR length(btrim(p_correlation_id)) = 0 THEN RAISE EXCEPTION 'Deposit correlation ID is required'; END IF;
 
-  SELECT o.economic_id INTO depositor_economic_id FROM owner_registry o WHERE o.id = p_human_id AND o.owner_type = 'human' AND o.status = 'active';
+  depositor_economic_id := earth_private_economic_owner_id(p_human_id);
   SELECT a.id INTO depositor_account FROM economic_accounts a WHERE a.owner_economic_id = depositor_economic_id AND a.asset_id = 1 AND a.account_type = 1 AND a.is_default_settlement AND a.status = 'active';
   SELECT a.id INTO bank_account FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = 'SYSTEM-GLOBAL-BANK' AND a.asset_id = 1 AND a.account_type = 10 AND a.status = 'active';
   IF depositor_account IS NULL OR bank_account IS NULL THEN RAISE EXCEPTION 'V2 depositor or bank reserve account is unavailable'; END IF;

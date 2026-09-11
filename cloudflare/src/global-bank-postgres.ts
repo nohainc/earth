@@ -6,7 +6,7 @@ export async function listBankDeposits(repository: PostgresRepository, humanId: 
             d.rate_rule_version, d.start_total_game_minute, d.maturity_total_game_minute,
             d.status, d.created_transaction_id, d.payout_transaction_id, d.correlation_id, d.created_at
        FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
-      WHERE o.id = $1 ORDER BY d.created_at DESC`,
+      WHERE o.economic_id = earth_private_economic_owner_id($1) ORDER BY d.created_at DESC`,
     [humanId],
   );
   return { deposits: deposits.rows.map((row) => ({

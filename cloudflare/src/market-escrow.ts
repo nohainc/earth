@@ -6,7 +6,8 @@ export async function marketAccount(tx: PostgresRepository, ownerId: string, ass
   const result = await tx.query<{ account_id: string }>(
     `SELECT a.id::TEXT AS account_id
        FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-      WHERE o.id = $1 AND a.asset_id = $2 AND a.status = 'active'
+      WHERE o.id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1)
+        AND a.asset_id = $2 AND a.status = 'active'
         AND ($3::SMALLINT IS NULL AND a.is_default_settlement OR a.account_type = $3)
         AND ($4::TEXT IS NULL OR a.legacy_account_id = $4)
       ORDER BY a.is_default_settlement DESC, a.id
@@ -20,7 +21,10 @@ export async function ensureMarketEscrow(tx: PostgresRepository, ownerId: string
   const legacyAccountId = `market-order:${orderId}`;
   const existing = await marketAccount(tx, ownerId, assetId, 6, legacyAccountId);
   if (existing) return existing;
-  const owner = await tx.query<{ economic_id: string }>('SELECT economic_id::TEXT FROM owner_registry WHERE id = $1', [ownerId]);
+  const owner = await tx.query<{ economic_id: string }>(
+    'SELECT economic_id::TEXT FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1)',
+    [ownerId],
+  );
   if (!owner.rows[0]) throw new Error('Economic owner not found');
   const created = await tx.query<{ account_id: string }>(
     `INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, balance, is_default_settlement, status, legacy_account_id)

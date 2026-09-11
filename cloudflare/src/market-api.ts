@@ -188,7 +188,12 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
     }
     if (myOrders) {
       const result = await withRepository(env, async (repository) => {
-        const rows = await repository.query<Record<string, unknown>>('SELECT * FROM market_orders WHERE human_id = $1 ORDER BY created_at DESC LIMIT 500', [viewer!.id]);
+        const rows = await repository.query<Record<string, unknown>>(
+          `SELECT market_orders.*
+             FROM market_orders
+             JOIN owner_registry owner ON owner.economic_id = market_orders.owner_economic_id
+            WHERE owner.id = (SELECT house_id FROM humans WHERE id = $1)
+            ORDER BY market_orders.created_at DESC LIMIT 500`, [viewer!.id]);
         return { orders: rows.rows.map((row) => serializeOrder(row, Number(row.instrument_base_asset_id ?? row.base_asset_id ?? MARKET_ASSET_IDS.MATERIAL))) };
       });
       if (!result) return unavailable();
@@ -219,9 +224,9 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
                   d.status, d.created_game_day, d.created_game_minute, d.long_owner_economic_id,
                   d.short_owner_economic_id, o.economic_id AS viewer_economic_id
              FROM derivative_obligations d JOIN market_instruments i ON i.id = d.instrument_id
-             CROSS JOIN (SELECT economic_id FROM owner_registry WHERE id = $1) o
-            WHERE d.status = 'open' AND (d.long_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)
-               OR d.short_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1))
+             CROSS JOIN (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1)) o
+            WHERE d.status = 'open' AND (d.long_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1))
+               OR d.short_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $1), $1)))
             ORDER BY d.expiry_total_game_minute, d.id`, [viewer!.id]);
         return { positions: rows.rows.map((row) => ({
           id: row.id, instrumentId: row.instrument_id, symbol: row.symbol,

@@ -13,10 +13,11 @@ test('daily settlement has one ordered canonical phase registry', () => {
   assert.equal(phases.find((phase) => phase.id === 'profile_rebuild')?.shardMode, 'owner-shards');
 
   const requiredOrder = [
-    'prepare_partitions', 'profile_rebuild', 'profile_settlement',
-    'life_maintenance', 'basic_levy', 'ip_license_billing', 'building_settlement',
-    'city_corporate_income_tax', 'global_bank', 'bank_health', 'budget_dividend_eligibility', 'financial_projections', 'rankings_snapshot',
-    'end_of_day_snapshots',
+    'succession_activation', 'prepare_partitions', 'profile_rebuild', 'profile_settlement',
+    'ip_license_billing', 'building_settlement', 'basic_levy',
+    'city_corporate_income_tax', 'global_bank', 'bank_health', 'life_maintenance',
+    'budget_dividend_eligibility', 'financial_states', 'lifecycle', 'post_succession_access_refresh',
+    'financial_projections', 'rankings_snapshot', 'end_of_day_snapshots',
   ];
   const indexes = requiredOrder.map((id) => phases.findIndex((phase) => phase.id === id));
   assert.ok(indexes.every((index) => index >= 0));
@@ -25,6 +26,11 @@ test('daily settlement has one ordered canonical phase registry', () => {
   assert.ok(phases.findIndex((phase) => phase.id === 'global_bank') < phases.findIndex((phase) => phase.id === 'bank_health'));
   assert.ok(phases.findIndex((phase) => phase.id === 'bank_health') < phases.findIndex((phase) => phase.id === 'budget_dividend_eligibility'));
   assert.ok(phases.findIndex((phase) => phase.id === 'budget_dividend_eligibility') < phases.findIndex((phase) => phase.id === 'financial_states'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'financial_states') < phases.findIndex((phase) => phase.id === 'lifecycle'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'building_settlement') < phases.findIndex((phase) => phase.id === 'life_maintenance'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'bank_health') < phases.findIndex((phase) => phase.id === 'life_maintenance'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'lifecycle') < phases.findIndex((phase) => phase.id === 'end_of_day_snapshots'));
+  assert.ok(phases.findIndex((phase) => phase.id === 'lifecycle') < phases.findIndex((phase) => phase.id === 'post_succession_access_refresh'));
 });
 
 test('scheduler uses only the resumable daily engine', () => {

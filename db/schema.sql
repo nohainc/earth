@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 292.
+-- Canonical fresh-install schema, reconciled through migration 314.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -37,12 +37,15 @@ $$;
 CREATE TABLE IF NOT EXISTS humans (
   id TEXT PRIMARY KEY,
   account_id TEXT NOT NULL UNIQUE,
+  house_id TEXT NOT NULL,
   display_name TEXT NOT NULL,
   age_years INTEGER NOT NULL DEFAULT 31,
   standing INTEGER NOT NULL DEFAULT 0,
   legacy INTEGER NOT NULL DEFAULT 0,
-  life_status TEXT NOT NULL DEFAULT 'active' CHECK (life_status IN ('active','deceased','estate')),
+  life_status TEXT NOT NULL DEFAULT 'active' CHECK (life_status IN ('active','pending','deceased','estate')),
+  mortality_state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (mortality_state IN ('ACTIVE','DEATH_CONFIRMED','DECEASED')),
   death_game_day BIGINT,
+  activation_game_day BIGINT NOT NULL DEFAULT 0,
   political_eligibility_game_day BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
@@ -59,8 +62,23 @@ CREATE TABLE IF NOT EXISTS auth_credentials (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+CREATE TABLE IF NOT EXISTS auth_accounts (
+  id TEXT PRIMARY KEY,
+  house_id TEXT NOT NULL,
+  email TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  password_salt TEXT NOT NULL,
+  password_iterations INTEGER NOT NULL DEFAULT 100000,
+  email_verified_at TIMESTAMPTZ,
+  mfa_secret TEXT,
+  mfa_enabled BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
 CREATE TABLE IF NOT EXISTS auth_sessions (
   id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
   human_id TEXT NOT NULL REFERENCES humans(id),
   token_hash TEXT NOT NULL UNIQUE,
   expires_at TIMESTAMPTZ NOT NULL,
@@ -68,6 +86,7 @@ CREATE TABLE IF NOT EXISTS auth_sessions (
   revoked_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS auth_sessions_token_idx ON auth_sessions(token_hash, expires_at);
+CREATE INDEX IF NOT EXISTS auth_sessions_account_idx ON auth_sessions(account_id, revoked_at, expires_at);
 
 CREATE TABLE IF NOT EXISTS auth_login_attempts (
   email TEXT PRIMARY KEY,
@@ -79,6 +98,7 @@ CREATE INDEX IF NOT EXISTS auth_login_block_idx ON auth_login_attempts(blocked_u
 
 CREATE TABLE IF NOT EXISTS auth_action_tokens (
   id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL,
   human_id TEXT NOT NULL REFERENCES humans(id),
   token_hash TEXT NOT NULL UNIQUE,
   action TEXT NOT NULL CHECK (action IN ('verify_email','reset_password')),
@@ -106,21 +126,101 @@ CREATE INDEX IF NOT EXISTS auth_email_deliveries_recipient_idx ON auth_email_del
 
 CREATE TABLE IF NOT EXISTS houses (
   id TEXT PRIMARY KEY,
+  account_id TEXT NOT NULL UNIQUE,
   email TEXT NOT NULL UNIQUE,
   house_name TEXT NOT NULL,
   motto TEXT,
   founder_human_id TEXT REFERENCES humans(id),
+  current_human_id TEXT REFERENCES humans(id),
   legacy_points BIGINT NOT NULL DEFAULT 0,
+  dynasty_legacy BIGINT NOT NULL DEFAULT 0,
+  succession_transition_until_game_day BIGINT NOT NULL DEFAULT 0,
+  generation INTEGER NOT NULL DEFAULT 1,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','SUSPENDED','CLOSED')),
   total_wealth_generated NUMERIC(20,2) NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_houses_email ON houses(email);
+CREATE INDEX IF NOT EXISTS humans_house_idx ON humans(house_id, life_status, created_at);
+CREATE UNIQUE INDEX IF NOT EXISTS humans_one_active_per_house_idx ON humans(house_id) WHERE life_status = 'active';
+CREATE INDEX IF NOT EXISTS humans_pending_activation_idx ON humans (activation_game_day, house_id) WHERE life_status = 'pending';
+CREATE UNIQUE INDEX IF NOT EXISTS houses_one_current_human_idx ON houses(current_human_id) WHERE current_human_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS houses_succession_transition_idx ON houses(succession_transition_until_game_day) WHERE succession_transition_until_game_day > 0;
+
+CREATE OR REPLACE FUNCTION earth_house_in_succession_transition(p_house_id TEXT, p_game_day BIGINT)
+RETURNS BOOLEAN LANGUAGE SQL STABLE AS $$
+  SELECT COALESCE((SELECT succession_transition_until_game_day > p_game_day FROM houses WHERE id = p_house_id), false);
+$$;
+
+ALTER TABLE humans DROP CONSTRAINT IF EXISTS humans_house_fk;
+ALTER TABLE humans ADD CONSTRAINT humans_house_fk FOREIGN KEY (house_id) REFERENCES houses(id);
+ALTER TABLE auth_accounts ADD CONSTRAINT auth_accounts_house_fk FOREIGN KEY (house_id) REFERENCES houses(id);
+ALTER TABLE auth_sessions ADD CONSTRAINT auth_sessions_account_fk FOREIGN KEY (account_id) REFERENCES auth_accounts(id);
+ALTER TABLE auth_action_tokens ADD CONSTRAINT auth_action_tokens_account_fk FOREIGN KEY (account_id) REFERENCES auth_accounts(id);
+
+CREATE OR REPLACE FUNCTION earth_validate_house_incumbent()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE v_current_human_id TEXT;
+BEGIN
+  IF NEW.life_status = 'active' THEN
+    SELECT current_human_id INTO v_current_human_id FROM houses WHERE id = NEW.house_id FOR UPDATE;
+    IF v_current_human_id IS NOT NULL AND v_current_human_id <> NEW.id THEN
+      RAISE EXCEPTION 'House % already has active Human %', NEW.house_id, v_current_human_id;
+    END IF;
+    UPDATE houses SET current_human_id = NEW.id WHERE id = NEW.house_id;
+  ELSIF TG_OP = 'UPDATE' AND OLD.life_status = 'active' AND NEW.life_status <> 'active' THEN
+    UPDATE houses SET current_human_id = NULL WHERE id = NEW.house_id AND current_human_id = NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS humans_house_incumbent_trigger ON humans;
+CREATE TRIGGER humans_house_incumbent_trigger
+  AFTER INSERT OR UPDATE OF house_id, life_status ON humans
+  FOR EACH ROW EXECUTE FUNCTION earth_validate_house_incumbent();
+
+CREATE OR REPLACE FUNCTION earth_validate_human_death_state()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF OLD.mortality_state = 'ACTIVE' AND NEW.mortality_state NOT IN ('ACTIVE', 'DEATH_CONFIRMED') THEN
+    RAISE EXCEPTION 'Human % must be death-confirmed before becoming deceased', NEW.id;
+  END IF;
+  IF OLD.mortality_state = 'DEATH_CONFIRMED' AND NEW.mortality_state NOT IN ('DEATH_CONFIRMED', 'DECEASED') THEN
+    RAISE EXCEPTION 'Human % has an invalid death-state transition', NEW.id;
+  END IF;
+  IF NEW.mortality_state = 'DECEASED' AND NEW.life_status <> 'deceased' THEN
+    RAISE EXCEPTION 'Deceased Human % must have life_status deceased', NEW.id;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS humans_death_state_trigger ON humans;
+CREATE TRIGGER humans_death_state_trigger
+  BEFORE UPDATE OF mortality_state, life_status ON humans
+  FOR EACH ROW EXECUTE FUNCTION earth_validate_human_death_state();
+
+CREATE OR REPLACE FUNCTION earth_close_human(p_human_id TEXT)
+RETURNS VOID LANGUAGE plpgsql AS $$
+BEGIN
+  UPDATE humans
+  SET account_status = 'closed', deleted_at = COALESCE(deleted_at, NOW())
+  WHERE id = p_human_id;
+  IF NOT FOUND THEN
+    RAISE EXCEPTION 'Human % not found', p_human_id;
+  END IF;
+  UPDATE owner_registry
+  SET status = 'closed', updated_at = NOW()
+  WHERE source_id = p_human_id;
+END;
+$$;
 
 CREATE TABLE IF NOT EXISTS house_lineage_records (
   id TEXT PRIMARY KEY,
   house_id TEXT NOT NULL REFERENCES houses(id) ON DELETE CASCADE,
   human_id TEXT REFERENCES humans(id),
   predecessor_human_id TEXT REFERENCES humans(id),
+  successor_human_id TEXT REFERENCES humans(id),
   generation INTEGER NOT NULL,
   name TEXT NOT NULL,
   title TEXT NOT NULL DEFAULT 'House Scion',
@@ -137,6 +237,8 @@ CREATE TABLE IF NOT EXISTS house_lineage_records (
 );
 CREATE INDEX IF NOT EXISTS idx_house_lineage_house ON house_lineage_records(house_id, generation ASC);
 CREATE INDEX IF NOT EXISTS idx_house_lineage_human ON house_lineage_records(human_id);
+CREATE INDEX IF NOT EXISTS idx_house_lineage_successor ON house_lineage_records(successor_human_id);
+CREATE UNIQUE INDEX IF NOT EXISTS house_lineage_records_house_generation_idx ON house_lineage_records(house_id, generation);
 
 CREATE TABLE IF NOT EXISTS house_perks (
   id TEXT PRIMARY KEY,
@@ -162,14 +264,50 @@ CREATE TABLE IF NOT EXISTS house_heirlooms (
   acquired_game_day BIGINT NOT NULL DEFAULT 0,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS house_heirlooms_equipped_human_idx ON house_heirlooms(equipped_by_human_id) WHERE equipped_by_human_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS succession_plans (
   human_id TEXT PRIMARY KEY REFERENCES humans(id),
   successor_name TEXT NOT NULL,
-  registered_game_day BIGINT NOT NULL,
-  estate_period_days INTEGER NOT NULL DEFAULT 30,
-  successor_human_id TEXT REFERENCES humans(id)
+  registered_game_day BIGINT NOT NULL
 );
+
+CREATE TABLE IF NOT EXISTS house_succession_plans (
+  house_id TEXT PRIMARY KEY REFERENCES houses(id) ON DELETE CASCADE,
+  successor_name TEXT NOT NULL CHECK (length(btrim(successor_name)) > 0),
+  successor_profile JSONB NOT NULL DEFAULT '{}'::JSONB,
+  registered_game_day BIGINT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE','USED','CANCELLED')),
+  used_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS house_succession_plans_status_idx ON house_succession_plans(status, registered_game_day);
+CREATE OR REPLACE FUNCTION earth_house_succession_name(p_house_id TEXT)
+RETURNS TEXT LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT AS $$
+  SELECT successor_name FROM house_succession_plans WHERE house_id = p_house_id AND status = 'ACTIVE';
+$$;
+
+CREATE TABLE IF NOT EXISTS succession_events (
+  id TEXT PRIMARY KEY,
+  house_id TEXT NOT NULL REFERENCES houses(id),
+  predecessor_human_id TEXT NOT NULL REFERENCES humans(id),
+  successor_human_id TEXT NOT NULL REFERENCES humans(id),
+  death_game_day BIGINT NOT NULL,
+  effective_game_day BIGINT NOT NULL,
+  reason TEXT NOT NULL,
+  predecessor_age INTEGER NOT NULL,
+  predecessor_standing INTEGER NOT NULL,
+  predecessor_legacy INTEGER NOT NULL,
+  house_legacy_before BIGINT NOT NULL,
+  house_legacy_after BIGINT,
+  rule_version TEXT,
+  status TEXT NOT NULL DEFAULT 'PREPARED' CHECK (status IN ('PREPARED', 'COMPLETED', 'FAILED')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  completed_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS succession_events_house_idx ON succession_events(house_id, death_game_day DESC);
+CREATE INDEX IF NOT EXISTS succession_events_status_idx ON succession_events(status, effective_game_day);
 
 CREATE TABLE IF NOT EXISTS life_events (
   id TEXT PRIMARY KEY,
@@ -188,8 +326,13 @@ CREATE TABLE IF NOT EXISTS deceased_profiles (
   death_game_day BIGINT NOT NULL,
   final_standing INTEGER NOT NULL,
   final_legacy INTEGER NOT NULL,
+  final_age_years INTEGER,
   successor_name TEXT,
   birth_game_day BIGINT,
+  corporation_id TEXT,
+  city_id TEXT,
+  major_titles JSONB NOT NULL DEFAULT '[]'::jsonb,
+  achievements JSONB NOT NULL DEFAULT '[]'::jsonb,
   cause_of_death TEXT,
   epitaph TEXT,
   lifetime_dividends NUMERIC(20,2) NOT NULL DEFAULT 0,
@@ -234,6 +377,7 @@ CREATE TABLE IF NOT EXISTS world_state (
   living_cost_index NUMERIC(10,4) NOT NULL DEFAULT 1.0,
   essential_services_index NUMERIC(10,4) NOT NULL DEFAULT 0.68,
   genesis_at TIMESTAMPTZ NOT NULL DEFAULT '2026-01-01T00:00:00Z',
+  world_seed TEXT NOT NULL DEFAULT 'EARTH-WORLD-V2',
   simulated_day_offset BIGINT NOT NULL DEFAULT 0,
   clock_mode TEXT NOT NULL DEFAULT 'realtime' CHECK (clock_mode IN ('realtime', 'manual', 'paused')),
   manual_total_game_minutes BIGINT NOT NULL DEFAULT 0 CHECK (manual_total_game_minutes >= 0),
@@ -284,7 +428,7 @@ CREATE SEQUENCE IF NOT EXISTS owner_registry_economic_id_seq
 
 CREATE TABLE IF NOT EXISTS owner_registry (
   id TEXT PRIMARY KEY,
-  owner_type TEXT NOT NULL CHECK (owner_type IN ('human','city','corporation','community','system','legacy')),
+  owner_type TEXT NOT NULL CHECK (owner_type IN ('human','house','city','corporation','community','system','legacy')),
   source_id TEXT NOT NULL UNIQUE,
   economic_id BIGINT NOT NULL DEFAULT nextval('owner_registry_economic_id_seq'),
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','closed','archived')),
@@ -367,6 +511,11 @@ ON CONFLICT (id) DO NOTHING;
 INSERT INTO owner_registry (id, owner_type, source_id)
 SELECT id, 'human', id FROM humans
 ON CONFLICT (id) DO NOTHING;
+INSERT INTO owner_registry (id, owner_type, source_id, status)
+SELECT h.id, 'house', h.id,
+       CASE WHEN h.status = 'ACTIVE' THEN 'active' ELSE 'closed' END
+FROM houses h
+ON CONFLICT (id) DO UPDATE SET owner_type = 'house', status = EXCLUDED.status, updated_at = CURRENT_TIMESTAMP;
 
 CREATE TABLE IF NOT EXISTS account_balances (
   account_id TEXT PRIMARY KEY,
@@ -644,6 +793,19 @@ CREATE INDEX IF NOT EXISTS economic_accounts_shard_lookup_idx
   ON economic_accounts (settlement_shard, asset_id, account_type, status)
   WHERE settlement_shard IS NOT NULL;
 
+INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, status, legacy_account_id)
+SELECT owner.economic_id, asset.id, CASE WHEN asset.id = 1 THEN 1 ELSE 2 END,
+       TRUE, 'active', 'house:' || owner.id || ':' || asset.code
+FROM owner_registry owner
+JOIN economic_assets asset ON TRUE
+WHERE owner.owner_type = 'house'
+  AND NOT EXISTS (
+    SELECT 1 FROM economic_accounts existing
+    WHERE existing.owner_economic_id = owner.economic_id
+      AND existing.asset_id = asset.id
+      AND existing.account_type = CASE WHEN asset.id = 1 THEN 1 ELSE 2 END
+  );
+
 INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, legacy_account_id)
 SELECT o.economic_id, 1, t.id, FALSE,
        CASE t.id WHEN 7 THEN 'monetary-issuance' ELSE 'monetary-retirement' END
@@ -883,6 +1045,8 @@ CREATE INDEX IF NOT EXISTS market_orders_reserved_idx ON market_orders(human_id,
 CREATE INDEX IF NOT EXISTS market_orders_instrument_batch_idx ON market_orders(instrument_id, eligible_batch_id, status, limit_price_units, sequence_no);
 CREATE INDEX IF NOT EXISTS market_orders_owner_idx ON market_orders(owner_economic_id, status);
 CREATE UNIQUE INDEX IF NOT EXISTS market_orders_human_correlation_idx ON market_orders(human_id, correlation_id) WHERE correlation_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS market_orders_owner_correlation_idx ON market_orders(owner_economic_id, correlation_id) WHERE owner_economic_id IS NOT NULL AND correlation_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS market_orders_house_control_idx ON market_orders(owner_economic_id, status, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS daily_settlement_profiles (
   owner_id TEXT PRIMARY KEY,
@@ -995,6 +1159,8 @@ CREATE TABLE IF NOT EXISTS buildings (
   id TEXT PRIMARY KEY,
   city_id TEXT REFERENCES cities(id),
   owner_id TEXT REFERENCES humans(id),
+  owner_economic_id BIGINT REFERENCES owner_registry(economic_id),
+  managed_by_human_id TEXT REFERENCES humans(id),
   building_type TEXT NOT NULL,
   name TEXT NOT NULL,
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier >= 1),
@@ -1045,8 +1211,38 @@ ALTER TABLE buildings ADD CONSTRAINT buildings_ownership_scope_check CHECK (
   (ownership_class = 'private' AND owner_id IS NOT NULL)
   OR (ownership_class = 'civic' AND city_id IS NOT NULL)
 );
+ALTER TABLE buildings ADD CONSTRAINT buildings_private_house_owner_ck CHECK (ownership_class <> 'private' OR owner_economic_id IS NOT NULL);
+CREATE INDEX IF NOT EXISTS buildings_owner_economic_idx ON buildings(owner_economic_id, status);
+CREATE INDEX IF NOT EXISTS buildings_managed_by_human_idx ON buildings(managed_by_human_id, status);
 CREATE INDEX IF NOT EXISTS idx_buildings_city ON buildings(city_id, status);
 CREATE INDEX IF NOT EXISTS idx_buildings_owner ON buildings(owner_id, status);
+
+CREATE OR REPLACE FUNCTION earth_sync_private_building_house_owner()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+  IF NEW.ownership_class = 'private' AND NEW.owner_id IS NOT NULL THEN
+    NEW.managed_by_human_id := NEW.owner_id;
+    SELECT house_owner.economic_id INTO NEW.owner_economic_id
+    FROM humans human
+    JOIN owner_registry house_owner
+      ON house_owner.id = human.house_id
+     AND house_owner.owner_type = 'house'
+     AND house_owner.status = 'active'
+    WHERE human.id = NEW.owner_id;
+    IF NEW.owner_economic_id IS NULL THEN
+      RAISE EXCEPTION 'Private building % requires a Human belonging to an active House', NEW.id;
+    END IF;
+  ELSIF NEW.ownership_class <> 'private' THEN
+    NEW.owner_economic_id := NULL;
+    NEW.managed_by_human_id := NULL;
+  END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS buildings_private_house_owner_trigger ON buildings;
+CREATE TRIGGER buildings_private_house_owner_trigger
+  BEFORE INSERT OR UPDATE OF owner_id, ownership_class ON buildings
+  FOR EACH ROW EXECUTE FUNCTION earth_sync_private_building_house_owner();
 
 CREATE TABLE IF NOT EXISTS building_settlement_journals (
   id UUID PRIMARY KEY,
@@ -1314,6 +1510,43 @@ CREATE TABLE IF NOT EXISTS memberships (
   joined_game_day BIGINT NOT NULL
 );
 
+CREATE TABLE IF NOT EXISTS house_affiliations (
+  house_id TEXT PRIMARY KEY REFERENCES houses(id) ON DELETE CASCADE,
+  city_id TEXT REFERENCES cities(id),
+  corporation_id TEXT REFERENCES corporations(id),
+  joined_game_day BIGINT NOT NULL,
+  rank INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (status IN ('ACTIVE', 'INACTIVE')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS house_affiliations_city_idx ON house_affiliations(city_id, status);
+CREATE INDEX IF NOT EXISTS house_affiliations_corporation_idx ON house_affiliations(corporation_id, status);
+
+CREATE OR REPLACE FUNCTION earth_sync_house_affiliation()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+DECLARE v_house_id TEXT;
+BEGIN
+  IF TG_OP IN ('INSERT', 'UPDATE') THEN
+    SELECT house_id INTO v_house_id FROM humans WHERE id = NEW.human_id;
+    IF v_house_id IS NOT NULL THEN
+      INSERT INTO house_affiliations (house_id, city_id, corporation_id, joined_game_day, status)
+      VALUES (v_house_id, NEW.city_id, NEW.corporation_id, NEW.joined_game_day, 'ACTIVE')
+      ON CONFLICT (house_id) DO UPDATE SET city_id = EXCLUDED.city_id, corporation_id = EXCLUDED.corporation_id, status = 'ACTIVE', updated_at = CURRENT_TIMESTAMP;
+    END IF;
+  ELSE
+    SELECT house_id INTO v_house_id FROM humans WHERE id = OLD.human_id;
+    IF v_house_id IS NOT NULL AND NOT EXISTS (SELECT 1 FROM memberships m JOIN humans h ON h.id = m.human_id WHERE h.house_id = v_house_id AND (m.city_id IS NOT NULL OR m.corporation_id IS NOT NULL)) THEN
+      UPDATE house_affiliations SET status = 'INACTIVE', updated_at = CURRENT_TIMESTAMP WHERE house_id = v_house_id;
+    END IF;
+  END IF;
+  IF TG_OP = 'DELETE' THEN RETURN OLD; END IF;
+  RETURN NEW;
+END;
+$$;
+DROP TRIGGER IF EXISTS memberships_house_affiliation_trigger ON memberships;
+CREATE TRIGGER memberships_house_affiliation_trigger AFTER INSERT OR UPDATE OF city_id, corporation_id, joined_game_day OR DELETE ON memberships FOR EACH ROW EXECUTE FUNCTION earth_sync_house_affiliation();
+
 CREATE TABLE IF NOT EXISTS membership_events (
   id TEXT PRIMARY KEY,
   human_id TEXT NOT NULL REFERENCES humans(id),
@@ -1510,7 +1743,7 @@ CREATE INDEX IF NOT EXISTS bank_deposits_maturity_idx ON bank_deposits(status, m
 CREATE TABLE IF NOT EXISTS bank_loans (
   id TEXT PRIMARY KEY,
   borrower_economic_id BIGINT NOT NULL REFERENCES owner_registry(economic_id),
-  borrower_type TEXT NOT NULL CHECK (borrower_type IN ('human', 'city', 'corporation')),
+  borrower_type TEXT NOT NULL CHECK (borrower_type IN ('human', 'house', 'city', 'corporation')),
   original_principal_units BIGINT NOT NULL CHECK (original_principal_units > 0),
   outstanding_principal_units BIGINT NOT NULL CHECK (outstanding_principal_units >= 0),
   accrued_interest_units BIGINT NOT NULL DEFAULT 0 CHECK (accrued_interest_units >= 0),
@@ -1669,12 +1902,14 @@ CREATE TABLE IF NOT EXISTS communities (
 
 CREATE TABLE IF NOT EXISTS community_members (
   community_id TEXT NOT NULL REFERENCES communities(id),
+  house_id TEXT NOT NULL REFERENCES houses(id),
   human_id TEXT NOT NULL REFERENCES humans(id),
   role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('founder','admin','member')),
   joined_game_day BIGINT NOT NULL,
-  PRIMARY KEY (community_id, human_id)
+  PRIMARY KEY (community_id, house_id)
 );
-CREATE INDEX IF NOT EXISTS community_members_human_idx ON community_members(human_id);
+CREATE INDEX IF NOT EXISTS community_members_house_idx ON community_members(house_id, community_id);
+CREATE INDEX IF NOT EXISTS community_members_human_idx ON community_members(human_id, community_id);
 
 CREATE TABLE IF NOT EXISTS community_membership_requests (
   id TEXT PRIMARY KEY,
@@ -1787,10 +2022,26 @@ CREATE TABLE IF NOT EXISTS proposal_challenge_authorities (
   institution_id TEXT NOT NULL REFERENCES institutions(id) ON DELETE CASCADE,
   human_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
   role_code TEXT NOT NULL CHECK (role_code IN ('constitutional_judge','judicial_delegate','ouc_court')),
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','revoked','ENDED_BY_DEATH')),
   granted_game_day BIGINT NOT NULL DEFAULT 1,
+  revoked_effective_game_day BIGINT,
   PRIMARY KEY (institution_id, human_id, role_code)
 );
+CREATE INDEX IF NOT EXISTS proposal_challenge_authorities_active_idx ON proposal_challenge_authorities(institution_id, role_code, status);
+
+CREATE TABLE IF NOT EXISTS governance_vacancies (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  institution_id TEXT NOT NULL REFERENCES institutions(id),
+  office_code TEXT NOT NULL,
+  former_human_id TEXT NOT NULL REFERENCES humans(id),
+  vacancy_game_day BIGINT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'OPEN' CHECK (status IN ('OPEN','FILLED','CANCELLED')),
+  reason TEXT NOT NULL DEFAULT 'ENDED_BY_DEATH',
+  replacement_human_id TEXT REFERENCES humans(id),
+  filled_game_day BIGINT,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS governance_vacancies_open_idx ON governance_vacancies(institution_id, status, vacancy_game_day);
 
 CREATE TABLE IF NOT EXISTS proposal_vote_totals (
   proposal_id TEXT PRIMARY KEY REFERENCES proposals(id) ON DELETE CASCADE,
@@ -1806,12 +2057,14 @@ CREATE TABLE IF NOT EXISTS proposal_vote_totals (
 
 CREATE TABLE IF NOT EXISTS ballots (
   proposal_id TEXT NOT NULL REFERENCES proposals(id),
+  house_id TEXT NOT NULL REFERENCES houses(id),
   human_id TEXT NOT NULL REFERENCES humans(id),
   choice TEXT NOT NULL CHECK (choice IN ('support','oppose','abstain')),
   weight NUMERIC(10,3) NOT NULL DEFAULT 1,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  PRIMARY KEY (proposal_id, human_id)
+  PRIMARY KEY (proposal_id, house_id)
 );
+CREATE INDEX IF NOT EXISTS ballots_human_audit_idx ON ballots(human_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS governance_rules (
   id TEXT PRIMARY KEY,
@@ -2764,6 +3017,7 @@ ALTER TABLE technologies ADD COLUMN IF NOT EXISTS cost_credits NUMERIC(20,2) NOT
 ALTER TABLE technologies ADD COLUMN IF NOT EXISTS status TEXT NOT NULL DEFAULT 'active';
 ALTER TABLE world_state ADD COLUMN IF NOT EXISTS last_scheduler_at TIMESTAMPTZ;
 ALTER TABLE world_state ADD COLUMN IF NOT EXISTS daily_settlement_mode TEXT NOT NULL DEFAULT 'profile_resources';
+ALTER TABLE world_state ADD COLUMN IF NOT EXISTS world_seed TEXT NOT NULL DEFAULT 'EARTH-WORLD-V2';
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS commodity_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS equity_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;
 ALTER TABLE net_worth_snapshots ADD COLUMN IF NOT EXISTS real_estate_valuation NUMERIC(20,2) NOT NULL DEFAULT 0;

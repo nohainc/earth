@@ -76,8 +76,8 @@ export async function listCommodityDerivativesAndOHLC(
               d.status, d.created_at
          FROM derivative_obligations d JOIN market_instruments i ON i.id = d.instrument_id
         WHERE i.base_asset_id = $1
-          AND (d.long_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $2)
-            OR d.short_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $2))
+          AND (d.long_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $2), $2))
+            OR d.short_owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = COALESCE((SELECT house_id FROM humans WHERE id = $2), $2)))
         ORDER BY expiry_game_day ASC, d.created_at DESC LIMIT 50`, [assetId, humanId],
     ),
   ]);

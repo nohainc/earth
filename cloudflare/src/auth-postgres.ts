@@ -11,7 +11,7 @@ import { enqueueOutbox } from './outbox-postgres.ts';
 
 export async function registerIdentity(repository: PostgresRepository, input: { email: string; personName: string; houseSurname: string; password: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const existing = await tx.query('SELECT human_id FROM auth_credentials WHERE email = $1', [input.email]);
+    const existing = await tx.query('SELECT id FROM auth_accounts WHERE email = $1', [input.email]);
     if (existing.rows[0]) throw new Error('Email is already registered');
     const world = await tx.query<{ game_day: number; living_cost_index: string }>("SELECT game_day, living_cost_index FROM world_state WHERE id = 'WORLD'");
     const referencePrice = await tx.query<{ reference_price: string }>("SELECT COALESCE(AVG(price), 50) AS reference_price FROM market_prices WHERE product IN ('components', 'energy')");
@@ -29,7 +29,10 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     // The humans INSERT fires daily profile provisioning. Register the
     // canonical owner before that trigger creates the settlement profile.
     await tx.query("INSERT INTO owner_registry (id, owner_type, source_id) VALUES ($1, 'human', $1)", [humanId]);
-    await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,political_eligibility_game_day) VALUES ($1,$2,$3,31,0,0,$4)', [humanId, accountId, displayName, worldDay + 30]);
+    await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email, account_id = 'deleted-' || id || '-' || account_id WHERE email = $1", [input.email]);
+    await tx.query("INSERT INTO houses (id,account_id,email,house_name,motto,founder_human_id,legacy_points,dynasty_legacy,generation,status) VALUES ($1,$2,$3,$4,$5,NULL,0,0,1,'ACTIVE')", [houseId, input.email, input.email, houseName, 'From the Red Dust We Build Eternity']);
+    await tx.query('INSERT INTO humans (id,account_id,house_id,display_name,age_years,standing,legacy,political_eligibility_game_day) VALUES ($1,$2,$3,$4,31,0,0,$5)', [humanId, accountId, houseId, displayName, worldDay + 30]);
+    await tx.query('INSERT INTO auth_accounts (id,house_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5,$6)', [`AUTH-${houseId}`, houseId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query(
       `INSERT INTO buildings (
          id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
@@ -52,8 +55,7 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO auth_credentials (human_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5)', [humanId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query("INSERT INTO account_balances (account_id,owner_id,balance,currency) VALUES ($1,$2,$3,'CREDIT')", [accountId, humanId, starter.credits]);
     for (const [resource, amount] of Object.entries(starter.resources)) await tx.query('INSERT INTO resource_balances (owner_id,resource,amount) VALUES ($1,$2,$3)', [humanId, resource, amount]);
-    await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email WHERE email = $1", [input.email]);
-    await tx.query('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,0,0)', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', humanId]);
+    await tx.query('UPDATE houses SET founder_human_id = $1, current_human_id = $1 WHERE id = $2', [humanId, houseId]);
     await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
     await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
@@ -85,7 +87,7 @@ export async function updateDisplayName(repository: PostgresRepository, input: {
 export async function loginIdentity(repository: PostgresRepository, input: { email: string; password: string; otp: string; validTotp: (secret: string, code: string) => Promise<boolean> }): Promise<Record<string, unknown>> {
   const attempt = (await repository.query<{ window_started_at: string; attempt_count: number; blocked_until: string | null }>('SELECT window_started_at, attempt_count, blocked_until FROM auth_login_attempts WHERE email = $1', [input.email])).rows[0];
   if (attempt?.blocked_until && new Date(attempt.blocked_until).getTime() > Date.now()) throw new Error('Too many login attempts. Try again later.');
-  const credential = (await repository.query<{ human_id: string; password_hash: string; password_salt: string; password_iterations: number; email_verified_at: string | null; mfa_enabled: boolean; mfa_secret: string | null; life_status: string }>("SELECT auth_credentials.*, humans.life_status FROM auth_credentials JOIN humans ON humans.id = auth_credentials.human_id WHERE auth_credentials.email = $1 AND humans.account_status = 'active'", [input.email])).rows[0];
+    const credential = (await repository.query<{ account_id: string; house_id: string; password_hash: string; password_salt: string; password_iterations: number; email_verified_at: string | null; mfa_enabled: boolean; mfa_secret: string | null; life_status: string }>("SELECT auth_accounts.id AS account_id, auth_accounts.house_id, auth_accounts.*, humans.life_status FROM auth_accounts JOIN houses ON houses.id = auth_accounts.house_id JOIN humans ON humans.id = houses.current_human_id WHERE auth_accounts.email = $1 AND houses.status = 'ACTIVE' AND humans.account_status = 'active'", [input.email])).rows[0];
   if (!credential) throw new Error('Invalid email or password');
   if (!credential.email_verified_at) throw new Error('Verify your email before signing in');
   const matches = Boolean(input.password.length && await derivePassword(input.password, base64ToBytes(credential.password_salt), Number(credential.password_iterations)) === credential.password_hash);
@@ -100,20 +102,22 @@ export async function loginIdentity(repository: PostgresRepository, input: { ema
   await repository.query('DELETE FROM auth_login_attempts WHERE email = $1', [input.email]);
   const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
   const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
-  await repository.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), credential.human_id, await digest(token), expires]);
-  const human = (await repository.query<{ id: string; display_name: string; life_status: string }>('SELECT id, display_name, life_status FROM humans WHERE id = $1', [credential.human_id])).rows[0];
+  await repository.query('INSERT INTO auth_sessions (id,account_id,human_id,token_hash,expires_at) SELECT $1,$2,h.current_human_id,$3,$4 FROM houses h WHERE h.id = $5', [crypto.randomUUID(), credential.account_id, await digest(token), expires, credential.house_id]);
+  const human = (await repository.query<{ id: string; house_id: string; display_name: string; life_status: string }>('SELECT id, house_id, display_name, life_status FROM humans WHERE id = (SELECT current_human_id FROM houses WHERE id = $1)', [credential.house_id])).rows[0];
   return { ok: true, human, lifeStatus: human?.life_status ?? credential.life_status, expiresAt: expires, token, maxAge: SESSION_DAYS * 86400 };
 }
 
 export async function rebornIdentity(repository: PostgresRepository, input: { email: string; displayName: string; dynastyName?: string; startingCityId?: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
+    const cred = (await tx.query<{ account_id: string; house_id: string; human_id: string; email: string }>(`SELECT a.id AS account_id, a.house_id, a.email,
+      COALESCE(h.current_human_id, (SELECT l.human_id FROM house_lineage_records l WHERE l.house_id = a.house_id ORDER BY l.generation DESC, l.created_at DESC LIMIT 1)) AS human_id
+      FROM auth_accounts a JOIN houses h ON h.id = a.house_id WHERE a.email = $1`, [input.email])).rows[0];
     if (!cred) throw new Error('Account not found');
     const prevHuman = (await tx.query<{ id: string; display_name: string; legacy: number; standing: number; life_status: string }>('SELECT id, display_name, legacy, standing, life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
     if (!prevHuman || !['deceased', 'estate'].includes(prevHuman.life_status)) {
       throw new Error('Civic Rebirth is available only after mortality or during an estate period');
     }
-    const existingHouse = (await tx.query<{ house_name: string }>('SELECT house_name FROM houses WHERE email = $1', [input.email])).rows[0];
+    const existingHouse = (await tx.query<{ id: string; house_name: string }>('SELECT id, house_name FROM houses WHERE account_id = $1 OR email = $1', [input.email])).rows[0];
 
     const world = await tx.query<{ game_day: number; living_cost_index: string }>("SELECT game_day, living_cost_index FROM world_state WHERE id = 'WORLD'");
     const worldDay = Number(world.rows[0]?.game_day ?? 184);
@@ -131,7 +135,8 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     // The humans INSERT fires daily profile provisioning, so the canonical
     // owner must exist before the trigger creates that profile.
     await tx.query("INSERT INTO owner_registry (id, owner_type, source_id) VALUES ($1, 'human', $1)", [newHumanId]);
-    await tx.query('INSERT INTO humans (id,account_id,display_name,age_years,standing,legacy,life_status) VALUES ($1,$2,$3,20,500,$4,\'active\')', [newHumanId, newAccountId, input.displayName, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
+    if (!existingHouse) throw new Error('House principal not found');
+    await tx.query('INSERT INTO humans (id,account_id,house_id,display_name,age_years,standing,legacy,life_status) VALUES ($1,$2,$3,$4,20,500,$5,\'active\')', [newHumanId, newAccountId, existingHouse.id, input.displayName, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
     await tx.query(
       `INSERT INTO buildings (
          id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
@@ -171,29 +176,28 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     }
 
     // 4. Update auth credentials to point to the new human
-    await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [newHumanId, input.email]);
-    await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
-
     // 5. Inscribe into house lineage
     const houseName = input.houseName?.trim() || input.dynastyName?.trim() || existingHouse?.house_name || 'Founding House';
 
     // Keep the active Family & House model updated so every new generation is visible in-game.
-    let houseRow = (await tx.query<{ id: string }>('SELECT id FROM houses WHERE email = $1 FOR UPDATE', [input.email])).rows[0];
+    let houseRow = (await tx.query<{ id: string }>('SELECT id FROM houses WHERE account_id = $1 OR email = $1 FOR UPDATE', [input.email])).rows[0];
     if (!houseRow) {
       const houseId = `HOUSE-${newHumanId.slice(2)}`;
-      houseRow = (await tx.query<{ id: string }>('INSERT INTO houses (id,email,house_name,motto,founder_human_id,legacy_points,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id', [houseId, input.email, houseName, 'From the Red Dust We Build Eternity', newHumanId, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), 0])).rows[0];
+      houseRow = (await tx.query<{ id: string }>('INSERT INTO houses (id,account_id,email,house_name,motto,founder_human_id,legacy_points,dynasty_legacy,generation,status,total_wealth_generated) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id', [houseId, input.email, input.email, houseName, 'From the Red Dust We Build Eternity', newHumanId, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), 1, 'ACTIVE', 0])).rows[0];
     }
     const nextGeneration = (await tx.query<{ generation: number }>('SELECT COALESCE(MAX(generation), 0) + 1 AS generation FROM house_lineage_records WHERE house_id = $1', [houseRow.id])).rows[0]?.generation ?? 1;
     await tx.query('UPDATE house_lineage_records SET is_incumbent = false WHERE house_id = $1', [houseRow.id]);
     await tx.query('INSERT INTO house_lineage_records (id,house_id,human_id,predecessor_human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,true,$9) ON CONFLICT (id) DO NOTHING', [crypto.randomUUID(), houseRow.id, newHumanId, prevHuman?.id ?? null, nextGeneration, input.displayName, 'House Successor', worldDay, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
     await tx.query('UPDATE houses SET legacy_points = legacy_points + $1 WHERE id = $2', [Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25), houseRow.id]);
+    await tx.query('UPDATE houses SET current_human_id = $1, generation = $2 WHERE id = $3', [newHumanId, nextGeneration, houseRow.id]);
     // A new adult starts with a fresh estate, but still carries the family's
     // equipped heirlooms and their active house benefits.
     await tx.query('UPDATE house_heirlooms SET equipped_by_human_id = $1 WHERE equipped_by_human_id = $2', [newHumanId, prevHuman?.id ?? '']);
 
     const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
     const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
-    await tx.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), newHumanId, await digest(token), expires]);
+    await tx.query('UPDATE houses SET current_human_id = $1, generation = $2 WHERE id = $3', [newHumanId, nextGeneration, houseRow.id]);
+    await tx.query('INSERT INTO auth_sessions (id,account_id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), cred.account_id, newHumanId, await digest(token), expires]);
 
     return {
       ok: true,
@@ -208,7 +212,9 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
 
 export async function claimHeirIdentity(repository: PostgresRepository, input: { email: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const cred = (await tx.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [input.email])).rows[0];
+    const cred = (await tx.query<{ account_id: string; house_id: string; human_id: string; email: string }>(`SELECT a.id AS account_id, a.house_id, a.email,
+      COALESCE(h.current_human_id, (SELECT l.human_id FROM house_lineage_records l WHERE l.house_id = a.house_id ORDER BY l.generation DESC, l.created_at DESC LIMIT 1)) AS human_id
+      FROM auth_accounts a JOIN houses h ON h.id = a.house_id WHERE a.email = $1`, [input.email])).rows[0];
     if (!cred) throw new Error('Account not found');
     const predecessor = (await tx.query<{ id: string; display_name: string; life_status: string }>('SELECT id, display_name, life_status FROM humans WHERE id = $1', [cred.human_id])).rows[0];
     if (!predecessor || !['deceased', 'estate'].includes(predecessor.life_status)) {
@@ -234,9 +240,6 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
     // attached to the deceased identity.
     await tx.query('UPDATE house_heirlooms SET equipped_by_human_id = $1 WHERE equipped_by_human_id = $2', [successor.id, cred.human_id]);
 
-    await tx.query('UPDATE auth_credentials SET human_id = $1 WHERE email = $2', [successor.id, input.email]);
-    await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [cred.human_id]);
-
     // Make succession visible in the same world timeline as mortality and
     // rebirth. This is the player-facing confirmation that the next
     // generation is now the active character, even when estate settlement
@@ -246,7 +249,8 @@ export async function claimHeirIdentity(repository: PostgresRepository, input: {
 
     const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
     const expires = new Date(Date.now() + SESSION_DAYS * 86400000).toISOString();
-    await tx.query('INSERT INTO auth_sessions (id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4)', [crypto.randomUUID(), successor.id, await digest(token), expires]);
+    await tx.query('UPDATE houses SET current_human_id = $1 WHERE id = $2', [successor.id, house.id]);
+    await tx.query('INSERT INTO auth_sessions (id,account_id,human_id,token_hash,expires_at) VALUES ($1,$2,$3,$4,$5)', [crypto.randomUUID(), cred.account_id, successor.id, await digest(token), expires]);
 
     return {
       ok: true,
@@ -267,15 +271,16 @@ export async function deleteAccount(
     // 1. Mark human as deceased
     await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [input.humanId]);
     // 2. Delete credentials
+    const account = (await tx.query<{ id: string; house_id: string }>('SELECT id, house_id FROM auth_accounts WHERE email = $1', [input.email])).rows[0];
     await tx.query('DELETE FROM auth_credentials WHERE human_id = $1', [input.humanId]);
     // 3. Delete action tokens
-    await tx.query('DELETE FROM auth_action_tokens WHERE human_id = $1', [input.humanId]);
+    await tx.query('DELETE FROM auth_action_tokens WHERE account_id = $1', [account?.id]);
     // 4. Delete active sessions
-    await tx.query('DELETE FROM auth_sessions WHERE human_id = $1', [input.humanId]);
+    await tx.query('DELETE FROM auth_sessions WHERE account_id = $1', [account?.id]);
     // 5. Clear login attempts
     await tx.query('DELETE FROM auth_login_attempts WHERE email = $1', [input.email]);
     // 6. Release house email so the email can be re-registered
-    await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email WHERE email = $1", [input.email]);
+    await tx.query("UPDATE houses SET email = 'deleted-' || id || '-' || email, account_id = 'deleted-' || id || '-' || account_id, status = 'CLOSED' WHERE email = $1", [input.email]);
     // 7. Enqueue outbox notification
     await enqueueOutbox(tx, {
       eventKey: `account-deleted:${input.humanId}`,

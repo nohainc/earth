@@ -184,6 +184,10 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
       (SELECT p.decay_multiplier FROM economic_policy_rules p WHERE p.code = b.operating_policy) AS economic_decay_multiplier,
       earth_condition_efficiency(b.condition, COALESCE(bc.condition_curve_version, 'v1')) AS condition_efficiency,
       COALESCE(cache.scoped_modifiers, '{}'::JSONB) AS technology_modifiers,
+      COALESCE(
+        (SELECT owner.id FROM owner_registry owner WHERE owner.economic_id = b.owner_economic_id),
+        (SELECT house_id FROM humans WHERE id = b.owner_id)
+      ) AS private_owner_id,
       COALESCE(cache.technology_source_breakdown, '[]'::JSONB) AS technology_source_breakdown
     FROM buildings b
     LEFT JOIN building_catalog bc ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
@@ -198,7 +202,10 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
     `SELECT o.id AS owner_id, o.economic_id::TEXT AS economic_id, a.id::TEXT AS account_id,
             a.asset_id, a.account_type, a.balance::TEXT
        FROM owner_registry o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
-      WHERE (o.id = ANY($1::TEXT[]) OR o.id = 'SYSTEM') AND a.status = 'active'`,
+      WHERE (o.id = ANY($1::TEXT[])
+          OR o.id IN (SELECT house_id FROM humans WHERE id = ANY($1::TEXT[]))
+          OR o.id = 'SYSTEM')
+        AND a.status = 'active'`,
     [ownerIds],
   );
   const accounts = new Map<string, Account>();
@@ -211,20 +218,22 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
     if (account.account_type === 1 || account.account_type === 2 || account.account_type === 3 || account.account_type === 5) byOwnerAsset.set(key(account.owner_id, account.asset_id), account);
   }
   const residents = new Map<string, Account[]>();
-  const residentRows = await tx.query<{ city_id: string; human_id: string }>(
-    `SELECT m.city_id, m.human_id FROM memberships m JOIN humans h ON h.id = m.human_id
+  const residentRows = await tx.query<{ city_id: string; human_id: string; house_id: string }>(
+    `SELECT m.city_id, m.human_id, h.house_id FROM memberships m JOIN humans h ON h.id = m.human_id
       WHERE h.life_status = 'active' AND m.city_id = ANY($1::TEXT[])`, [ownerIds]);
   const residentIds = [...new Set(residentRows.rows.map((r) => r.human_id))];
   if (residentIds.length > 0) {
     const extra = await tx.query<Account>(`SELECT o.id AS owner_id, o.economic_id::TEXT AS economic_id, a.id::TEXT AS account_id,
       a.asset_id, a.account_type, a.balance::TEXT FROM owner_registry o JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
-      WHERE o.id = ANY($1::TEXT[]) AND a.asset_id = 1 AND a.account_type IN (1,3,5) AND a.status = 'active'`, [residentIds]);
+      WHERE (o.id = ANY($1::TEXT[])
+          OR o.id IN (SELECT house_id FROM humans WHERE id = ANY($1::TEXT[])))
+        AND a.asset_id = 1 AND a.account_type IN (1,3,5) AND a.status = 'active'`, [residentIds]);
     for (const row of extra.rows) {
       byOwnerAsset.set(key(row.owner_id, row.asset_id), row);
       available.set(key(row.owner_id, row.asset_id), Number(row.balance) / SCALES[row.asset_id]);
     }
     for (const row of residentRows.rows) {
-      const account = byOwnerAsset.get(key(row.human_id, 1));
+      const account = byOwnerAsset.get(key(row.house_id, 1));
       if (account) residents.set(row.city_id, [...(residents.get(row.city_id) ?? []), account]);
     }
   }
@@ -234,7 +243,7 @@ export async function settleBuildingUpkeepAndRevenueV2(tx: PostgresRepository, d
 
   for (const building of buildings.rows) {
     const ownerClass = (building.ownership_class ?? 'private').toLowerCase();
-    const economicOwner = ownerClass === 'civic' ? building.city_id : building.owner_id;
+    const economicOwner = ownerClass === 'civic' ? building.city_id : (building.private_owner_id ?? building.owner_id);
     if (!economicOwner) continue;
     const costMultiplier = Number(building.economic_cost_multiplier ?? 1);
     const technologyModifiers = building.technology_modifiers ?? {};

@@ -1,5 +1,9 @@
-insert into humans (id, account_id, display_name, age_years, standing, legacy)
-values ('H-0044', 'account-amara', 'Amara Kline', 31, 742, 31)
+insert into houses (id, account_id, email, house_name, motto, generation, status)
+values ('HOUSE-H-0044', 'account-amara', 'amara@earth.local', 'House Kline', 'From the Red Dust We Build Eternity', 1, 'ACTIVE')
+on conflict (id) do nothing;
+
+insert into humans (id, account_id, house_id, display_name, age_years, standing, legacy)
+values ('H-0044', 'account-amara', 'HOUSE-H-0044', 'Amara Kline', 31, 742, 31)
 on conflict (id) do nothing;
 
 insert into institutions (id, kind, name) values
@@ -48,12 +52,17 @@ on conflict (business_id) do nothing;
 
 -- Local UI/API test fixtures. IDs are namespaced so this block is safe to re-run
 -- and easy to remove from a disposable local database.
-insert into humans (id, account_id, display_name, age_years, standing, legacy)
+insert into houses (id, account_id, email, house_name, motto, generation, status)
+select 'HOUSE-TEST-H-' || lpad(n::text, 3, '0'), 'test-account-' || lpad(n::text, 3, '0'), 'test-' || lpad(n::text, 3, '0') || '@earth.local', 'House Test ' || lpad(n::text, 3, '0'), 'Local UI test house', 1, 'ACTIVE'
+from generate_series(1, 10) n
+on conflict (id) do nothing;
+
+insert into humans (id, account_id, house_id, display_name, age_years, standing, legacy)
 values
-  ('TEST-H-001', 'test-account-001', 'Mira Solberg', 28, 610, 12),
-  ('TEST-H-002', 'test-account-002', 'Jonas Reed', 42, 488, 35),
-  ('TEST-H-003', 'test-account-003', 'Leila Okafor', 36, 815, 20),
-  ('TEST-H-004', 'test-account-004', 'Tomas Varga', 24, 355, 4)
+  ('TEST-H-001', 'test-account-001', 'HOUSE-TEST-H-001', 'Mira Solberg', 28, 610, 12),
+  ('TEST-H-002', 'test-account-002', 'HOUSE-TEST-H-002', 'Jonas Reed', 42, 488, 35),
+  ('TEST-H-003', 'test-account-003', 'HOUSE-TEST-H-003', 'Leila Okafor', 36, 815, 20),
+  ('TEST-H-004', 'test-account-004', 'HOUSE-TEST-H-004', 'Tomas Varga', 24, 355, 4)
 on conflict (id) do nothing;
 
 insert into institutions (id, kind, name)
@@ -96,14 +105,14 @@ values
   ('TEST-H-004', 'TEST-CORP-003', 'TEST-CITY-003', 225)
 on conflict (human_id) do nothing;
 
-insert into humans (id, account_id, display_name, age_years, standing, legacy)
+insert into humans (id, account_id, house_id, display_name, age_years, standing, legacy)
 values
-  ('TEST-H-005', 'test-account-005', 'Nia Bennett', 31, 540, 9),
-  ('TEST-H-006', 'test-account-006', 'Oskar Lind', 47, 675, 42),
-  ('TEST-H-007', 'test-account-007', 'Priya Nandakumar', 39, 730, 27),
-  ('TEST-H-008', 'test-account-008', 'Rafael Costa', 26, 402, 7),
-  ('TEST-H-009', 'test-account-009', 'Sana Ito', 33, 590, 18),
-  ('TEST-H-010', 'test-account-010', 'Elias Novak', 52, 460, 51)
+  ('TEST-H-005', 'test-account-005', 'HOUSE-TEST-H-005', 'Nia Bennett', 31, 540, 9),
+  ('TEST-H-006', 'test-account-006', 'HOUSE-TEST-H-006', 'Oskar Lind', 47, 675, 42),
+  ('TEST-H-007', 'test-account-007', 'HOUSE-TEST-H-007', 'Priya Nandakumar', 39, 730, 27),
+  ('TEST-H-008', 'test-account-008', 'HOUSE-TEST-H-008', 'Rafael Costa', 26, 402, 7),
+  ('TEST-H-009', 'test-account-009', 'HOUSE-TEST-H-009', 'Sana Ito', 33, 590, 18),
+  ('TEST-H-010', 'test-account-010', 'HOUSE-TEST-H-010', 'Elias Novak', 52, 460, 51)
 on conflict (id) do nothing;
 
 insert into institutions (id, kind, name)
@@ -185,18 +194,24 @@ values
 on conflict (id) do nothing;
 
 -- Archive and house page fixtures.
-insert into humans (id, account_id, display_name, age_years, standing, legacy, life_status, political_eligibility_game_day)
+insert into houses (id, account_id, email, house_name, motto, generation, status)
 values
-  ('TEST-H-011', 'test-account-011', 'Ada Mercer', 88, 920, 410, 'deceased', 0),
-  ('TEST-H-012', 'test-account-012', 'Bastien Okoro', 74, 780, 295, 'deceased', 0),
-  ('TEST-H-013', 'test-account-013', 'Clara Mercer', 67, 865, 340, 'deceased', 0),
-  ('TEST-H-014', 'test-account-014', 'Darius Okoro', 61, 705, 260, 'deceased', 0)
+  ('TEST-HSE-001', 'ada.mercer@earth.local', 'ada.mercer@earth.local', 'House Mercer', 'Measure twice, build for generations.', 2, 'ACTIVE'),
+  ('TEST-HSE-002', 'bastien.okoro@earth.local', 'bastien.okoro@earth.local', 'House Okoro', 'Knowledge is the longest inheritance.', 2, 'ACTIVE')
 on conflict (id) do nothing;
 
-insert into houses (id, email, house_name, motto, founder_human_id, legacy_points, total_wealth_generated)
+insert into humans (id, account_id, house_id, display_name, age_years, standing, legacy, life_status, political_eligibility_game_day)
 values
-  ('TEST-HSE-001', 'ada.mercer@earth.local', 'House Mercer', 'Measure twice, build for generations.', 'TEST-H-011', 820, 980000),
-  ('TEST-HSE-002', 'bastien.okoro@earth.local', 'House Okoro', 'Knowledge is the longest inheritance.', 'TEST-H-012', 560, 640000)
+  ('TEST-H-011', 'test-account-011', 'TEST-HSE-001', 'Ada Mercer', 88, 920, 410, 'deceased', 0),
+  ('TEST-H-012', 'test-account-012', 'TEST-HSE-002', 'Bastien Okoro', 74, 780, 295, 'deceased', 0),
+  ('TEST-H-013', 'test-account-013', 'TEST-HSE-001', 'Clara Mercer', 67, 865, 340, 'deceased', 0),
+  ('TEST-H-014', 'test-account-014', 'TEST-HSE-002', 'Darius Okoro', 61, 705, 260, 'deceased', 0)
+on conflict (id) do nothing;
+
+insert into houses (id, account_id, email, house_name, motto, founder_human_id, legacy_points, dynasty_legacy, generation, status, total_wealth_generated)
+values
+  ('TEST-HSE-001', 'ada.mercer@earth.local', 'ada.mercer@earth.local', 'House Mercer', 'Measure twice, build for generations.', 'TEST-H-011', 820, 820, 2, 'ACTIVE', 980000),
+  ('TEST-HSE-002', 'bastien.okoro@earth.local', 'bastien.okoro@earth.local', 'House Okoro', 'Knowledge is the longest inheritance.', 'TEST-H-012', 560, 560, 2, 'ACTIVE', 640000)
 on conflict (id) do nothing;
 
 insert into deceased_profiles (

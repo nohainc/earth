@@ -45,7 +45,7 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
     const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
     const email = parsed.value.email?.trim().toLowerCase();
     if (email) {
-      const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string; email_verified_at: string | null }>('SELECT human_id, email, email_verified_at FROM auth_credentials WHERE email = $1', [email])))?.rows[0];
+      const credential = (await withRepository(env, (repository) => repository.query<{ human_id: string; account_id: string; email: string; email_verified_at: string | null }>('SELECT h.id AS human_id, a.id AS account_id, a.email, a.email_verified_at FROM auth_accounts a JOIN houses hs ON hs.id = a.house_id LEFT JOIN humans h ON h.id = hs.current_human_id WHERE a.email = $1', [email])))?.rows[0];
       if (credential) {
         if (credential.email_verified_at) {
           return Response.json(
@@ -53,7 +53,7 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
             { headers: { 'x-correlation-id': correlationId } },
           );
         }
-        const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE human_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.human_id])))?.rows[0];
+        const recentlySent = (await withRepository(env, (repository) => repository.query('SELECT 1 FROM auth_action_tokens WHERE account_id = $1 AND action = \'verify_email\' AND created_at > CURRENT_TIMESTAMP - INTERVAL \'60 seconds\' LIMIT 1', [credential.account_id])))?.rows[0];
         if (!recentlySent) {
           try {
             await issueActionToken(env, credential.human_id, 'verify_email', credential.email, correlationId);
@@ -72,10 +72,10 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
     const token = url.searchParams.get('token');
     if (!token) return Response.json({ ok: false, error: 'Verification token is required' }, { status: 400 });
     const tokenHash = await digest(token);
-    const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'verify_email' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
+    const action = (await withRepository(env, (repository) => repository.query<{ id: string; account_id: string }>("SELECT id, account_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'verify_email' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
     if (!action) return Response.json({ ok: false, error: 'Verification link is invalid or expired' }, { status: 400 });
     const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-      await tx.query('UPDATE auth_credentials SET email_verified_at = CURRENT_TIMESTAMP WHERE human_id = $1', [action.human_id]);
+      await tx.query('UPDATE auth_accounts SET email_verified_at = CURRENT_TIMESTAMP WHERE id = $1', [action.account_id]);
       await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
       return true;
     }));
@@ -87,7 +87,7 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
     if (!parsed.ok) return parsed.response;
     const correlationId = request.headers.get('x-correlation-id') || crypto.randomUUID();
     const email = parsed.value.email?.trim().toLowerCase();
-    const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT human_id, email FROM auth_credentials WHERE email = $1', [email])))?.rows[0] : null;
+    const credential = email ? (await withRepository(env, (repository) => repository.query<{ human_id: string; email: string }>('SELECT hs.current_human_id AS human_id, a.email FROM auth_accounts a JOIN houses hs ON hs.id = a.house_id WHERE a.email = $1', [email])))?.rows[0] : null;
     if (credential) {
       try {
         await issueActionToken(env, credential.human_id, 'reset_password', credential.email, correlationId);
@@ -110,14 +110,14 @@ export async function publicAuthRoute(request: Request, env: Env, url: URL): Pro
     const body = parsed.value;
     if (!body.token || (body.password ?? '').length < 12) return Response.json({ ok: false, error: 'A valid token and 12-character password are required' }, { status: 400 });
     const tokenHash = await digest(body.token);
-    const action = (await withRepository(env, (repository) => repository.query<{ id: string; human_id: string }>("SELECT id, human_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
+    const action = (await withRepository(env, (repository) => repository.query<{ id: string; account_id: string }>("SELECT id, account_id FROM auth_action_tokens WHERE token_hash = $1 AND action = 'reset_password' AND consumed_at IS NULL AND expires_at > CURRENT_TIMESTAMP", [tokenHash])))?.rows[0];
     if (!action) return Response.json({ ok: false, error: 'Recovery link is invalid or expired' }, { status: 400 });
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const passwordHash = await derivePassword(body.password, salt, 100000);
     const updated = await withRepository(env, (repository) => repository.transaction(async (tx) => {
-      await tx.query('UPDATE auth_credentials SET password_hash = $1, password_salt = $2, password_iterations = $3 WHERE human_id = $4', [passwordHash, bytesToBase64(salt), 100000, action.human_id]);
+      await tx.query('UPDATE auth_accounts SET password_hash = $1, password_salt = $2, password_iterations = $3 WHERE id = $4', [passwordHash, bytesToBase64(salt), 100000, action.account_id]);
       await tx.query('UPDATE auth_action_tokens SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1', [action.id]);
-      await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE human_id = $1 AND revoked_at IS NULL', [action.human_id]);
+      await tx.query('UPDATE auth_sessions SET revoked_at = CURRENT_TIMESTAMP WHERE account_id = $1 AND revoked_at IS NULL', [action.account_id]);
       return true;
     }));
     if (!updated) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });

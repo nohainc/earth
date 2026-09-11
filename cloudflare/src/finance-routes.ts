@@ -21,7 +21,7 @@ export async function handleFinanceRoutes(
   request: Request,
   env: Env,
   url: URL,
-  viewer: { id: string },
+  viewer: { id: string; house_id: string },
   sensitiveActionAllowed: (env: Env, humanId: string, otp?: string) => Promise<boolean>,
 ): Promise<Response | null> {
   if (url.pathname === '/api/finance/me' && request.method === 'GET') {
@@ -31,21 +31,21 @@ export async function handleFinanceRoutes(
                                  ea.scale, ea.decimals
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
                             LEFT JOIN economic_assets ea ON ea.id = a.asset_id
-                           WHERE o.id = $1 AND a.status = 'active' ORDER BY a.asset_id, a.account_type`, [viewer.id]),
-        repository.query(`SELECT s.* FROM owner_financial_summary s JOIN owner_registry o ON o.economic_id = s.owner_economic_id WHERE o.id = $1`, [viewer.id]),
+                           WHERE o.id = $1 AND a.status = 'active' ORDER BY a.asset_id, a.account_type`, [viewer.house_id]),
+        repository.query(`SELECT s.* FROM owner_financial_summary s JOIN owner_registry o ON o.economic_id = s.owner_economic_id WHERE o.id = $1`, [viewer.house_id]),
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
         repository.query(`SELECT obligation_type, principal_due_units, interest_due_units, due_game_day, priority_class, status
                             FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id
-                           WHERE o.id = $1 ORDER BY due_game_day, priority_class`, [viewer.id]),
+                           WHERE o.id = $1 ORDER BY due_game_day, priority_class`, [viewer.house_id]),
         repository.query(`SELECT id, principal_units, accrued_interest_units, rate_bps, maturity_total_game_minute, status,
                                  deposit_protection_limit_units, deposit_protection_rule_version
                             FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id
-                           WHERE o.id = $1 ORDER BY created_at DESC`, [viewer.id]),
+                           WHERE o.id = $1 ORDER BY created_at DESC`, [viewer.house_id]),
         repository.query(`SELECT t.id, t.game_day, t.game_minute, t.transaction_kind, t.correlation_id,
                                  e.asset_id, e.delta, e.reason_code
                             FROM economic_transactions t JOIN economic_entries e ON e.transaction_id = t.id
                            WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1)
-                           ORDER BY t.id DESC LIMIT 100`, [viewer.id]),
+                           ORDER BY t.id DESC LIMIT 100`, [viewer.house_id]),
       ]);
       return { accounts: accounts.rows, summary: summary.rows[0] ?? null, state: state.rows[0] ?? null, obligations: claims.rows, deposits: deposits.rows, transactions: entries.rows };
     });
@@ -53,7 +53,7 @@ export async function handleFinanceRoutes(
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/finance/taxes' && request.method === 'GET') {
-    const result = await withRepository(env, (repository) => repository.query(`SELECT f.* FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id WHERE o.id = $1 AND f.obligation_type = 'TAX' ORDER BY f.due_game_day DESC`, [viewer.id]));
+    const result = await withRepository(env, (repository) => repository.query(`SELECT f.* FROM financial_obligations f JOIN owner_registry o ON o.economic_id = f.debtor_economic_id WHERE o.id = $1 AND f.obligation_type = 'TAX' ORDER BY f.due_game_day DESC`, [viewer.house_id]));
     return Response.json({ obligations: result?.rows ?? [], persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/finance/bank/balance-sheet' && request.method === 'GET') {
@@ -65,7 +65,7 @@ export async function handleFinanceRoutes(
       const [state, sheet, deposits] = await Promise.all([
         repository.query('SELECT * FROM global_bank_resolution_state WHERE id = 1'),
         repository.query('SELECT * FROM global_bank_balance_sheet ORDER BY game_day DESC LIMIT 1'),
-        repository.query(`SELECT d.* FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id WHERE o.id = $1 ORDER BY d.created_at DESC`, [viewer.id]),
+        repository.query(`SELECT d.* FROM bank_deposits d JOIN owner_registry o ON o.economic_id = d.depositor_economic_id WHERE o.id = $1 ORDER BY d.created_at DESC`, [viewer.house_id]),
       ]);
       return { resolution: state.rows[0] ?? null, balanceSheet: sheet.rows[0] ?? null, deposits: deposits.rows };
     });

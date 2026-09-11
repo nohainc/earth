@@ -54,10 +54,15 @@ BEGIN
   IF p_term_installments IS NULL OR p_term_installments < 1 OR p_term_installments > 360 THEN RAISE EXCEPTION 'Loan term is outside supported bounds'; END IF;
   IF p_installment_interval_days IS NULL OR p_installment_interval_days < 1 THEN RAISE EXCEPTION 'Loan installment interval must be positive'; END IF;
 
-  SELECT o.economic_id, o.owner_type INTO borrower FROM owner_registry o WHERE o.id = p_borrower_id AND o.owner_type IN ('human', 'city', 'corporation') AND o.status = 'active';
+  SELECT o.economic_id, o.owner_type INTO borrower FROM owner_registry o WHERE o.id = p_borrower_id AND o.owner_type IN ('city', 'corporation') AND o.status = 'active';
+  IF borrower.economic_id IS NULL THEN
+    SELECT o.economic_id, 'house'::TEXT INTO borrower
+      FROM humans h JOIN owner_registry o ON o.id = h.house_id
+     WHERE h.id = p_borrower_id AND o.owner_type = 'house' AND o.status = 'active';
+  END IF;
   SELECT a.id INTO borrower_account
   FROM economic_accounts a WHERE a.owner_economic_id = borrower.economic_id AND a.asset_id = 1
-    AND a.account_type = CASE WHEN borrower.owner_type = 'human' THEN 1 ELSE 3 END
+    AND a.account_type = CASE WHEN borrower.owner_type IN ('human', 'house') THEN 1 ELSE 3 END
     AND a.is_default_settlement AND a.status = 'active';
   SELECT a.id INTO bank_account FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
     WHERE o.id = 'SYSTEM-GLOBAL-BANK' AND a.asset_id = 1 AND a.account_type = 10 AND a.status = 'active';

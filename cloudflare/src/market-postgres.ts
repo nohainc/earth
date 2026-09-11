@@ -30,7 +30,7 @@ const assetIds: Record<string, number> = {
 
 export async function submitMarketOrder(repository: PostgresRepository, input: MarketOrderInput): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const prior = await tx.query('SELECT * FROM market_orders WHERE human_id = $1 AND correlation_id = $2', [input.humanId, input.correlationId]);
+    const prior = await tx.query('SELECT * FROM market_orders WHERE owner_economic_id = (SELECT owner.economic_id FROM humans JOIN owner_registry owner ON owner.id = humans.house_id WHERE humans.id = $1) AND correlation_id = $2', [input.humanId, input.correlationId]);
     if (prior.rows[0]) return { ok: true, alreadyProcessed: true, order: prior.rows[0], correlationId: input.correlationId };
     const human = await tx.query('SELECT id FROM humans WHERE id = $1', [input.humanId]);
     if (!human.rows[0]) throw new Error('Human not found');
@@ -74,7 +74,7 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
       if (!buyerBalance.rows[0] || BigInt(buyerBalance.rows[0].balance) < reservedCents) throw new Error('Insufficient Credits to reserve this order');
       v2Escrow = await reserveForOrder(tx, { ownerId: input.humanId, assetId: 1, sourceAccountId: buyerAccount, amountUnits: reservedCents, orderId, gameDay, reason: 'market_order_reservation' });
     }
-    await tx.query('INSERT INTO market_orders (id, human_id, product, side, quantity, limit_price, quantity_units, limit_price_units, filled_quantity_units, reserved_quote_units, owner_economic_id, instrument_id, filled_units, eligible_batch_id, escrow_account_id, reserved_base_units, buyer_fee_bps, seller_fee_bps, rules_version, rules_snapshot, submitted_game_day, submitted_game_minute, correlation_id) SELECT $1,$2,$3,$4,$5,$6,$7,$8,0,$9,o.economic_id,$10,0,$11,$12,$13,$14,$15,$16,$17::JSONB,$18,$19,$20 FROM owner_registry o WHERE o.id = $2', [orderId, input.humanId, input.product, input.side, unitsToDisplayQuantity(quantityUnits), priceUnitsToDisplayPrice(limitPriceUnits), quantityUnits.toString(), limitPriceUnits.toString(), reservedCents.toString(), instrument.id, eligibleBatchId, v2Escrow, input.side === 'sell' ? quantityUnits.toString() : '0', buyerFeeBps, sellerFeeBps, instrument.rules_version, orderRulesSnapshot, gameDay, gameMinute, input.correlationId]);
+    await tx.query('INSERT INTO market_orders (id, human_id, product, side, quantity, limit_price, quantity_units, limit_price_units, filled_quantity_units, reserved_quote_units, owner_economic_id, instrument_id, filled_units, eligible_batch_id, escrow_account_id, reserved_base_units, buyer_fee_bps, seller_fee_bps, rules_version, rules_snapshot, submitted_game_day, submitted_game_minute, correlation_id) SELECT $1,$2,$3,$4,$5,$6,$7,$8,0,$9,o.economic_id,$10,0,$11,$12,$13,$14,$15,$16,$17::JSONB,$18,$19,$20 FROM owner_registry o WHERE o.id = COALESCE((SELECT house_id FROM humans WHERE id = $2), $2)', [orderId, input.humanId, input.product, input.side, unitsToDisplayQuantity(quantityUnits), priceUnitsToDisplayPrice(limitPriceUnits), quantityUnits.toString(), limitPriceUnits.toString(), reservedCents.toString(), instrument.id, eligibleBatchId, v2Escrow, input.side === 'sell' ? quantityUnits.toString() : '0', buyerFeeBps, sellerFeeBps, instrument.rules_version, orderRulesSnapshot, gameDay, gameMinute, input.correlationId]);
     const state = await rebuildMarketInstrumentState(tx, instrument.id);
     await refreshMarketPriceProjection(tx, instrument, state, gameDay);
     const order = await tx.query('SELECT * FROM market_orders WHERE id = $1', [orderId]);
@@ -96,8 +96,8 @@ export async function settleMarket(repository: PostgresRepository, product: stri
     if (!buy.rows.length || !sell.rows.length) return { ok: true, filled: false, reason: 'No eligible matched orders or price' };
     const auction = clearMarketAuction({
       previousClearingPriceUnits: BigInt(state.last_clearing_price_units ?? 0),
-      buyOrders: buy.rows.map((row) => ({ id: String(row.id), ownerId: String(row.human_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
-      sellOrders: sell.rows.map((row) => ({ id: String(row.id), ownerId: String(row.human_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
+      buyOrders: buy.rows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
+      sellOrders: sell.rows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
     });
     const selectedFill = auction.fills[0];
     if (!selectedFill) return { ok: true, filled: false, reason: auction.selfTradeActions.length ? 'Self-trade prevented' : 'No executable auction volume', selfTradePreventedUnits: auction.statistics.selfTradePreventedUnits.toString() };
@@ -170,8 +170,8 @@ export async function settleMarketBatch(repository: PostgresRepository, product:
     const sellRows = orders.rows.filter((row) => row.side === 'sell');
     const auction = clearMarketAuction({
       previousClearingPriceUnits: BigInt(state.last_clearing_price_units ?? 0),
-      buyOrders: buyRows.map((row) => ({ id: String(row.id), ownerId: String(row.human_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
-      sellOrders: sellRows.map((row) => ({ id: String(row.id), ownerId: String(row.human_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
+      buyOrders: buyRows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
+      sellOrders: sellRows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
     });
     if (!auction.fills.length) return { ok: true, filled: false, fillCount: 0, selfTradePreventedUnits: auction.statistics.selfTradePreventedUnits.toString() };
     const day = settlementGameDay ?? Number(game.rows[0]?.game_day ?? 0);
@@ -261,7 +261,7 @@ export async function listMarketOrders(repository: PostgresRepository, product: 
 
 export async function cancelMarketOrder(repository: PostgresRepository, input: { orderId: string; humanId: string }): Promise<Record<string, unknown>> {
   return repository.transaction(async (tx) => {
-    const order = await tx.query<Record<string, unknown>>("SELECT * FROM market_orders WHERE id = $1 AND human_id = $2 AND status IN ('open','partial') FOR UPDATE", [input.orderId, input.humanId]);
+      const order = await tx.query<Record<string, unknown>>("SELECT * FROM market_orders WHERE id = $1 AND owner_economic_id = (SELECT owner.economic_id FROM humans JOIN owner_registry owner ON owner.id = humans.house_id WHERE humans.id = $2) AND status IN ('open','partial') FOR UPDATE", [input.orderId, input.humanId]);
     if (!order.rows[0]) throw new Error('Open order not found for this Human');
     const current = order.rows[0];
     const remainingUnits = BigInt(String(current.quantity_units)) - BigInt(String(current.filled_quantity_units));
@@ -284,7 +284,7 @@ export async function cancelMarketOrder(repository: PostgresRepository, input: {
       if (refundUnits > 0n) await releaseReservation(tx, { escrowAccountId: String(current.escrow_account_id), destinationAccountId: v2Buyer, assetId: 1, amountUnits: refundUnits, orderId: input.orderId, gameDay: day, reason: 'market_order_cancellation' });
       if (!isDeliveryFuture || remainingUnits === BigInt(String(current.quantity_units))) await closeEscrowAccount(tx, String(current.escrow_account_id), input.orderId);
     }
-    await tx.query("UPDATE market_orders SET status = 'cancelled', reserved_quote_units = 0, reserved_base_units = 0 WHERE id = $1 AND human_id = $2", [input.orderId, input.humanId]);
+    await tx.query("UPDATE market_orders SET status = 'cancelled', reserved_quote_units = 0, reserved_base_units = 0 WHERE id = $1 AND owner_economic_id = (SELECT owner.economic_id FROM humans JOIN owner_registry owner ON owner.id = humans.house_id WHERE humans.id = $2)", [input.orderId, input.humanId]);
     const spotInstrument = await getActiveSpotInstrument(tx, String(current.product));
     if (spotInstrument) {
       const state = await rebuildMarketInstrumentState(tx, spotInstrument.id);

@@ -20,6 +20,7 @@ export interface LineageRecord {
   house_id: string;
   human_id: string;
   predecessor_human_id: string | null;
+  successor_human_id: string | null;
   generation: number;
   name: string;
   title: string;

@@ -1,5 +1,5 @@
 import type { PostgresRepository } from './repository.ts';
-import { processMortality } from './lifecycle-postgres.ts';
+import { activatePendingHouseSuccessors, processHouseMortality } from './lifecycle-postgres.ts';
 import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { centsToMoney, compoundRateAmountToCents, moneyToCents, quantityToCents, rateAmountToCents } from './money.ts';
 import { fromNanoMarkup, toNanoMarkup } from './nano-markup.ts';
@@ -555,7 +555,7 @@ async function settleResearchAndProgress(tx: PostgresRepository, day: number): P
 
 async function settleLifecycle(tx: PostgresRepository, day: number): Promise<void> {
   await tx.query("UPDATE humans SET age_years = age_years + 1, legacy = legacy + CASE WHEN standing > 0 THEN 1 ELSE 0 END WHERE life_status = 'active' AND $1 % 365 = 0", [day]);
-  if (day % 365 === 0) await processMortality(tx, day);
+  if (day % 365 === 0) await processHouseMortality(tx, day);
 }
 
 /**
@@ -583,6 +583,7 @@ export async function runResumableSettlementDay(
 
   const context = (tx: PostgresRepository, shard?: number): DailySettlementPhaseContext => ({ tx, day, shard });
   const phases = createDailySettlementPhaseRegistry({
+    activateSuccessors: ({ tx }) => activatePendingHouseSuccessors(tx, day),
     preparePartitions: ({ tx }) => provisionEconomicEntryPartitions(tx, day),
     rebuildProfiles: ({ tx, shard }) => tx.query<{ rebuilt_count: string }>('SELECT earth_rebuild_dirty_profiles($1::smallint,$2::bigint) AS rebuilt_count', [shard, day]).then((result) => Number(result.rows[0]?.rebuilt_count ?? 0)),
     profileSettlement: ({ tx }) => applyPreparedSettlementProfiles(tx, day),
@@ -602,6 +603,10 @@ export async function runResumableSettlementDay(
     patentExpirations: ({ tx }) => tx.query('SELECT earth_finalize_technology_public_domain($1)', [day]),
     researchAndProgress: ({ tx }) => settleResearchAndProgress(tx, day),
     lifecycle: ({ tx }) => settleLifecycle(tx, day),
+    postSuccessionAccessRefresh: async ({ tx }) => {
+      await tx.query('SELECT earth_rebuild_corporation_technology_modifier_cache($1)', [day]);
+      return tx.query('SELECT earth_refresh_technology_modifier_sources($1)', [day]);
+    },
     financialStates: ({ tx }) => updateFinancialStates(tx, day),
     institutionDissolution: ({ tx }) => dissolveInstitutions(tx, day),
     financialProjections: ({ tx }) => tx.query('SELECT earth_refresh_daily_financial_projections($1)', [day]),

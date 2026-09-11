@@ -18,7 +18,7 @@ export async function handleEconomicRoutes(request: Request, env: Env, url: URL,
         JOIN economic_accounts a ON a.owner_economic_id = o.economic_id
         JOIN economic_assets assets ON assets.id = a.asset_id
         LEFT JOIN economic_account_types types ON types.id = a.account_type
-        WHERE o.id = $1 AND a.status = 'active'
+        WHERE o.economic_id = earth_private_economic_owner_id($1) AND a.status = 'active'
         ORDER BY a.asset_id, a.is_default_settlement DESC, a.id`, [viewer.id]);
       return { ownerId: viewer.id, assets: accounts.rows.map((row) => ({ code: row.asset_code, accountId: row.account_id, accountType: row.account_type, balance: displayUnits(row.balance_units, row.asset_scale, row.asset_decimals) })) };
     });
@@ -40,7 +40,7 @@ export async function handleEconomicRoutes(request: Request, env: Env, url: URL,
         JOIN economic_entries e ON e.transaction_id = t.id
         JOIN economic_accounts a ON a.id = e.account_id
         JOIN economic_assets assets ON assets.id = a.asset_id
-        WHERE a.owner_economic_id = (SELECT economic_id FROM owner_registry WHERE id = $1)
+        WHERE a.owner_economic_id = earth_private_economic_owner_id($1)
           AND ($2::BIGINT = 0 OR t.id < $2)
         ORDER BY t.game_day DESC, t.id DESC, e.id
         LIMIT $3`, [viewer.id, beforeId, limit * 8]);
