@@ -9,10 +9,8 @@ class BuildingModel {
   final String buildingType;
   final String name;
   final int tier;
-  final double condition;
   final int slotFootprint;
   final String operatingPolicy;
-  final bool autoRepairEnabled;
   final double dailyOperatingCredits;
   final String? resourceOutputType;
   final double resourceOutputAmount;
@@ -31,10 +29,8 @@ class BuildingModel {
     required this.buildingType,
     required this.name,
     required this.tier,
-    required this.condition,
     required this.slotFootprint,
     required this.operatingPolicy,
-    required this.autoRepairEnabled,
     required this.dailyOperatingCredits,
     this.resourceOutputType,
     required this.resourceOutputAmount,
@@ -62,10 +58,8 @@ class BuildingModel {
       buildingType: json['building_type']?.toString() ?? '',
       name: json['name']?.toString() ?? 'Facility',
       tier: (json['tier'] is num) ? (json['tier'] as num).toInt() : int.tryParse(json['tier']?.toString() ?? '') ?? 1,
-      condition: (json['condition'] is num) ? (json['condition'] as num).toDouble() : double.tryParse(json['condition']?.toString() ?? '') ?? 100.0,
       slotFootprint: (json['slot_footprint'] is num) ? (json['slot_footprint'] as num).toInt() : int.tryParse(json['slot_footprint']?.toString() ?? '') ?? 1,
       operatingPolicy: json['operating_policy']?.toString() ?? 'balanced',
-      autoRepairEnabled: json['auto_repair_enabled'] == true || json['auto_repair_enabled']?.toString() == 'true',
       dailyOperatingCredits: (json['daily_operating_credits'] is num) ? (json['daily_operating_credits'] as num).toDouble() : double.tryParse(json['daily_operating_credits']?.toString() ?? '') ?? 0.0,
       resourceOutputType: json['resource_output_type']?.toString(),
       resourceOutputAmount: (json['resource_output_amount'] is num) ? (json['resource_output_amount'] as num).toDouble() : double.tryParse(json['resource_output_amount']?.toString() ?? '') ?? 0.0,

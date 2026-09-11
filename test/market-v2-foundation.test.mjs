@@ -31,7 +31,7 @@ test('Market V2 derives instrument state from the authoritative book and fills',
   assert.match(futures, /submitMarketOrder/);
   assert.match(futures, /instrumentId/);
   assert.doesNotMatch(fs.readFileSync('cloudflare/src/market-postgres.ts', 'utf8'), /UPDATE market_prices SET [^;]*(supply|demand)/i);
-  assert.doesNotMatch(fs.readFileSync('cloudflare/src/engines/market-engine.ts', 'utf8'), /UPDATE market_prices/i);
+  assert.equal(fs.existsSync('cloudflare/src/engines/market-engine.ts'), false);
 });
 
 test('Market V2 does not expose manual settlement endpoints', () => {

@@ -56,6 +56,103 @@ Widget _institutionBudgetCard(
   );
 }
 
+Widget _institutionFinanceClarityCard(
+  BuildContext context, {
+  required Map<String, dynamic> institution,
+  Map<String, dynamic> projection = const <String, dynamic>{},
+}) {
+  final treasury = asDouble(projection['treasury'] ??
+          projection['cash_treasury'] ??
+          institution['treasury']) ??
+      0;
+  final budget = asDouble(projection['budget_authorized'] ??
+          projection['authorized_units'] ??
+          projection['budget']) ??
+      0;
+  final committed = asDouble(projection['budget_committed'] ??
+          projection['committed_units'] ??
+          projection['committed']) ??
+      0;
+  final available = asDouble(projection['budget_available'] ??
+          projection['available_authority'] ??
+          (budget - committed)) ??
+      math.max(0, budget - committed);
+  final revenue = asDouble(projection['period_revenue'] ??
+          projection['daily_revenue'] ??
+          projection['revenue']) ??
+      0;
+  final expenses = asDouble(projection['period_spending'] ??
+          projection['daily_expenses'] ??
+          projection['expenses']) ??
+      0;
+
+  String money(double value) => '${formatWholeNumber(value)} C';
+  final values = [
+    ('Treasury', money(treasury), Icons.account_balance_wallet_outlined),
+    ('Budget', money(budget), Icons.fact_check_outlined),
+    ('Committed', money(committed), Icons.assignment_outlined),
+    ('Available', money(available), Icons.check_circle_outline),
+    ('Revenue', money(revenue), Icons.trending_up_outlined),
+    ('Expenses', money(expenses), Icons.trending_down_outlined),
+  ];
+
+  return Container(
+    width: double.infinity,
+    padding: EdgeInsets.all(context.cardPadding),
+    decoration: BoxDecoration(
+      color: context.surfaceColor,
+      borderRadius: BorderRadius.circular(context.radiusCard),
+      border: Border.all(color: context.subtleBorderColor),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text('FINANCIAL POSITION', style: context.topicTitleStyle),
+        const SizedBox(height: 4),
+        Text(
+          'Cash, spending permission, commitments, and activity are shown separately.',
+          style: context.widgetFooterStyle,
+        ),
+        const SizedBox(height: 12),
+        LayoutBuilder(
+          builder: (context, constraints) {
+            final width = constraints.maxWidth < 430
+                ? constraints.maxWidth
+                : (constraints.maxWidth - 16) / 3;
+            return Wrap(
+              spacing: 8,
+              runSpacing: 10,
+              children: values
+                  .map((item) => SizedBox(
+                        width: width,
+                        child: Row(
+                          children: [
+                            Icon(item.$3,
+                                size: 16, color: context.primaryColor),
+                            const SizedBox(width: 6),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(item.$1, style: context.captionStyle),
+                                  Text(item.$2,
+                                      style: context.bodyStyle.copyWith(
+                                          fontWeight: FontWeight.w700)),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ))
+                  .toList(),
+            );
+          },
+        ),
+      ],
+    ),
+  );
+}
+
 class CorporationDirectoryPanel extends StatefulWidget {
   final EarthState state;
   final bool busy;
@@ -2802,6 +2899,15 @@ class CorporationOverviewPanel extends StatelessWidget {
                 'Separate corporate funds for research, patents, payroll, and corporate projects. This budget is not the city budget or your personal account.',
             accent: context.warningColor,
           ),
+          const SizedBox(height: 12),
+          _institutionFinanceClarityCard(
+            context,
+            institution: corporation,
+            projection: corporation['financial_projection'] is Map
+                ? Map<String, dynamic>.from(
+                    corporation['financial_projection'] as Map)
+                : const <String, dynamic>{},
+          ),
           SizedBox(height: context.spacingTopic),
           Container(
             width: double.infinity,
@@ -3447,6 +3553,12 @@ class InstitutionsCapacityPanel extends StatelessWidget {
                 description:
                     'Municipal funds for civic buildings, public services, maintenance, and explicitly approved resident subsidies. This is separate from personal and corporate money.',
                 accent: context.warningColor,
+              ),
+              const SizedBox(height: 12),
+              _institutionFinanceClarityCard(
+                context,
+                institution: city,
+                projection: cityFinance,
               ),
 
               SizedBox(height: context.spacingTitleOffset),

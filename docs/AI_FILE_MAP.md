@@ -96,12 +96,9 @@ subsystems. Start with the named engine before changing scheduler orchestration.
 
 | File | Responsibility |
 |---|---|
-| `engines/simulation-orchestrator.ts` | Coordinates simulation phases |
-| `engines/time-engine.ts` | Game-clock progression |
 | `engines/financial-engine.ts` | Financial settlement |
 | `engines/institutions-engine.ts` | City and corporation effects |
 | `engines/lifecycle-engine.ts` | Human lifecycle and succession |
-| `engines/market-engine.ts` | Market processing |
 | `engines/production-engine.ts` | Production and machine output |
 | `engines/resource-flow-engine.ts` | Resource movement and balances |
 | `engines/rankings-engine.ts` | Ranking calculation |

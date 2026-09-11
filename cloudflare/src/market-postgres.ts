@@ -1,12 +1,11 @@
 import type { PostgresRepository } from './repository.ts';
 import { enqueueOutbox } from './outbox-postgres.ts';
-import { centsToMoney } from './money.ts';
 import { marketFeeRate } from './market-rules.ts';
 import { getActiveMarketInstrument, getActiveSpotInstrument, MARKET_ASSET_IDS } from './market-model.ts';
 import { MARKET_BATCH_GAME_MINUTES } from './market-model.ts';
 import { calculateFeeUnits, calculateFeeUnitsBps, calculateQuoteUnits, displayPriceToUnits, displayQuantityToUnits, displayRateToBps, priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { marketBatchId } from './market-time.ts';
-import { closeEscrowAccount, marketAccount, postEscrowTransaction, postSettlementBatch, releaseReservation, reserveForOrder } from './market-escrow.ts';
+import { closeEscrowAccount, marketAccount, postSettlementBatch, releaseReservation, reserveForOrder } from './market-escrow.ts';
 import { clearMarketAuction } from './market-clearing-engine.ts';
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 
@@ -79,80 +78,6 @@ export async function submitMarketOrder(repository: PostgresRepository, input: M
     await refreshMarketPriceProjection(tx, instrument, state, gameDay);
     const order = await tx.query('SELECT * FROM market_orders WHERE id = $1', [orderId]);
     return { ok: true, order: order.rows[0], correlationId: input.correlationId };
-  });
-}
-
-export async function settleMarket(repository: PostgresRepository, product: string, settlementGameDay?: number, settlementBatchId?: number): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const instrument = await getActiveSpotInstrument(tx, product);
-    if (!instrument) throw new Error('Unknown or inactive market instrument');
-    const legacyAssetId = assetIds[product];
-    if (legacyAssetId && legacyAssetId !== instrument.base_asset_id) throw new Error('Market instrument asset mapping is inconsistent');
-    const state = await rebuildMarketInstrumentState(tx, instrument.id);
-    const game = await tx.query<{ game_day: number; game_minute: number }>("SELECT game_day, game_minute FROM world_state WHERE id = 'WORLD'");
-    const currentBatchId = settlementBatchId ?? marketBatchId(Number(game.rows[0]?.game_day ?? 1), Number(game.rows[0]?.game_minute ?? 0), MARKET_BATCH_GAME_MINUTES);
-    const buy = await tx.query<Record<string, unknown>>("SELECT * FROM market_orders WHERE product = $1 AND side = 'buy' AND status IN ('open','partial') AND reserved_quote_units > 0 AND eligible_batch_id <= $2 ORDER BY limit_price_units DESC, sequence_no ASC FOR UPDATE", [product, currentBatchId]);
-    const sell = await tx.query<Record<string, unknown>>("SELECT * FROM market_orders WHERE product = $1 AND side = 'sell' AND status IN ('open','partial') AND reserved_base_units > 0 AND eligible_batch_id <= $2 ORDER BY limit_price_units ASC, sequence_no ASC FOR UPDATE", [product, currentBatchId]);
-    if (!buy.rows.length || !sell.rows.length) return { ok: true, filled: false, reason: 'No eligible matched orders or price' };
-    const auction = clearMarketAuction({
-      previousClearingPriceUnits: BigInt(state.last_clearing_price_units ?? 0),
-      buyOrders: buy.rows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'BUY' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
-      sellOrders: sell.rows.map((row) => ({ id: String(row.id), ownerId: String(row.owner_economic_id), side: 'SELL' as const, quantityUnits: BigInt(String(row.quantity_units)), filledUnits: BigInt(String(row.filled_quantity_units)), limitPriceUnits: BigInt(String(row.limit_price_units)), sequenceNo: BigInt(String(row.sequence_no)) })),
-    });
-    const selectedFill = auction.fills[0];
-    if (!selectedFill) return { ok: true, filled: false, reason: auction.selfTradeActions.length ? 'Self-trade prevented' : 'No executable auction volume', selfTradePreventedUnits: auction.statistics.selfTradePreventedUnits.toString() };
-    const buyOrder = buy.rows.find((row) => String(row.id) === selectedFill.buyOrderId);
-    const sellOrder = sell.rows.find((row) => String(row.id) === selectedFill.sellOrderId);
-    if (!buyOrder || !sellOrder) throw new Error('Auction selected missing orders');
-    const fill = selectedFill.quantityUnits;
-    const clearingPriceUnits = selectedFill.priceUnits;
-    const clearingPrice = priceUnitsToDisplayPrice(clearingPriceUnits);
-    const totalCents = calculateQuoteUnits(fill, clearingPriceUnits);
-    const feeCents = calculateFeeUnitsBps(totalCents, String(buyOrder.buyer_fee_bps ?? 0));
-    const payableCents = totalCents + feeCents;
-    const reservedCents = BigInt(String(buyOrder.reserved_quote_units));
-    const usedCents = reservedCents > 0n ? (() => { const quote = calculateQuoteUnits(fill, BigInt(buyOrder.limit_price_units as string)); return quote + calculateFeeUnitsBps(quote, String(buyOrder.buyer_fee_bps ?? 0)); })() : payableCents;
-    if (reservedCents > 0n && reservedCents < usedCents) throw new Error('Buy order reservation is inconsistent');
-    const gameDay = settlementGameDay ?? Number(game.rows[0]?.game_day ?? 0);
-    const tradeId = crypto.randomUUID();
-    const buyFilled = BigInt(buyOrder.filled_quantity_units as string) + fill;
-    const sellFilled = BigInt(sellOrder.filled_quantity_units as string) + fill;
-    const refund = usedCents > payableCents ? centsToMoney(usedCents - payableCents) : '0.00';
-    const fee = centsToMoney(feeCents);
-    const total = centsToMoney(totalCents);
-    const payable = centsToMoney(payableCents);
-    const used = centsToMoney(usedCents);
-    const v2BuyEscrow = String(buyOrder.escrow_account_id);
-    const v2SellEscrow = String(sellOrder.escrow_account_id);
-    const v2Buyer = await marketAccount(tx, String(buyOrder.human_id), 1);
-    const v2Seller = await marketAccount(tx, String(sellOrder.human_id), 1);
-    const v2BuyerInventory = await marketAccount(tx, String(buyOrder.human_id), instrument.base_asset_id);
-    const v2OucResult = await tx.query<{ economic_account_id: string }>('SELECT economic_account_id::TEXT FROM economic_account_migrations WHERE legacy_account_id = $1', ['account-ouc-treasury']);
-    const v2Ouc = v2OucResult.rows[0]?.economic_account_id ?? null;
-    if (!v2Buyer || !v2Seller || !v2BuyerInventory || !v2Ouc || !buyOrder.escrow_account_id || !sellOrder.escrow_account_id) throw new Error('Market V2 settlement accounts are missing');
-    const marketEntries = [
-      { accountId: v2BuyEscrow, delta: -usedCents, assetId: 1, reason: 'market_trade' },
-      { accountId: v2Seller, delta: totalCents, assetId: 1, reason: 'market_trade' },
-      ...(feeCents > 0n ? [{ accountId: v2Ouc, delta: feeCents, assetId: 1, reason: 'market_fee' }] : []),
-      ...(refund !== '0.00' ? [{ accountId: v2Buyer, delta: usedCents - payableCents, assetId: 1, reason: 'market_order_refund' }] : []),
-      { accountId: v2SellEscrow, delta: -fill, assetId: instrument.base_asset_id, reason: 'market_trade' },
-      { accountId: v2BuyerInventory, delta: fill, assetId: instrument.base_asset_id, reason: 'market_trade' },
-    ];
-    await postEscrowTransaction(tx, gameDay, `market-trade:${tradeId}`, String(buyOrder.id), marketEntries);
-    if (buyFilled >= BigInt(buyOrder.quantity_units as string)) await closeEscrowAccount(tx, v2BuyEscrow, String(buyOrder.id));
-    if (sellFilled >= BigInt(sellOrder.quantity_units as string)) await closeEscrowAccount(tx, v2SellEscrow, String(sellOrder.id));
-    await tx.query("UPDATE market_orders SET filled_quantity = $1, filled_quantity_units = $2, filled_units = $2, reserved_quote_units = GREATEST(0, reserved_quote_units - $3), status = $4 WHERE id = $5", [unitsToDisplayQuantity(buyFilled), buyFilled.toString(), usedCents.toString(), buyFilled >= BigInt(buyOrder.quantity_units as string) ? 'filled' : 'partial', buyOrder.id]);
-    await tx.query("UPDATE market_orders SET filled_quantity = $1, filled_quantity_units = $2, filled_units = $2, reserved_base_units = GREATEST(0, reserved_base_units - $3), status = $4 WHERE id = $5", [unitsToDisplayQuantity(sellFilled), sellFilled.toString(), fill.toString(), sellFilled >= BigInt(sellOrder.quantity_units as string) ? 'filled' : 'partial', sellOrder.id]);
-    await enqueueOutbox(tx, {
-      eventKey: `market-trade:${tradeId}`,
-      topic: 'world_activity',
-      aggregateType: 'market_trade',
-      aggregateId: tradeId,
-      payload: { type: 'world_activity', gameDay, category: 'market', tradeId, product, quantity: Number(unitsToDisplayQuantity(fill)) },
-    });
-    const rebuiltState = await rebuildMarketInstrumentState(tx, instrument.id);
-    await refreshMarketPriceProjection(tx, instrument, rebuiltState, gameDay);
-    return { ok: true, filled: true, buyOrderId: buyOrder.id, sellOrderId: sellOrder.id, tradeId, product, quantityUnits: fill.toString(), quantity: Number(unitsToDisplayQuantity(fill)), clearingPrice: Number(clearingPrice), total: Number(total), fee: Number(fee), payable: Number(payable) };
   });
 }
 

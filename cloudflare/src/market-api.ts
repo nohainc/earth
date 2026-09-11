@@ -5,6 +5,7 @@ import { cancelMarketOrder, submitMarketOrder } from './market-postgres.ts';
 import { assetUnitScale, MARKET_ASSET_IDS } from './market-model.ts';
 import { priceUnitsToDisplayPrice, unitsToDisplayQuantity } from './market-units.ts';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation.ts';
+import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
 type InstrumentRow = {
   id: string;
@@ -163,6 +164,7 @@ export async function handleMarketApiRoutes(request: Request, env: Env, url: URL
   const orderPost = url.pathname === '/market/orders' && request.method === 'POST';
   const cancelMatch = path.match(/^\/api\/market\/orders\/([^/]+)\/cancel$/);
   if (!instrumentsPath && !instrumentMatch && !myOrders && !positions && !orderPost && !(cancelMatch && request.method === 'POST')) return null;
+  if ((orderPost || (cancelMatch && request.method === 'POST')) && !featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
 
   try {
     if (instrumentsPath) {

@@ -625,8 +625,8 @@ export async function executeProposal(repository: PostgresRepository, input: { p
       await tx.query(
         `INSERT INTO buildings (
           id, city_id, owner_id, ownership_class,
-          building_type, name, tier, condition, slot_footprint,
-          operating_policy, auto_repair_enabled,
+          building_type, name, tier, slot_footprint,
+          operating_policy,
           upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
           daily_operating_credits,
           resource_output_type, resource_output_amount,
@@ -634,7 +634,7 @@ export async function executeProposal(repository: PostgresRepository, input: { p
           construction_started_minute, construction_complete_minute,
           construction_start_day, construction_duration_days, construction_due_end_day, construction_progress,
           status, created_game_day
-        ) VALUES ($1, $2, NULL, 'civic', $3, $4, $5, 100, $6, 'balanced', true, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 0.0, 'under_construction', $22)`,
+        ) VALUES ($1, $2, NULL, 'civic', $3, $4, $5, $6, 'balanced', $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, 0.0, 'under_construction', $22)`,
         [
           buildingId,
           current.institution_id,

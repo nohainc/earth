@@ -6,7 +6,6 @@ import { generateDecisionQueue } from './decision-queue.ts';
 import { evaluatePlayerObjectives } from './objectives.ts';
 import { economicStartIndex } from './starter-package.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
-import { reconcileWorldSimulation } from './engines/simulation-orchestrator.ts';
 import { computeResourceFlows } from './engines/resource-flow-engine.ts';
 import { mapTechnologyCatalogRow } from './technology-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
@@ -117,7 +116,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     .reduce((sum, row, _, rows) => sum + Number(row.price ?? 0) / Math.max(1, rows.length), 0);
   const startIndex = economicStartIndex(referencePrice || 50);
   const feeRate = Number(await marketFeeRate(repository, viewerId));
-  const [rankings, book, trades, ownOrders, aiAssistants, communities, finance, liquidity, audit, financialStates, history, buildings, investmentShares, civicDividends, corporateResearch, districtZoning, buildingCatalog] = await Promise.all([
+  const [rankings, book, trades, ownOrders, communities, finance, liquidity, audit, financialStates, history, buildings, investmentShares, civicDividends, corporateResearch, districtZoning, buildingCatalog] = await Promise.all([
     Promise.all([
       repository.query(`
         SELECT entity_id AS id, entity_name AS name, rank, rank_delta, final_score, metrics_line, sub_indexes, raw_metrics, affiliation,
@@ -214,7 +213,6 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
     repository.query('SELECT i.symbol AS product, SUM(f.quantity_units) AS traded_quantity_units, MAX(f.price_units) AS last_price_units, MAX(f.created_at) AS last_trade_at FROM market_fills f JOIN market_instruments i ON i.id = f.instrument_id GROUP BY i.symbol ORDER BY i.symbol'),
     repository.query("SELECT id, product, side, quantity, filled_quantity, limit_price, status, created_at FROM market_orders WHERE human_id = $1 AND status IN ('open','partial') ORDER BY created_at DESC LIMIT 50", [viewerId]),
-    repository.query('SELECT id, tier, policy, enabled FROM ai_assistants WHERE owner_id = $1 ORDER BY id', [viewerId]),
     repository.query(`
       SELECT
         c.id, 
@@ -417,9 +415,6 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     resources: resourceMap,
     netWorth: Number(account.rows[0]?.balance ?? 0) + 15000,
   }, objectiveRules);
-  const recommendations = [
-    ...(city && Number(city.health_capacity ?? 0) / 100 < 0.5 ? [{ type: 'services', priority: 'high', subject: 'CITY-HEALTH', message: 'Health service is critical; propose or fund additional city health capacity.' }] : []),
-  ];
   const proposalsWithDeadlines = (proposals.rows as Row[]).map((proposal) => ({
     ...proposal,
     deadline: projectGameDeadline({
@@ -493,7 +488,7 @@ export async function worldSnapshot(repository: PostgresRepository, viewerId: st
     buildingCatalog: buildingCatalogRows,
     market: { products, book: book.rows, trades: trades.rows, orders: ownOrders.rows, feeRate, lastSettlement: null },
     governance: { proposals: proposalsWithDeadlines.map((proposal) => ({ ...proposal, votes: voteCounts[String(proposal.id)] ?? { support: 0, oppose: 0, abstain: 0 }, my_vote: viewerVotes[String(proposal.id)] ?? null, ballots: {} })), rules: governanceRules.rows },
-    technology: { research: technology.rows[0] ?? {}, catalog: technologyCatalog.rows.map(mapTechnologyCatalogRow), corporationProjects: corporationTechnologyProjects.rows }, workforce: [], aiAssistants: aiAssistants.rows, aiRecommendations: recommendations, ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,
+    technology: { research: technology.rows[0] ?? {}, catalog: technologyCatalog.rows.map(mapTechnologyCatalogRow), corporationProjects: corporationTechnologyProjects.rows }, workforce: [], ledgerEntries: ledger.rows, resourceLedger: resourceLedger.rows,
     publicActivity: [{ type: 'world_clock', day: worldRow.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: worldRow.market_batch_seconds ?? 498 }], opportunities, decisionQueue, objectives, rankings: { cities: rankings[0].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), corporations: rankings[1].rows.map((row) => ({ ...row, rules: fromNanoMarkup<Record<string, unknown>>(row.charter_rules), charter_rules: undefined })), citizens: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })), humans: rankings[2].rows.map((row) => ({ ...row, compositeScore: Math.round(Number(row.standing || 0) * 2 + Number(row.legacy || 0) * 3) })) }, history: { events: history[0].rows, rankings: history[1].rows }, financeStatus: financialStates.rows, personalFinance: personalFinance.rows[0] ?? { status: 'active', protected_credits: 100 }, communities: communities.rows, cityMembers: rankings[2].rows,
     audit: { balancesNonNegative: Number(audit[0].rows[0]?.invalid ?? 0) === 0, ledgerEntriesValid: Number(audit[1].rows[0]?.invalid ?? 0) === 0, corporationMemberCountsConsistent: Number(audit[2].rows[0]?.invalid ?? 0) === 0, cityResidentCountsConsistent: Number(audit[3].rows[0]?.invalid ?? 0) === 0 },
     finance: { taxRules: finance.rows, liquidity: { activeHumans, moneySupply: money, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: money < target * 0.8 ? 'below-corridor' : money > target * 1.2 ? 'above-corridor' : 'inside-corridor' } },

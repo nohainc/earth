@@ -14,6 +14,7 @@ import {
   listCommunityContributions,
   contributeToCommunity,
 } from './communities-postgres.ts';
+import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
 export async function handleCommunityRoutes(
   request: Request,
@@ -21,6 +22,7 @@ export async function handleCommunityRoutes(
   url: URL,
   viewer: { id: string },
 ): Promise<Response | null> {
+  if (!featureEnabled(env, 'communities')) return featureDisabledResponse('communities');
   if (url.pathname === '/api/communities' && request.method === 'GET') {
     const result = await withRepository(env, (repository) => listCommunities(repository));
     return Response.json({ ...result, persistence: 'planetscale-postgres' });

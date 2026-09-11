@@ -333,7 +333,7 @@ export async function readBusinessProfile(repository: PostgresRepository, busine
     repository.query('SELECT revenue, operating_costs, profit, taxed_revenue, last_game_day, updated_at FROM business_financials WHERE business_id = $1', [businessId]),
     repository.query('SELECT business_management.manager_id, humans.display_name AS manager_name, business_management.appointed_by, business_management.appointed_game_day, business_management.updated_at FROM business_management JOIN humans ON humans.id = business_management.manager_id WHERE business_management.business_id = $1', [businessId]),
     repository.query('SELECT version, shareholder_vote_threshold, board_approval_threshold, dilution_notice_days, updated_by, updated_game_day, updated_at FROM business_constitutions WHERE business_id = $1', [businessId]),
-    repository.query('SELECT id, name, building_type, condition, status FROM buildings WHERE business_id = $1 ORDER BY id', [businessId]),
+    repository.query('SELECT id, name, building_type, status FROM buildings WHERE business_id = $1 ORDER BY id', [businessId]),
     repository.query('SELECT business_shares.holder_id, humans.display_name, business_shares.shares FROM business_shares JOIN humans ON humans.id = business_shares.holder_id WHERE business_shares.business_id = $1 ORDER BY business_shares.shares DESC, business_shares.holder_id', [businessId]),
   ]);
   const totalIssuedShares = holders.rows.reduce((total, holder) => total + Number((holder as { shares: unknown }).shares ?? 0), 0);

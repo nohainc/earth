@@ -5,6 +5,7 @@ import { listActiveMarketInstruments, MARKET_BATCH_GAME_MINUTES } from './market
 import { rebuildMarketInstrumentState, refreshMarketPriceProjection } from './market-state.ts';
 import { refreshMarketCandles } from './market-candles.ts';
 import { settleDueDeliveryFutures } from './market-futures-settlement.ts';
+import type { FeatureConfig } from './feature-config.ts';
 
 export type MarketBatchResult = { batchesProcessed: number; tradesCreated: number; futuresSettled: number; busy: boolean };
 
@@ -14,10 +15,12 @@ export async function processDueMarketBatches(
   safeProcessedGameDay: number,
   workBudgetMs = 10_000,
   leaseOwner = `market-scheduler:${crypto.randomUUID()}`,
+  features?: FeatureConfig,
 ): Promise<MarketBatchResult> {
   const startedAt = Date.now();
   const maxBatch = Math.ceil((safeProcessedGameDay * GAME_DAY_MINUTES) / MARKET_BATCH_GAME_MINUTES) - 1;
-  const instruments = await listActiveMarketInstruments(repository);
+  const allInstruments = await listActiveMarketInstruments(repository);
+  const instruments = allInstruments.filter((instrument) => features?.futures !== false || instrument.instrument_type !== 'DELIVERY_FUTURE');
   let batchesProcessed = 0;
   let tradesCreated = 0;
   let settledFutures = 0;
@@ -94,6 +97,6 @@ export async function processDueMarketBatches(
     if (completed.rowCount !== 1) { busy = true; break; }
     batchesProcessed += 1;
   }
-  if (Date.now() - startedAt < workBudgetMs) settledFutures = await settleDueDeliveryFutures(repository, safeProcessedGameDay, workBudgetMs - (Date.now() - startedAt));
+  if (features?.futures !== false && Date.now() - startedAt < workBudgetMs) settledFutures = await settleDueDeliveryFutures(repository, safeProcessedGameDay, workBudgetMs - (Date.now() - startedAt));
   return { batchesProcessed, tradesCreated, futuresSettled: settledFutures, busy };
 }

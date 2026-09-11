@@ -4,9 +4,9 @@ import { withPostgresRepository } from './repository';
 export async function healthResponse(request: Request, env: Env): Promise<Response> {
   const postgres = await probePostgres(env.HYPERDRIVE);
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
-    const [core, feature, reservations, governance, financial, assets, taxed, balances, scheduler, outbox, migrations, counts, settlement] = await Promise.all([
+    const [core, feature, reservations, governance, financial, assets, taxed, balances, scheduler, outbox, migrations, counts, settlement, observability] = await Promise.all([
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events']]),
-      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['ai_assistants', 'buildings', 'civic_dividend_payouts', 'global_bank_deposits']]),
+      repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['buildings', 'civic_dividend_payouts', 'global_bank_deposits']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_orders' AND column_name = 'reserved_quote_units'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['corporations', 'cities']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'personal_financial_states'"),
@@ -38,6 +38,13 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         last_completed_game_day: string | null;
         backlog_game_days: string;
         last_completed_at: string | null;
+        current_phase: string | null;
+        lease_owner: string | null;
+        lease_heartbeat_at: string | null;
+        phase_completed: string;
+        phase_total: string;
+        failed_runs: string;
+        retry_count: string;
       }>(`
         WITH clock AS (
           SELECT earth_game_day_from_total_minutes(total_game_minutes) AS current_game_day
@@ -55,11 +62,35 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
                clock.current_game_day::text,
                completed.game_day::text AS last_completed_game_day,
                GREATEST(0, (clock.current_game_day - 1) - COALESCE(completed.game_day, 0))::text AS backlog_game_days,
-               completed.completed_at::text AS last_completed_at
+               completed.completed_at::text AS last_completed_at,
+               active.current_phase,
+               active.lease_owner,
+               active.lease_heartbeat_at::text,
+               COALESCE((SELECT COUNT(*) FROM daily_settlement_phase_runs p WHERE p.game_day = active.game_day AND p.status = 'completed'), 0)::text AS phase_completed,
+               COALESCE((SELECT COUNT(*) FROM daily_settlement_phase_runs p WHERE p.game_day = active.game_day), 0)::text AS phase_total,
+               (SELECT COUNT(*) FROM daily_settlement_runs r WHERE r.status = 'failed')::text AS failed_runs,
+               (SELECT COALESCE(SUM(attempt_count), 0) FROM daily_settlement_runs)::text AS retry_count
         FROM daily_settlement_control control CROSS JOIN clock
         LEFT JOIN completed ON TRUE
+        LEFT JOIN LATERAL (SELECT r.game_day, r.current_phase, r.lease_owner, r.lease_heartbeat_at
+                             FROM daily_settlement_runs r
+                            WHERE r.status = 'running'
+                            ORDER BY r.game_day DESC LIMIT 1) active ON TRUE
         WHERE control.id = 'WORLD'
       `),
+      Promise.all([
+        repository.query<{ active: string }>("SELECT COUNT(*)::text AS active FROM pg_stat_activity WHERE datname = current_database() AND state <> 'idle'").catch(() => ({ rows: [{ active: '0' }] })),
+        repository.query<{ api_errors: string; worker_errors: string }>(`SELECT
+          COUNT(*) FILTER (WHERE source IN ('api', 'http'))::text AS api_errors,
+          COUNT(*) FILTER (WHERE source IN ('worker', 'scheduler'))::text AS worker_errors
+          FROM app_error_logs WHERE created_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`).catch(() => ({ rows: [{ api_errors: '0', worker_errors: '0' }] })),
+        repository.query<{ slow_queries: string }>(`SELECT COUNT(*)::text AS slow_queries FROM pg_stat_statements WHERE mean_exec_time >= 1000`).catch(() => ({ rows: [{ slow_queries: '0' }] })),
+        repository.query<{ active_buildings: string; inactive_buildings: string }>(`SELECT
+          COUNT(*) FILTER (WHERE status = 'active')::text AS active_buildings,
+          COUNT(*) FILTER (WHERE status <> 'active')::text AS inactive_buildings FROM buildings`).catch(() => ({ rows: [{ active_buildings: '0', inactive_buildings: '0' }] })),
+        repository.query<{ market_orders_processed: string }>(`SELECT COUNT(*)::text AS market_orders_processed
+          FROM market_orders WHERE updated_at >= CURRENT_TIMESTAMP - INTERVAL '24 hours'`).catch(() => ({ rows: [{ market_orders_processed: '0' }] })),
+      ]),
     ]);
     const schedulerAgeSeconds = Number(scheduler.rows[0]?.age_seconds ?? Number.POSITIVE_INFINITY);
     const schedulerState = schedulerAgeSeconds <= 180 ? 'healthy' : schedulerAgeSeconds <= 600 ? 'degraded' : 'critical';
@@ -72,6 +103,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
     const outboxOldestAgeSeconds = outboxRow?.oldest_pending_age != null ? Number(outboxRow.oldest_pending_age) : null;
     const outboxLastDeliveryAt = outboxRow?.last_delivery ?? null;
     const settlementRow = settlement.rows[0];
+    const [connectionRow, errorRow, slowQueryRow, buildingRow, marketRow] = observability;
     const settlementBacklog = Number(settlementRow?.backlog_game_days ?? Number.POSITIVE_INFINITY);
     const settlementStatus = settlementRow?.status ?? 'unavailable';
     return {
@@ -111,6 +143,28 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
           lastCompletedGameDay: settlementRow?.last_completed_game_day != null ? Number(settlementRow.last_completed_game_day) : null,
           backlogGameDays: Number.isFinite(settlementBacklog) ? settlementBacklog : null,
           lastCompletedAt: settlementRow?.last_completed_at ?? null,
+          currentPhase: settlementRow?.current_phase ?? null,
+          leaseOwner: settlementRow?.lease_owner ?? null,
+          leaseHeartbeatAt: settlementRow?.lease_heartbeat_at ?? null,
+          phaseProgress: {
+            completed: Number(settlementRow?.phase_completed ?? 0),
+            total: Number(settlementRow?.phase_total ?? 0),
+          },
+          failedRuns: Number(settlementRow?.failed_runs ?? 0),
+          retryCount: Number(settlementRow?.retry_count ?? 0),
+        },
+        worldHealth: {
+          humanCount: Number(counts[0].rows[0]?.count ?? 0),
+          cityCount: Number((await repository.query('SELECT COUNT(*)::integer AS count FROM cities')).rows[0]?.count ?? 0),
+          corporationCount: Number((await repository.query('SELECT COUNT(*)::integer AS count FROM corporations')).rows[0]?.count ?? 0),
+          activeBuildings: Number(buildingRow.rows[0]?.active_buildings ?? 0),
+          inactiveBuildings: Number(buildingRow.rows[0]?.inactive_buildings ?? 0),
+          marketOrdersProcessed24h: Number(marketRow.rows[0]?.market_orders_processed ?? 0),
+          dbConnections: Number(connectionRow.rows[0]?.active ?? 0),
+          slowQueries24h: Number(slowQueryRow.rows[0]?.slow_queries ?? 0),
+          apiErrors24h: Number(errorRow.rows[0]?.api_errors ?? 0),
+          workerErrors24h: Number(errorRow.rows[0]?.worker_errors ?? 0),
+          failedSettlementRuns: Number(settlementRow?.failed_runs ?? 0),
         },
         invariantScan: {
           ok: Number(balances.rows[0]?.invalid ?? 0) === 0,

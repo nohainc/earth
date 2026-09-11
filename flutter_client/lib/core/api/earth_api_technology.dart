@@ -75,22 +75,4 @@ extension EarthApiTechnology on EarthApi {
     return world();
   }
 
-  Future<EarthState> setAiPolicy(String assistantId, String policy,
-      {bool enabled = true}) async {
-    await _request('/api/ai/policy', method: 'POST', body: {
-      'assistantId': assistantId,
-      'policy': policy,
-      'enabled': enabled,
-    });
-    return world();
-  }
-
-  Future<EarthState> upgradeAi(String assistantId, {String otp = ''}) async {
-    await _request('/api/ai/upgrade', method: 'POST', body: {
-      'assistantId': assistantId,
-      if (otp.isNotEmpty) 'otp': otp,
-    });
-    return world();
-  }
-
 }

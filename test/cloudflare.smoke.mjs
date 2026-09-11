@@ -213,18 +213,6 @@ const maintenance = await get('/api/machines/unknown/maintenance', { method: 'PO
 assert.equal(maintenance.response.status, 401);
 assert.equal(maintenance.body.error, 'Authentication required');
 
-const ai = await get('/api/ai');
-assert.equal(ai.response.status, 401);
-assert.equal(ai.body.error, 'Authentication required');
-
-const aiPolicy = await get('/api/ai/policy', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(aiPolicy.response.status, 401);
-assert.equal(aiPolicy.body.error, 'Authentication required');
-
-const aiUpgrade = await get('/api/ai/upgrade', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
-assert.equal(aiUpgrade.response.status, 401);
-assert.equal(aiUpgrade.body.error, 'Authentication required');
-
 const machineUpgrade = await get('/api/machines/unknown/upgrade', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
 assert.equal(machineUpgrade.response.status, 401);
 assert.equal(machineUpgrade.body.error, 'Authentication required');

@@ -44,17 +44,6 @@ extension EarthApiRealEstate on EarthApi {
     return EarthState(res as Map<String, dynamic>);
   }
 
-  Future<EarthState> repairBuilding({
-    required String buildingId,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/repair',
-      method: 'POST',
-      body: {'buildingId': buildingId},
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
-
   Future<EarthState> setBuildingOperatingPolicy({
     required String buildingId,
     required String policy,
@@ -65,21 +54,6 @@ extension EarthApiRealEstate on EarthApi {
       body: {
         'buildingId': buildingId,
         'policy': policy,
-      },
-    );
-    return EarthState(res as Map<String, dynamic>);
-  }
-
-  Future<EarthState> setBuildingAutoRepair({
-    required String buildingId,
-    required bool enabled,
-  }) async {
-    final res = await _request(
-      '/api/real-estate/auto-repair',
-      method: 'POST',
-      body: {
-        'buildingId': buildingId,
-        'enabled': enabled,
       },
     );
     return EarthState(res as Map<String, dynamic>);

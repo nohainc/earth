@@ -10,6 +10,7 @@ import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { estimateLifeMaintenance } from './life-maintenance-postgres.ts';
 import { fromNanoMarkup } from './nano-markup.ts';
 import { createBankDeposit, listBankDeposits, withdrawBankDeposit } from './global-bank-postgres.ts';
+import { featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
 function charterRate(raw: unknown, key: string): number | null {
   const charter = fromNanoMarkup<Record<string, unknown>>(raw);
@@ -95,6 +96,7 @@ export async function handleFinanceRoutes(
     return Response.json({ ...(result ?? { deposits: [] }), persistence: 'planetscale-postgres' });
   }
   if (url.pathname === '/api/finance/bank/deposit' && request.method === 'POST') {
+    if (!featureEnabled(env, 'bankDeposits')) return featureDisabledResponse('bankDeposits');
     const parsed = await parseJsonBody<{ amount?: number; termDays?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const correlationId = resolveIdempotencyKey(request, parsed.value.correlationId);
@@ -105,6 +107,7 @@ export async function handleFinanceRoutes(
     } catch (error) { return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Bank deposit failed' }, { status: 409 }); }
   }
   if (url.pathname === '/api/finance/bank/withdraw' && request.method === 'POST') {
+    if (!featureEnabled(env, 'bankDeposits')) return featureDisabledResponse('bankDeposits');
     const parsed = await parseJsonBody<{ depositId?: string; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const depositId = parsed.value.depositId?.trim() ?? '';
@@ -122,14 +125,14 @@ export async function handleFinanceRoutes(
                             FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
                            WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.id]),
         repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-        repository.query("SELECT id, name, building_type, condition, status FROM buildings WHERE owner_id = $1 AND ownership_class = 'private'", [viewer.id]),
+        repository.query("SELECT id, name, building_type, status FROM buildings WHERE owner_id = $1 AND ownership_class = 'private'", [viewer.id]),
         repository.query('SELECT NULL::text AS id WHERE false'),
         repository.query<{ age_years: number; city_id: string | null; residents: string | null; housing_capacity: string | null; energy_capacity: string | null; connectivity_capacity: string | null; health_capacity: string | null; living_cost_index: string; city_charter: string | null; corporation_charter: string | null }>("SELECT h.age_years, m.city_id, c.residents, c.housing_capacity, c.energy_capacity, c.connectivity_capacity, c.health_capacity, w.living_cost_index, city_institution.charter_rules AS city_charter, corporation_institution.charter_rules AS corporation_charter FROM humans h CROSS JOIN world_state w LEFT JOIN memberships m ON m.human_id = h.id LEFT JOIN cities c ON c.id = m.city_id LEFT JOIN institutions city_institution ON city_institution.id = m.city_id LEFT JOIN institutions corporation_institution ON corporation_institution.id = m.corporation_id WHERE h.id = $1 AND w.id = 'WORLD'", [viewer.id]),
         repository.query('SELECT game_day, food_used, energy_used, compute_used, credits_for_resources, life_condition_after, shortfall_notes, paid, unpaid, status FROM personal_life_maintenance WHERE human_id = $1 ORDER BY game_day DESC LIMIT 1', [viewer.id]),
         repository.query<{ total: string }>('SELECT COALESCE(SUM(unpaid), 0) AS total FROM personal_life_maintenance WHERE human_id = $1', [viewer.id]),
         repository.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BASIC' AND active = true", []),
         repository.query<{ profit: string }>('SELECT 0::numeric AS profit'),
-        repository.query("SELECT resource_output_type, resource_output_amount, daily_operating_credits, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_policy, condition, auto_repair_enabled, ownership_class FROM buildings WHERE owner_id = $1 AND ownership_class = 'private' AND status = 'active'", [viewer.id]),
+        repository.query("SELECT resource_output_type, resource_output_amount, daily_operating_credits, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_policy, ownership_class FROM buildings WHERE owner_id = $1 AND ownership_class = 'private' AND status = 'active'", [viewer.id]),
         repository.query<{ amount: string }>('SELECT 0::numeric AS amount'),
         repository.query<{ id: string; category: string; rate: string }>('SELECT id, category, rate FROM tax_rules WHERE active = true ORDER BY id'),
         repository.query<{ amount: string }>("SELECT COALESCE(SUM(-e.delta) / 100.0, 0) AS amount FROM economic_entries e JOIN economic_transactions t ON t.id = e.transaction_id WHERE e.account_id IN (SELECT a.id FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.id = $1) AND t.game_day = (SELECT game_day FROM world_state WHERE id = 'WORLD') AND e.delta < 0 AND e.reason_code IN ('BASIC_LEVY','MARKET_TAX','basic_levy','market_tax')", [viewer.id]),

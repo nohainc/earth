@@ -99,7 +99,6 @@ test('authenticated PostgreSQL mutation creates outbox event, broadcasts post-co
         await tx.query('DELETE FROM auth_sessions WHERE human_id = $1', [humanId]);
         await tx.query('DELETE FROM auth_action_tokens WHERE human_id = $1', [humanId]);
         await tx.query('DELETE FROM auth_login_attempts WHERE email = $1', [email]);
-        await tx.query('DELETE FROM ai_assistants WHERE owner_id = $1', [humanId]);
         await tx.query('DELETE FROM business_assets WHERE business_id IN (SELECT id FROM businesses WHERE owner_id = $1)', [humanId]);
         await tx.query('DELETE FROM ownership_events WHERE to_owner_id = $1', [humanId]);
         await tx.query('DELETE FROM research_projects WHERE owner_id = $1', [humanId]);

@@ -21,12 +21,12 @@ export async function settleContinuousFinancials(
 // Machine depreciation logic removed; machines are now handled via buildings.
 
   // 2. Evaluate solvency across Human-owned private operations.
-  const buildings = await repo.query<{ id: string; owner_id: string; condition: string }>(
-    "SELECT id, owner_id, condition FROM buildings WHERE status = 'active' AND ownership_class = 'private'",
+  const buildings = await repo.query<{ id: string; owner_id: string }>(
+    "SELECT id, owner_id FROM buildings WHERE status = 'active' AND ownership_class = 'private'",
   );
   const owners = new Map<string, { condition: number }>();
   for (const building of buildings.rows) {
-    owners.set(building.owner_id, { condition: Math.min(owners.get(building.owner_id)?.condition ?? 100, Number(building.condition ?? 100)) });
+    owners.set(building.owner_id, { condition: 100 });
   }
   for (const [ownerId, owner] of owners) {
     const balance = (await repo.query<{ balance: string }>(

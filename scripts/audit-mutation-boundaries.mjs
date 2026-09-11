@@ -17,7 +17,7 @@ for (const name of names) {
   if (!mutationFunctions.length) continue;
 
   const hasTransaction = source.includes('repository.transaction(');
-  const hasReplayBoundary = source.includes('correlationId') || source.includes('correlation_id') || name === 'scheduler-postgres.ts' || name === 'roles-postgres.ts' || name === 'ai-postgres.ts' || name === 'auth-postgres.ts' || name === 'outbox-postgres.ts';
+  const hasReplayBoundary = source.includes('correlationId') || source.includes('correlation_id') || name === 'scheduler-postgres.ts' || name === 'roles-postgres.ts' || name === 'auth-postgres.ts' || name === 'outbox-postgres.ts';
   if (!hasTransaction && name !== 'financial-postgres.ts') failures.push(`${name}: mutation adapter has no repository transaction`);
   if (!hasReplayBoundary) failures.push(`${name}: mutation adapter has no visible idempotency/correlation boundary`);
   audited.push({ file: name, mutationFunctions, transaction: hasTransaction || name === 'financial-postgres.ts', replayBoundary: hasReplayBoundary });

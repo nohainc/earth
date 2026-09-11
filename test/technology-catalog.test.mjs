@@ -188,15 +188,10 @@ test('technology modifiers are rebuilt in a corporation-day cache before buildin
 
 test('Building V2 applies technology modifiers to every economic term', () => {
   const source = fs.readFileSync(path.resolve('cloudflare/src/building-settlement-v2.ts'), 'utf8');
-  assert.match(source, /earth_condition_efficiency\(b\.condition/);
-  assert.match(source, /conditionEfficiency/);
   assert.match(source, /inputMultiplier\('ENERGY'\)/);
   assert.match(source, /inputMultiplier\('MATERIAL'\)/);
   assert.match(source, /modifier\('PRODUCTION_OUTPUT'/);
-  assert.match(source, /modifier\('SERVICE_CAPACITY'/);
-  assert.match(source, /modifier\('BUILDING_WEAR'/);
-  assert.match(source, /modifier\('REPAIR_EFFICIENCY'/);
-  assert.match(source, /conditionDelta = -baseWear \* wearMultiplier/);
+  assert.doesNotMatch(source, /BUILDING_WEAR|REPAIR_EFFICIENCY|conditionDelta|repair_/);
 });
 
 test('construction snapshots technology terms at project start', () => {

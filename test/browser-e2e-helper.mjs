@@ -257,19 +257,11 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
         });
         const vote = await voteRes.json();
 
-        // 7. AI Assistant Policy Modification
-        const aiRes = await fetch('/api/ai/assistants/AI-01/policy', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json', 'Idempotency-Key': 'browser-ai-1' },
-          body: JSON.stringify({ policy: 'maintenance', enabled: true })
-        });
-        const ai = await aiRes.json();
-
-        // 8. Notifications Center
+        // 7. Notifications Center
         const notifRes = await fetch('/api/notifications?limit=10');
         const notifs = await notifRes.json();
 
-        // 9. Security: Verify Unauthorized / Bad Request returns safe error
+        // 8. Security: Verify Unauthorized / Bad Request returns safe error
         const unauthRes = await fetch('/api/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -286,7 +278,6 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
           orderPlaced: order.ok === true || order.status === 'placed',
           voteAccepted: vote.ok === true,
           voteWeightServerAuthoritative: vote.weight !== 999999,
-          aiAccepted: ai.ok === true || ai.policy === 'maintenance',
           notificationsLoaded: Array.isArray(notifs.notifications || notifs),
           safeErrorReturned: unauth.ok === false && typeof unauth.error === 'string' && unauth.code !== undefined,
         };

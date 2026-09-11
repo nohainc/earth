@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 338.
+-- Canonical fresh-install schema, reconciled through migration 341.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -16,10 +16,6 @@
 CREATE OR REPLACE FUNCTION earth_ratio_to_ppm(p_value NUMERIC)
 RETURNS BIGINT LANGUAGE SQL IMMUTABLE STRICT AS $$
   SELECT LEAST(1000000::BIGINT, GREATEST(0::BIGINT, ROUND(p_value * 1000000)::BIGINT));
-$$;
-CREATE OR REPLACE FUNCTION earth_condition_to_bp(p_value NUMERIC)
-RETURNS BIGINT LANGUAGE SQL IMMUTABLE STRICT AS $$
-  SELECT LEAST(10000::BIGINT, GREATEST(0::BIGINT, ROUND(p_value * 100)::BIGINT));
 $$;
 CREATE OR REPLACE FUNCTION earth_multiplier_to_ppm(p_value NUMERIC)
 RETURNS BIGINT LANGUAGE SQL IMMUTABLE STRICT AS $$
@@ -1433,13 +1429,9 @@ CREATE TABLE IF NOT EXISTS buildings (
   building_type TEXT NOT NULL,
   name TEXT NOT NULL,
   tier INTEGER NOT NULL DEFAULT 1 CHECK (tier >= 1),
-  condition NUMERIC(10,4) NOT NULL DEFAULT 100.0 CHECK (condition >= 0.0 AND condition <= 100.0),
   slot_footprint INTEGER NOT NULL DEFAULT 1 CHECK (slot_footprint >= 0),
   ownership_class TEXT NOT NULL REFERENCES economic_ownership_classes(code),
   operating_policy TEXT NOT NULL DEFAULT 'balanced' REFERENCES economic_policy_rules(code),
-  auto_repair_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  auto_repair_target_condition NUMERIC(10,4) NOT NULL DEFAULT 90 CHECK (auto_repair_target_condition BETWEEN 0 AND 100),
-  repair_priority INTEGER NOT NULL DEFAULT 100 CHECK (repair_priority BETWEEN 0 AND 1000),
   settlement_priority INTEGER NOT NULL DEFAULT 100 CHECK (settlement_priority BETWEEN 0 AND 1000),
   daily_operating_credits NUMERIC(20,2) NOT NULL DEFAULT 0 CHECK (daily_operating_credits >= 0),
   resource_output_amount NUMERIC(20,6) NOT NULL DEFAULT 0 CHECK (resource_output_amount >= 0),
@@ -1455,7 +1447,7 @@ CREATE TABLE IF NOT EXISTS buildings (
   construction_cost_material_units BIGINT,
   construction_cost_components_units BIGINT,
   construction_cost_compute_units BIGINT,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('under_construction','active','damaged','derelict','decommissioned')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('under_construction','active','inactive','decommissioned')),
   operational_state TEXT NOT NULL DEFAULT 'ACTIVE' CHECK (operational_state IN ('ACTIVE', 'DEGRADED', 'OFFLINE', 'DESTROYED')),
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   last_settled_game_day BIGINT
@@ -1522,14 +1514,10 @@ CREATE TABLE IF NOT EXISTS building_settlement_journals (
   gross_revenue_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
   operating_costs_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
   net_surplus_crd NUMERIC(20,2) NOT NULL DEFAULT 0,
-  condition_start NUMERIC(10,4) NOT NULL,
-  condition_end NUMERIC(10,4) NOT NULL,
-  auto_repaired BOOLEAN NOT NULL DEFAULT FALSE,
   technology_effects JSONB NOT NULL DEFAULT '{}'::JSONB,
   consumed_units JSONB NOT NULL DEFAULT '{}'::JSONB,
   produced_units JSONB NOT NULL DEFAULT '{}'::JSONB,
   rules_version TEXT NOT NULL DEFAULT 'building-economy-v2',
-  condition_efficiency_ppm BIGINT NOT NULL DEFAULT 1000000,
   requested_inputs JSONB NOT NULL DEFAULT '{}'::JSONB,
   allocated_inputs JSONB NOT NULL DEFAULT '{}'::JSONB,
   shortages JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -1540,10 +1528,6 @@ CREATE TABLE IF NOT EXISTS building_settlement_journals (
   service_units_sold BIGINT NOT NULL DEFAULT 0,
   gross_service_revenue_units BIGINT NOT NULL DEFAULT 0,
   operating_expense_units BIGINT NOT NULL DEFAULT 0,
-  wear_points NUMERIC(20,8) NOT NULL DEFAULT 0,
-  repair_requested_points NUMERIC(20,8) NOT NULL DEFAULT 0,
-  repair_applied_points NUMERIC(20,8) NOT NULL DEFAULT 0,
-  repair_resources JSONB NOT NULL DEFAULT '{}'::JSONB,
   status_before TEXT NOT NULL DEFAULT 'ACTIVE',
   status_after TEXT NOT NULL DEFAULT 'ACTIVE',
   economic_batch_id BIGINT,
@@ -1709,25 +1693,15 @@ CREATE UNLOGGED TABLE IF NOT EXISTS building_settlement_plans (
   requirements JSONB NOT NULL DEFAULT '{}'::JSONB,
   allocated_inputs JSONB NOT NULL DEFAULT '{}'::JSONB,
   utilization NUMERIC(12,6) NOT NULL DEFAULT 0 CHECK (utilization >= 0 AND utilization <= 1),
-  condition_efficiency NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (condition_efficiency >= 0),
   consumption JSONB NOT NULL DEFAULT '{}'::JSONB,
   production JSONB NOT NULL DEFAULT '{}'::JSONB,
   service_capacity BIGINT NOT NULL DEFAULT 0,
   service_sales BIGINT NOT NULL DEFAULT 0,
   operating_expenses JSONB NOT NULL DEFAULT '{}'::JSONB,
-  wear NUMERIC(12,6) NOT NULL DEFAULT 0,
-  repair_points NUMERIC(12,6) NOT NULL DEFAULT 0,
-  condition_before NUMERIC(10,4) NOT NULL,
-  condition_after NUMERIC(10,4) NOT NULL,
   status_after TEXT NOT NULL,
   policy_code TEXT NOT NULL,
   operation_mode TEXT NOT NULL DEFAULT 'SCALABLE',
   minimum_operating_ratio NUMERIC(12,6) NOT NULL DEFAULT 0,
-  condition_curve_version TEXT NOT NULL DEFAULT 'v1',
-  maintenance_fulfillment NUMERIC(12,6) NOT NULL DEFAULT 1,
-  auto_repair_enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  repair_target_condition NUMERIC(10,4) NOT NULL DEFAULT 90,
-  repair_priority INTEGER NOT NULL DEFAULT 100,
   service_type TEXT,
   default_price_credit_units BIGINT NOT NULL DEFAULT 0,
   service_mode TEXT NOT NULL DEFAULT 'PRIVATE' CHECK (service_mode IN ('PRIVATE', 'PUBLIC_CONTRACT', 'FREE')),
@@ -1740,36 +1714,17 @@ CREATE UNLOGGED TABLE IF NOT EXISTS building_settlement_plans (
   operational_state_after TEXT NOT NULL DEFAULT 'ACTIVE',
   rules_version TEXT NOT NULL,
   utilization_ppm BIGINT GENERATED ALWAYS AS (earth_ratio_to_ppm(utilization)) STORED,
-  condition_efficiency_ppm BIGINT GENERATED ALWAYS AS (earth_ratio_to_ppm(condition_efficiency)) STORED,
-  condition_before_bp BIGINT GENERATED ALWAYS AS (earth_condition_to_bp(condition_before)) STORED,
-  condition_after_bp BIGINT GENERATED ALWAYS AS (earth_condition_to_bp(condition_after)) STORED,
-  wear_points_bp BIGINT GENERATED ALWAYS AS (earth_condition_to_bp(wear)) STORED,
-  repair_points_bp BIGINT GENERATED ALWAYS AS (earth_condition_to_bp(repair_points)) STORED,
-  maintenance_fulfillment_ppm BIGINT GENERATED ALWAYS AS (earth_ratio_to_ppm(maintenance_fulfillment)) STORED,
-  repair_target_condition_bp BIGINT GENERATED ALWAYS AS (earth_condition_to_bp(repair_target_condition)) STORED,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (building_id, game_day),
   CHECK (
     utilization_ppm BETWEEN 0 AND 1000000
-    AND condition_efficiency_ppm BETWEEN 0 AND 1000000
-    AND condition_before_bp BETWEEN 0 AND 10000
-    AND condition_after_bp BETWEEN 0 AND 10000
-    AND maintenance_fulfillment_ppm BETWEEN 0 AND 1000000
+    utilization_ppm BETWEEN 0 AND 1000000
   )
 );
 CREATE INDEX IF NOT EXISTS building_settlement_plans_shard_idx
   ON building_settlement_plans (game_day, shard, building_id);
 CREATE INDEX IF NOT EXISTS building_settlement_plans_owner_idx
   ON building_settlement_plans (game_day, owner_economic_id, building_id);
-
-CREATE TABLE IF NOT EXISTS building_condition_efficiency_curves (
-  curve_version TEXT NOT NULL,
-  condition_value NUMERIC(10,4) NOT NULL CHECK (condition_value BETWEEN 0 AND 100),
-  efficiency NUMERIC(12,8) NOT NULL CHECK (efficiency BETWEEN 0 AND 1),
-  PRIMARY KEY (curve_version, condition_value)
-);
-CREATE INDEX IF NOT EXISTS building_condition_efficiency_curves_version_idx
-  ON building_condition_efficiency_curves (curve_version, condition_value);
 
 CREATE SEQUENCE IF NOT EXISTS service_demand_id_seq AS BIGINT START WITH 1 INCREMENT BY 1 MINVALUE 1;
 CREATE TABLE IF NOT EXISTS service_demand (
@@ -2549,7 +2504,7 @@ CREATE INDEX IF NOT EXISTS technology_prerequisites_requires_idx ON technology_p
 CREATE TABLE IF NOT EXISTS technology_effects (
   id BIGINT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   technology_id TEXT NOT NULL REFERENCES technology_catalog(id) ON DELETE CASCADE,
-  effect_type TEXT NOT NULL CHECK (effect_type IN ('PRODUCTION_OUTPUT','RESOURCE_INPUT','CONSTRUCTION_TIME','CONSTRUCTION_RESOURCE_COST','BUILDING_WEAR','REPAIR_EFFICIENCY','RESEARCH_CAPACITY','SERVICE_CAPACITY','ENERGY_INPUT')),
+  effect_type TEXT NOT NULL CHECK (effect_type IN ('PRODUCTION_OUTPUT','RESOURCE_INPUT','CONSTRUCTION_TIME','CONSTRUCTION_RESOURCE_COST','RESEARCH_CAPACITY','SERVICE_CAPACITY','ENERGY_INPUT')),
   target_type TEXT NOT NULL CHECK (target_type IN ('ALL_BUILDINGS','ASSET','BUILDING','SERVICE','RESEARCH')),
   target_key TEXT NOT NULL,
   modifier_family TEXT NOT NULL,
@@ -2696,8 +2651,6 @@ CREATE TABLE IF NOT EXISTS corporation_technology_modifier_cache (
   energy_input_bps INTEGER NOT NULL DEFAULT 0,
   construction_time_bps INTEGER NOT NULL DEFAULT 0,
   construction_cost_bps INTEGER NOT NULL DEFAULT 0,
-  wear_bps INTEGER NOT NULL DEFAULT 0,
-  repair_efficiency_bps INTEGER NOT NULL DEFAULT 0,
   research_capacity_bps INTEGER NOT NULL DEFAULT 0,
   service_capacity_bps INTEGER NOT NULL DEFAULT 0,
   scoped_modifiers JSONB NOT NULL DEFAULT '{}'::JSONB,
@@ -2838,7 +2791,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_ticks_contract ON contract_delivery_tick
 */
 
 -- -----------------------------------------------------------------------------
--- 11. Communications & AI Advisory
+-- 11. Communications
 -- -----------------------------------------------------------------------------
 
 CREATE TABLE IF NOT EXISTS comm_channels (
@@ -2871,27 +2824,6 @@ CREATE TABLE IF NOT EXISTS comm_messages (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_comm_messages_channel ON comm_messages(channel_id, created_at DESC);
-
-CREATE TABLE IF NOT EXISTS ai_assistants (
-  id TEXT PRIMARY KEY,
-  owner_id TEXT NOT NULL REFERENCES humans(id),
-  tier TEXT NOT NULL CHECK (tier IN ('basic','advanced')),
-  policy TEXT NOT NULL DEFAULT 'recommend',
-  enabled BOOLEAN NOT NULL DEFAULT TRUE,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS ai_assistants_owner_idx ON ai_assistants(owner_id, enabled);
-
-CREATE TABLE IF NOT EXISTS ai_recommendation_feedback (
-  id UUID PRIMARY KEY,
-  human_id TEXT NOT NULL REFERENCES humans(id),
-  recommendation_type TEXT NOT NULL,
-  recommendation_id TEXT NOT NULL,
-  action TEXT NOT NULL CHECK (action IN ('accepted','dismissed','ignored')),
-  feedback_note TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_ai_rec_feedback_human ON ai_recommendation_feedback(human_id, created_at DESC);
 
 -- -----------------------------------------------------------------------------
 -- 12. System, Side-Effects & Observability
@@ -3238,6 +3170,47 @@ CREATE TABLE IF NOT EXISTS settlement_anomalies (
 );
 CREATE INDEX IF NOT EXISTS settlement_anomalies_open_idx ON settlement_anomalies(severity, created_at DESC) WHERE resolved_at IS NULL;
 
+CREATE TABLE IF NOT EXISTS human_daily_needs (
+  human_id TEXT NOT NULL REFERENCES humans(id) ON DELETE CASCADE,
+  game_day BIGINT NOT NULL CHECK (game_day >= 0),
+  city_id TEXT REFERENCES cities(id),
+  food_satisfaction NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (food_satisfaction BETWEEN 0 AND 1),
+  housing_satisfaction NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (housing_satisfaction BETWEEN 0 AND 1),
+  energy_satisfaction NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (energy_satisfaction BETWEEN 0 AND 1),
+  healthcare_access NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (healthcare_access BETWEEN 0 AND 1),
+  connectivity_access NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (connectivity_access BETWEEN 0 AND 1),
+  life_quality NUMERIC(12,6) NOT NULL DEFAULT 1 CHECK (life_quality BETWEEN 0 AND 1),
+  source TEXT NOT NULL DEFAULT 'daily-needs-v2',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (human_id, game_day)
+);
+CREATE INDEX IF NOT EXISTS human_daily_needs_day_idx ON human_daily_needs (game_day, city_id, human_id);
+
+CREATE OR REPLACE FUNCTION earth_refresh_human_daily_needs(p_game_day BIGINT)
+RETURNS INTEGER LANGUAGE plpgsql AS $$
+DECLARE v_count INTEGER;
+BEGIN
+  INSERT INTO human_daily_needs (human_id, game_day, city_id, food_satisfaction, housing_satisfaction, energy_satisfaction, healthcare_access, connectivity_access, life_quality)
+  SELECT h.id, p_game_day, m.city_id,
+    LEAST(1, GREATEST(0, COALESCE(lm.food_used / NULLIF(lm.food, 0), CASE WHEN lm.id IS NULL THEN 1 ELSE 0 END))),
+    CASE WHEN c.id IS NULL OR c.residents <= 0 THEN 1 ELSE LEAST(1, GREATEST(0, c.housing_capacity::NUMERIC / c.residents)) END,
+    CASE WHEN c.id IS NULL OR c.residents <= 0 THEN 1 ELSE LEAST(1, GREATEST(0, c.energy_capacity::NUMERIC / c.residents)) END,
+    CASE WHEN c.id IS NULL THEN 0.5 ELSE LEAST(1, GREATEST(0, c.health_capacity::NUMERIC / 100)) END,
+    CASE WHEN c.id IS NULL OR c.residents <= 0 THEN 1 ELSE LEAST(1, GREATEST(0, c.connectivity_capacity::NUMERIC / c.residents)) END,
+    (LEAST(1, GREATEST(0, COALESCE(lm.food_used / NULLIF(lm.food, 0), CASE WHEN lm.id IS NULL THEN 1 ELSE 0 END))) +
+      CASE WHEN c.id IS NULL OR c.residents <= 0 THEN 1 ELSE LEAST(1, GREATEST(0, c.housing_capacity::NUMERIC / c.residents)) END +
+      CASE WHEN c.id IS NULL OR c.residents <= 0 THEN 1 ELSE LEAST(1, GREATEST(0, c.energy_capacity::NUMERIC / c.residents)) END +
+      CASE WHEN c.id IS NULL THEN 0.5 ELSE LEAST(1, GREATEST(0, c.health_capacity::NUMERIC / 100)) END +
+      CASE WHEN c.id IS NULL OR c.residents <= 0 THEN 1 ELSE LEAST(1, GREATEST(0, c.connectivity_capacity::NUMERIC / c.residents)) END) / 5
+  FROM humans h LEFT JOIN memberships m ON m.human_id = h.id LEFT JOIN cities c ON c.id = m.city_id
+  LEFT JOIN LATERAL (SELECT id, food, food_used FROM personal_life_maintenance WHERE human_id = h.id AND game_day = p_game_day ORDER BY id DESC LIMIT 1) lm ON TRUE
+  WHERE h.life_status = 'active'
+  ON CONFLICT (human_id, game_day) DO UPDATE SET city_id = EXCLUDED.city_id, food_satisfaction = EXCLUDED.food_satisfaction, housing_satisfaction = EXCLUDED.housing_satisfaction, energy_satisfaction = EXCLUDED.energy_satisfaction, healthcare_access = EXCLUDED.healthcare_access, connectivity_access = EXCLUDED.connectivity_access, life_quality = EXCLUDED.life_quality, updated_at = CURRENT_TIMESTAMP;
+  GET DIAGNOSTICS v_count = ROW_COUNT;
+  RETURN v_count;
+END; $$;
+
 -- ----------------------------------------------------------------------------
 -- Reconciled late-schema extensions (migrations 088, 092, 097, 107, 157-180)
 -- ----------------------------------------------------------------------------
@@ -3279,16 +3252,6 @@ CREATE TABLE IF NOT EXISTS building_catalog (
   is_active BOOLEAN DEFAULT TRUE, research_project_id TEXT,
   operation_mode TEXT NOT NULL DEFAULT 'SCALABLE' CHECK (operation_mode IN ('SCALABLE', 'BINARY', 'THRESHOLD')),
   minimum_operating_ratio NUMERIC(12,6) NOT NULL DEFAULT 0 CHECK (minimum_operating_ratio BETWEEN 0 AND 1),
-  condition_curve_version TEXT NOT NULL DEFAULT 'v1',
-  base_condition_decay NUMERIC(12,6) NOT NULL DEFAULT 1,
-  maintenance_wear_multiplier NUMERIC(12,6) NOT NULL DEFAULT 2,
-  repair_target_condition NUMERIC(10,4) NOT NULL DEFAULT 100,
-  repair_materials_per_point NUMERIC(20,8) NOT NULL DEFAULT 1,
-  repair_components_per_point NUMERIC(20,8) NOT NULL DEFAULT 1,
-  base_condition_decay_ppm BIGINT GENERATED ALWAYS AS (earth_multiplier_to_ppm(base_condition_decay)) STORED,
-  maintenance_wear_multiplier_ppm BIGINT GENERATED ALWAYS AS (earth_multiplier_to_ppm(maintenance_wear_multiplier)) STORED,
-  repair_materials_per_point_ppm BIGINT GENERATED ALWAYS AS (ROUND(repair_materials_per_point * 1000000)::BIGINT) STORED,
-  repair_components_per_point_ppm BIGINT GENERATED ALWAYS AS (ROUND(repair_components_per_point * 1000000)::BIGINT) STORED,
   service_type TEXT,
   base_service_capacity_units BIGINT NOT NULL DEFAULT 0,
   default_price_credit_units BIGINT NOT NULL DEFAULT 0,
@@ -3307,9 +3270,6 @@ CREATE TABLE IF NOT EXISTS building_economic_rule_versions (
   effective_to_game_day BIGINT,
   production_recipes JSONB NOT NULL DEFAULT '{}'::JSONB,
   upkeep JSONB NOT NULL DEFAULT '{}'::JSONB,
-  condition_curve_version TEXT NOT NULL DEFAULT 'v1',
-  condition_decay_ppm BIGINT NOT NULL DEFAULT 1000000 CHECK (condition_decay_ppm >= 0),
-  repair_costs JSONB NOT NULL DEFAULT '{}'::JSONB,
   service_capacity_units BIGINT NOT NULL DEFAULT 0 CHECK (service_capacity_units >= 0),
   service_price_units BIGINT NOT NULL DEFAULT 0 CHECK (service_price_units >= 0),
   service_matching_rules JSONB NOT NULL DEFAULT '{}'::JSONB,

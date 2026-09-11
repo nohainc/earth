@@ -9,7 +9,9 @@ if (!connectionString) {
 }
 
 const migrationDirectory = new URL('../db/migrations/', import.meta.url);
-const names = (await readdir(migrationDirectory)).filter((name) => /^\d+_.+\.sql$/.test(name)).sort();
+const names = (await readdir(migrationDirectory))
+  .filter((name) => /^\d+_.+\.sql$/.test(name))
+  .sort((a, b) => Number(a.match(/^\d+/)[0]) - Number(b.match(/^\d+/)[0]));
 // These checksums identify historical migrations that were applied before the
 // canonical files were restored. Reconcile metadata only; never rerun them.
 const knownAppliedLegacyChecksums = new Map([
@@ -34,6 +36,7 @@ const client = new Client({
 });
 
 await client.connect();
+await client.query('SELECT pg_advisory_lock(hashtext($1))', ['earth-schema-migrations']);
 try {
   await client.query(`
     create table if not exists earth_schema_migrations (
@@ -101,5 +104,6 @@ try {
   const result = await client.query('select version, name, applied_at from earth_schema_migrations order by version');
   console.log(JSON.stringify({ ok: true, migrations: result.rows }, null, 2));
 } finally {
+  await client.query('SELECT pg_advisory_unlock(hashtext($1))', ['earth-schema-migrations']).catch(() => undefined);
   await client.end();
 }

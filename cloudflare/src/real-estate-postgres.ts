@@ -351,8 +351,8 @@ export async function purchasePrivatePlotAndConstruct(
     await tx.query(
       `INSERT INTO buildings (
         id, city_id, owner_id, ownership_class,
-        catalog_id, building_type, name, tier, condition, slot_footprint,
-        operating_policy, auto_repair_enabled,
+        catalog_id, building_type, name, tier, slot_footprint,
+        operating_policy,
         upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute,
         daily_operating_credits,
         resource_output_type, resource_output_amount,
@@ -365,7 +365,7 @@ export async function purchasePrivatePlotAndConstruct(
         construction_cost_credits_units, construction_cost_material_units,
         construction_cost_components_units, construction_cost_compute_units,
         status, created_game_day
-      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, 100.0, $8, 'balanced', true, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, $23, 0.0, $24, $25, $26, $27, $28, $29, $30, $31, 'under_construction', $32)`,
+      ) VALUES ($1, $2, $3, 'private', $4, $5, $6, $7, $8, 'balanced', $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22, 0.0, $23, $24, $25, $26, $27, $28, $29, $30, 'under_construction', $31)`,
       [
         buildingId,
         citizenCityId,
@@ -585,7 +585,6 @@ export async function upgradeBuilding(
         name = COALESCE($3, name),
         resource_output_amount = $4,
         daily_operating_credits = $5,
-        condition = 100.0,
         updated_at = CURRENT_TIMESTAMP
       WHERE id = $6`,
       [newCatalogId, nextTier, tierSpec?.name ?? catalogOutput?.name ?? null, newOutputAmount, newOpCredits, bld.id],
@@ -638,7 +637,7 @@ export async function completeBuildingConstruction(
     }
 
     const updated = await tx.query(
-      "UPDATE buildings SET status = 'active', construction_progress = 100.0, condition = 100.0, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *",
+      "UPDATE buildings SET status = 'active', construction_progress = 100.0, updated_at = CURRENT_TIMESTAMP WHERE id = $1 RETURNING *",
       [bld.id],
     );
     await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
@@ -683,84 +682,6 @@ export async function setBuildingOperatingPolicy(
     ]);
 
     return { ok: true, buildingId: input.buildingId, policy: input.policy };
-  });
-}
-
-export async function setBuildingAutoRepair(
-  repository: PostgresRepository,
-  input: {
-    humanId: string;
-    buildingId: string;
-    autoRepairEnabled: boolean;
-  },
-): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const bld = await tx.query<{ id: string; owner_id: string }>(
-      'SELECT id, owner_id FROM buildings WHERE id = $1',
-      [input.buildingId],
-    );
-    if (!bld.rows[0]) throw new Error('Building not found');
-    if (bld.rows[0].owner_id !== input.humanId) throw new Error('Unauthorized');
-
-    await tx.query(
-      'UPDATE buildings SET auto_repair_enabled = $1, updated_at = CURRENT_TIMESTAMP WHERE id = $2',
-      [input.autoRepairEnabled, input.buildingId],
-    );
-    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
-      bld.rows[0].owner_id,
-      input.buildingId,
-      input.autoRepairEnabled ? 'auto_repair_enabled' : 'auto_repair_disabled',
-      null,
-      null,
-    ]);
-
-    return { ok: true, buildingId: input.buildingId, autoRepairEnabled: input.autoRepairEnabled };
-  });
-}
-
-export async function repairBuilding(
-  repository: PostgresRepository,
-  input: {
-    humanId: string;
-    buildingId: string;
-  },
-): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const bld = await tx.query<{ id: string; owner_id: string; condition: string; tier: number }>(
-      'SELECT id, owner_id, condition, tier FROM buildings WHERE id = $1 FOR UPDATE',
-      [input.buildingId],
-    );
-    if (!bld.rows[0]) throw new Error('Building not found');
-    if (bld.rows[0].owner_id !== input.humanId) throw new Error('Unauthorized');
-
-    const currentCondition = Number(bld.rows[0].condition);
-    if (currentCondition >= 100) return { ok: true, condition: 100, message: 'Facility is already in pristine condition' };
-
-    const missingCondition = 100 - currentCondition;
-    const requiredComponents = Math.max(1, Math.ceil((missingCondition / 10) * bld.rows[0].tier));
-
-    await postEconomicResourceMutation(tx, {
-      ownerId: input.humanId,
-      resource: 'components',
-      delta: -requiredComponents,
-      reasonType: 'building_maintenance',
-      reasonId: input.buildingId,
-      correlationId: `repair-${input.buildingId}-${Date.now()}`,
-    });
-
-    await tx.query(
-      "UPDATE buildings SET condition = 100.0, status = 'active', updated_at = CURRENT_TIMESTAMP WHERE id = $1",
-      [input.buildingId],
-    );
-    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [
-      bld.rows[0].owner_id,
-      input.buildingId,
-      'building_repaired',
-      null,
-      null,
-    ]);
-
-    return { ok: true, buildingId: input.buildingId, condition: 100.0, componentsUsed: requiredComponents };
   });
 }
 
@@ -829,7 +750,7 @@ export async function getCivicDividendHistory(
   );
 
   const myShares = await repository.query(
-    `SELECT s.*, b.name AS building_name, b.building_type, b.condition
+    `SELECT s.*, b.name AS building_name, b.building_type
      FROM building_investment_shares s
      JOIN buildings b ON s.building_id = b.id
      WHERE s.investor_id = $1 AND b.city_id = $2`,

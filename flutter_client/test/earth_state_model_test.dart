@@ -17,8 +17,6 @@ void main() {
       'life': {'vitality': 90},
       'machines': [{'id': 'M-1'}],
       'productionEvents': [{'type': 'produced'}],
-      'aiAssistants': [{'type': 'maintenance'}],
-      'aiRecommendations': [{'text': 'Optimize'}],
       'market': {
         'products': {'food': 10.0},
         'book': [{'price': 10}],
@@ -52,8 +50,6 @@ void main() {
     expect(state.governance['active'], isEmpty);
     expect(state.institutions['city'], isNotNull);
     expect(state.life['vitality'], 90);
-    expect(state.aiAssistants.length, 1);
-    expect(state.aiRecommendations.length, 1);
     expect(state.market['food'], 10.0);
     expect(state.marketBook.length, 1);
     expect(state.marketTrades.length, 1);

@@ -2,6 +2,7 @@ import type { PostgresRepository } from './repository.ts';
 import { runWorldSchedulerTick } from './scheduler-postgres.ts';
 import { processEndOfDayAutomation } from './daily-automation.ts';
 import { processDueMarketBatches } from './market-scheduler.ts';
+import { featureConfig, type FeatureConfig } from './feature-config.ts';
 
 export type SchedulerHeartbeatResult = {
   schedulerRunId: string;
@@ -18,6 +19,7 @@ export type SchedulerHeartbeatResult = {
 export type SchedulerHeartbeatOptions = {
   maxCatchupDays?: number;
   workBudgetMs?: number;
+  features?: FeatureConfig;
 };
 
 function positiveInteger(value: unknown, fallback: number): number {
@@ -57,6 +59,7 @@ export async function runSchedulerHeartbeat(
   const startedAt = Date.now();
   const maxCatchupDays = positiveInteger(options.maxCatchupDays ?? 3, 3);
   const workBudgetMs = positiveInteger(options.workBudgetMs ?? 20_000, 20_000);
+  const features = options.features ?? featureConfig(undefined);
   const workerInstanceId = `scheduler:${crypto.randomUUID()}`;
   const before = await readSettlementPosition(repository);
   const run = await repository.query<{ id: string }>(
@@ -69,12 +72,12 @@ export async function runSchedulerHeartbeat(
   let actionsProcessed = 0;
   let lastTick: Awaited<ReturnType<typeof runWorldSchedulerTick>>;
   try {
-    lastTick = await runWorldSchedulerTick(repository, String(scheduledTime));
+    lastTick = await runWorldSchedulerTick(repository, String(scheduledTime), features);
     if (lastTick.settlementStatus === 'completed') settledDays += 1;
     let position = await readSettlementPosition(repository);
     while (position.watermark < position.day - 1 && settledDays < maxCatchupDays && Date.now() - startedAt < workBudgetMs) {
       const nextDay = position.watermark + 1;
-      lastTick = await runWorldSchedulerTick(repository, `${scheduledTime}:catchup:${nextDay}`);
+      lastTick = await runWorldSchedulerTick(repository, `${scheduledTime}:catchup:${nextDay}`, features);
       if (lastTick.settlementStatus === 'busy' || lastTick.settlementStatus === 'failed') break;
       if (lastTick.settlementStatus === 'completed') settledDays += 1;
       const nextPosition = await readSettlementPosition(repository);
@@ -83,8 +86,8 @@ export async function runSchedulerHeartbeat(
     }
     position = await readSettlementPosition(repository);
     actionsProcessed = await processEndOfDayAutomation(repository, position.watermark, 1439);
-    const market = position.watermark > 0
-      ? await processDueMarketBatches(repository, position.watermark, Math.max(1, Math.min(workBudgetMs, 10_000)), workerInstanceId)
+    const market = position.watermark > 0 && features.spotMarket
+      ? await processDueMarketBatches(repository, position.watermark, Math.max(1, Math.min(workBudgetMs, 10_000)), workerInstanceId, features)
       : { batchesProcessed: 0, tradesCreated: 0, busy: false };
     await repository.query('UPDATE world_state SET last_scheduler_at = to_timestamp($1 / 1000.0) WHERE id = \'WORLD\'', [Number(scheduledTime)]);
     const after = await readSettlementPosition(repository);

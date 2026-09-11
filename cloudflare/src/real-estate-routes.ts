@@ -6,8 +6,6 @@ import {
   upgradeBuilding,
   completeBuildingConstruction,
   setBuildingOperatingPolicy,
-  setBuildingAutoRepair,
-  repairBuilding,
   demolishBuilding,
   contributeCorporateResearch,
 } from './real-estate-postgres.ts';
@@ -105,26 +103,6 @@ export async function handleRealEstateRoutes(
     }
   }
 
-  if (url.pathname === '/api/real-estate/repair' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ buildingId?: string }>(request);
-    if (!parsed.ok) return parsed.response;
-    const buildingId = parsed.value.buildingId?.trim();
-    if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        repairBuilding(repository, {
-          humanId: viewer.id,
-          buildingId,
-        }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Repair failed';
-      return Response.json({ ok: false, error: message }, { status: /insufficient|unauthorized/i.test(message) ? 409 : 400 });
-    }
-  }
-
   if (url.pathname === '/api/real-estate/policy' && request.method === 'POST') {
     const parsed = await parseJsonBody<{ buildingId?: string; policy?: string }>(request);
     if (!parsed.ok) return parsed.response;
@@ -143,28 +121,6 @@ export async function handleRealEstateRoutes(
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
       const message = error instanceof Error ? error.message : 'Policy update failed';
-      return Response.json({ ok: false, error: message }, { status: /unauthorized|not found/i.test(message) ? 403 : 400 });
-    }
-  }
-
-  if (url.pathname === '/api/real-estate/auto-repair' && request.method === 'POST') {
-    const parsed = await parseJsonBody<{ buildingId?: string; enabled?: boolean }>(request);
-    if (!parsed.ok) return parsed.response;
-    const buildingId = parsed.value.buildingId?.trim();
-    const enabled = parsed.value.enabled ?? true;
-    if (!buildingId) return Response.json({ ok: false, error: 'Building ID is required' }, { status: 400 });
-    try {
-      const result = await withRepository(env, (repository) =>
-        setBuildingAutoRepair(repository, {
-          humanId: viewer.id,
-          buildingId,
-          autoRepairEnabled: Boolean(enabled),
-        }),
-      );
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : 'Auto repair update failed';
       return Response.json({ ok: false, error: message }, { status: /unauthorized|not found/i.test(message) ? 403 : 400 });
     }
   }

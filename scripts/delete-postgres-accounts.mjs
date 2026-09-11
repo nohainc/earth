@@ -49,7 +49,6 @@ const deleteStatements = [
   ['notifications', "DELETE FROM notifications WHERE human_id = ANY($1::text[])", 'humans'],
   ['personal_financial_states', "DELETE FROM personal_financial_states WHERE human_id = ANY($1::text[])", 'humans'],
   ['deceased_profiles', "DELETE FROM deceased_profiles WHERE human_id = ANY($1::text[])", 'humans'],
-  ['ai_assistants', "DELETE FROM ai_assistants WHERE owner_id = ANY($1::text[])", 'humans'],
   ['governance_rules', "DELETE FROM governance_rules WHERE created_by = ANY($1::text[])", 'humans'],
   ['ownership_events', "DELETE FROM ownership_events WHERE from_owner_id = ANY($1::text[]) OR to_owner_id = ANY($1::text[])", 'humans'],
   ['resource_balances', "DELETE FROM resource_balances WHERE owner_id = ANY($1::text[])", 'humans'],

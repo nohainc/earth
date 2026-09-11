@@ -1,6 +1,6 @@
 # EARTH — Current Project State
 
-> Last updated: 2026-09-11 · Read this file first in every AI session before opening any other file.
+> Last updated: 2026-09-11 · Development baseline: see `ARCHITECTURE_BASELINE.md`.
 
 ---
 
@@ -17,13 +17,13 @@
 - Businesses: shares, constitutions, managers, statements, dividends, mergers
 - Contracts: employment, supply, intellectual-service, disputes
 - House/dynasty: lineage, perks, heirlooms, succession
-- AI assistants: list, policy, tier upgrade (rule-based heuristics — **not an LLM**)
 - Notifications, audit log, SSE / WebSocket event fan-out
 - Daily briefing, net-worth history, market OHLC, futures/derivatives
 - Transactional outbox delivery (emails via Cloudflare Email Service)
 - Flutter Web client fully functional at `/app`
-- Migration head 181; canonical schema and manifest are reconciled through
-  migration 181
+- Migration head 341; canonical schema and manifest are reconciled through
+  migration 341. Economy V2 and related V2 systems remain in development and
+  shadow-reconciliation/cutover work is not yet a production release gate.
 
 ---
 
@@ -31,7 +31,6 @@
 
 - **`index.ts` route extraction** — 2,371 lines; route groups for AI, house, read-models extracted (2026-08-29); communities, corporations, cities, finance, contracts, governance, market, lifecycle still in index.ts
 - **`scheduler-postgres.ts`** — contains long inline SQL; resumable V2 settlement now provisions future entry partitions before daily work
-- **`ai-postgres.ts`** (46 lines) — AI advisor is rule-based only; hardcoded upgrade cost `2400` not loaded from `world_rules`
 - **`objectives.ts`** — all target thresholds (`100000`, `50000`, `25`, etc.) hardcoded; should be loaded from `world_rules` table
 - **Economy V2 migration** — interactive and daily paths are being dual-written while shadow reconciliation compares legacy and V2 balances/deltas before cutover
 - **Economy V2 final cutover** — not ready; `npm run db:verify:economy-cutover` currently reports remaining legacy production callers and must pass before archival/removal

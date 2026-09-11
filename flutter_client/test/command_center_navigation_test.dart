@@ -86,8 +86,6 @@ void main() {
       },
       'machines': <dynamic>[],
       'productionEvents': <dynamic>[],
-      'aiAssistants': <dynamic>[],
-      'aiRecommendations': <dynamic>[],
     });
   }
 

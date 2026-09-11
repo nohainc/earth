@@ -11,6 +11,7 @@ import { settleGlobalBank } from './global-bank-settlement-engine.ts';
 import { captureEconomyShadowOpening, reconcileEconomyShadowDay } from './economy-shadow.ts';
 import { createDailySettlementPhaseRegistry, type DailySettlementPhaseContext } from './daily-settlement-phases.ts';
 import { provisionEconomicEntryPartitions } from './economic-entry-partitions.ts';
+import type { FeatureConfig } from './feature-config.ts';
 
 export { settleBuildingUpkeepAndRevenueV2, settleCivicDividends };
 
@@ -637,6 +638,7 @@ export async function runResumableSettlementDay(
   repository: PostgresRepository,
   day: number,
   leaseOwner = `settlement-worker:${crypto.randomUUID()}`,
+  features?: FeatureConfig,
 ): Promise<SettlementResult> {
   const claim = await repository.transaction(async (tx) => tx.query<{ claimed: boolean; status: string; attempt_count: number; current_phase: string | null }>(
     'SELECT * FROM earth_claim_settlement_day($1,$2,$3)', [day, leaseOwner, 300],
@@ -657,31 +659,35 @@ export async function runResumableSettlementDay(
     preparePartitions: ({ tx }) => provisionEconomicEntryPartitions(tx, day),
     rebuildProfiles: ({ tx, shard }) => tx.query<{ rebuilt_count: string }>('SELECT earth_rebuild_dirty_profiles($1::smallint,$2::bigint) AS rebuilt_count', [shard, day]).then((result) => Number(result.rows[0]?.rebuilt_count ?? 0)),
     profileSettlement: ({ tx }) => applyPreparedSettlementProfiles(tx, day),
-    lifeMaintenance: ({ tx }) => settleLifeMaintenanceInTransaction(tx, day),
+    lifeMaintenance: async ({ tx }) => {
+      const result = await settleLifeMaintenanceInTransaction(tx, day);
+      await tx.query('SELECT earth_refresh_human_daily_needs($1)', [day]);
+      return result;
+    },
     basicLevy: ({ tx }) => settleBasicLevy(tx, day),
-    ipLicenseBilling: ({ tx }) => tx.query('SELECT earth_settle_technology_license_fees($1)', [day]),
+    ipLicenseBilling: ({ tx }) => features?.technologyLicenses === false ? Promise.resolve() : tx.query('SELECT earth_settle_technology_license_fees($1)', [day]),
     buildingSettlement: async ({ tx }) => {
       await tx.query('SELECT earth_rebuild_corporation_technology_modifier_cache($1)', [day]);
       await tx.query('SELECT earth_refresh_technology_modifier_sources($1)', [day]);
       return settleBuildingUpkeepAndRevenueV2(tx, day);
     },
     cityCorporateIncomeTax: ({ tx }) => settleCityCorporateIncomeTax(tx, day),
-    globalBank: ({ tx }) => settleGlobalBank(tx, day),
-    bankHealth: ({ tx }) => tx.query('SELECT earth_evaluate_global_bank_resolution($1)', [day]),
+    globalBank: ({ tx }) => features?.bankDeposits === false && features?.bankLoans === false ? Promise.resolve() : settleGlobalBank(tx, day),
+    bankHealth: ({ tx }) => features?.bankDeposits === false && features?.bankLoans === false ? Promise.resolve() : tx.query('SELECT earth_evaluate_global_bank_resolution($1)', [day]),
     mandatoryBudgetPayments: ({ tx }) => settleMandatoryBudgetPayments(tx, day),
     scheduledBudgetPayments: ({ tx }) => settleScheduledBudgetPayments(tx, day),
     cityServiceProjections: ({ tx }) => refreshCityServiceProjections(tx, day),
     cityDynamics: ({ tx }) => processCityDynamics(tx, day),
     budgetDividendEligibility: ({ tx }) => settleCivicDividends(tx, day),
-    patentExpirations: ({ tx }) => tx.query('SELECT earth_finalize_technology_public_domain($1)', [day]),
+    patentExpirations: ({ tx }) => features?.patents === false ? Promise.resolve() : tx.query('SELECT earth_finalize_technology_public_domain($1)', [day]),
     researchAndProgress: ({ tx }) => settleResearchAndProgress(tx, day),
-    lifecycle: ({ tx }) => settleLifecycle(tx, day),
+    lifecycle: ({ tx }) => features?.mortality === false ? Promise.resolve() : settleLifecycle(tx, day),
     postSuccessionAccessRefresh: async ({ tx }) => {
       await tx.query('SELECT earth_rebuild_corporation_technology_modifier_cache($1)', [day]);
       return tx.query('SELECT earth_refresh_technology_modifier_sources($1)', [day]);
     },
-    financialStates: ({ tx }) => updateFinancialStates(tx, day),
-    institutionDissolution: ({ tx }) => dissolveInstitutions(tx, day),
+    financialStates: ({ tx }) => features?.institutionDistress === false ? Promise.resolve() : updateFinancialStates(tx, day),
+    institutionDissolution: ({ tx }) => features?.forcedLiquidation === false ? Promise.resolve() : dissolveInstitutions(tx, day),
     financialProjections: async ({ tx }) => {
       await tx.query('SELECT earth_refresh_daily_financial_projections($1)', [day]);
       return tx.query('SELECT earth_refresh_institution_financial_projection_fields($1)', [day]);
@@ -781,7 +787,7 @@ async function captureEndOfDaySnapshots(tx: PostgresRepository, day: number): Pr
 }
 
 
-export async function runWorldSchedulerTick(repository: PostgresRepository, idempotencyKey?: string): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; settlementStatus?: SettlementResult['status']; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
+export async function runWorldSchedulerTick(repository: PostgresRepository, idempotencyKey?: string, features?: FeatureConfig): Promise<{ day: number; minute: number; newDay: boolean; settledGameDay?: number; settlementStatus?: SettlementResult['status']; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean }> {
   let pendingResumableSettlementDay: number | null = null;
   let result: { day: number; minute: number; newDay: boolean; settledGameDay?: number; settlementStatus?: SettlementResult['status']; productionEvents: number; marketSettlements: number; alreadyProcessed?: boolean };
   result = await repository.transaction(async (tx) => {
@@ -813,7 +819,7 @@ export async function runWorldSchedulerTick(repository: PostgresRepository, idem
     const settlementDay = active && nextDay < day ? nextDay : null;
     if (settlementDay !== null) pendingResumableSettlementDay = settlementDay;
     await tx.query("UPDATE world_state SET living_cost_index = ROUND(GREATEST(0.5, LEAST(3, (SELECT COALESCE(AVG(price), 1) FROM market_prices) / 50))::numeric, 3), essential_services_index = ROUND(GREATEST(0, LEAST(1, (SELECT COALESCE(MIN(LEAST(LEAST(1, housing_capacity / GREATEST(1, residents)), LEAST(1, energy_capacity / GREATEST(1, residents)), LEAST(1, connectivity_capacity / GREATEST(1, residents)), LEAST(1, health_capacity / 100.0))), 0) FROM cities)))::numeric, 3) WHERE id = 'WORLD'");
-    await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(condition), 68) FROM buildings WHERE status = 'active') * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
+    await tx.query("UPDATE world_state SET health = CAST(GREATEST(0, LEAST(100, (SELECT COALESCE(AVG(CASE WHEN status = 'active' THEN 100 ELSE 0 END), 68) FROM buildings) * COALESCE(essential_services_index, 0.68))) AS INTEGER) WHERE id = 'WORLD'");
     const productionEvents = await settleProduction(tx, day);
     await runAiMaintenance(tx, day);
     if (idempotencyKey) {
@@ -825,7 +831,7 @@ export async function runWorldSchedulerTick(repository: PostgresRepository, idem
   let settlementStatus: SettlementResult['status'] | undefined;
   if (pendingResumableSettlementDay !== null) {
     await captureEconomyShadowOpening(repository, pendingResumableSettlementDay);
-    const settlement = await runResumableSettlementDay(repository, pendingResumableSettlementDay, `scheduler:${idempotencyKey ?? crypto.randomUUID()}`);
+    const settlement = await runResumableSettlementDay(repository, pendingResumableSettlementDay, `scheduler:${idempotencyKey ?? crypto.randomUUID()}`, features);
     settlementStatus = settlement.status;
     if (settlement.status === 'completed') await reconcileEconomyShadowDay(repository, pendingResumableSettlementDay);
   }

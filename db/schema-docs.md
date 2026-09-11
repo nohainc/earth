@@ -21,6 +21,4 @@ Generated reference for core operational tables; consult the numbered migrations
 | ballots | Governance votes | proposal_id TEXT, house_id TEXT, human_id UUID (casting-Human audit), choice TEXT, weight NUMERIC |
 | notifications | Player notifications | id TEXT, human_id UUID, notification_type TEXT, read_at TIMESTAMPTZ |
 | event_outbox | Reliable side-effect dispatch | id UUID, topic TEXT, payload JSONB, status TEXT |
-| ai_assistants | Player advisory assistants | id TEXT, owner_id UUID, tier TEXT, policy TEXT |
-| ai_recommendation_feedback | Player feedback on advice | id UUID, human_id UUID, recommendation_type TEXT, action TEXT |
 | scheduler_tick_logs | Scheduler engine observability | id UUID, game_day INTEGER, engine TEXT, status TEXT, duration_ms INTEGER |

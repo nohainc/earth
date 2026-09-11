@@ -45,15 +45,10 @@ condition curves and decay, repair costs, service capacity/pricing, and service
 matching behavior therefore remain pinned to the rules that applied on the
 settled day, even when the scheduler is catching up or replaying history.
 
-The legacy building settlement implementation remains present until the
-dependency audit and replacement plans prove that no scheduler or API caller
-uses it.
-
-The production scheduler imports only `building-settlement-v2.ts`. The former
-`building-settlement-engine.ts` is quarantined as a legacy compatibility
-fixture for old integration tests and is not a production dependency. It may
-be deleted once those legacy tests are retired; shared accounting adapters are
-not removed as part of this audit.
+The former `building-settlement-engine.ts` has been deleted. The production
+scheduler and all active building callers use `building-settlement-v2.ts`.
+Shared accounting adapters remain only where their owning subsystem has not
+completed its Economy V2 cutover.
 
 Generic `daily_settlement_profiles` are explicitly non-building profiles. They
 must not carry building production, upkeep, service, repair, or other building

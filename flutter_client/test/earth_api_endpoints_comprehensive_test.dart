@@ -28,8 +28,6 @@ void main() {
           'institutions': {'communities': [], 'cities': [], 'corporations': []},
           'machines': [],
           'productionEvents': [],
-          'aiAssistants': [],
-          'aiRecommendations': [],
         },
         'events': [],
         'notifications': [],

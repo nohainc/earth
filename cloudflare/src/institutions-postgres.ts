@@ -116,15 +116,15 @@ export async function createCity(repository: PostgresRepository, input: { founde
     await tx.query('UPDATE cities SET residents = (SELECT COUNT(*) FROM memberships WHERE city_id = $1), housing_capacity = GREATEST(10, (SELECT COUNT(*) FROM memberships WHERE city_id = $1)), energy_capacity = GREATEST(10, (SELECT COUNT(*) FROM memberships WHERE city_id = $1)), connectivity_capacity = GREATEST(10, (SELECT COUNT(*) FROM memberships WHERE city_id = $1)) WHERE id = $1', [cityId]);
     await tx.query(
       `INSERT INTO buildings (
-         id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
-         slot_footprint, ownership_class, operating_policy, auto_repair_enabled,
+         id, city_id, owner_id, catalog_id, building_type, name, tier,
+         slot_footprint, ownership_class, operating_policy,
          upkeep_energy, upkeep_food, upkeep_materials, upkeep_components,
          upkeep_compute, daily_operating_credits, resource_output_type,
          resource_output_amount, construction_started_game_day,
          construction_complete_game_day, construction_progress, status, created_game_day
        )
        SELECT 'BLD-DIST-' || $1, $1, $1, c.id, c.building_type, c.name, c.tier,
-              100, c.slot_footprint, c.ownership_class, 'balanced', true,
+              c.slot_footprint, c.ownership_class, 'balanced',
               c.upkeep_energy, c.upkeep_food, c.upkeep_materials,
               c.upkeep_components, c.upkeep_compute, c.operating_credits,
               NULL, 0, $2::integer, $2::integer, 100, 'active', $2::bigint

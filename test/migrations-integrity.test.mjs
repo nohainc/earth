@@ -12,13 +12,13 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '338_budget_integrity_checks.sql');
+  assert.equal(files.at(-1), '341_human_daily_needs_v2.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 338, 'Manifest version must match latest migration version (338)');
+  assert.equal(manifest.migrationVersion, 341, 'Manifest version must match latest migration version (341)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 338/);
+  assert.match(schema, /reconciled through migration 341/);
   assert.ok(manifest.requiredTables.technology_catalog, 'Technology V2 catalog must be in the canonical manifest');
   for (const table of ['owner_financial_summary', 'institution_financial_summary', 'tax_daily_summary']) assert.ok(manifest.requiredTables[table], `${table} must be in the canonical manifest`);
   const marketIntegrity = fs.readFileSync(path.resolve('db/migrations/210_market_integrity_report.sql'), 'utf8');
@@ -241,7 +241,6 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(buildingEconomics, /earth_record_settlement_rate_segment/);
   assert.match(buildingEconomics, /same canonical calculator/);
   assert.match(buildingEconomics, /asset\.scale/);
-  assert.match(fs.readFileSync(path.resolve('cloudflare/src/building-settlement-engine.ts'), 'utf8'), /earth_calculate_building_economics/);
   assert.ok(manifest.requiredTables.economic_policy_rules, 'Manifest must contain canonical policy rules');
   assert.ok(manifest.requiredTables.economic_ownership_classes, 'Manifest must contain canonical ownership classes');
   const policyRules = fs.readFileSync(path.resolve('db/migrations/176_canonical_policy_and_ownership_rules.sql'), 'utf8');
@@ -253,9 +252,7 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(policyRules, /'overclock', 1\.60, 1\.90, 3\.00/);
   assert.match(policyValues, /'overclock', 1\.60, 1\.90, 3\.00/);
   assert.match(policyValues, /decay_multiplier = 0\.10/);
-  assert.match(fs.readFileSync(path.resolve('cloudflare/src/building-settlement-engine.ts'), 'utf8'), /economic_policy_rules policy/);
   assert.match(fs.readFileSync(path.resolve('cloudflare/src/real-estate-catalog.ts'), 'utf8'), /'overclock'/);
-  assert.match(fs.readFileSync(path.resolve('cloudflare/src/building-settlement-engine.ts'), 'utf8'), /economic_decay_multiplier/);
   const profileOrchestration = fs.readFileSync(path.resolve('cloudflare/src/daily-settlement-profiles.ts'), 'utf8');
   assert.match(profileOrchestration, /earth_rebuild_dirty_profiles\(\$1::smallint, \$2::bigint\)/);
   assert.doesNotMatch(profileOrchestration, /SELECT owner_id, owner_kind FROM daily_settlement_profiles/);

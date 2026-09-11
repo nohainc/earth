@@ -7,7 +7,6 @@ import { createResearchProject as createResearchProjectPostgres, fundResearchPro
 import { castVote as castVotePostgres, createProposal as createProposalPostgres } from './governance-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
-import { listAssistants as listAssistantsPostgres, updateAssistantPolicy as updateAssistantPolicyPostgres, upgradeAssistant as upgradeAssistantPostgres } from './ai-postgres';
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, decideCommunityMembershipRequest as decideCommunityMembershipRequestPostgres, disbandCommunity as disbandCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres, listCommunityMembershipRequests as listCommunityMembershipRequestsPostgres, setCommunityMemberRole as setCommunityMemberRolePostgres, updateCommunity as updateCommunityPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
 import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, createCorporationWithCapital as createCorporationWithCapitalPostgres, decideCorporationMembershipRequest as decideCorporationMembershipRequestPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationAdmissionPolicy as setCorporationAdmissionPolicyPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
@@ -24,9 +23,8 @@ import { cancelDeliveryFutureListing, createDeliveryFutureListing, submitDeliver
 import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
 import { getDailyBriefing } from './daily-briefing-postgres.ts';
 import { listSocialDirectory } from './social-directory-postgres.ts';
-import { purchasePrivatePlotAndConstruct, upgradeBuilding, completeBuildingConstruction, setBuildingOperatingPolicy, setBuildingAutoRepair, repairBuilding, demolishBuilding, getCityDistrictZoning, contributeCorporateResearch } from './real-estate-postgres.ts';
+import { purchasePrivatePlotAndConstruct, upgradeBuilding, completeBuildingConstruction, setBuildingOperatingPolicy, demolishBuilding, getCityDistrictZoning, contributeCorporateResearch } from './real-estate-postgres.ts';
 import { BUILDING_CATALOG } from './real-estate-catalog.ts';
-import { handleAiRoutes } from './ai-routes.ts';
 import { handleHouseRoutes } from './house-routes.ts';
 import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
@@ -37,6 +35,7 @@ import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHis
 import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 import { handleEconomicRoutes } from './economic-routes.ts';
 import { handleMarketApiRoutes } from './market-api.ts';
+import { featureConfig, featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
 
@@ -415,7 +414,10 @@ const worker = {
       const limit = Number(url.searchParams.get('limit') || 50);
       const offset = Number(url.searchParams.get('offset') || 0);
       const source = url.searchParams.get('source') || undefined;
-      const humanId = url.searchParams.get('all') === 'true' ? undefined : (url.searchParams.get('humanId') || viewer.id);
+      // Error telemetry is a player-scoped diagnostic surface. Do not allow a
+      // query parameter to turn it into an unauthorised cross-player/admin
+      // data export.
+      const humanId = viewer.id;
       try {
         const errors = await withRepository(env, (repo) =>
           listRecentAppErrors(repo, { limit, offset, source, humanId }),
@@ -564,6 +566,7 @@ const worker = {
     }
 
     if (url.pathname === '/api/market/futures/create' && request.method === 'POST') {
+      if (!featureEnabled(env, 'futures')) return featureDisabledResponse('futures');
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ commodity?: string; size?: number; strikePrice?: number; durationGameMinutes?: number; correlationId?: string }>(request);
@@ -592,6 +595,7 @@ const worker = {
     }
 
     if (url.pathname.startsWith('/api/market/futures/') && url.pathname.endsWith('/buy') && request.method === 'POST') {
+      if (!featureEnabled(env, 'futures')) return featureDisabledResponse('futures');
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const segments = url.pathname.split('/');
@@ -614,6 +618,7 @@ const worker = {
     }
 
     if (url.pathname.startsWith('/api/market/futures/') && url.pathname.endsWith('/cancel') && request.method === 'POST') {
+      if (!featureEnabled(env, 'futures')) return featureDisabledResponse('futures');
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const segments = url.pathname.split('/');
@@ -734,6 +739,7 @@ const worker = {
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/market/orders' && request.method === 'POST') {
+      if (!featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string }>(request);
@@ -870,6 +876,7 @@ const worker = {
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
     if (url.pathname === '/api/life/successor' && request.method === 'POST') {
+      if (!featureEnabled(env, 'mortality')) return featureDisabledResponse('mortality');
       const viewer = await currentHuman(request, env, true);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ name?: string; estatePeriodDays?: number; successorHumanId?: string }>(request);
@@ -902,6 +909,7 @@ const worker = {
       const world = await runSchedulerHeartbeat(repository, _event.scheduledTime, {
         maxCatchupDays: schedulerConfig.EARTH_SCHEDULER_MAX_CATCHUP_DAYS,
         workBudgetMs: schedulerConfig.EARTH_SCHEDULER_WORK_BUDGET_MS,
+        features: featureConfig(env),
       });
       return world;
     }, { workload: 'scheduler' });

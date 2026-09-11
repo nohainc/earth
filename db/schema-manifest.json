@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 338,
+  "migrationVersion": 341,
   "requiredTables": {
     "app_error_logs": [
       "id",
@@ -14,18 +14,6 @@
       "account_id",
       "owner_id",
       "balance"
-    ],
-    "ai_assistants": [
-      "id",
-      "owner_id"
-    ],
-    "ai_recommendation_feedback": [
-      "id",
-      "human_id",
-      "recommendation_type",
-      "recommendation_id",
-      "action",
-      "created_at"
     ],
     "auth_action_tokens": [
       "id",
@@ -1278,6 +1266,17 @@
       "amount_units",
       "paid_units",
       "status"
+    ],
+    "human_daily_needs": [
+      "human_id",
+      "game_day",
+      "city_id",
+      "food_satisfaction",
+      "housing_satisfaction",
+      "energy_satisfaction",
+      "healthcare_access",
+      "connectivity_access",
+      "life_quality"
     ],
     "personal_life_maintenance": [
       "human_id",

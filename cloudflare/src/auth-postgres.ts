@@ -19,7 +19,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     const starter = calculateStarterPackage(world.rows[0]?.living_cost_index ?? 1, economicStartIndex(referencePrice.rows[0]?.reference_price ?? 50));
     const humanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const accountId = `account-${humanId.toLowerCase()}`;
-    const assistantId = `AI-${humanId.slice(2)}-01`;
     const houseId = `HOUSE-${humanId.slice(2)}`;
     const displayName = `${input.personName} ${input.houseSurname}`;
     const houseName = `House ${input.houseSurname}`;
@@ -35,15 +34,15 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('INSERT INTO auth_accounts (id,house_id,email,password_hash,password_salt,password_iterations) VALUES ($1,$2,$3,$4,$5,$6)', [`AUTH-${houseId}`, houseId, input.email, passwordHash, bytesToBase64(salt), iterations]);
     await tx.query(
       `INSERT INTO buildings (
-         id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
-         slot_footprint, ownership_class, operating_policy, auto_repair_enabled,
+         id, city_id, owner_id, catalog_id, building_type, name, tier,
+         slot_footprint, ownership_class, operating_policy,
          upkeep_energy, upkeep_food, upkeep_materials, upkeep_components,
          upkeep_compute, daily_operating_credits, resource_output_type,
          resource_output_amount, construction_started_game_day,
          construction_complete_game_day, construction_progress, status, created_game_day
        )
        SELECT 'BLD-ESTATE-' || $1, NULL, $1, c.id, c.building_type, c.name,
-              c.tier, 100, c.slot_footprint, c.ownership_class, 'balanced', true,
+              c.tier, c.slot_footprint, c.ownership_class, 'balanced',
               c.upkeep_energy, c.upkeep_food, c.upkeep_materials,
               c.upkeep_components, c.upkeep_compute, c.operating_credits,
               NULL, 0, $2, $2, 100, 'active', $2
@@ -58,7 +57,6 @@ export async function registerIdentity(repository: PostgresRepository, input: { 
     await tx.query('UPDATE houses SET founder_human_id = $1, current_human_id = $1 WHERE id = $2', [humanId, houseId]);
     await tx.query("INSERT INTO house_lineage_records (id,house_id,human_id,generation,name,title,birth_game_day,is_incumbent,legacy_score) VALUES ($1,$2,$3,1,$4,'House Founder',$5,true,0)", [crypto.randomUUID(), houseId, humanId, displayName, worldDay]);
     await tx.query("INSERT INTO personal_financial_states (human_id, status, since_game_day, protected_credits, last_reason) VALUES ($1, 'active', $2, 100, 'starter-package')", [humanId, worldDay]);
-    await tx.query("INSERT INTO ai_assistants (id,owner_id,tier,policy,enabled) VALUES ($1,$2,'basic','recommend',true)", [assistantId, humanId]);
     await enqueueOutbox(tx, {
       eventKey: `starter-package:${humanId}`,
       topic: 'world_activity',
@@ -139,15 +137,15 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
     await tx.query('INSERT INTO humans (id,account_id,house_id,display_name,age_years,standing,legacy,life_status) VALUES ($1,$2,$3,$4,20,500,$5,\'active\')', [newHumanId, newAccountId, existingHouse.id, input.displayName, Math.floor(Number(prevHuman?.legacy ?? 0) * 0.25)]);
     await tx.query(
       `INSERT INTO buildings (
-         id, city_id, owner_id, catalog_id, building_type, name, tier, condition,
-         slot_footprint, ownership_class, operating_policy, auto_repair_enabled,
+         id, city_id, owner_id, catalog_id, building_type, name, tier,
+         slot_footprint, ownership_class, operating_policy,
          upkeep_energy, upkeep_food, upkeep_materials, upkeep_components,
          upkeep_compute, daily_operating_credits, resource_output_type,
          resource_output_amount, construction_started_game_day,
          construction_complete_game_day, construction_progress, status, created_game_day
        )
        SELECT 'BLD-ESTATE-' || $1, NULL, $1, c.id, c.building_type, c.name,
-              c.tier, 100, c.slot_footprint, c.ownership_class, 'balanced', true,
+              c.tier, c.slot_footprint, c.ownership_class, 'balanced',
               c.upkeep_energy, c.upkeep_food, c.upkeep_materials,
               c.upkeep_components, c.upkeep_compute, c.operating_credits,
               NULL, 0, $2, $2, 100, 'active', $2
