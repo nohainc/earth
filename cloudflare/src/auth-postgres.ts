@@ -124,7 +124,8 @@ export async function rebornIdentity(repository: PostgresRepository, input: { em
 
     const newHumanId = `H-${crypto.randomUUID().slice(0, 8).toUpperCase()}`;
     const newAccountId = `account-${newHumanId.toLowerCase()}`;
-    const cityId = input.startingCityId ?? 'CITY-0084';
+    const cityId = input.startingCityId ?? (await tx.query<{ city_id: string | null }>('SELECT city_id FROM memberships WHERE human_id = $1', [cred.human_id])).rows[0]?.city_id;
+    if (!cityId) throw new Error('A starting City is required for succession');
     const city = (await tx.query<{ id: string; corporation_id: string | null }>('SELECT id, corporation_id FROM cities WHERE id = $1', [cityId])).rows[0];
     if (!city) throw new Error(`Starting city ${cityId} does not exist`);
 

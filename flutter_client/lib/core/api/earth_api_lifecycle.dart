@@ -9,28 +9,10 @@ extension EarthApiLifecycle on EarthApi {
   }
 
   Future<EarthState> registerSuccessor(
-    String name, {
-    String? successorHumanId,
-    int? estatePeriodDays,
-  }) async {
+    String name,
+  ) async {
     await _request('/api/life/successor', method: 'POST', body: {
       'name': name.trim(),
-      if (successorHumanId != null && successorHumanId.trim().isNotEmpty)
-        'successorHumanId': successorHumanId.trim(),
-      if (estatePeriodDays != null && estatePeriodDays > 0)
-        'estatePeriodDays': estatePeriodDays,
-    });
-    return world();
-  }
-
-  Future<EarthState> settleInheritance({
-    required String predecessorId,
-    required String successorId,
-    required String successorName,
-  }) async {
-    await _request('/api/life/successor', method: 'POST', body: {
-      'name': successorName.trim(),
-      'successorHumanId': successorId.trim(),
     });
     return world();
   }

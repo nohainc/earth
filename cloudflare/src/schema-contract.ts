@@ -1,5 +1,5 @@
 // Generated from db/schema-manifest.json. Do not edit manually.
-export const EARTH_SCHEMA_VERSION = 354;
+export const EARTH_SCHEMA_VERSION = 355;
 export const REQUIRED_SCHEMA_TABLES = {
   "auth_email_deliveries": [
     "id",
@@ -498,6 +498,12 @@ export const REQUIRED_SCHEMA_TABLES = {
     "operating_cost_recipient_type",
     "effects",
     "is_original"
+  ],
+  "building_catalog_effects": [
+    "catalog_id",
+    "effect_code",
+    "effect_value",
+    "rules_version"
   ],
   "building_economic_rule_versions": [
     "catalog_id",
@@ -1930,5 +1936,6 @@ export const REQUIRED_INDEXES = [
   "community_members_house_idx",
   "community_members_human_idx",
   "houses_succession_transition_idx",
-  "house_lineage_records_house_generation_idx"
+  "house_lineage_records_house_generation_idx",
+  "building_catalog_effects_code_idx"
 ] as const;

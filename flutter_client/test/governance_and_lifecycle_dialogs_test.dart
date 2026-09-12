@@ -41,46 +41,6 @@ void main() {
     expect(saved, true);
   });
 
-  testWidgets('showSettleInheritanceDialog opens settlement confirmation and executes',
-      (tester) async {
-    bool settled = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => showSettleInheritanceDialog(
-                context,
-                (fn) async {
-                  settled = true;
-                },
-                predecessorId: 'H-001',
-                defaultSuccessorName: 'Kaelen Vance',
-              ),
-              child: const Text('Open Settle Dialog'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open Settle Dialog'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('Settle Estate Inheritance'), findsOneWidget);
-    expect(find.text('Execute inheritance'), findsOneWidget);
-
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Successor Human ID'), 'H-0099');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('Execute inheritance'));
-    await tester.pumpAndSettle();
-
-    expect(settled, true);
-  });
-
   testWidgets('showRecoveryDialog authorizes institution recovery',
       (tester) async {
     bool recovered = false;

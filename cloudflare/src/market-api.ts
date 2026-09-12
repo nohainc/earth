@@ -155,14 +155,14 @@ async function readInstrumentRoute(repository: PostgresRepository, key: string, 
 }
 
 export async function handleMarketApiRoutes(request: Request, env: Env, url: URL): Promise<Response | null> {
-  const path = url.pathname.startsWith('/market/') ? `/api${url.pathname}` : url.pathname;
+  const path = url.pathname;
   const instrumentsPath = path === '/api/market/instruments' && request.method === 'GET';
   const instrumentMatch = path.match(/^\/api\/market\/([^/]+)\/(book|batches|fills|candles)$/);
   const myOrders = path === '/api/market/orders/my' && request.method === 'GET';
-  const orderPost = url.pathname === '/market/orders' && request.method === 'POST';
-  const cancelMatch = path.match(/^\/api\/market\/orders\/([^/]+)\/cancel$/);
-  if (!instrumentsPath && !instrumentMatch && !myOrders && !orderPost && !(cancelMatch && request.method === 'POST')) return null;
-  if ((orderPost || (cancelMatch && request.method === 'POST')) && !featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
+  const orderPost = path === '/api/market/orders' && request.method === 'POST';
+  const cancelMatch = path.match(/^\/api\/market\/orders\/([^/]+)$/);
+  if (!instrumentsPath && !instrumentMatch && !myOrders && !orderPost && !(cancelMatch && request.method === 'DELETE')) return null;
+  if ((orderPost || (cancelMatch && request.method === 'DELETE')) && !featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
 
   try {
     if (instrumentsPath) {

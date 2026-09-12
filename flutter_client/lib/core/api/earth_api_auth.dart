@@ -128,9 +128,12 @@ extension EarthApiAuth on EarthApi {
     return response;
   }
 
-  Future<void> deleteAccount() async {
+  Future<void> deleteAccount({String? code}) async {
     try {
-      await _request('/api/auth/account', method: 'DELETE');
+      await _request('/api/auth/account', method: 'DELETE', body: {
+        'confirm': true,
+        if (code != null && code.isNotEmpty) 'code': code,
+      });
     } finally {
       await AuthStorage.clearToken();
     }

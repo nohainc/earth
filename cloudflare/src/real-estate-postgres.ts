@@ -3,11 +3,7 @@ import { getAuthoritativeGameTime } from './game-clock.ts';
 import { postEconomicCreditTransfer } from './financial-postgres.ts';
 import { postEconomicResourceMutation } from './resource-ledger-postgres.ts';
 import { centsToMoney, moneyToCents } from './money.ts';
-import {
-  BUILDING_CATALOG,
-  type OperatingPolicy,
-  type OwnershipClass,
-} from './real-estate-catalog.ts';
+import type { OperatingPolicy } from './real-estate-catalog.ts';
 
 type ConstructionTechnologySnapshot = {
   rulesVersion: string | null;
@@ -101,16 +97,18 @@ export async function getCityDistrictZoning(
   );
   const population = Number(popRes.rows[0]?.count ?? 1);
 
-  // Count active Urban District Modules in the city (minimum 1 founding district guaranteed)
-  const distRes = await repository.query<{ count: string }>(
-    "SELECT COUNT(*)::integer AS count FROM buildings WHERE city_id = $1 AND building_type = 'urban-district-module' AND status NOT IN ('closed', 'foreclosed')",
+  const districtEffects = await repository.query<{ district_count: string; citizen_capacity: string; total_slots: string; civic_reserved_slots: string }>(
+    `SELECT
+       (SELECT COUNT(*)::text FROM buildings WHERE city_id = $1 AND building_type = 'urban-district-module' AND status NOT IN ('closed', 'foreclosed')) AS district_count,
+       COALESCE((SELECT SUM(e.effect_value) FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.city_id = $1 AND b.status NOT IN ('closed', 'foreclosed') AND e.effect_code = 'CITY_CITIZEN_CAPACITY'), 0)::text AS citizen_capacity,
+       COALESCE((SELECT SUM(e.effect_value) FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.city_id = $1 AND b.status NOT IN ('closed', 'foreclosed') AND e.effect_code = 'CITY_TOTAL_SLOTS'), 0)::text AS total_slots,
+       COALESCE((SELECT SUM(e.effect_value) FROM buildings b JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1)) WHERE b.city_id = $1 AND b.status NOT IN ('closed', 'foreclosed') AND e.effect_code = 'CITY_CIVIC_RESERVED_SLOTS'), 0)::text AS civic_reserved_slots`,
     [cityId],
   );
-  const districtModulesCount = Math.max(1, Number(distRes.rows[0]?.count || 1));
-
-  const maxCitizens = districtModulesCount * 10;
-  const totalSlots = districtModulesCount * 120;
-  const civicReservedSlots = districtModulesCount * 20;
+  const districtModulesCount = Number(districtEffects.rows[0]?.district_count ?? 0);
+  const maxCitizens = Number(districtEffects.rows[0]?.citizen_capacity ?? 0);
+  const totalSlots = Number(districtEffects.rows[0]?.total_slots ?? 0);
+  const civicReservedSlots = Number(districtEffects.rows[0]?.civic_reserved_slots ?? 0);
 
   const bldRes = await repository.query<{
     id: string;
@@ -124,15 +122,21 @@ export async function getCityDistrictZoning(
     [cityId],
   );
   const personalEstateRes = viewerId
-    ? await repository.query<{ tier: number }>(
-        "SELECT COALESCE(MAX(tier), 1)::integer AS tier FROM buildings WHERE owner_id = $1 AND building_type = 'private-estate-plot' AND status NOT IN ('closed', 'foreclosed')",
+    ? await repository.query<{ slots: string }>(
+        `SELECT COALESCE(SUM(e.effect_value), 0)::text AS slots
+           FROM buildings b
+           JOIN building_catalog_effects e ON e.catalog_id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
+          WHERE b.owner_id = $1 AND b.building_type = 'private-estate-plot'
+            AND b.status NOT IN ('closed', 'foreclosed')
+            AND e.effect_code = 'PRIVATE_OWNER_SLOTS'`,
         [viewerId],
       )
-    : { rows: [] as Array<{ tier: number }> };
+    : { rows: [] as Array<{ slots: string }> };
 
   let usedPrivateSlots = 0;
   let usedCivicSlots = 0;
-  let personalEstateTier = Math.max(1, Number(personalEstateRes.rows[0]?.tier ?? 1));
+  const personalOwnerSlots = Number(personalEstateRes.rows[0]?.slots ?? 0);
+  let personalEstateTier = Math.max(1, Math.ceil(personalOwnerSlots / 10));
   let personalUsedSlots = 0;
 
   for (const row of bldRes.rows) {
@@ -152,7 +156,7 @@ export async function getCityDistrictZoning(
   const availablePrivateSlots = Math.max(0, maxPrivatePermitted - usedPrivateSlots);
   const availableCivicSlots = Math.max(0, totalSlots - usedCivicSlots - usedPrivateSlots);
 
-  const personalMaxSlots = personalEstateTier * 10;
+  const personalMaxSlots = personalOwnerSlots || personalEstateTier * 10;
   const personalAvailableSlots = Math.max(0, personalMaxSlots - personalUsedSlots);
 
   return {
@@ -205,22 +209,30 @@ export async function purchasePrivatePlotAndConstruct(
       [`${input.buildingType}-t1`],
     )).rows[0];
     if (!catalogRow) throw new Error('Unknown or inactive building blueprint');
+    const catalogNumber = (value: unknown): number => Number(value ?? 0);
+    const output = [
+      ['energy', catalogNumber(catalogRow.output_energy)],
+      ['food', catalogNumber(catalogRow.output_food)],
+      ['material', catalogNumber(catalogRow.output_materials)],
+      ['components', catalogNumber(catalogRow.output_components)],
+      ['compute', catalogNumber(catalogRow.output_compute)],
+    ].find(([, amount]) => amount > 0);
     const spec = {
-      type: catalogRow.building_type,
-      name: catalogRow.name,
-      tier: Number(catalogRow.tier),
-      defaultOwnershipClass: catalogRow.ownership_class,
-      slotFootprint: Number(catalogRow.slot_footprint),
-      baseCreditCost: Number(catalogRow.cost_credits ?? 0),
-      baseMaterialCost: Number(catalogRow.cost_materials ?? 0),
-      dailyEnergyUpkeep: Number(catalogRow.upkeep_energy ?? 0),
-      dailyFoodUpkeep: Number(catalogRow.upkeep_food ?? 0),
-      dailyMaterialsUpkeep: Number(catalogRow.upkeep_materials ?? 0),
-      dailyComponentsUpkeep: Number(catalogRow.upkeep_components ?? 0),
-      dailyComputeUpkeep: Number(catalogRow.upkeep_compute ?? 0),
-      dailyStaffingCredits: Number(catalogRow.operating_credits ?? 0),
-      resourceOutputType: catalogRow.output_energy > 0 ? 'energy' : catalogRow.output_food > 0 ? 'food' : catalogRow.output_materials > 0 ? 'material' : catalogRow.output_components > 0 ? 'components' : 'compute',
-      resourceOutputAmount: Number(catalogRow.output_energy || catalogRow.output_food || catalogRow.output_materials || catalogRow.output_components || catalogRow.output_compute || 0),
+      type: String(catalogRow.building_type),
+      name: String(catalogRow.name),
+      tier: catalogNumber(catalogRow.tier),
+      defaultOwnershipClass: String(catalogRow.ownership_class),
+      slotFootprint: catalogNumber(catalogRow.slot_footprint),
+      baseCreditCost: catalogNumber(catalogRow.cost_credits),
+      baseMaterialCost: catalogNumber(catalogRow.cost_materials),
+      dailyEnergyUpkeep: catalogNumber(catalogRow.upkeep_energy),
+      dailyFoodUpkeep: catalogNumber(catalogRow.upkeep_food),
+      dailyMaterialsUpkeep: catalogNumber(catalogRow.upkeep_materials),
+      dailyComponentsUpkeep: catalogNumber(catalogRow.upkeep_components),
+      dailyComputeUpkeep: catalogNumber(catalogRow.upkeep_compute),
+      dailyStaffingCredits: catalogNumber(catalogRow.operating_credits),
+      resourceOutputType: output?.[0] ?? null,
+      resourceOutputAmount: output?.[1] ?? 0,
     };
     if (spec.defaultOwnershipClass === 'civic') {
       throw new Error('Civic utility buildings must be procured via Democratic City Referendum');
@@ -452,11 +464,13 @@ export async function upgradeBuilding(
     if (!bld) throw new Error('Building not found');
     if (bld.owner_id !== input.humanId) throw new Error('Only the property owner can upgrade this facility');
     const nextTier = bld.tier + 1;
-    const spec = BUILDING_CATALOG[bld.building_type];
-    const tierSpec = spec?.tiers?.find((t) => t.tier === nextTier);
     const targetCatalog = await tx.query<{
       id: string;
+      building_type: string;
       name: string;
+      tier: number;
+      ownership_class: string;
+      slot_footprint: number;
       research_project_id: string | null;
       cost_credits: string;
       cost_materials: string;
@@ -467,8 +481,13 @@ export async function upgradeBuilding(
       output_materials: string;
       output_components: string;
       output_compute: string;
+      upkeep_energy: string;
+      upkeep_food: string;
+      upkeep_materials: string;
+      upkeep_components: string;
+      upkeep_compute: string;
       operating_credits: string;
-    }>('SELECT id, name, research_project_id, cost_credits, cost_materials, cost_components, cost_compute, output_energy, output_food, output_materials, output_components, output_compute, operating_credits FROM building_catalog WHERE id = $1', [`${bld.building_type}-t${nextTier}`]);
+    }>('SELECT id, building_type, name, tier, ownership_class, slot_footprint, research_project_id, cost_credits, cost_materials, cost_components, cost_compute, output_energy, output_food, output_materials, output_components, output_compute, upkeep_energy, upkeep_food, upkeep_materials, upkeep_components, upkeep_compute, operating_credits FROM building_catalog WHERE id = $1 AND tier = $2 AND is_active = true', [`${bld.building_type}-t${nextTier}`, nextTier]);
     // Tier upgrades are catalog-driven.  The static catalog may still contain
     // legacy tier definitions, but a tier must not become usable until its
     // researched/seeded database blueprint exists (and the buildings.catalog_id
@@ -490,27 +509,20 @@ export async function upgradeBuilding(
       if (!unlock.rows[0]) throw new Error('Your corporation must complete this building research before using the tier');
     }
 
-    if (bld.building_type !== 'private-estate-plot' && tierSpec?.requiredCityPopulation) {
-      const popRes = await tx.query<{ count: string }>(
-        'SELECT COUNT(*)::text AS count FROM memberships WHERE city_id = $1',
-        [bld.city_id],
-      );
-      const population = Number(popRes.rows[0]?.count ?? 0);
-      if (population < tierSpec.requiredCityPopulation) {
-        throw new Error(`Tier ${nextTier} requires City Population of at least ${tierSpec.requiredCityPopulation} (Current: ${population})`);
-      }
-    }
-
-    const upgradeCreditCost = tierSpec?.upgradeCreditCost ?? Number(targetCatalog.rows[0]?.cost_credits ?? 4800 * nextTier);
-    const upgradeMaterialCost = tierSpec?.upgradeMaterialCost ?? Number(targetCatalog.rows[0]?.cost_materials ?? 0);
-    const upgradeCompCost = tierSpec?.upgradeComponentsCost ?? Number(targetCatalog.rows[0]?.cost_components ?? 0);
-    const upgradeComputeCost = tierSpec?.upgradeComputeCost ?? Number(targetCatalog.rows[0]?.cost_compute ?? 0);
+    const upgradeCreditCost = Number(targetCatalog.rows[0].cost_credits ?? 0);
+    const upgradeMaterialCost = Number(targetCatalog.rows[0].cost_materials ?? 0);
+    const upgradeCompCost = Number(targetCatalog.rows[0].cost_components ?? 0);
+    const upgradeComputeCost = Number(targetCatalog.rows[0].cost_compute ?? 0);
     const catalogOutput = targetCatalog.rows[0];
-    const newOutputAmount = tierSpec?.resourceOutputType && tierSpec.resourceOutputType !== 'credits'
-      ? tierSpec.resourceOutputAmount ?? Number(catalogOutput?.[`output_${tierSpec.resourceOutputType}` as keyof typeof catalogOutput] ?? bld.resource_output_amount ?? 0)
-      : 0;
-    const newOpCredits = tierSpec?.dailyOperatingCredits ??
-      Number(catalogOutput?.operating_credits ?? bld.daily_operating_credits ?? 0);
+    const outputCandidates = [
+      ['energy', catalogOutput.output_energy], ['food', catalogOutput.output_food],
+      ['material', catalogOutput.output_materials], ['components', catalogOutput.output_components],
+      ['compute', catalogOutput.output_compute],
+    ] as const;
+    const newOutput = outputCandidates.find(([, amount]) => Number(amount ?? 0) > 0);
+    const newOutputType = newOutput?.[0] ?? null;
+    const newOutputAmount = Number(newOutput?.[1] ?? 0);
+    const newOpCredits = Number(catalogOutput.operating_credits ?? 0);
 
     const creditCostCents = BigInt(upgradeCreditCost * 100);
     const account = await tx.query<{ account_id: string; balance: string }>(

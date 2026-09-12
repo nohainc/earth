@@ -576,22 +576,6 @@ class SuccessionPanel extends StatelessWidget {
             ),
           ),
 
-          // 3. SETTLE ESTATE ACTION (ONLY IN ACTIVE ESTATE PERIOD)
-          if (isEstatePeriod && successorName != null) ...[
-            SizedBox(height: context.spacingTitleOffset),
-            EarthButton(
-              label: 'SETTLE ESTATE INHERITANCE',
-              variant: EarthButtonVariant.primary,
-              onPressed: busy
-                  ? null
-                  : () => showSettleInheritanceDialog(
-                        context,
-                        action,
-                        predecessorId: human['id']?.toString() ?? 'H-0044',
-                        defaultSuccessorName: successorName,
-                      ),
-            ),
-          ],
         ],
       ),
     );
@@ -659,7 +643,6 @@ class _EditSuccessorDialogState extends State<_EditSuccessorDialog> {
             Navigator.pop(context);
             await widget.action(() => const EarthApi().registerSuccessor(
                   name,
-                  estatePeriodDays: 30,
                 ));
           },
         ),

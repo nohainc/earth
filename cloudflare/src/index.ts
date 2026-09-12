@@ -1,35 +1,25 @@
 import { DurableObject } from 'cloudflare:workers';
 import { authorityMode, withRepository } from './repository';
-import { cancelMarketOrder as cancelMarketOrderPostgres, listMarketOrders as listMarketOrdersPostgres, submitMarketOrder as submitMarketOrderPostgres } from './market-postgres';
-import { declarePersonalInsolvency as declarePersonalInsolvencyPostgres, publicSpending as publicSpendingPostgres, recoverInstitution as recoverInstitutionPostgres, settleTax as settleTaxPostgres } from './finance-postgres';
 import { getLifeStatus as getLifeStatusPostgres, getSuccessor as getSuccessorPostgres, registerSuccessor as registerSuccessorPostgres } from './lifecycle-postgres';
 import { createResearchProject as createResearchProjectPostgres, fundResearchProject as fundResearchProjectPostgres } from './technology-postgres';
-import { castVote as castVotePostgres, createProposal as createProposalPostgres } from './governance-postgres';
 import { worldSnapshot as worldSnapshotPostgres } from './world-postgres';
 import { runSchedulerHeartbeat } from './scheduler';
 import { changeCommunityMembership as changeCommunityMembershipPostgres, contributeToCommunity as contributeToCommunityPostgres, createCommunity as createCommunityPostgres, decideCommunityMembershipRequest as decideCommunityMembershipRequestPostgres, disbandCommunity as disbandCommunityPostgres, listCommunities as listCommunitiesPostgres, listCommunityContributions as listCommunityContributionsPostgres, listCommunityMembers as listCommunityMembersPostgres, listCommunityMembershipRequests as listCommunityMembershipRequestsPostgres, setCommunityMemberRole as setCommunityMemberRolePostgres, updateCommunity as updateCommunityPostgres } from './communities-postgres';
 import { deliverOutbox } from './outbox-postgres';
-import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityResidency as changeCityResidencyPostgres, changeCorporationMembership as changeCorporationMembershipPostgres, cityQualification as cityQualificationPostgres, corporationQualification as corporationQualificationPostgres, contributeToCorporation as contributeToCorporationPostgres, createCity as createCityPostgres, createCorporation as createCorporationPostgres, createCorporationWithCapital as createCorporationWithCapitalPostgres, decideCorporationMembershipRequest as decideCorporationMembershipRequestPostgres, listCities as listCitiesPostgres, listCorporations as listCorporationsPostgres, setCityBudget as setCityBudgetPostgres, setCityTaxCharter as setCityTaxCharterPostgres, setCorporationAdmissionPolicy as setCorporationAdmissionPolicyPostgres, setCorporationTaxCharter as setCorporationTaxCharterPostgres, spendCorporationTreasury as spendCorporationTreasuryPostgres } from './institutions-postgres';
-import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-postgres';
+import { listTechnology as listTechnologyPostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
 import { healthResponse, livenessResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { communicationsRoutes } from './communications-routes';
-import { getHouseOverview, unlockHousePerk, equipHouseHeirloom, forgeHouseHeirloom, updateHouseMotto } from './house-postgres.ts';
-import { getNetWorthHistory, recordDailyNetWorthSnapshot } from './net-worth-postgres.ts';
-import { getDailyBriefing } from './daily-briefing-postgres.ts';
-import { listSocialDirectory } from './social-directory-postgres.ts';
-import { purchasePrivatePlotAndConstruct, upgradeBuilding, completeBuildingConstruction, setBuildingOperatingPolicy, demolishBuilding, getCityDistrictZoning, contributeCorporateResearch } from './real-estate-postgres.ts';
-import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { handleHouseRoutes } from './house-routes.ts';
 import { handleReadModelRoutes } from './read-model-routes.ts';
 import { handleFinanceRoutes } from './finance-routes.ts';
 import { handleCommunityRoutes } from './community-routes.ts';
 import { handleInstitutionRoutes } from './institutions-routes.ts';
+import { handleGovernanceRoutes } from './governance-routes.ts';
 import { handleRealEstateRoutes } from './real-estate-routes.ts';
-import { getResourceLedgerHistory, getResourceDailyBreakdown, getResourceRateHistory, type ResourceKind, type ExtendedResourceKind } from './resource-ledger-postgres.ts';
 import { logAppError, listRecentAppErrors } from './error-logger-postgres.ts';
 import { handleEconomicRoutes } from './economic-routes.ts';
 import { handleMarketApiRoutes } from './market-api.ts';
@@ -49,22 +39,6 @@ function corsOriginFor(request: Request, env: Env): string | null {
 
 export class MarketCoordinator extends DurableObject<Env> {
   private sseControllers: Set<ReadableStreamDefaultController<Uint8Array>> = new Set();
-
-  constructor(ctx: DurableObjectState, env: Env) {
-    super(ctx, env);
-    ctx.blockConcurrencyWhile(async () => {
-      await ctx.storage.put('initialized', true);
-    });
-  }
-
-  async submitCommand(payload: unknown): Promise<{ ok: true; coordinator: string }> {
-    await this.ctx.storage.put('lastCommand', { payload, at: new Date().toISOString() });
-    return { ok: true, coordinator: 'market' };
-  }
-
-  async snapshot(): Promise<unknown> {
-    return this.ctx.storage.get('lastCommand');
-  }
 
   async broadcast(event: Record<string, unknown>): Promise<void> {
     const message = JSON.stringify(event);
@@ -128,7 +102,10 @@ export class MarketCoordinator extends DurableObject<Env> {
       socket.send(JSON.stringify({ type: 'pong', at: new Date().toISOString() }));
       return;
     }
-    socket.send(JSON.stringify({ type: 'snapshot', data: await this.snapshot() }));
+    socket.send(JSON.stringify({
+      type: 'refresh_required',
+      reason: 'market_state_is_postgres_authoritative',
+    }));
   }
 
   async webSocketClose(socket: WebSocket, code: number, reason: string): Promise<void> {
@@ -141,125 +118,40 @@ async function productionEventsFromPostgres(request: Request, env: Env): Promise
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const url = new URL(request.url);
   const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 30)));
-  return Response.json({ events: [], limit, persistence: 'planetscale-postgres' });
+  const result = await withRepository(env, (repository) => repository.query(
+    `SELECT j.id, j.building_id, j.city_id, j.day AS game_day,
+            j.actual_output_units, j.service_capacity_units, j.operating_expense_units,
+            j.status_after
+       FROM building_settlement_journals j
+       JOIN buildings b ON b.id = j.building_id
+      WHERE j.day = (SELECT game_day FROM world_state WHERE id = 'WORLD')
+        AND (b.owner_id = $1 OR b.city_id IN (SELECT city_id FROM memberships WHERE human_id = $1))
+      ORDER BY j.id DESC LIMIT $2`, [viewer.id, limit]));
+  if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+  return Response.json({ events: result.rows, limit, persistence: 'planetscale-postgres' });
 }
 
 async function servicesStatusFromPostgres(request: Request, env: Env): Promise<Response> {
   const viewer = await currentHuman(request, env);
   if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const city = (await withRepository(env, (repository) => repository.query<Record<string, number>>('SELECT cities.* FROM cities JOIN memberships ON memberships.city_id = cities.id WHERE memberships.human_id = $1', [viewer.id])))?.rows[0];
-  const independentBaseline = { housing: 0.75, utilities: 0.75, connectivity: 0.75, health: 0.5 };
-  const ratios = city ? { housing: Math.min(1, Number(city.housing_capacity ?? 0) / Math.max(1, Number(city.residents ?? 0))), utilities: Math.min(1, Number(city.energy_capacity ?? 0) / Math.max(1, Number(city.residents ?? 0))), connectivity: Math.min(1, Number(city.connectivity_capacity ?? 0) / Math.max(1, Number(city.residents ?? 0))), health: Math.min(1, Number(city.health_capacity ?? 0) / 100) } : independentBaseline;
-  const status = Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= 0.75 ? 'basic' : 'critical']));
-  return Response.json({ cityId: city?.id ?? null, provider: city ? 'city-capacity' : 'ouc-independent-minimum', ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)), persistence: 'planetscale-postgres' });
-}
-
-async function worldActivityFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
   const result = await withRepository(env, async (repository) => {
-    const [world, technology] = await Promise.all([
-      repository.query('SELECT game_day, market_batch_seconds FROM world_state WHERE id = $1', ['WORLD']),
-      repository.query(`SELECT ROUND(p.progress_research_points * 100.0 / NULLIF(p.required_research_points, 0), 2) AS progress
-        FROM corporation_research_projects p
-        JOIN memberships m ON m.corporation_id = (SELECT source_id FROM owner_registry WHERE economic_id = p.corporation_economic_id)
-        WHERE m.human_id = $1 AND p.target_type = 'TECHNOLOGY'
-        ORDER BY p.created_at DESC LIMIT 1`, [viewer.id]),
-    ]);
-    return { activity: [{ type: 'world_clock', day: world.rows[0]?.game_day ?? 184 }, { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 }, { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 }] };
+    const city = await repository.query<{ id: string }>('SELECT city_id AS id FROM memberships WHERE human_id = $1 AND city_id IS NOT NULL LIMIT 1', [viewer.id]);
+    const cityId = city.rows[0]?.id;
+    if (!cityId) return { cityId: null, projection: null };
+    const projection = await repository.query('SELECT * FROM city_service_capacity_daily WHERE city_id = $1 ORDER BY game_day DESC LIMIT 1', [cityId]);
+    return { cityId, projection: projection.rows[0] ?? null };
   });
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function eventsFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const url = new URL(request.url);
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-  const result = await withRepository(env, (repository) => listEventsPostgres(repository, viewer.id, limit));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function notificationsFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const url = new URL(request.url);
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-  const result = await withRepository(env, (repository) => listNotificationsPostgres(repository, viewer.id, limit));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function markNotificationReadFromPostgres(request: Request, env: Env, notificationId: string): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const result = await withRepository(env, (repository) => markNotificationReadPostgres(repository, viewer.id, notificationId));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function markAllNotificationsReadFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const result = await withRepository(env, (repository) => markAllNotificationsReadPostgres(repository, viewer.id));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function auditFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function institutionsFromPostgres(request: Request, env: Env): Promise<Response> {
-  const result = await withRepository(env, (repository) => listInstitutionsPostgres(repository));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function rankingsFromPostgres(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const category = url.searchParams.get('category') ?? undefined;
-  const metric = url.searchParams.get('metric') ?? undefined;
-  const search = url.searchParams.get('search') ?? undefined;
-  const limit = Math.min(100, Math.max(1, Number(url.searchParams.get('limit') ?? 50)));
-  const offset = Math.max(0, Number(url.searchParams.get('offset') ?? 0));
-  const result = await withRepository(env, (repository) => listRankingsPostgres(repository, { category, metric, search, limit, offset }));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function historyFromPostgres(request: Request, env: Env): Promise<Response> {
-  const url = new URL(request.url);
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-  const result = await withRepository(env, (repository) => listHistoryPostgres(repository, limit));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function ownershipHistoryFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const url = new URL(request.url);
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-  const result = await withRepository(env, (repository) => listOwnershipEventsPostgres(repository, viewer.id, limit));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
-}
-
-async function membershipHistoryFromPostgres(request: Request, env: Env): Promise<Response> {
-  const viewer = await currentHuman(request, env);
-  if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-  const url = new URL(request.url);
-  const limit = Math.min(50, Math.max(1, Number(url.searchParams.get('limit') ?? 20)));
-  const result = await withRepository(env, (repository) => listMembershipEventsPostgres(repository, viewer.id, limit));
-  if (!result) throw new Error('PostgreSQL repository is unavailable');
-  return Response.json({ ...result, persistence: 'planetscale-postgres' });
+  if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
+  const projection = result.projection as Record<string, number> | null;
+  const ratios = projection ? {
+    housing: Number(projection.coverage_ratio ?? 0),
+    utilities: Number(projection.energy_capacity ?? 0) / Math.max(1, Number(projection.service_demand ?? 0)),
+    connectivity: Number(projection.connectivity_capacity ?? 0) / Math.max(1, Number(projection.service_demand ?? 0)),
+    health: Number(projection.health_capacity ?? 0) / Math.max(1, Number(projection.service_demand ?? 0)),
+  } : { housing: 0, utilities: 0, connectivity: 0, health: 0 };
+  for (const key of Object.keys(ratios)) ratios[key as keyof typeof ratios] = Math.min(1, Math.max(0, ratios[key as keyof typeof ratios]));
+  const status = Object.fromEntries(Object.entries(ratios).map(([key, value]) => [key, value >= 1 ? 'normal' : value >= 0.75 ? 'basic' : 'critical']));
+  return Response.json({ cityId: result.cityId, provider: projection ? 'city-service-capacity-projection' : null, ratios, status, essentialServicesIndex: Math.min(...Object.values(ratios)), persistence: 'planetscale-postgres' });
 }
 
 const worker = {
@@ -369,7 +261,7 @@ const worker = {
       const response = await handleInstitutionRoutes(request, env, url, viewer);
       if (response) return response;
     }
-    if (url.pathname.startsWith('/api/real-estate') || url.pathname.startsWith('/api/corporate-research') || url.pathname.startsWith('/api/corporation/building-research') || url.pathname.startsWith('/api/corporations/building-research')) {
+    if (url.pathname.startsWith('/api/real-estate') || url.pathname.startsWith('/api/research/')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const response = await handleRealEstateRoutes(request, env, url, viewer);
@@ -476,7 +368,7 @@ const worker = {
         return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Research project creation failed' }, { status: 409 });
       }
     }
-    if ((url.pathname === '/api/technology/TECH-001/fund' || url.pathname === '/api/technology/me/fund') && request.method === 'POST') {
+    if (url.pathname === '/api/technology/me/fund' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const parsed = await parseJsonBody<{ amount?: number; correlationId?: string }>(request);
@@ -494,65 +386,11 @@ const worker = {
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
     }
-    if (url.pathname === '/api/finance/personal/declare' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ otp?: string; reason?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for personal insolvency' }, { status: 401 });
-      try {
-        const result = await withRepository(env, (repository) => declarePersonalInsolvencyPostgres(repository, viewer.id, (body.reason?.trim() || 'Human-requested insolvency restructuring').slice(0, 240)));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Personal insolvency failed' }, { status: 409 });
-      }
-    }
-
-    if (url.pathname === '/api/finance' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, async (repository) => {
-        const [account, rules] = await Promise.all([
-          repository.query(`SELECT a.id::TEXT AS account_id, o.id AS owner_id, (a.balance / 100.0) AS balance, 'CREDIT' AS currency
-                              FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                             WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.house_id]),
-          repository.query(`SELECT DISTINCT ON (tax_rule_id) tax_rule_id AS id, scope, category, rate_bps, version,
-                                   tax_base_definition, effective_from_game_day, effective_to_game_day
-                              FROM tax_rule_versions
-                             WHERE effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-                               AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
-                             ORDER BY tax_rule_id, effective_from_game_day DESC, version DESC`),
-        ]);
-        return { account: account.rows[0] ?? null, taxRules: rules.rows };
-      });
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-
     if (url.pathname === '/api/economy' || url.pathname.startsWith('/api/economy/')) {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
       const economicRoute = await handleEconomicRoutes(request, env, url, viewer);
       if (economicRoute) return economicRoute;
-    }
-
-    if (url.pathname === '/api/finance/liquidity' && request.method === 'GET') {
-      const liquidity = (await withRepository(env, (repository) => repository.query<{ active_humans: number; money_supply: string; living_cost_index: string }>("SELECT (SELECT COUNT(*) FROM humans WHERE life_status = 'active') AS active_humans, (SELECT COALESCE(SUM(balance), 0) FROM economic_accounts WHERE asset_id = 1 AND account_type NOT IN (7, 8) AND status = 'active') AS money_supply, (SELECT living_cost_index FROM world_state WHERE id = 'WORLD') AS living_cost_index")))?.rows[0];
-      const activeHumans = Number(liquidity?.active_humans ?? 0); const supply = Number(liquidity?.money_supply ?? 0); const livingCostIndex = Number(liquidity?.living_cost_index ?? 1); const target = activeHumans * Math.max(0.5, livingCostIndex) * 100;
-      return Response.json({ activeHumans, moneySupply: supply, livingCostIndex, target, corridor: { low: target * 0.8, high: target * 1.2 }, status: supply < target * 0.8 ? 'below-corridor' : supply > target * 1.2 ? 'above-corridor' : 'inside-corridor', persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/finance/status' && request.method === 'GET') {
-      const result = await withRepository(env, async (repository) => {
-        const [states, events] = await Promise.all([
-          repository.query('SELECT * FROM financial_states ORDER BY status DESC, institution_kind, institution_id'),
-          repository.query('SELECT * FROM bankruptcy_events ORDER BY game_day DESC, created_at DESC LIMIT 50'),
-        ]);
-        return { states: states.rows, events: events.rows };
-      });
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
     }
 
     // ── House / dynasty routes → house-routes.ts ────────────────────────────
@@ -561,233 +399,6 @@ const worker = {
 
     const marketApiResponse = await handleMarketApiRoutes(request, env, url);
     if (marketApiResponse) return marketApiResponse;
-
-    if (url.pathname === '/api/finance/net-worth-history' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      const humanId = viewer?.id || 'H-0044';
-      try {
-        const result = await withRepository(env, (repository) => getNetWorthHistory(repository, humanId));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to fetch net-worth history';
-        return Response.json({ ok: false, error: message }, { status: 400 });
-      }
-    }
-
-    if (url.pathname === '/api/player/daily-briefing' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      const humanId = viewer?.id || 'H-0044';
-      try {
-        const result = await withRepository(env, (repository) => getDailyBriefing(repository, humanId));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Failed to generate daily briefing';
-        return Response.json({ ok: false, error: message }, { status: 400 });
-      }
-    }
-    if (url.pathname === '/api/finance/recover' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ institutionId?: string; amount?: number; otp?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!(await sensitiveActionAllowed(env, viewer.id, body.otp))) return Response.json({ ok: false, error: 'Authenticator code required for financial recovery' }, { status: 401 });
-      const institutionId = body.institutionId?.trim() ?? '';
-      const amount = Math.round(Number(body.amount) * 100) / 100;
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!institutionId || !Number.isFinite(amount) || amount <= 0 || amount > 100000 || !correlationId) return Response.json({ ok: false, error: 'Recovery amount must be between 0 and 100,000 Credits' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => recoverInstitutionPostgres(repository, { humanId: viewer.id, institutionId, amount, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Institution recovery failed';
-        return Response.json({ ok: false, error: message }, { status: /required/i.test(message) ? 403 : /not found/i.test(message) ? 404 : /insufficient|crisis/i.test(message) ? 409 : 400 });
-      }
-    }
-    if (url.pathname === '/api/taxes/settle' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ taxableAmount?: number }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const taxableAmount = Number(body.taxableAmount);
-      if (!Number.isFinite(taxableAmount) || taxableAmount <= 0) return Response.json({ ok: false, error: 'Taxable amount must be positive' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => settleTaxPostgres(repository, viewer.id, taxableAmount));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Tax settlement failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-    if (url.pathname === '/api/finance/public-spending' && request.method === 'POST') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ cityId?: string; category?: string; amount?: number; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const cityId = body.cityId || 'CITY-0084';
-      const category = body.category?.trim() || 'public-services';
-      const amount = Number(body.amount);
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!Number.isFinite(amount) || amount <= 0 || !correlationId) return Response.json({ ok: false, error: 'Public spending amount and Idempotency-Key are required' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => publicSpendingPostgres(repository, { actorId: viewer.id, cityId, category, amount, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Public spending failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
-      }
-    }
-    if (url.pathname === '/api/market/book' && request.method === 'GET') {
-      const result = await withRepository(env, async (repository) => {
-        const [rows, trades, rule] = await Promise.all([
-          repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
-          repository.query('SELECT i.symbol AS product, SUM(f.quantity_units) AS traded_quantity_units, MAX(f.price_units) AS last_price_units, MAX(f.created_at) AS last_trade_at FROM market_fills f JOIN market_instruments i ON i.id = f.instrument_id GROUP BY i.symbol ORDER BY i.symbol'),
-          repository.query(`SELECT rate_bps FROM tax_rule_versions
-                             WHERE tax_rule_id = 'TAX-OUC-MARKET'
-                               AND effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
-                               AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
-                             ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`),
-        ]);
-        const feeRate = Number(rule.rows[0]?.rate_bps ?? 0) / 10000;
-        return { book: rows.rows, trades: trades.rows, feeRate };
-      });
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/market/orders' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listMarketOrdersPostgres(repository, url.searchParams.get('product')));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/market/orders' && request.method === 'POST') {
-      if (!featureEnabled(env, 'spotMarket')) return featureDisabledResponse('spotMarket');
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ product?: string; quantity?: number; limitPrice?: number; side?: string; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const product = body.product;
-      const side = body.side === 'sell' ? 'sell' : 'buy';
-      const quantity = Number(body.quantity);
-      const limitPrice = Number(body.limitPrice);
-      if (!['food', 'material', 'components', 'energy', 'compute'].includes(product ?? '') || !Number.isInteger(quantity) || quantity <= 0 || !Number.isFinite(limitPrice) || limitPrice <= 0) return Response.json({ ok: false, error: 'Invalid market order' }, { status: 400 });
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => submitMarketOrderPostgres(repository, { humanId: viewer.id, product: product!, side, quantity, limitPrice, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Market order failed';
-        return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : /insufficient|reservation/i.test(message) ? 409 : 400 });
-      }
-    }
-    const cancelOrderMatch = url.pathname.match(/^\/api\/market\/orders\/([^/]+)$/);
-    if (cancelOrderMatch && request.method === 'DELETE') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      try {
-        const result = await withRepository(env, (repository) => cancelMarketOrderPostgres(repository, { orderId: cancelOrderMatch[1], humanId: viewer.id }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market order cancellation failed' }, { status: 404 });
-      }
-    }
-    if (url.pathname === '/api/governance/proposals' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listGovernanceProposalsPostgres(repository));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/governance/rules' && request.method === 'GET') {
-      const result = await withRepository(env, (repository) => listGovernanceRulesPostgres(repository));
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
-    if (url.pathname === '/api/governance/proposals' && request.method === 'POST') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ institutionId?: string; title?: string; body?: string; durationHours?: number; ruleVersionId?: string; target?: { category?: string; value?: Record<string, unknown> }; correlationId?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      const institutionId = body.institutionId?.trim() || 'OUC-001';
-      const title = body.title?.trim();
-      const proposalBody = body.body?.trim();
-      if (!title || title.length < 8 || title.length > 140) return Response.json({ ok: false, error: 'Proposal title must be 8–140 characters' }, { status: 400 });
-      if (!proposalBody || proposalBody.length < 20 || proposalBody.length > 4000) return Response.json({ ok: false, error: 'Proposal body must be 20–4000 characters' }, { status: 400 });
-      const correlationId = resolveIdempotencyKey(request, body.correlationId);
-      if (!correlationId) return Response.json({ ok: false, error: 'Idempotency-Key conflicts with correlationId or is too long' }, { status: 400 });
-      const targetCategory = body.target?.category?.trim() || null;
-      if (targetCategory && !['market', 'finance', 'services', 'technology', 'megaproject_procurement'].includes(targetCategory)) return Response.json({ ok: false, error: 'Unsupported target rule category' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => createProposalPostgres(repository, { humanId: human.id, institutionId, title, body: proposalBody, durationHours: body.durationHours, ruleVersionId: body.ruleVersionId, targetCategory, targetValue: body.target?.value ?? null, correlationId }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' }, { status: result.alreadyProcessed ? 200 : 201 });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Proposal creation failed' }, { status: 409 });
-      }
-    }
-    const voteMatch = url.pathname.match(/^\/api\/governance\/proposals\/([^/]+)\/vote$/);
-    if (voteMatch && request.method === 'POST') {
-      const human = await currentHuman(request, env);
-      if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ vote?: string }>(request);
-      if (!parsed.ok) return parsed.response;
-      const body = parsed.value;
-      if (!['support', 'oppose', 'abstain'].includes(body.vote ?? '')) return Response.json({ ok: false, error: 'Invalid ballot choice' }, { status: 400 });
-      try {
-        const result = await withRepository(env, (repository) => castVotePostgres(repository, { proposalId: voteMatch[1], humanId: human.id, choice: body.vote! }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : 'Ballot failed';
-        return Response.json({ ok: false, error: message }, { status: /already/i.test(message) ? 409 : /not found/i.test(message) ? 404 : 403 });
-      }
-    }
-    if (url.pathname === '/api/pantheon' && request.method === 'GET') {
-      try {
-        const result = await withRepository(env, (repository) => listPantheonOfAchievementsPostgres(repository));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Pantheon fetch failed' }, { status: 500 });
-      }
-    }
-    if (url.pathname === '/api/cemetery' && request.method === 'GET') {
-      const search = url.searchParams.get('search')?.trim();
-      const dynasty = url.searchParams.get('dynasty')?.trim();
-      const limit = Number(url.searchParams.get('limit') ?? 50);
-      try {
-        const result = await withRepository(env, (repository) => listCemeteryProfilesPostgres(repository, { search, dynasty, limit }));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Cemetery fetch failed' }, { status: 500 });
-      }
-    }
-    if (url.pathname === '/api/market/history' && request.method === 'GET') {
-      const product = url.searchParams.get('product')?.trim() ?? 'material';
-      const days = Number(url.searchParams.get('days') ?? 30);
-      try {
-        const result = await withRepository(env, (repository) => listMarketPriceHistoryPostgres(repository, product, days));
-        if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-        return Response.json({ ...result, persistence: 'planetscale-postgres' });
-      } catch (error) {
-        return Response.json({ ok: false, error: error instanceof Error ? error.message : 'Market price history fetch failed' }, { status: 500 });
-      }
-    }
-    // Businesses were removed in favor of direct Human ownership. Keep the
-    // old namespace closed so stale clients receive a deterministic response.
-    if (url.pathname === '/api/businesses' || url.pathname.startsWith('/api/businesses/')) {
-      return Response.json({ ok: false, error: 'Business entities are no longer supported; use Human-owned assets' }, { status: 410 });
-    }
 
     if (url.pathname === '/api/life/successor' && request.method === 'GET') {
       const viewer = await currentHuman(request, env);
@@ -807,20 +418,17 @@ const worker = {
       if (!featureEnabled(env, 'mortality')) return featureDisabledResponse('mortality');
       const viewer = await currentHuman(request, env, true);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const parsed = await parseJsonBody<{ name?: string; estatePeriodDays?: number; successorHumanId?: string }>(request);
+      const parsed = await parseJsonBody<{ name?: string }>(request);
       if (!parsed.ok) return parsed.response;
       const body = parsed.value;
       const successorName = (body.name ?? '').trim();
       if (!successorName) {
-        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName: '', estatePeriodDays: 30, successorHumanId: null, currentLifeStatus: viewer.life_status }));
+        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName: '', currentLifeStatus: viewer.life_status }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       }
-      const estatePeriodDays = Number(body.estatePeriodDays ?? 30);
-      if (!Number.isInteger(estatePeriodDays) || estatePeriodDays < 7 || estatePeriodDays > 90) return Response.json({ ok: false, error: 'Estate period must be between 7 and 90 days' }, { status: 400 });
-      if (body.successorHumanId) return Response.json({ ok: false, error: 'Cross-Human successors are no longer supported; succession is House-based' }, { status: 410 });
       try {
-        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName, estatePeriodDays, successorHumanId: null, currentLifeStatus: viewer.life_status }));
+        const result = await withRepository(env, (repository) => registerSuccessorPostgres(repository, { humanId: viewer.id, successorName, currentLifeStatus: viewer.life_status }));
         if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
         return Response.json({ ...result, persistence: 'planetscale-postgres' });
       } catch (error) {
@@ -828,7 +436,7 @@ const worker = {
         return Response.json({ ok: false, error: message }, { status: /another active/i.test(message) ? 400 : 409 });
       }
     }
-    return Response.json({ service: 'earth-world', environment: env.ENVIRONMENT, status: 'edge-ready' });
+    return Response.json({ ok: false, error: 'API route not found', code: 'NOT_FOUND' }, { status: 404 });
   },
   async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
     const result = await withRepository(env, async (repository) => {
@@ -923,7 +531,7 @@ export default {
       return new Response(object.body, { headers });
     }
     const healthPath = url.pathname === '/api/live' || url.pathname === '/api/ready' || url.pathname === '/ready' || url.pathname === '/api/health' || url.pathname === '/health';
-    const isDataRequest = !healthPath && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/'));
+    const isDataRequest = !healthPath && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname.startsWith('/internal/'));
     let response: Response;
     try {
       if (isDataRequest) authorityMode(env);
@@ -931,6 +539,10 @@ export default {
         const readModelResponse = await handleReadModelRoutes(request, env, url);
         if (readModelResponse) {
           response = readModelResponse;
+        } else if (url.pathname.startsWith('/api/governance')) {
+          const viewer = await currentHuman(request, env);
+          if (!viewer) response = Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+          else response = await handleGovernanceRoutes(request, env, url, viewer) ?? await worker.fetch(request, env, ctx);
         } else if (url.pathname === '/api/production/events' && request.method === 'GET') {
           response = await productionEventsFromPostgres(request, env);
         } else if (url.pathname === '/api/services/status' && request.method === 'GET') {

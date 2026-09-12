@@ -62,7 +62,12 @@ create index if not exists idx_dynasty_lineage_records_human on dynasty_lineage_
 create index if not exists idx_dynasty_perks_dynasty on dynasty_perks(dynasty_id);
 create index if not exists idx_dynasty_heirlooms_dynasty on dynasty_heirlooms(dynasty_id);
 
--- Seed founding dynasty and lineage for player H-0044 (Amara Vance) if exists
+-- Seed founding dynasty and lineage for player H-0044 (Amara Vance) if exists.
+-- Migrations run before db/seed.sql on a fresh database, so this block must be
+-- a no-op when the optional fixture human has not been created yet.
+DO $seed$
+BEGIN
+  IF EXISTS (SELECT 1 FROM humans WHERE id = 'H-0044') THEN
 insert into dynasties (id, email, dynasty_name, motto, founder_human_id, legacy_points, total_wealth_generated)
 values (
   'DYN-H0044',
@@ -150,3 +155,6 @@ values
   null,
   'Awarded for drafting the Constitutional Protection Charter on Game Day 75.'
 ) on conflict (id) do nothing;
+  END IF;
+END
+$seed$;

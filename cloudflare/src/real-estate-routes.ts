@@ -31,9 +31,9 @@ export async function handleRealEstateRoutes(
     const body = parsed.value;
     const buildingType = body.buildingType?.trim();
     const name = body.name?.trim() || '';
-    const cityId = body.cityId?.trim() || 'CITY-0084';
-    if (!buildingType) {
-      return Response.json({ ok: false, error: 'Building type is required' }, { status: 400 });
+    const cityId = body.cityId?.trim();
+    if (!buildingType || !cityId) {
+      return Response.json({ ok: false, error: 'Building type and city ID are required' }, { status: 400 });
     }
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
     if (!correlationId) {
@@ -145,7 +145,7 @@ export async function handleRealEstateRoutes(
     }
   }
 
-  if (url.pathname === '/api/corporate-research/contribute' && request.method === 'POST') {
+  if (url.pathname === '/api/research/contribute' && request.method === 'POST') {
     const parsed = await parseJsonBody<{
       poolId?: string;
       credits?: number;
@@ -182,7 +182,7 @@ export async function handleRealEstateRoutes(
     }
   }
 
-  if ((url.pathname === '/api/corporation/building-research' || url.pathname === '/api/corporations/building-research') && request.method === 'POST') {
+  if (url.pathname === '/api/research/buildings' && request.method === 'POST') {
     const parsed = await parseJsonBody<{
       buildingType?: string;
       correlationId?: string;
@@ -212,7 +212,7 @@ export async function handleRealEstateRoutes(
     }
   }
 
-  if ((url.pathname === '/api/corporation/building-research' || url.pathname === '/api/corporations/building-research') && request.method === 'GET') {
+  if (url.pathname === '/api/research/buildings' && request.method === 'GET') {
     try {
       const result = await withRepository(env, (repository) =>
         listCorporationBuildingResearch(repository, viewer.id),

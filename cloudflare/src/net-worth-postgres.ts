@@ -31,7 +31,7 @@ export interface NetWorthSummary {
 
 export async function getNetWorthHistory(
   client: any,
-  humanId: string = 'H-0044'
+  humanId: string
 ): Promise<{
   ok: boolean;
   humanId: string;

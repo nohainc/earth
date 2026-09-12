@@ -3,7 +3,6 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:earth_client/core/api/earth_api.dart';
 import 'package:earth_client/core/models/earth_state.dart';
 import 'package:earth_client/core/navigation_deep_link.dart';
-import 'package:earth_client/features/command_center/dashboard.dart';
 import 'package:earth_client/features/house/house_tree_dialog.dart';
 import 'package:earth_client/features/finance/net_worth_analytics_dialog.dart';
 

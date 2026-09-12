@@ -33,29 +33,31 @@
         }
       }
     },
-    "/api/technology/adopt": {
+    "/api/technology/projects": {
       "post": {
-        "summary": "Deploy a completed technology to a managed business",
+        "summary": "Start a corporation research project",
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "type": "object",
-                "required": ["businessId", "technologyId"],
+                "required": ["name", "budget", "focus", "correlationId"],
                 "properties": {
-                  "businessId": { "type": "string" },
-                  "technologyId": { "type": "string" }
+                  "name": { "type": "string" },
+                  "budget": { "type": "number" },
+                  "focus": { "type": "string" },
+                  "correlationId": { "type": "string" }
                 }
               }
             }
           }
         },
         "responses": {
-          "200": { "description": "Technology deployed" },
+          "201": { "description": "Research project created" },
           "400": { "description": "Validation error" },
           "401": { "description": "Authentication required" },
-          "409": { "description": "Business or technology cannot be adopted" }
+          "409": { "description": "Research project cannot be created" }
         }
       }
     },

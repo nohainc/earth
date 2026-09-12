@@ -98,9 +98,9 @@ export const HOUSE_PERK_CATALOG = [
 
 export async function getHouseOverview(
   client: PostgresRepository,
-  email: string,
-  humanId: string = 'H-0044',
-  humanName: string = 'Amara Vance'
+  houseId: string,
+  humanId: string,
+  humanName: string
 ): Promise<{
   ok: boolean;
   house: HouseRecord;
@@ -118,8 +118,8 @@ export async function getHouseOverview(
 
     // Ensure house exists or create initial one
     let houseRes = await client.query(
-      `SELECT * FROM houses WHERE email = $1 OR id = $2 LIMIT 1`,
-      [email, `HSE-${humanId}`]
+      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
+      [houseId]
     );
 
     let house: HouseRecord;
@@ -227,7 +227,7 @@ export async function getHouseOverview(
 
 export async function unlockHousePerk(
   client: PostgresRepository,
-  email: string,
+  houseId: string,
   perkKey: string,
   gameDay: number = 1,
   correlationId?: string
@@ -239,8 +239,8 @@ export async function unlockHousePerk(
 
   return transactional(client, async () => {
     const houseRes = await client.query(
-      `SELECT * FROM houses WHERE email = $1 LIMIT 1`,
-      [email]
+      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
+      [houseId]
     );
     if (houseRes.rows.length === 0) {
       throw new Error('House not found for this account.');
@@ -297,15 +297,15 @@ export async function unlockHousePerk(
 
 export async function equipHouseHeirloom(
   client: PostgresRepository,
-  email: string,
+  houseId: string,
   heirloomId: string,
   humanId: string,
   correlationId?: string
 ): Promise<{ ok: boolean; heirloomId: string; isEquipped: boolean; equippedBy: string | null }> {
   return transactional(client, async () => {
     const houseRes = await client.query(
-      `SELECT * FROM houses WHERE email = $1 LIMIT 1`,
-      [email]
+      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
+      [houseId]
     );
     if (houseRes.rows.length === 0) {
       throw new Error('House not found for this account.');
@@ -340,7 +340,7 @@ export async function equipHouseHeirloom(
 
 export async function forgeHouseHeirloom(
   client: PostgresRepository,
-  email: string,
+  houseId: string,
   name: string,
   heirloomType: string,
   inscription: string,
@@ -349,8 +349,8 @@ export async function forgeHouseHeirloom(
 ): Promise<{ ok: boolean; heirloom: HouseHeirloom }> {
   return transactional(client, async () => {
     const houseRes = await client.query(
-      `SELECT * FROM houses WHERE email = $1 LIMIT 1`,
-      [email]
+      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
+      [houseId]
     );
     if (houseRes.rows.length === 0) {
       throw new Error('House not found for this account.');
@@ -376,7 +376,7 @@ export async function forgeHouseHeirloom(
         name.trim(),
         heirloomType,
         'Legendary',
-        statBuff.trim(),
+        ({ founder_seal: '+10% Machine Build Speed', senate_gavel: '+10% Governance Influence', quantum_cipher: '+10% Research Security', pioneer_chronometer: '+5% Succession Stability', house_standard: '+5% House Prestige' } as Record<string, string>)[heirloomType],
         null,
         inscription.trim(),
       ]
@@ -391,15 +391,15 @@ export async function forgeHouseHeirloom(
 
 export async function updateHouseMotto(
   client: PostgresRepository,
-  email: string,
+  houseId: string,
   motto: string,
   houseName?: string,
   correlationId?: string
 ): Promise<{ ok: boolean; motto: string; houseName: string }> {
   return transactional(client, async () => {
     const houseRes = await client.query(
-      `SELECT * FROM houses WHERE email = $1 LIMIT 1`,
-      [email]
+      `SELECT * FROM houses WHERE id = $1 LIMIT 1`,
+      [houseId]
     );
     if (houseRes.rows.length === 0) {
       throw new Error('House not found for this account.');

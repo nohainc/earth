@@ -76,7 +76,7 @@ extension EarthApiRealEstate on EarthApi {
     required double compute,
   }) async {
     final res = await _request(
-      '/api/corporate-research/contribute',
+      '/api/research/contribute',
       method: 'POST',
       body: {
         'poolId': poolId,

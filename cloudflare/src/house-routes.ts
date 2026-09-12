@@ -27,7 +27,7 @@ export async function handleHouseRoutes(
     const viewer = await currentHuman(request, env);
     if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
     try {
-      const result = await withRepository(env, (repository) => getHouseOverview(repository, viewer.email, viewer.id, viewer.display_name));
+      const result = await withRepository(env, (repository) => getHouseOverview(repository, viewer.house_id, viewer.id, viewer.display_name));
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
     } catch (error) {
@@ -49,7 +49,7 @@ export async function handleHouseRoutes(
     if (!perkKey) return Response.json({ ok: false, error: 'Perk key is required' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
-        unlockHousePerk(repository, viewer.email || 'amara@earth.local', perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)),
+        unlockHousePerk(repository, viewer.house_id, perkKey, 1, resolveIdempotencyKey(request, parsed.value.correlationId)),
       );
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
       return Response.json({ ...result, persistence: 'planetscale-postgres' });
@@ -74,7 +74,7 @@ export async function handleHouseRoutes(
       const result = await withRepository(env, (repository) =>
         equipHouseHeirloom(
           repository,
-          viewer.email || 'amara@earth.local',
+          viewer.house_id,
           heirloomId,
           viewer.id,
           resolveIdempotencyKey(request, parsed.value.correlationId),
@@ -99,24 +99,22 @@ export async function handleHouseRoutes(
       name?: string;
       heirloomType?: string;
       inscription?: string;
-      statBuff?: string;
       correlationId?: string;
     }>(request);
     if (!parsed.ok) return parsed.response;
     const name = parsed.value.name?.trim() ?? '';
     const heirloomType = parsed.value.heirloomType?.trim() ?? 'house_standard';
     const inscription = parsed.value.inscription?.trim() ?? 'Forged by the house patriarch.';
-    const statBuff = parsed.value.statBuff?.trim() ?? '+5% Prestige & Influence';
     if (!name) return Response.json({ ok: false, error: 'Heirloom name is required' }, { status: 400 });
     try {
       const result = await withRepository(env, (repository) =>
         forgeHouseHeirloom(
           repository,
-          viewer.email || 'amara@earth.local',
+          viewer.house_id,
           name,
           heirloomType,
           inscription,
-          statBuff,
+          '',
           resolveIdempotencyKey(request, parsed.value.correlationId),
         ),
       );
@@ -146,7 +144,7 @@ export async function handleHouseRoutes(
       const result = await withRepository(env, (repository) =>
         updateHouseMotto(
           repository,
-          viewer.email || 'amara@earth.local',
+          viewer.house_id,
           motto,
           houseName,
           resolveIdempotencyKey(request, parsed.value.correlationId),

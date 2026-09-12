@@ -1,7 +1,6 @@
 import type { PostgresRepository } from './repository';
 import { enqueueOutbox } from './outbox-postgres.ts';
 import { toNanoMarkup, fromNanoMarkup } from './nano-markup.ts';
-import { BUILDING_CATALOG } from './real-estate-catalog.ts';
 import { transferCredits } from './financial-postgres.ts';
 import { moneyToCents, centsToMoney } from './money.ts';
 import { getAuthoritativeGameTime } from './game-clock.ts';
@@ -245,7 +244,7 @@ export async function createProposal(repository: PostgresRepository, input: { hu
           upkeep_components, upkeep_compute, operating_credits
         FROM building_catalog WHERE id = $1`, [buildingCatalogId])).rows[0]
       : null;
-    const fallback = buildingCatalogId ? BUILDING_CATALOG[String(input.targetValue?.buildingType ?? input.targetValue?.type ?? '')] : null;
+    if (buildingCatalogId && !catalog) throw new Error('Building catalog entry is incomplete or unavailable');
     const actionSnapshot: Record<string, unknown> = catalog ? {
       actionType: 'construct_civic_building',
       buildingCatalogId,
@@ -264,24 +263,6 @@ export async function createProposal(repository: PostgresRepository, input: { hu
       dailyStaffingCredits: Number(catalog.operating_credits ?? 0),
       resourceOutputType: catalog.output_energy > 0 ? 'energy' : catalog.output_food > 0 ? 'food' : catalog.output_materials > 0 ? 'material' : catalog.output_components > 0 ? 'components' : 'compute',
       resourceOutputAmount: Number(catalog.output_energy || catalog.output_food || catalog.output_materials || catalog.output_components || catalog.output_compute || 0),
-    } : fallback ? {
-      actionType: 'construct_civic_building',
-      buildingCatalogId,
-      buildingType: fallback.type,
-      tier: fallback.tier,
-      creditCostUnits: moneyToCents(fallback.baseCreditCost).toString(),
-      materialCostUnits: BigInt(Math.round(fallback.baseMaterialCost * 1_000_000)).toString(),
-      slotFootprint: fallback.slotFootprint,
-      constructionDurationDays: Math.max(2, fallback.slotFootprint * 2),
-      ownershipClass: fallback.defaultOwnershipClass,
-      dailyEnergyUpkeep: fallback.dailyEnergyUpkeep,
-      dailyFoodUpkeep: fallback.dailyFoodUpkeep,
-      dailyMaterialsUpkeep: fallback.dailyMaterialsUpkeep,
-      dailyComponentsUpkeep: fallback.dailyComponentsUpkeep,
-      dailyComputeUpkeep: fallback.dailyComputeUpkeep,
-      dailyStaffingCredits: fallback.dailyStaffingCredits,
-      resourceOutputType: fallback.resourceOutputType,
-      resourceOutputAmount: fallback.resourceOutputAmount,
     } : {
       actionType: financialActionType(input.targetCategory) ?? (input.targetCategory === 'technology' || input.targetCategory === 'research' ? 'start_research' : input.targetCategory ? 'amend_rule' : 'generic'),
       ...(input.targetValue ?? {}),

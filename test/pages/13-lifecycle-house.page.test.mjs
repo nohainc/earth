@@ -29,8 +29,6 @@ test("Page 13: Citizen Lifecycle, Succession & House Dynasty", async (t) => {
     const res = await registerSuccessor(repo, {
       humanId: TEST_HUMAN_ID,
       successorName: "Elena Noga",
-      successorHumanId: SUCCESSOR_ID,
-      estatePeriodDays: 30,
       currentLifeStatus: "active",
     });
 

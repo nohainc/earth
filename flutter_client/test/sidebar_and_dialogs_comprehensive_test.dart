@@ -339,46 +339,6 @@ void main() {
     expect(started, true);
   });
 
-  testWidgets('showLicenseComposerDialog validates inputs and submits license',
-      (tester) async {
-    bool licensed = false;
-
-    await tester.pumpWidget(
-      MaterialApp(
-        home: Builder(
-          builder: (context) => Scaffold(
-            body: ElevatedButton(
-              onPressed: () => showLicenseComposerDialog(
-                context,
-                (fn) async {
-                  licensed = true;
-                },
-              ),
-              child: const Text('Open License Dialog'),
-            ),
-          ),
-        ),
-      ),
-    );
-
-    await tester.tap(find.text('Open License Dialog'));
-    await tester.pumpAndSettle();
-
-    expect(find.text('License technology'), findsOneWidget);
-    expect(find.text('License'), findsOneWidget);
-
-    await tester.enterText(
-        find.widgetWithText(TextField, 'Licensee Human ID'), 'H-0042');
-    await tester.enterText(
-        find.widgetWithText(TextField, 'License fee (minimum 50 C)'), '200');
-    await tester.pumpAndSettle();
-
-    await tester.tap(find.text('License'));
-    await tester.pumpAndSettle();
-
-    expect(licensed, true);
-  });
-
   testWidgets('Sidebar renders in slim rail mode when isSlim is true',
       (tester) async {
     const state = EarthState({

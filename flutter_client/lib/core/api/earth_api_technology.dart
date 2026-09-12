@@ -25,52 +25,10 @@ extension EarthApiTechnology on EarthApi {
   }
 
   Future<EarthState> startCorporationBuildingResearch(String buildingType) async {
-    await _request('/api/corporation/building-research', method: 'POST', body: {
+    await _request('/api/research/buildings', method: 'POST', body: {
       'buildingType': buildingType,
       'correlationId':
           newClientCorrelationId('corporation-building-research'),
-    });
-    return world();
-  }
-
-  Future<EarthState> grantPatent() async {
-    await _request('/api/technology/me/patent', method: 'POST');
-    return world();
-  }
-
-  Future<EarthState> adoptTechnology(String technologyId) async {
-    await _request('/api/technology/adopt', method: 'POST', body: {
-      'technologyId': technologyId,
-    });
-    return world();
-  }
-
-  Future<EarthState> setTechnologySubscription(String technologyKey, {required bool active}) async {
-    await _request('/api/technology/subscription', method: 'POST', body: {
-      'technologyKey': technologyKey,
-      'status': active ? 'active' : 'inactive',
-      'correlationId': newClientCorrelationId('technology-subscription-$technologyKey-${active ? 'on' : 'off'}'),
-    });
-    return world();
-  }
-
-  Future<EarthState> licenseTechnology() async {
-    await _request('/api/technology/me/license', method: 'POST', body: {
-      'royaltyRate': 0.05,
-    });
-    return world();
-  }
-
-  Future<EarthState> licenseTechnologyTo(
-      String licenseeId, double fee, String otp,
-      {String? licenseeBusinessId}) async {
-    await _request('/api/technology/me/license', method: 'POST', body: {
-      'licenseeId': licenseeId.trim(),
-      'licenseFee': fee,
-      'royaltyRate': 0.05,
-      'otp': otp,
-      if (licenseeBusinessId != null && licenseeBusinessId.trim().isNotEmpty)
-        'licenseeBusinessId': licenseeBusinessId.trim(),
     });
     return world();
   }

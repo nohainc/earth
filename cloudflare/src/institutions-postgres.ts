@@ -315,8 +315,9 @@ export async function changeCorporationMembership(repository: PostgresRepository
       }
       if (!cityId) {
         const defaultCityRes = await tx.query<{ id: string }>('SELECT id FROM cities LIMIT 1');
-        cityId = defaultCityRes.rows[0]?.id ?? 'CITY-0084';
+        cityId = defaultCityRes.rows[0]?.id ?? null;
       }
+      if (!cityId) throw new Error('Corporation has no capital or associated City');
       await tx.query('INSERT INTO memberships (human_id, corporation_id, city_id, joined_game_day) VALUES ($1,$2,$3,$4) ON CONFLICT(human_id) DO UPDATE SET corporation_id = excluded.corporation_id, city_id = excluded.city_id, joined_game_day = excluded.joined_game_day', [input.humanId, input.corporationId, cityId, gameDay]);
       await setHouseAffiliationFromHuman(tx, input.humanId, cityId, input.corporationId, gameDay);
       await refreshPopulation(tx, input.corporationId, [current.city_id, cityId]);

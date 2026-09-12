@@ -14,7 +14,7 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.equal(files[0], '001_initial.sql');
   const latestMigration = files.at(-1);
   const latestVersion = Number(latestMigration.match(/^(\d+)_/)[1]);
-  assert.equal(latestMigration, '352_economic_invariant_levels.sql');
+  assert.equal(latestMigration, '355_building_catalog_effects.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
   assert.equal(manifest.migrationVersion, latestVersion, 'Manifest version must match latest migration version');

@@ -126,15 +126,11 @@ void main() {
   });
 
   test(
-      'Lifecycle, Machines, Market, Finance & Technology API endpoints execute expected HTTP calls',
+      'Lifecycle, Market, Finance & Research API endpoints execute expected HTTP calls',
       () async {
-    await api.registerSuccessor('Kaelen Vance',
-        successorHumanId: 'H-2', estatePeriodDays: 45);
-    await api.settleInheritance(
-        predecessorId: 'H-1', successorId: 'H-2', successorName: 'Kaelen');
+    await api.registerSuccessor('Kaelen Vance');
 
     await api.submitOrder('energy', 1.25, side: 'buy', quantity: 100);
-    await api.settleMarket('energy');
     await api.cancelOrder('ORD-1');
     await api.marketPriceHistory('energy');
 
@@ -142,9 +138,6 @@ void main() {
 
     await api.startResearch('Hyperdrive', 1000);
     await api.fundResearch();
-    await api.grantPatent();
-    await api.licenseTechnology();
-    await api.licenseTechnologyTo('H-2', 300, '123456');
 
     expect(recordedCalls.contains('POST /api/life/successor'), true);
     expect(recordedCalls.contains('POST /api/market/orders'), true);

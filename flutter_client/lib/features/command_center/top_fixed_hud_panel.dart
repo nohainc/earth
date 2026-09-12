@@ -608,8 +608,7 @@ class _TopFixedHudPanelState extends State<TopFixedHudPanel> {
 
   // --- LIVE TELEMETRY STATUS PILL ---
   Widget _buildLiveTelemetryPill(
-      BuildContext context, LiveConnectionStatus status,
-      {bool isMobile = false}) {
+      BuildContext context, LiveConnectionStatus status) {
     return Tooltip(
       message: '${status.label}\n${status.description}',
       waitDuration: const Duration(milliseconds: 150),

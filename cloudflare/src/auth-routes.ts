@@ -5,9 +5,6 @@ import { withRepository } from './repository';
 import { rebornIdentity, claimHeirIdentity, updateDisplayName, deleteAccount } from './auth-postgres';
 
 export async function authenticatedAuthRoute(request: Request, env: Env, url: URL): Promise<Response | null> {
-  if ((url.pathname === '/api/auth/rebirth' || url.pathname === '/api/auth/claim-heir') && request.method === 'POST') {
-    return Response.json({ ok: false, error: 'Cross-Human inheritance is retired; House succession is automatic' }, { status: 410 });
-  }
   if (url.pathname === '/api/auth/me' && request.method === 'GET') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ authenticated: false, human: null, persistence: 'planetscale-postgres' });
@@ -125,6 +122,21 @@ export async function authenticatedAuthRoute(request: Request, env: Env, url: UR
   if (url.pathname === '/api/auth/account' && request.method === 'DELETE') {
     const human = await currentHuman(request, env);
     if (!human) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
+    const parsed = await parseJsonBody<{ confirm?: boolean; code?: string }>(request);
+    if (!parsed.ok) return parsed.response;
+    if (parsed.value.confirm !== true) return Response.json({ ok: false, error: 'Explicit account deletion confirmation is required' }, { status: 400 });
+    const token = extractToken(request);
+    const recent = token && await withRepository(env, async (repository) => {
+      const tokenHash = await digest(token);
+      const result = await repository.query<{ created_at: string }>('SELECT created_at FROM auth_sessions WHERE token_hash = $1 AND account_id = $2 AND revoked_at IS NULL', [tokenHash, human.account_id]);
+      return Boolean(result.rows[0] && Date.now() - new Date(result.rows[0].created_at).getTime() <= 15 * 60 * 1000);
+    });
+    if (!recent) return Response.json({ ok: false, error: 'Recent authentication is required before account deletion' }, { status: 401 });
+    const credential = await withRepository(env, (repository) => repository.query<{ mfa_enabled: boolean; mfa_secret: string | null }>('SELECT mfa_enabled, mfa_secret FROM auth_accounts WHERE id = $1', [human.account_id]));
+    const mfa = credential?.rows[0];
+    if (mfa?.mfa_enabled && (!mfa.mfa_secret || !(await validTotp(mfa.mfa_secret, parsed.value.code ?? '')))) {
+      return Response.json({ ok: false, error: 'Authenticator code required for account deletion' }, { status: 401 });
+    }
     try {
       const result = await withRepository(env, (repository) => deleteAccount(repository, { humanId: human.id, email: human.email }));
       if (!result) return Response.json({ ok: false, error: 'Authentication storage is unavailable' }, { status: 503 });

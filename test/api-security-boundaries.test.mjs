@@ -84,7 +84,7 @@ test('API Security Boundaries and Request Hardening', async () => {
       body: JSON.stringify({ policy: 'margin', ownerId: 'H-9999' }),
     });
     const policyJson = await policyRes.json();
-    assert.equal(policyRes.status, 410);
+    assert.equal(policyRes.status, 404);
     assert.equal(policyJson.ok, false);
 
     // 4. Oversized request body must be rejected safely

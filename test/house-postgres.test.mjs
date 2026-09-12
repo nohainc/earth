@@ -70,8 +70,8 @@ function createMockDb(initialData = {}) {
         return { rows: [{ id: params[0] }] };
       }
 
-      if (s.includes('FROM HOUSES WHERE EMAIL = $1') || s.includes('FROM DYNASTIES WHERE EMAIL = $1')) {
-        const found = houses.find((d) => d.email === params[0] || d.id === params[1]);
+      if (s.includes('FROM HOUSES WHERE ID = $1') || s.includes('FROM DYNASTIES WHERE ID = $1')) {
+        const found = houses.find((d) => d.email === params[0] || d.id === params[0]);
         return { rows: found ? [found] : [] };
       }
 
@@ -162,7 +162,7 @@ function createMockDb(initialData = {}) {
 
 test('getHouseOverview queries house, lineage, perks, and catalog', async () => {
   const db = createMockDb();
-  const res = await getHouseOverview(db, 'amara@earth.local', 'H-0044', 'Amara Vance');
+  const res = await getHouseOverview(db, 'HSE-H0044', 'H-0044', 'Amara Vance');
 
   assert.equal(res.ok, true);
   assert.equal(res.house.house_name, 'House Vance');
@@ -173,7 +173,7 @@ test('getHouseOverview queries house, lineage, perks, and catalog', async () => 
 
 test('unlockHousePerk deducts legacy points and records perk', async () => {
   const db = createMockDb();
-  const res = await unlockHousePerk(db, 'amara@earth.local', 'industrialist_lineage', 140);
+  const res = await unlockHousePerk(db, 'HSE-H0044', 'industrialist_lineage', 140);
 
   assert.equal(res.ok, true);
   assert.equal(res.perkKey, 'industrialist_lineage');
@@ -182,12 +182,12 @@ test('unlockHousePerk deducts legacy points and records perk', async () => {
 
 test('equipHouseHeirloom toggles equip status', async () => {
   const db = createMockDb();
-  const res1 = await equipHouseHeirloom(db, 'amara@earth.local', 'HLM-001', 'H-0044');
+  const res1 = await equipHouseHeirloom(db, 'HSE-H0044', 'HLM-001', 'H-0044');
   assert.equal(res1.ok, true);
   assert.equal(res1.isEquipped, true);
   assert.equal(res1.equippedBy, 'H-0044');
 
-  const res2 = await equipHouseHeirloom(db, 'amara@earth.local', 'HLM-001', 'H-0044');
+  const res2 = await equipHouseHeirloom(db, 'HSE-H0044', 'HLM-001', 'H-0044');
   assert.equal(res2.ok, true);
   assert.equal(res2.isEquipped, false);
   assert.equal(res2.equippedBy, null);
@@ -197,7 +197,7 @@ test('forgeHouseHeirloom and updateHouseMotto succeed', async () => {
   const db = createMockDb();
   const forgeRes = await forgeHouseHeirloom(
     db,
-    'amara@earth.local',
+    'HSE-H0044',
     'Senate Gavel of Truth',
     'senate_gavel',
     'Used to ratify World Charter.',
@@ -206,7 +206,7 @@ test('forgeHouseHeirloom and updateHouseMotto succeed', async () => {
   assert.equal(forgeRes.ok, true);
   assert.equal(forgeRes.heirloom.name, 'Senate Gavel of Truth');
 
-  const mottoRes = await updateHouseMotto(db, 'amara@earth.local', 'Per Aspera Ad Astra', 'House Vance-Neo');
+  const mottoRes = await updateHouseMotto(db, 'HSE-H0044', 'Per Aspera Ad Astra', 'House Vance-Neo');
   assert.equal(mottoRes.ok, true);
   assert.equal(mottoRes.motto, 'Per Aspera Ad Astra');
   assert.equal(mottoRes.houseName, 'House Vance-Neo');

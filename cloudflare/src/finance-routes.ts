@@ -263,12 +263,12 @@ export async function handleFinanceRoutes(
     const parsed = await parseJsonBody<{ cityId?: string; category?: string; amount?: number; correlationId?: string }>(request);
     if (!parsed.ok) return parsed.response;
     const body = parsed.value;
-    const cityId = body.cityId || 'CITY-0084';
+    const cityId = body.cityId?.trim();
     const category = body.category?.trim() || 'public-services';
     const amount = Number(body.amount);
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!Number.isFinite(amount) || amount <= 0 || !correlationId) {
-      return Response.json({ ok: false, error: 'Public spending amount and Idempotency-Key are required' }, { status: 400 });
+    if (!cityId || !Number.isFinite(amount) || amount <= 0 || !correlationId) {
+      return Response.json({ ok: false, error: 'City ID, public spending amount, and Idempotency-Key are required' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>

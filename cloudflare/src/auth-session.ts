@@ -24,6 +24,17 @@ export interface AuthenticatedHouse {
   economic_id: string;
 }
 
+export type ViewerContext = {
+  accountId: string;
+  houseId: string;
+  currentHumanId: string;
+};
+
+export async function currentViewer(request: Request, env: Env): Promise<ViewerContext | null> {
+  const human = await currentHuman(request, env);
+  return human ? { accountId: human.account_id, houseId: human.house_id, currentHumanId: human.id } : null;
+}
+
 /** Resolve the persistent player principal from the session, independent of its current Human. */
 export async function currentHouse(request: Request, env: Env): Promise<AuthenticatedHouse | null> {
   for (const token of extractTokens(request)) {

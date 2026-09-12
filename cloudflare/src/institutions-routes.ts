@@ -346,10 +346,10 @@ export async function handleInstitutionRoutes(
     const body = parsed.value;
     const amount = Number(body.amount);
     const category = body.category?.trim() || 'public-services';
-    const cityId = body.cityId?.trim() || 'CITY-0084';
+    const cityId = body.cityId?.trim();
     const correlationId = resolveIdempotencyKey(request, body.correlationId);
-    if (!Number.isFinite(amount) || amount <= 0 || amount > 100000 || !correlationId) {
-      return Response.json({ ok: false, error: 'Treasury amount and correlation ID are invalid' }, { status: 400 });
+    if (!cityId || !Number.isFinite(amount) || amount <= 0 || amount > 100000 || !correlationId) {
+      return Response.json({ ok: false, error: 'City ID, treasury amount, and correlation ID are required' }, { status: 400 });
     }
     try {
       const result = await withRepository(env, (repository) =>

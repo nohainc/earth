@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 354,
+  "migrationVersion": 355,
   "requiredTables": {
     "auth_email_deliveries": [
       "id",
@@ -424,6 +424,12 @@
       "operating_cost_recipient_type",
       "effects",
       "is_original"
+    ],
+    "building_catalog_effects": [
+      "catalog_id",
+      "effect_code",
+      "effect_value",
+      "rules_version"
     ],
     "building_economic_rule_versions": [
       "catalog_id",
@@ -1813,6 +1819,7 @@
     "community_members_house_idx",
     "community_members_human_idx",
     "houses_succession_transition_idx",
-    "house_lineage_records_house_generation_idx"
+    "house_lineage_records_house_generation_idx",
+    "building_catalog_effects_code_idx"
   ]
 }

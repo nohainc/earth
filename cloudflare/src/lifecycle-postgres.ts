@@ -47,7 +47,7 @@ export async function clearSuccessor(repository: PostgresRepository, humanId: st
   return { ok: true, successor: null };
 }
 
-export async function registerSuccessor(repository: PostgresRepository, input: { humanId: string; successorName: string; estatePeriodDays: number; successorHumanId: string | null; currentLifeStatus: string }): Promise<Record<string, unknown>> {
+export async function registerSuccessor(repository: PostgresRepository, input: { humanId: string; successorName: string; currentLifeStatus: string }): Promise<Record<string, unknown>> {
   if (!input.successorName || input.successorName.trim().length === 0) {
     return clearSuccessor(repository, input.humanId);
   }
@@ -72,45 +72,6 @@ export async function getLifeStatus(repository: PostgresRepository, humanId: str
     repository.query('SELECT * FROM life_events WHERE human_id = $1 ORDER BY game_day DESC LIMIT 20', [humanId]),
   ]);
   return { ok: true, human: human.rows[0] ?? null, succession: succession.rows[0] ?? null, events: events.rows };
-}
-
-export async function settleInheritance(repository: PostgresRepository, input: { predecessorId: string; successorId: string; successorName: string; day: number }): Promise<Record<string, unknown>> {
-  return repository.transaction(async (tx) => {
-    const eventId = `INHERIT-${input.predecessorId}-${input.day}`;
-    const prior = await tx.query<{ estate_credits: string }>("SELECT estate_credits FROM life_events WHERE id = $1 AND event_type = 'inheritance'", [eventId]);
-    if (prior.rows[0]) return { ok: true, alreadyProcessed: true, eventId, inherited: Number(prior.rows[0].estate_credits), successorHumanId: input.successorId };
-
-    const predecessor = await tx.query<{ id: string; display_name: string; death_game_day: number; standing: number; legacy: number; life_status: string }>('SELECT id, display_name, death_game_day, standing, legacy, life_status FROM humans WHERE id = $1 FOR UPDATE', [input.predecessorId]);
-    const successor = await tx.query<{ id: string }>("SELECT id FROM humans WHERE id = $1 AND life_status = 'active' FOR UPDATE", [input.successorId]);
-    if (!predecessor.rows[0] || predecessor.rows[0].life_status !== 'estate') throw new Error('Only an active Estate can be settled');
-    if (!successor.rows[0] || input.successorId === input.predecessorId) throw new Error('Successor Human must be another active Human');
-
-    const accounts = await tx.query<{ account_id: string; owner_id: string; balance: string }>("SELECT account_id, owner_id, balance FROM account_balances WHERE owner_id IN ($1, $2) AND currency = 'CREDIT'", [input.predecessorId, input.successorId]);
-    const predecessorAccount = accounts.rows.find((account) => account.owner_id === input.predecessorId);
-    const successorAccount = accounts.rows.find((account) => account.owner_id === input.successorId);
-    if (!predecessorAccount || !successorAccount) throw new Error('Predecessor and successor Credit accounts are required');
-    const grossCents = moneyToCents(predecessorAccount.balance);
-    const inheritedCents = grossCents;
-    const gross = Number(centsToMoney(grossCents));
-    const inherited = gross;
-    const transferDay = input.day;
-    if (inheritedCents > 0n) await transferCredits(tx, { ledgerId: crypto.randomUUID(), gameDay: transferDay, debitAccount: predecessorAccount.account_id, creditAccount: successorAccount.account_id, amount: centsToMoney(inheritedCents), reasonType: 'late_inheritance', reasonId: eventId, ruleVersion: 'life-v4', correlationId: eventId });
-    await tx.query('UPDATE humans SET standing = 0, legacy = 0 WHERE id = $1', [input.successorId]);
-
-    const buildings = await tx.query<{ id: string }>('SELECT id FROM buildings WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
-    const resources = await tx.query<{ resource: string; amount: string }>('SELECT resource, amount FROM resource_balances WHERE owner_id = $1 FOR UPDATE', [input.predecessorId]);
-    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [input.predecessorId, eventId, 'ownership_transfer_out', input.day, 0]);
-    await tx.query('SELECT earth_economic_state_changed($1, $2, $3, $4, $5)', [input.successorId, eventId, 'ownership_transfer_in', input.day, 0]);
-    for (const resource of resources.rows) await tx.query('INSERT INTO resource_balances (owner_id, resource, amount) VALUES ($1,$2,$3) ON CONFLICT (owner_id, resource) DO UPDATE SET amount = resource_balances.amount + EXCLUDED.amount', [input.successorId, resource.resource, resource.amount]);
-    await tx.query('DELETE FROM resource_balances WHERE owner_id = $1', [input.predecessorId]);
-    await tx.query("UPDATE humans SET life_status = 'deceased' WHERE id = $1", [input.predecessorId]);
-    await tx.query('INSERT INTO deceased_profiles (human_id, display_name, death_game_day, final_standing, final_legacy, successor_name) SELECT id, display_name, death_game_day, standing, legacy, $1 FROM humans WHERE id = $2 ON CONFLICT (human_id) DO UPDATE SET successor_name = EXCLUDED.successor_name', [input.successorName, input.predecessorId]);
-    await tx.query('INSERT INTO life_events (id, human_id, event_type, game_day, successor_name, estate_credits) VALUES ($1,$2,\'inheritance\',$3,$4,$5)', [eventId, input.predecessorId, input.day, input.successorName, inherited]);
-    for (const building of buildings.rows) await tx.query('INSERT INTO ownership_events (id, asset_type, asset_id, from_owner_id, to_owner_id, quantity, reason_type, reason_id, game_day) VALUES ($1,\'BUILDING\',$2,$3,$4,1,\'late_inheritance\',$5,$6)', [crypto.randomUUID(), building.id, input.predecessorId, input.successorId, eventId, input.day]);
-    await tx.query('INSERT INTO notifications (id, human_id, notification_type, title, body, entity_id) VALUES ($1,$2,\'life\',\'Inheritance received\',$3,$4)', [crypto.randomUUID(), input.successorId, `You received ${inherited} Credits and the registered assets of ${predecessor.rows[0].display_name}.`, eventId]);
-    await tx.query('INSERT INTO world_events (id, game_day, event_type, title, details) VALUES ($1,$2,\'human.life_event\',\'An Estate completed succession\',$3) ON CONFLICT (id) DO NOTHING', [`LATE-INHERITANCE-${input.predecessorId}-${input.day}`, input.day, toNanoMarkup({ predecessor: input.predecessorId, successor: input.successorId, inherited, successionLevy: 0 })]);
-    return { ok: true, lateSuccession: true, successorHumanId: input.successorId, inherited, successionLevy: 0, eventId, assets: { buildings: buildings.rows.length, resourceTypes: resources.rows.length } };
-  });
 }
 
 export type MortalityInputs = {

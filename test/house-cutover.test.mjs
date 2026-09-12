@@ -14,8 +14,8 @@ test('House cutover retires cross-Human succession entry points', () => {
   assert.match(migration, /DROP COLUMN IF EXISTS successor_human_id/);
   assert.match(migration, /DROP COLUMN IF EXISTS estate_period_days/);
   assert.doesNotMatch(schema, /successor_human_id TEXT REFERENCES humans\(id\)\n\);/);
-  assert.match(index, /Cross-Human successors are no longer supported/);
-  assert.match(authRoutes, /Cross-Human inheritance is retired/);
+  assert.doesNotMatch(index, /Cross-Human successors are no longer supported|settleInheritance|successorHumanId/);
+  assert.doesNotMatch(authRoutes, /Cross-Human inheritance is retired|settleInheritance/);
   assert.match(lifecycleEngine, /processHouseMortality/);
   assert.doesNotMatch(lifecycleEngine, /processMortality/);
 });

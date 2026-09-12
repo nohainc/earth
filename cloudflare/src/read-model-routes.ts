@@ -48,7 +48,7 @@ export async function handleReadModelRoutes(
         activity: [
           { type: 'world_clock', day: world.rows[0]?.game_day ?? 0 },
           { type: 'research_progress', progress: technology.rows[0]?.progress ?? 0 },
-          { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 498 },
+          { type: 'market_cycle', batch: world.rows[0]?.market_batch_seconds ?? 0 },
         ],
       };
     });
@@ -141,10 +141,11 @@ export async function handleReadModelRoutes(
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }
 
-  if ((url.pathname === '/api/audit' || url.pathname === '/api/world/audit') && request.method === 'GET') {
-    const viewer = await currentHuman(request, env);
-    if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-    const result = await withRepository(env, (repository) => auditWorldPostgres(repository, viewer.id));
+  if (url.pathname === '/internal/audit' && request.method === 'GET') {
+    const expectedToken = env.INTERNAL_ADMIN_TOKEN;
+    const providedToken = request.headers.get('authorization')?.replace(/^Bearer\s+/i, '') ?? '';
+    if (!expectedToken || providedToken !== expectedToken) return new Response(null, { status: 404 });
+    const result = await withRepository(env, (repository) => auditWorldPostgres(repository, 'internal-admin'));
     if (!result) throw new Error('PostgreSQL repository is unavailable');
     return Response.json({ ...result, persistence: 'planetscale-postgres' });
   }

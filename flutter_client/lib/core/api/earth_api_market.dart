@@ -16,12 +16,6 @@ extension EarthApiMarket on EarthApi {
     return world();
   }
 
-  Future<EarthState> settleMarket(String product) async {
-    await _request('/api/market/settle',
-        method: 'POST', body: {'product': product});
-    return world();
-  }
-
   Future<EarthState> cancelOrder(String orderId) async {
     await _request('/api/market/orders/$orderId', method: 'DELETE');
     return world();

@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 354.
+-- Canonical fresh-install schema, reconciled through migration 355.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -3221,6 +3221,17 @@ CREATE TABLE IF NOT EXISTS building_catalog (
   CHECK (tier BETWEEN 1 AND 5)
 );
 CREATE UNIQUE INDEX IF NOT EXISTS building_catalog_type_tier_uq ON building_catalog (building_type, tier);
+
+CREATE TABLE IF NOT EXISTS building_catalog_effects (
+  catalog_id TEXT NOT NULL REFERENCES building_catalog(id) ON DELETE CASCADE,
+  effect_code TEXT NOT NULL,
+  effect_value BIGINT NOT NULL CHECK (effect_value >= 0),
+  rules_version TEXT NOT NULL DEFAULT 'building-effects-v1',
+  created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (catalog_id, effect_code, rules_version)
+);
+CREATE INDEX IF NOT EXISTS building_catalog_effects_code_idx
+  ON building_catalog_effects (effect_code, catalog_id);
 
 -- Development/balance reference values. These are not market prices and never
 -- participate in live account settlement.

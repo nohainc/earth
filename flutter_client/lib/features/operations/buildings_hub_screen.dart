@@ -4546,7 +4546,7 @@ class _BuildingsHubScreenState extends State<BuildingsHubScreen> {
     final hasPhysicalOutput =
         outputType != null && outputType.isNotEmpty && outputType != 'credits';
     final outputLabel =
-        hasPhysicalOutput ? outputType!.toUpperCase() : 'SERVICE CAPACITY';
+        hasPhysicalOutput ? outputType.toUpperCase() : 'SERVICE CAPACITY';
     final output = isActive ? effectiveOutputAmount : 0.0;
     final status = !isActive
         ? 'Inactive'
