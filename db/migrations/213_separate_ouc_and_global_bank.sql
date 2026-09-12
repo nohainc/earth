@@ -11,6 +11,36 @@ SET is_default_settlement = FALSE, updated_at = CURRENT_TIMESTAMP
 FROM owner_registry o
 WHERE a.owner_economic_id = o.economic_id AND o.id = 'OUC' AND a.asset_id = 1;
 
+-- The legacy OUC account may already have been copied into Economy V2 by an
+-- earlier migration. The legacy identifier is globally unique, so detach it
+-- from any non-OUC account and reuse that account for the canonical OUC
+-- treasury instead of attempting a conflicting insert.
+UPDATE economic_accounts existing
+SET legacy_account_id = NULL,
+    updated_at = CURRENT_TIMESTAMP
+FROM owner_registry ouc
+WHERE existing.legacy_account_id = 'account-ouc-treasury'
+  AND ouc.id = 'OUC'
+  AND existing.owner_economic_id <> ouc.economic_id;
+
+UPDATE economic_accounts existing
+SET owner_economic_id = ouc.economic_id,
+    asset_id = 1,
+    account_type = 3,
+    is_default_settlement = TRUE,
+    status = 'active',
+    updated_at = CURRENT_TIMESTAMP
+FROM owner_registry ouc
+WHERE existing.legacy_account_id = 'account-ouc-treasury'
+  AND ouc.id = 'OUC'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM economic_accounts treasury
+    WHERE treasury.owner_economic_id = ouc.economic_id
+      AND treasury.asset_id = 1
+      AND treasury.account_type = 3
+  );
+
 INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, balance, is_default_settlement, legacy_account_id)
 SELECT o.economic_id, 1, 3, COALESCE((SELECT balance FROM economic_accounts x JOIN economic_account_migrations m ON m.economic_account_id = x.id WHERE m.legacy_account_id = 'account-ouc-treasury' LIMIT 1), 0), TRUE, 'account-ouc-treasury'
 FROM owner_registry o
@@ -28,6 +58,24 @@ WHERE o.id = 'OUC'
 
 -- The bank owns its reserve and operations accounts. The old legacy identity
 -- is remapped to the new reserve so existing domain journals remain traceable.
+-- Reuse the already-migrated legacy account when present. Earlier Economy V2
+-- migrations registered it under GLOBAL-CORPORATE-BANK; moving that account's
+-- owner preserves its balance and history while avoiding a duplicate legacy
+-- account identifier.
+UPDATE economic_accounts legacy_bank
+SET owner_economic_id = bank_owner.economic_id,
+    updated_at = CURRENT_TIMESTAMP
+FROM owner_registry bank_owner
+WHERE legacy_bank.legacy_account_id = 'account-global-corporate-bank'
+  AND bank_owner.id = 'SYSTEM-GLOBAL-BANK'
+  AND NOT EXISTS (
+    SELECT 1
+    FROM economic_accounts existing
+    WHERE existing.owner_economic_id = bank_owner.economic_id
+      AND existing.asset_id = 1
+      AND existing.account_type = 10
+  );
+
 INSERT INTO economic_accounts (owner_economic_id, asset_id, account_type, is_default_settlement, legacy_account_id)
 SELECT o.economic_id, 1, t.account_type, FALSE,
        CASE t.account_type WHEN 10 THEN 'account-global-corporate-bank' ELSE 'account-global-bank-operations' END

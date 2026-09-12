@@ -37,6 +37,7 @@ SET institution_kind = i.kind,
       WHEN 'energy' THEN 'ENERGY'
       WHEN 'connectivity' THEN 'CONNECTIVITY'
       WHEN 'health' THEN 'HEALTH'
+      WHEN 'healthcare' THEN 'HEALTH'
       WHEN 'infrastructure' THEN 'INFRASTRUCTURE'
       WHEN 'public-services' THEN 'ESSENTIAL_SERVICES'
       WHEN 'maintenance' THEN 'ESSENTIAL_SERVICES'

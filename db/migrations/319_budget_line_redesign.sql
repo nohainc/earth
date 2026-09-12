@@ -4,6 +4,13 @@
 
 ALTER TABLE budget_categories
   ADD COLUMN IF NOT EXISTS id BIGINT GENERATED ALWAYS AS IDENTITY;
+
+-- The category FK currently points at the legacy composite primary key. Drop
+-- it before replacing that key with the stable category ID below; it is
+-- recreated after budget lines are backfilled.
+ALTER TABLE institution_budget_lines
+  DROP CONSTRAINT IF EXISTS institution_budget_lines_category_fk;
+
 ALTER TABLE budget_categories
   DROP CONSTRAINT IF EXISTS budget_categories_pkey;
 ALTER TABLE budget_categories
@@ -49,6 +56,8 @@ BEGIN
   END LOOP;
 END;
 $$;
+
+DROP TRIGGER IF EXISTS institution_budget_lines_kind_trigger ON institution_budget_lines;
 
 ALTER TABLE institution_budget_lines
   DROP CONSTRAINT IF EXISTS institution_budget_lines_pkey,

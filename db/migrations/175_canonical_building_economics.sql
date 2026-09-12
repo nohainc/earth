@@ -36,7 +36,7 @@ AS $$
   JOIN building_catalog bc
     ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
   CROSS JOIN LATERAL (VALUES
-    (1::SMALLINT, 'CREDIT'::TEXT,    COALESCE(bc.output_credits, 0),    COALESCE(bc.upkeep_credits, 0),    COALESCE(bc.operating_credits, 0)),
+    (1::SMALLINT, 'CREDIT'::TEXT,    0,                                   COALESCE(bc.upkeep_credits, 0),    COALESCE(bc.operating_credits, 0)),
     (2::SMALLINT, 'MATERIAL'::TEXT,  COALESCE(bc.output_materials, 0),  COALESCE(bc.upkeep_materials, 0),  COALESCE(bc.operating_materials, 0)),
     (3::SMALLINT, 'COMPONENTS'::TEXT,COALESCE(bc.output_components, 0), COALESCE(bc.upkeep_components, 0), COALESCE(bc.operating_components, 0)),
     (4::SMALLINT, 'ENERGY'::TEXT,    COALESCE(bc.output_energy, 0),    COALESCE(bc.upkeep_energy, 0),    COALESCE(bc.operating_energy, 0)),
@@ -46,60 +46,10 @@ AS $$
   WHERE b.id = p_building_id;
 $$;
 
--- Replace the V2 portion of the legacy-compatible rate-history procedure with
--- the same canonical calculator used by profile rebuilding.
-DO $$
-DECLARE
-  definition_text TEXT;
-  old_declaration TEXT := '  v_owner_economic_id BIGINT;';
-  new_declaration TEXT := E'  v_owner_economic_id BIGINT;\n  v_rate RECORD;';
-  start_marker TEXT := '  SELECT economic_id INTO v_owner_economic_id FROM owner_registry WHERE id = p_owner_id;';
-  end_marker TEXT := '  -- Also update daily_settlement_profiles';
-  start_position INTEGER;
-  end_position INTEGER;
-  replacement TEXT := $replacement$
-  SELECT economic_id INTO v_owner_economic_id FROM owner_registry WHERE id = p_owner_id;
-  IF v_owner_economic_id IS NOT NULL THEN
-    FOR v_rate IN
-      SELECT e.asset_id,
-             ROUND(SUM(e.output_units * e.effective_output_multiplier
-                 - (e.upkeep_units + e.operating_units) * e.effective_cost_multiplier)
-                 * asset.scale
-                 - CASE WHEN e.asset_code = 'CREDIT' THEN v_tax_credits * asset.scale ELSE 0 END)::BIGINT AS rate_units_per_day
-      FROM buildings b
-      CROSS JOIN LATERAL earth_calculate_building_economics(b.id) e
-      JOIN economic_assets asset ON asset.id = e.asset_id
-      WHERE b.status = 'active'
-        AND (
-          (v_owner_kind = 'city' AND b.city_id = p_owner_id AND (b.ownership_class = 'civic' OR b.ownership_class IS NULL))
-          OR (v_owner_kind <> 'city' AND b.owner_id = p_owner_id AND b.ownership_class = 'private')
-        )
-      GROUP BY e.asset_id, e.asset_code, asset.scale
-    LOOP
-      PERFORM earth_record_settlement_rate_segment(
-        v_owner_economic_id, v_rate.asset_id, v_game_day, v_game_minute::SMALLINT,
-        v_rate.rate_units_per_day, p_trigger_event, p_trigger_entity_id
-      );
-    END LOOP;
-  END IF;
-$replacement$;
-BEGIN
-  SELECT pg_get_functiondef(p.oid) INTO definition_text
-  FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-  WHERE n.nspname = 'public' AND p.proname = 'earth_record_rate_change'
-  LIMIT 1;
-  start_position := position(start_marker IN definition_text);
-  end_position := position(end_marker IN definition_text);
-  IF definition_text IS NULL OR COALESCE(start_position, 0) = 0 OR COALESCE(end_position, 0) = 0 OR end_position <= start_position THEN
-    RAISE EXCEPTION 'Cannot align earth_record_rate_change with canonical building calculator';
-  END IF;
-  definition_text := replace(definition_text, old_declaration, new_declaration);
-  definition_text := substring(definition_text FROM 1 FOR start_position - 1)
-    || replacement
-    || substring(definition_text FROM end_position);
-  EXECUTE definition_text;
-END;
-$$;
+-- The former migration dynamically rewrote the legacy rate-history function to
+-- include building condition and wear. That rewrite was brittle and is no
+-- longer part of the V2 architecture: Building V2 owns its own physical
+-- settlement and does not expose condition-based economics.
 
 -- Rebuild profiles from the canonical calculator. Credit remains excluded
 -- from accelerated profile posting until the safe-profile gate is removed,

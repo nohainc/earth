@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS tax_obligations (
   payment_transaction_id BIGINT REFERENCES economic_transactions(id),
   correlation_id TEXT NOT NULL UNIQUE,
   created_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS tax_obligations_payment_idx
   ON tax_obligations(status, game_day, taxpayer_economic_id);

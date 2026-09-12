@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 350.
+-- Canonical fresh-install schema, reconciled through migration 351.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.

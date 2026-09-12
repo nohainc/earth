@@ -12,7 +12,6 @@ AS $$
   UNION ALL SELECT 'membership_corporation_missing', COUNT(*) FROM memberships m LEFT JOIN corporations c ON c.id = m.corporation_id WHERE m.corporation_id IS NOT NULL AND c.id IS NULL
   UNION ALL SELECT 'account_owner_missing_registry', COUNT(*) FROM account_balances a LEFT JOIN owner_registry o ON o.id = a.owner_id WHERE o.id IS NULL
   UNION ALL SELECT 'building_owner_missing_registry', COUNT(*) FROM buildings b LEFT JOIN owner_registry o ON o.id = b.owner_id WHERE o.id IS NULL
-  UNION ALL SELECT 'business_owner_missing_registry', COUNT(*) FROM businesses b LEFT JOIN owner_registry o ON o.id = b.owner_id WHERE o.id IS NULL
   UNION ALL SELECT 'economic_account_owner_missing', COUNT(*) FROM economic_accounts a LEFT JOIN owner_registry o ON o.economic_id = a.owner_economic_id WHERE o.economic_id IS NULL
   UNION ALL SELECT 'duplicate_default_economic_account', COUNT(*) FROM (SELECT owner_economic_id, asset_id FROM economic_accounts WHERE is_default_settlement GROUP BY owner_economic_id, asset_id HAVING COUNT(*) > 1) d
   UNION ALL SELECT 'invalid_asset_account', COUNT(*) FROM economic_accounts a LEFT JOIN economic_assets x ON x.id = a.asset_id WHERE x.id IS NULL

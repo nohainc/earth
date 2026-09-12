@@ -11,9 +11,9 @@ ALTER TABLE building_catalog ADD CONSTRAINT building_catalog_operating_cost_unit
 
 UPDATE building_catalog
 SET operating_service_cost_units = CASE
-      WHEN operating_service_cost_units = 0 THEN ROUND(COALESCE(daily_operating_credits, 0) * 100)::BIGINT
+      WHEN operating_service_cost_units = 0 THEN ROUND(COALESCE(operating_credits, 0) * 100)::BIGINT
       ELSE operating_service_cost_units END
-WHERE COALESCE(daily_operating_credits, 0) > 0;
+WHERE COALESCE(operating_credits, 0) > 0;
 
 ALTER TABLE building_settlement_plans ADD COLUMN IF NOT EXISTS operating_cost_units BIGINT NOT NULL DEFAULT 0;
 ALTER TABLE building_settlement_plans ADD COLUMN IF NOT EXISTS operating_cost_recipient_type TEXT NOT NULL DEFAULT 'NONE';
@@ -68,5 +68,5 @@ BEGIN
 END;
 $$;
 
-COMMENT ON COLUMN building_catalog.daily_operating_credits IS
+COMMENT ON COLUMN building_catalog.operating_credits IS
   'Deprecated V1 field; Economy V2 requires an explicit operating-cost recipient.';

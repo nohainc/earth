@@ -51,17 +51,27 @@ WHERE h.house_id IS NULL;
 -- A legacy house can have several historical Humans, but only one active
 -- incumbent. The most recent active lineage record wins deterministically.
 UPDATE houses house
-SET current_human_id = incumbent.human_id,
-    generation = GREATEST(house.generation, COALESCE(incumbent.generation, 1))
-FROM LATERAL (
-  SELECT h.id AS human_id, l.generation
-  FROM humans h
-  LEFT JOIN house_lineage_records l ON l.human_id = h.id AND l.house_id = house.id
-  WHERE h.house_id = house.id AND h.life_status = 'active'
-  ORDER BY l.is_incumbent DESC NULLS LAST, l.generation DESC NULLS LAST, h.created_at DESC, h.id
-  LIMIT 1
-) incumbent
-WHERE house.current_human_id IS NULL;
+SET current_human_id = (
+      SELECT h.id
+      FROM humans h
+      LEFT JOIN house_lineage_records l ON l.human_id = h.id AND l.house_id = house.id
+      WHERE h.house_id = house.id AND h.life_status = 'active'
+      ORDER BY l.is_incumbent DESC NULLS LAST, l.generation DESC NULLS LAST, h.created_at DESC, h.id
+      LIMIT 1
+    ),
+    generation = GREATEST(
+      house.generation,
+      COALESCE((
+        SELECT l.generation
+        FROM humans h
+        JOIN house_lineage_records l ON l.human_id = h.id AND l.house_id = house.id
+        WHERE h.house_id = house.id AND h.life_status = 'active'
+        ORDER BY l.is_incumbent DESC NULLS LAST, l.generation DESC NULLS LAST, h.created_at DESC, h.id
+        LIMIT 1
+      ), 1)
+    )
+WHERE house.current_human_id IS NULL
+  AND EXISTS (SELECT 1 FROM humans h WHERE h.house_id = house.id AND h.life_status = 'active');
 
 ALTER TABLE houses
   ALTER COLUMN account_id SET NOT NULL;

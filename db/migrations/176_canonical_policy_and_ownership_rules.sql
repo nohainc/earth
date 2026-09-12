@@ -80,7 +80,7 @@ AS $$
     ON bc.id = COALESCE(b.catalog_id, b.building_type || '-t' || COALESCE(b.tier, 1))
   JOIN economic_policy_rules policy ON policy.code = b.operating_policy
   CROSS JOIN LATERAL (VALUES
-    (1::SMALLINT, 'CREDIT'::TEXT,     COALESCE(bc.output_credits, 0),     COALESCE(bc.upkeep_credits, 0),     COALESCE(bc.operating_credits, 0)),
+    (1::SMALLINT, 'CREDIT'::TEXT,     0,                                    COALESCE(bc.upkeep_credits, 0),     COALESCE(bc.operating_credits, 0)),
     (2::SMALLINT, 'MATERIAL'::TEXT,   COALESCE(bc.output_materials, 0),   COALESCE(bc.upkeep_materials, 0),   COALESCE(bc.operating_materials, 0)),
     (3::SMALLINT, 'COMPONENTS'::TEXT, COALESCE(bc.output_components, 0),  COALESCE(bc.upkeep_components, 0),  COALESCE(bc.operating_components, 0)),
     (4::SMALLINT, 'ENERGY'::TEXT,     COALESCE(bc.output_energy, 0),     COALESCE(bc.upkeep_energy, 0),     COALESCE(bc.operating_energy, 0)),

@@ -19,6 +19,23 @@ const knownAppliedLegacyChecksums = new Map([
   [83, new Set(['5eddbfba8cb5e96eb21ca627250de3d825e97e789d678bd6891553c58241fcb9'])],
   [98, new Set(['e2718362ed4075091ac45a3256ccd83c68c37aa46cd2ddbab723383111c3a70a'])],
   [104, new Set(['bbbc3dbec5fef0860aafb8a7433e1ad7d302c1ea0babe28cf0945ce666985bf2'])],
+  [165, new Set(['3ef8532f4d388cc44dd9c943457c5be1982f4e3c45c85366922334ed8ad4b624'])],
+  [175, new Set(['5d34bf37ff2795c5653ee469526585c0d5132e2d2bf9a8cf7236aa50a4c863a9'])],
+  [176, new Set(['bb7fa54e36f71f91660ed0119ee3ac00e11e7ce32263979900d4e900645fefa9'])],
+  [197, new Set(['14053cd25fd295c33a5756cef21d17e9610ff2bbb084c8e80cf93732922c6d10'])],
+  [200, new Set(['ea2ab11333adccab19f1a01f05b91610ecc8d949480f4ff5e966794340ec2b56'])],
+  [211, new Set(['a2828e65b462e3f21fd8e7d7e33ec8ad6d4d9b19f82f2c4bf5750d3c114bb58b'])],
+  [220, new Set(['a694e9b4507b4fdefda0dcdc2d1216d978782166aedb7ec693af0f9e08c13765'])],
+  [249, new Set(['1f1aa58c514906faed759925ca0e50a20fb7973490aa9be9f16b786579738628'])],
+  [293, new Set(['a92717bfcbac2684e4c834c0ab3375a6fee78ad8b1b45768d000780532e9d313'])],
+  [294, new Set(['05bcd2d72cdd922991df78e24eedf7359e5ea29734228daf1867bdd636299ba2'])],
+  [296, new Set(['3437496b26af0e3f97fc26bdda56d71b517ce5d4fb664ab010aaf935a3e3426c'])],
+  [315, new Set(['e76eb173bb4e65c5088575363fd9ce33827303f2fbe5c25572fd849493c9e135'])],
+  [318, new Set(['a9be67822dd525e6757617d838891e12f8fc12f2fbe80fd32b6a5e07b0d08be3'])],
+  [319, new Set(['8f80792dfb8a7c59d6ced9ac80c294b3677c01376914d9f435f38c0ab26ed180'])],
+  [340, new Set(['c3f74ed6cb172c1b5a0b03bc83cf53f4b805a48fcdf0bba871457a5f8e2dfe82'])],
+  [349, new Set(['7efd8937a9e19556f766bf839bc3ab62f2efc9dd310b74dbd5fd44efd5d0bfc3'])],
+  [213, new Set(['b22f2c33905aef30c4d8aa30bc7566d58014bb0293fd684279b31856719a8090'])],
 ]);
 const parsedConnection = new URL(connectionString);
 const usesSystemRoot = parsedConnection.searchParams.get('sslrootcert') === 'system';

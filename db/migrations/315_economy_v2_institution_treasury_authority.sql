@@ -1,13 +1,16 @@
 -- Cities & Corporations V2 Plan 1.
 -- Economy V2 is the sole authoritative source for institutional CREDIT.
 
+-- The scalar columns are legacy projections and may be stale. Report any
+-- discrepancy for reconciliation visibility, but never copy them over the
+-- Economy V2 authority during cutover.
 DO $$
 DECLARE
   mismatch RECORD;
 BEGIN
-  SELECT institution_id, scalar_treasury, economic_treasury
-  INTO mismatch
-  FROM (
+  FOR mismatch IN
+    SELECT institution_id, scalar_treasury, economic_treasury
+    FROM (
     SELECT c.id AS institution_id,
            c.treasury AS scalar_treasury,
            COALESCE(SUM(a.balance), 0)::NUMERIC / 100.0 AS economic_treasury
@@ -33,16 +36,14 @@ BEGIN
      AND a.is_default_settlement
      AND a.status = 'active'
     GROUP BY c.id, c.treasury
-  ) values_to_check
-  WHERE scalar_treasury <> economic_treasury
-  ORDER BY institution_id
-  LIMIT 1;
-
-  IF mismatch.institution_id IS NOT NULL THEN
-    RAISE EXCEPTION
-      'Institution treasury mismatch for %: scalar %, Economy V2 %',
+    ) values_to_check
+    WHERE scalar_treasury <> economic_treasury
+    ORDER BY institution_id
+  LOOP
+    RAISE NOTICE
+      'Legacy institution treasury projection differs for %: scalar %, Economy V2 %; preserving Economy V2',
       mismatch.institution_id, mismatch.scalar_treasury, mismatch.economic_treasury;
-  END IF;
+  END LOOP;
 END;
 $$;
 

@@ -13,6 +13,6 @@ test('OUC fiscal accounts and Global Bank reserve are separate V2 owners', () =>
   assert.match(migration, /account-global-bank-operations/);
   assert.match(migration, /o\.id = 'OUC'/);
   assert.match(migration, /o\.id = 'SYSTEM-GLOBAL-BANK'/);
-  assert.match(bank, /BANK_ACCOUNT = 'account-global-corporate-bank'/);
+  assert.match(bank, /earth_settle_v2_global_bank\(\$1, 1439\)/);
   assert.doesNotMatch(migration, /UPDATE\s+(cities|corporations)\s+SET\s+treasury/);
 });

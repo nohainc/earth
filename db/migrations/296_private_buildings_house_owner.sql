@@ -2,6 +2,12 @@
 -- Private buildings are economically owned by the persistent House. The
 -- legacy owner_id remains as the mortal manager/history reference.
 
+-- The legacy dirty-profile trigger omits this V2 column when it creates a
+-- profile for a newly observed building owner. Keep the column mandatory, but
+-- provide the valid baseline day expected for a dirty profile.
+ALTER TABLE daily_settlement_profiles
+  ALTER COLUMN effective_from_game_day SET DEFAULT 0;
+
 ALTER TABLE buildings
   ADD COLUMN IF NOT EXISTS owner_economic_id BIGINT,
   ADD COLUMN IF NOT EXISTS managed_by_human_id TEXT;

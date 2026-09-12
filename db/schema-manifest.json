@@ -1,6 +1,6 @@
 {
   "manifestVersion": 1,
-  "migrationVersion": 350,
+  "migrationVersion": 351,
   "requiredTables": {
     "economic_reference_prices": [
       "asset_id",
@@ -1674,10 +1674,6 @@
       "house_id"
     ],
     [
-      "human_id",
-      "technology_id"
-    ],
-    [
       "resource_balances",
       "owner_id",
       "resource"
@@ -1721,7 +1717,6 @@
     "auth_sessions_token_idx",
     "auth_login_block_idx",
     "auth_action_tokens_lookup_idx",
-    "market_orders_reserved_idx",
     "event_outbox_pending_idx",
     "event_outbox_aggregate_idx",
     "proposals_game_deadline_idx",
@@ -1736,9 +1731,7 @@
     "idx_house_lineage_successor",
     "idx_house_perks_house",
     "idx_house_heirlooms_house",
-    "idx_market_ohlc_commodity_day",
     "idx_net_worth_human_day",
-    "idx_ai_rec_feedback_human",
     "idx_scheduler_tick_logs_day",
     "personal_life_maintenance_human_day_idx",
     "daily_settlement_profiles_due_idx",

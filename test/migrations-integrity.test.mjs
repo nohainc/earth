@@ -12,16 +12,22 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '350_remove_building_decay_policy.sql');
+  assert.equal(files.at(-1), '351_repair_economic_entry_indexes.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 350, 'Manifest version must match latest migration version (350)');
+  assert.equal(manifest.migrationVersion, 351, 'Manifest version must match latest migration version (351)');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 350/);
+  assert.match(schema, /reconciled through migration 351/);
   assert.match(fs.readFileSync(path.resolve('db/migrations/349_remove_obsolete_building_credit_output.sql'), 'utf8'), /DROP COLUMN IF EXISTS output_credits/);
   assert.doesNotMatch(schema, /output_credits NUMERIC/);
   assert.doesNotMatch(schema, /decay_multiplier NUMERIC/);
+  assert.doesNotMatch(fs.readFileSync(path.resolve('db/migrations/175_canonical_building_economics.sql'), 'utf8'), /bc\.output_credits/);
+  assert.doesNotMatch(fs.readFileSync(path.resolve('db/migrations/176_canonical_policy_and_ownership_rules.sql'), 'utf8'), /bc\.output_credits/);
+  const marketOrderContract = fs.readFileSync(path.resolve('db/migrations/197_market_order_contract.sql'), 'utf8');
+  assert.match(marketOrderContract, /FROM owner_registry owner, market_instruments instrument/);
+  assert.match(marketOrderContract, /owner\.id = o\.human_id/);
+  assert.doesNotMatch(marketOrderContract, /h\.house_id/);
   assert.ok(manifest.requiredTables.tax_governance_rules, 'Tax constitution rulebook must be in the manifest');
   assert.match(fs.readFileSync(path.resolve('db/migrations/348_tax_constitution_governance.sql'), 'utf8'), /earth_create_tax_rule_version/);
   assert.ok(manifest.requiredTables.economic_research_balance_benchmarks, 'Research balance benchmarks must be in the manifest');
@@ -75,6 +81,7 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(spotOnly, /market_instruments_spot_only_ck/);
   assert.match(spotOnly, /CREATE OR REPLACE FUNCTION earth_market_integrity_report/);
   assert.doesNotMatch(schema, /CREATE TABLE IF NOT EXISTS (market_delivery_obligations|derivative_obligations)/);
+  assert.doesNotMatch(fs.readFileSync(path.resolve('db/migrations/165_economy_v2_integrity_checks.sql'), 'utf8'), /\bbusinesses\b/);
   assert.ok(manifest.requiredTables.market_batches, 'Manifest must contain canonical market batches');
   assert.ok(manifest.requiredTables.market_batch_instruments, 'Manifest must contain per-instrument batch state');
   const marketBatches = fs.readFileSync(path.resolve('db/migrations/198_market_clearing_batches.sql'), 'utf8');
@@ -247,9 +254,9 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   assert.match(buildingEconomics, /effective_cost_multiplier/);
   assert.match(buildingEconomics, /building_catalog/);
   assert.match(buildingEconomics, /CROSS JOIN LATERAL earth_calculate_building_economics/);
-  assert.match(buildingEconomics, /earth_record_settlement_rate_segment/);
-  assert.match(buildingEconomics, /same canonical calculator/);
-  assert.match(buildingEconomics, /asset\.scale/);
+  assert.doesNotMatch(buildingEconomics, /earth_record_settlement_rate_segment/);
+  assert.match(buildingEconomics, /does not expose condition-based economics/);
+  assert.doesNotMatch(buildingEconomics, /b\.condition|asset\.scale/);
   assert.ok(manifest.requiredTables.economic_policy_rules, 'Manifest must contain canonical policy rules');
   assert.ok(manifest.requiredTables.economic_ownership_classes, 'Manifest must contain canonical ownership classes');
   const policyRules = fs.readFileSync(path.resolve('db/migrations/176_canonical_policy_and_ownership_rules.sql'), 'utf8');

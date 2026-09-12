@@ -11,25 +11,25 @@ ALTER TABLE market_fills
   ADD COLUMN IF NOT EXISTS game_minute INTEGER;
 
 WITH numbered AS (
-  SELECT f.id,
+  SELECT f.id, f.buy_order_id, f.sell_order_id, f.batch_id, f.instrument_id,
          ROW_NUMBER() OVER (PARTITION BY f.batch_id, f.instrument_id ORDER BY f.created_at, f.id)::BIGINT AS fill_sequence
     FROM market_fills f
 )
 UPDATE market_fills f
-SET buyer_economic_id = buyer.owner_economic_id,
-    seller_economic_id = seller.owner_economic_id,
+SET buyer_economic_id = buyer.economic_id,
+    seller_economic_id = seller.economic_id,
     gross_quote_units = COALESCE(f.gross_quote_units, f.quote_units),
     economic_transaction_id = COALESCE(f.economic_transaction_id, batch_instrument.economic_transaction_id),
     sequence_no = COALESCE(f.sequence_no, numbered.fill_sequence),
     game_day = COALESCE(f.game_day, FLOOR(batch.start_total_game_minute / 1440)::BIGINT + 1),
     game_minute = COALESCE(f.game_minute, (batch.start_total_game_minute % 1440)::INTEGER)
 FROM numbered
-JOIN market_orders buy_order ON buy_order.id = f.buy_order_id
+JOIN market_orders buy_order ON buy_order.id = numbered.buy_order_id
 JOIN owner_registry buyer ON buyer.id = buy_order.human_id
-JOIN market_orders sell_order ON sell_order.id = f.sell_order_id
+JOIN market_orders sell_order ON sell_order.id = numbered.sell_order_id
 JOIN owner_registry seller ON seller.id = sell_order.human_id
-JOIN market_batches batch ON batch.id = f.batch_id
-JOIN market_batch_instruments batch_instrument ON batch_instrument.batch_id = f.batch_id AND batch_instrument.instrument_id = f.instrument_id
+JOIN market_batches batch ON batch.id = numbered.batch_id
+JOIN market_batch_instruments batch_instrument ON batch_instrument.batch_id = numbered.batch_id AND batch_instrument.instrument_id = numbered.instrument_id
 WHERE numbered.id = f.id;
 
 ALTER TABLE market_fills

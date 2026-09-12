@@ -50,7 +50,7 @@ BEGIN
       (o.id = 'SYSTEM-MONETARY-AUTHORITY' AND (a.asset_id <> 1 OR a.account_type <> 7 OR e.delta >= 0 OR e.reason_code NOT IN ('GENESIS_ISSUANCE', 'PLAYER_STARTING_GRANT', 'MONETARY_STABILIZATION') OR t.source_type <> 'monetary_authority')
       OR
       (o.id = 'SYSTEM-MONETARY-RETIREMENT' AND (a.asset_id <> 1 OR a.account_type <> 8 OR e.delta <= 0 OR e.reason_code <> 'CREDIT_RETIREMENT' OR t.source_type <> 'monetary_authority'))
-    );
+    ));
   IF invalid_count > 0 THEN
     RAISE EXCEPTION 'Transaction % violates monetary authority rules', p_transaction_id;
   END IF;
@@ -174,7 +174,7 @@ AS $$
     AND NOT (
       (o.id = 'SYSTEM-MONETARY-AUTHORITY' AND e.reason_code IN ('GENESIS_ISSUANCE', 'PLAYER_STARTING_GRANT', 'MONETARY_STABILIZATION') AND e.delta < 0 AND t.source_type = 'monetary_authority')
       OR (o.id = 'SYSTEM-MONETARY-RETIREMENT' AND e.reason_code = 'CREDIT_RETIREMENT' AND e.delta > 0 AND t.source_type = 'monetary_authority')
-    )
+    );
 $$;
 
 CREATE OR REPLACE FUNCTION earth_integrity_report()
@@ -186,4 +186,5 @@ AS $$
   SELECT check_name, invalid_count FROM earth_market_integrity_report()
   UNION ALL
   SELECT check_name, invalid_count FROM earth_monetary_supply_integrity()
+;
 $$;

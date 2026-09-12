@@ -34,6 +34,13 @@ FROM auth_accounts a
 JOIN humans h ON h.house_id = a.house_id
 WHERE s.account_id IS NULL AND s.human_id = h.id;
 
+-- A legacy session may outlive a deleted/incomplete credential record. Such a
+-- session cannot authenticate through the new House principal, so remove it
+-- before enforcing the non-null account relationship. Valid sessions above
+-- retain their token, expiry, revocation state, and session ID.
+DELETE FROM auth_sessions s
+WHERE s.account_id IS NULL;
+
 ALTER TABLE auth_sessions
   ALTER COLUMN account_id SET NOT NULL;
 ALTER TABLE auth_sessions
@@ -48,6 +55,9 @@ SET account_id = a.id
 FROM auth_accounts a
 JOIN humans h ON h.house_id = a.house_id
 WHERE t.account_id IS NULL AND t.human_id = h.id;
+
+DELETE FROM auth_action_tokens t
+WHERE t.account_id IS NULL;
 
 ALTER TABLE auth_action_tokens
   ALTER COLUMN account_id SET NOT NULL;

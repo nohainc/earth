@@ -23,9 +23,13 @@ SET owner_economic_id = owner.economic_id,
     sequence_no = nextval('market_order_sequence'),
     submitted_game_day = COALESCE(submitted_game_day, 1),
     submitted_game_minute = COALESCE(submitted_game_minute, 0)
-FROM owner_registry owner
-JOIN market_instruments instrument ON instrument.symbol = 'SPOT-' || UPPER(o.product)
-WHERE o.owner_economic_id IS NULL;
+FROM owner_registry owner, market_instruments instrument
+WHERE o.owner_economic_id IS NULL
+  -- This migration runs before the House cutover adds humans.house_id.
+  -- Backfill legacy orders from their original Human owner; the later House
+  -- ownership migration reconciles these owners without changing the order.
+  AND owner.id = o.human_id
+  AND instrument.symbol = 'SPOT-' || UPPER(o.product);
 
 UPDATE market_orders
 SET filled_units = filled_quantity_units
