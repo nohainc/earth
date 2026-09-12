@@ -98,7 +98,7 @@ jobs:
       - name: Create previous-release upgrade fixture database
         run: createdb -h localhost -U earth earth_upgrade
       - name: Build previous-release fixture
-        run: MIGRATION_TARGET_VERSION=350 DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:migrate:postgres
+        run: MIGRATION_TARGET_VERSION=1 DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:migrate:postgres
       - name: Seed previous-release fixture
         run: DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:seed:postgres
       - name: Snapshot previous-release fixture

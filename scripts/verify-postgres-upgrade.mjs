@@ -8,9 +8,9 @@ const snapshotPath = process.env.EARTH_UPGRADE_SNAPSHOT || '/tmp/earth-upgrade-s
 const mode = process.argv.includes('--verify') ? 'verify' : 'snapshot';
 const tables = {
   houses: 'houses', humans: 'humans', economicAccounts: 'economic_accounts', economicTransactions: 'economic_transactions',
-  economicEntries: 'economic_entries', marketOrders: 'market_orders', marketFills: 'market_fills', memberships: 'memberships',
+  economicEntries: 'economic_entries', marketOrders: 'market_orders', marketFills: 'market_fills',
   buildings: 'buildings', researchProjects: 'corporation_research_projects', taxObligations: 'tax_obligations', taxRules: 'tax_rule_versions',
-  budgetCommitments: 'institution_budget_commitments', deposits: 'global_bank_deposits', loans: 'global_bank_loans', proposals: 'proposals', outbox: 'event_outbox',
+  budgetCommitments: 'institution_budget_commitments', deposits: 'bank_deposits', loans: 'bank_loans', proposals: 'proposals', outbox: 'event_outbox',
 };
 
 const client = new Client({ connectionString, application_name: 'earth-postgres-upgrade-verifier', connectionTimeoutMillis: 5000, query_timeout: 30000 });
@@ -23,8 +23,8 @@ try {
   }
   const totals = await client.query(`
     SELECT
-      (SELECT COALESCE(SUM(balance), 0)::numeric FROM economic_accounts) AS economic_balance,
-      (SELECT COALESCE(SUM(delta), 0)::numeric FROM economic_entries) AS economic_entry_delta,
+      (SELECT COALESCE(SUM(balance_units), 0)::numeric FROM economic_accounts) AS economic_balance,
+      (SELECT COALESCE(SUM(delta_units), 0)::numeric FROM economic_entries) AS economic_entry_delta,
       (SELECT COALESCE(SUM(quantity_units), 0)::numeric FROM market_orders) AS order_quantity,
       (SELECT COALESCE(SUM(quantity_units), 0)::numeric FROM market_fills) AS fill_quantity
   `);

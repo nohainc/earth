@@ -28,10 +28,9 @@ test('email delivery distinguishes provider success from audit persistence', () 
 });
 
 test('email delivery migration reconciles legacy rows before constraints', () => {
-  const migration = fs.readFileSync('db/migrations/353_auth_email_delivery_contract.sql', 'utf8');
-  assert.match(migration, /ADD COLUMN IF NOT EXISTS correlation_id/);
-  assert.match(migration, /legacy-email:/);
-  assert.match(migration, /legacy-redacted/);
-  assert.match(migration, /DROP COLUMN IF EXISTS recipient_email/);
-  assert.match(migration, /ALTER COLUMN correlation_id SET NOT NULL/);
+  const schema = fs.readFileSync('db/baseline/01_schema.sql', 'utf8');
+  assert.match(schema, /CREATE TABLE auth_email_deliveries/);
+  assert.match(schema, /correlation_id TEXT NOT NULL UNIQUE/);
+  assert.match(schema, /recipient_masked TEXT NOT NULL/);
+  assert.match(schema, /auth_email_deliveries_correlation_uq/);
 });

@@ -39,10 +39,10 @@ psql -d earth -f db/seed.sql
 DATABASE_URL=postgres://$USER@localhost:5432/earth npm start
 ```
 
-`db/schema.sql` (tables, constraints, indexes) and `db/functions.sql` (stored
-procedures and triggers) create the clean, complete current state of the database
-from scratch in a single step. For existing environments,
-`npm run db:migrate:postgres` runs forward-only migrations from `db/migrations/`.
+The clean database is defined by the baseline sections under `db/baseline/` and
+applied by the immutable `db/migrations/001_baseline.sql`. For future changes,
+create active migrations starting at `002_...`; `npm run db:migrate:postgres`
+applies only migrations explicitly marked as active.
 
 For an existing local database, apply the migrations and load the canonical
 starter world explicitly:
@@ -119,8 +119,9 @@ The implementation checklist for the management-first redesign is in
 
 - `cloudflare/` — authoritative production Cloudflare Worker API & settlement engine
 - `flutter_client/` — multiplatform production client (Web, macOS, iOS, Android, Linux, Windows)
-- `db/migrations/` — relational PostgreSQL schema and versioned migrations (001–054)
-- `db/seed.sql` — initial United Corporations / City / Corporation / Human world
+- `db/baseline/` — clean schema, functions, reference data, and initial system world
+- `db/migrations/001_baseline.sql` — immutable migration version 1
+- `db/seed/` — development and test data only
 - `server.js` — non-production local reference API
 - `test/` — comprehensive automated test suites (Node.js test runner)
 
@@ -143,9 +144,8 @@ npm run qa
 
 ## PostgreSQL and Flutter verification
 
-The authoritative production schema is tracked in `db/migrations/` and runs in
-PlanetScale PostgreSQL through the Hyperdrive binding. Verify the database
-before deploying:
+The authoritative production schema is the v1 baseline and runs in PlanetScale
+PostgreSQL through the Hyperdrive binding. Verify the database before deploying:
 
 ```bash
 DATABASE_URL="$DATABASE_URL" npm run db:migrate:postgres

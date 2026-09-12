@@ -1,11 +1,12 @@
 import { readFile } from 'node:fs/promises';
 
-const schema = await readFile(new URL('../db/schema.sql', import.meta.url), 'utf8');
+const schema = await readFile(new URL('../db/baseline/01_schema.sql', import.meta.url), 'utf8');
+const baseline = await readFile(new URL('../db/migrations/001_baseline.sql', import.meta.url), 'utf8');
 const manifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
 const failures = [];
 
 for (const [table, columns] of Object.entries(manifest.requiredTables)) {
-  const definition = schema.match(new RegExp(`CREATE\\s+(?:UNLOGGED\\s+)?TABLE(?:\\s+IF\\s+NOT\\s+EXISTS)?\\s+${table}\\s*\\(([\\s\\S]*?)\\n\\);`, 'i'))?.[1];
+  const definition = schema.match(new RegExp(`CREATE\\s+(?:UNLOGGED\\s+)?TABLE(?:\\s+IF\\s+NOT\\s+EXISTS)?\\s+${table}\\s*\\(([\\s\\S]*?)\\)\\s*;`, 'i'))?.[1];
   if (!definition) {
     failures.push(`schema.sql is missing table ${table}`);
     continue;
@@ -19,6 +20,7 @@ for (const [table, columns] of Object.entries(manifest.requiredTables)) {
   }
 }
 
-if (!schema.includes(`reconciled through migration ${manifest.migrationVersion}`)) failures.push(`schema.sql header must identify migration ${manifest.migrationVersion} reconciliation`);
+if (!baseline.includes('-- EARTH ACTIVE MIGRATION: clean baseline')) failures.push('baseline migration marker is missing');
+if (manifest.migrationVersion !== 1) failures.push(`baseline manifest must be version 1, found ${manifest.migrationVersion}`);
 if (failures.length) throw new Error(`Canonical schema verification failed:\n- ${failures.join('\n- ')}`);
 console.log(JSON.stringify({ ok: true, migrationVersion: manifest.migrationVersion, tablesChecked: Object.keys(manifest.requiredTables).length }, null, 2));

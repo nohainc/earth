@@ -14,4 +14,6 @@ erDiagram
   governance_proposals ||--o{ ballots : receives
 ```
 
-The source of truth is the append-only migration history under `db/migrations`.
+The source of truth is the clean baseline under `db/baseline/`, applied by
+immutable migration `db/migrations/001_baseline.sql` (schema version `1`).
+Future schema changes begin at active migration `002_...`.

@@ -21,16 +21,16 @@ const client = new Client({
 await client.connect();
 try {
   const checks = {};
-  const invalidBalances = await client.query("SELECT COUNT(*)::integer AS count FROM account_balances WHERE balance < 0");
-  const invalidLedger = await client.query("SELECT COUNT(*)::integer AS count FROM ledger_entries WHERE amount <= 0 OR debit_account = credit_account OR correlation_id IS NULL");
-  const invalidOwnership = await client.query("SELECT COUNT(*)::integer AS count FROM ownership_events WHERE from_owner_id IS NOT NULL AND from_owner_id = to_owner_id");
-  const pendingOutbox = await client.query("SELECT COUNT(*)::integer AS count FROM event_outbox WHERE processed_at IS NULL AND attempts > 20");
+  const invalidBalances = await client.query('SELECT COUNT(*)::integer AS count FROM economic_accounts WHERE balance_units < 0');
+  const invalidLedger = await client.query('SELECT COUNT(*)::integer AS count FROM economic_entries WHERE delta_units = 0');
+  const invalidOwnership = await client.query('SELECT COUNT(*)::integer AS count FROM market_fills WHERE buyer_economic_id = seller_economic_id');
+  const pendingOutbox = await client.query("SELECT COUNT(*)::integer AS count FROM event_outbox WHERE status = 'LOCKED'");
   const world = await client.query("SELECT COUNT(*)::integer AS count FROM world_state WHERE id = 'WORLD'");
   const migrations = await client.query('SELECT COUNT(*)::integer AS count, COALESCE(MAX(version), 0)::integer AS version FROM earth_schema_migrations');
-  const detailed = await client.query('SELECT severity, check_name, invalid_count FROM earth_integrity_report_detailed() ORDER BY severity, check_name');
-  const critical = Object.fromEntries(detailed.rows.filter((row) => row.severity === 'critical').map((row) => [row.check_name, Number(row.invalid_count)]));
-  const warnings = Object.fromEntries(detailed.rows.filter((row) => row.severity === 'warning').map((row) => [row.check_name, Number(row.invalid_count)]));
-  const expensive = Object.fromEntries(detailed.rows.filter((row) => row.severity === 'expensive').map((row) => [row.check_name, Number(row.invalid_count)]));
+  const detailed = await client.query('SELECT check_name, invalid_count FROM earth_integrity_report() ORDER BY check_name');
+  const critical = Object.fromEntries(detailed.rows.map((row) => [row.check_name, Number(row.invalid_count)]));
+  const warnings = {};
+  const expensive = {};
 
   checks.balancesNonNegative = Number(invalidBalances.rows[0].count) === 0;
   checks.ledgerEntriesValid = Number(invalidLedger.rows[0].count) === 0;

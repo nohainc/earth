@@ -1,0 +1,2 @@
+-- Test profile starts with only the canonical system world.
+-- Individual integration tests create their own isolated actors and state.

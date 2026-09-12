@@ -27,10 +27,10 @@ live delivery; transactional outbox delivery is post-commit.
 
 ## Database baseline
 
-- Migration head: `341_human_daily_needs_v2.sql`.
-- Canonical fresh-install schema: `db/schema.sql`, reconciled through migration
-  341.
-- Schema manifest: `db/schema-manifest.json`, `migrationVersion: 341`.
+- Migration head: `001_baseline.sql`.
+- Canonical fresh-install schema: `db/baseline/`, assembled by
+  `db/migrations/001_baseline.sql`.
+- Schema manifest: `db/schema-manifest.json`, `migrationVersion: 1`.
 - Production-compatible scheduled entry point: `cloudflare/src/index.ts`.
 - Production cron configuration: `wrangler.api.jsonc`, `* * * * *`.
 - Economy V2 is still in migration/shadow-reconciliation mode; legacy callers

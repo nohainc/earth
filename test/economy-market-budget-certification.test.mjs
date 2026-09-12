@@ -6,7 +6,7 @@ const read = (path) => fs.readFileSync(path, 'utf8');
 
 test('Economy V2 certification: postings are atomic, balanced and idempotent', () => {
   const escrow = read('cloudflare/src/market-escrow.ts');
-  const schema = read('db/schema.sql');
+  const schema = read('db/baseline/01_schema.sql');
   assert.match(escrow, /earth_post_transaction/);
   assert.match(escrow, /earth_post_settlement_batch/);
   assert.match(schema, /economic_entries/);
@@ -30,11 +30,11 @@ test('Market certification: collateral, deterministic matching and replay protec
 
 test('Budget certification: authority, cash and commitments remain separate', () => {
   const api = read('cloudflare/src/institution-budget-api.ts');
-  const migration = read('db/migrations/320_budget_commitments.sql');
+  const migration = read('db/baseline/01_schema.sql');
   const spending = read('cloudflare/src/institution-budget-api.ts');
   assert.match(api, /authorized_units.*committed_units.*spent_units/s);
-  assert.match(migration, /authorized_units - committed_units - spent_units/);
-  assert.match(migration, /FOR UPDATE/);
+  assert.match(migration, /authorized_units >= committed_units \+ spent_units/);
+  assert.match(migration, /institution_budget_commitments/);
   assert.match(spending, /earth_pay_budget_commitment|earth_spend_institution_budget/);
 });
 

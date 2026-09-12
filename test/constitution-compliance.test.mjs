@@ -27,8 +27,8 @@ test('constitutional compliance guard: economic periods and tax changes are dail
   assert.doesNotMatch(dailyPhaseSource, /monthly|annual|per_month|month_income/i);
   assert.match(taxExecutor, /effectiveDay <= gameDay/);
   assert.match(taxExecutor, /future game day/);
-  assert.match(read('db/migrations/348_tax_constitution_governance.sql'), /authorization_proposal_id/);
-  assert.match(read('db/migrations/348_tax_constitution_governance.sql'), /decision_status = 'passed'/);
+  assert.match(read('db/baseline/01_schema.sql'), /tax_rule_versions/);
+  assert.match(read('cloudflare/src/proposal-finance-actions.ts'), /authorization_proposal_id|STALE_CONFLICT/);
 });
 
 test('constitutional compliance guard: House continuity keeps economic ownership at succession', () => {

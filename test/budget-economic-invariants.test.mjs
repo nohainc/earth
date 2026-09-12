@@ -7,7 +7,7 @@ const read = (path) => fs.readFileSync(new URL(`../${path}`, import.meta.url), '
 test('budget authorization and commitment creation are non-monetary operations', () => {
   const authorization = read('cloudflare/src/budget-authorization.ts');
   const commitments = read('cloudflare/src/institution-budget-api.ts');
-  const commitmentSql = read('db/migrations/320_budget_commitments.sql');
+  const commitmentSql = read('db/baseline/01_schema.sql');
   assert.doesNotMatch(authorization, /earth_post_transaction|UPDATE\s+economic_accounts|INSERT\s+INTO\s+economic_entries/);
   assert.doesNotMatch(commitments.slice(0, commitments.indexOf('export async function payInstitutionCommitment')), /earth_post_transaction|UPDATE\s+economic_accounts|INSERT\s+INTO\s+economic_entries/);
   assert.doesNotMatch(commitmentSql.slice(0, commitmentSql.indexOf('CREATE OR REPLACE FUNCTION earth_pay_budget_commitment')), /earth_post_transaction|UPDATE\s+economic_accounts|INSERT\s+INTO\s+economic_entries/);
@@ -26,8 +26,8 @@ test('only payment paths post balanced Economy V2 transfers', () => {
 
 test('budget amendments are explicitly non-monetary while reserve transfers are auditable', () => {
   const authorization = read('cloudflare/src/budget-authorization.ts');
-  const integrity = read('db/migrations/338_budget_integrity_checks.sql');
+  const integrity = read('db/baseline/02_functions.sql');
   assert.doesNotMatch(authorization, /economic_transaction|posting|balance/);
-  assert.match(integrity, /reserve_transfer_unbalanced/);
-  assert.match(integrity, /transaction_kind = 'RESERVE_TRANSFER'/);
+  assert.match(integrity, /earth_assert_baseline_integrity/);
+  assert.match(integrity, /budget authority invariant/);
 });

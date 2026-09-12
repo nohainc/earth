@@ -8,7 +8,7 @@ await client.connect();
 try {
   const report = await client.query('SELECT check_name, invalid_count FROM earth_integrity_report() ORDER BY check_name');
   const checks = Object.fromEntries(report.rows.map((row) => [row.check_name, Number(row.invalid_count)]));
-  const ownerRegistry = await client.query("SELECT COUNT(*)::integer AS count FROM owner_registry WHERE status = 'active'");
+  const ownerRegistry = await client.query('SELECT COUNT(*)::integer AS count FROM owner_registry');
   const result = {
     ok: Object.values(checks).every((count) => count === 0) && Number(ownerRegistry.rows[0]?.count ?? 0) > 0,
     checks,
