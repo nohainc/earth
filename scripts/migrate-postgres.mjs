@@ -12,6 +12,13 @@ const migrationDirectory = new URL('../db/migrations/', import.meta.url);
 const names = (await readdir(migrationDirectory))
   .filter((name) => /^\d+_.+\.sql$/.test(name))
   .sort((a, b) => Number(a.match(/^\d+/)[0]) - Number(b.match(/^\d+/)[0]));
+const migrationTarget = process.env.MIGRATION_TARGET_VERSION ? Number(process.env.MIGRATION_TARGET_VERSION) : null;
+if (migrationTarget !== null && (!Number.isInteger(migrationTarget) || migrationTarget < 1)) {
+  throw new Error('MIGRATION_TARGET_VERSION must be a positive integer');
+}
+const migrationsToApply = migrationTarget === null
+  ? names
+  : names.filter((name) => Number(name.slice(0, name.indexOf('_'))) <= migrationTarget);
 // These checksums identify historical migrations that were applied before the
 // canonical files were restored. Reconcile metadata only; never rerun them.
 const knownAppliedLegacyChecksums = new Map([
@@ -66,7 +73,7 @@ try {
 
   const allowRepair = process.env.ALLOW_MIGRATION_REPAIR === 'true' || process.argv.includes('--repair');
 
-  for (const name of names) {
+  for (const name of migrationsToApply) {
     const version = Number(name.slice(0, name.indexOf('_')));
     const sql = await readFile(join(migrationDirectory.pathname, name), 'utf8');
     const checksum = createHash('sha256').update(sql).digest('hex');

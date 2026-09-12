@@ -2,9 +2,15 @@ name: Deploy EARTH API
 
 on:
   workflow_dispatch:
+    inputs:
+      source_sha:
+        description: 'Exact commit whose successful EARTH tests run should be deployed'
+        required: true
+        type: string
 
 permissions:
   contents: read
+  actions: read
 
 concurrency:
   group: earth-api-deploy
@@ -14,43 +20,77 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     environment: production
+    env:
+      DATABASE_URL: ${{ secrets.PRODUCTION_DATABASE_URL }}
+      DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://earthuc.com' }}
+      CANARY_TARGET_URL: ${{ vars.DEPLOY_URL || 'https://earthuc.com' }}
+      SOURCE_SHA: ${{ inputs.source_sha }}
     steps:
       - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.source_sha }}
+          fetch-depth: 1
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
-      - run: npm run check
-      - run: npm run cf:assert-postgres
-      - run: npm run audit:mutation-boundaries
-      - run: npx wrangler deploy --dry-run --config wrangler.api.jsonc
+      - name: Audit runtime dependencies
+        run: npm run security:audit
+      - name: Verify source commit and required CI provenance
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          test "$(git rev-parse HEAD)" = "$SOURCE_SHA"
+          npm run db:verify:ci-provenance
+      - name: Validate production configuration and secrets
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          test -n "$DATABASE_URL"
+          test -n "$CLOUDFLARE_API_TOKEN"
+          test -n "$CLOUDFLARE_ACCOUNT_ID"
+          npm run deploy:verify:config
+          npm run cf:assert-postgres
+          npm run db:verify:schema-contract
+      - name: Verify production database connectivity
+        run: |
+          node -e "import('pg').then(async ({Client}) => { const c = new Client({connectionString: process.env.DATABASE_URL, connectionTimeoutMillis: 5000}); await c.connect(); await c.query('SELECT 1'); await c.end(); console.log('PostgreSQL reachable'); })"
+      - name: Capture production restore point
+        run: EARTH_BACKUP_DIR=backups npm run db:backup:postgres
+      - name: Upload restore point metadata
+        uses: actions/upload-artifact@v4
+        with:
+          name: earth-production-restore-point-${{ inputs.source_sha }}
+          path: backups/
+          retention-days: 30
+      - name: Apply forward-only production migrations
+        run: npm run db:migrate:postgres
+      - name: Verify exact production schema and critical invariants
+        run: |
+          npm run db:verify:manifest
+          npm run db:verify:surface
+          npm run db:verify:invariants
+          npm run db:verify:integrity
+          npm run db:verify:economy-cutover
+          npm run db:verify:finance-cutover
+      - name: Validate Worker dry run
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: npm run cf:check
       - name: Deploy API Worker
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: npx wrangler deploy --config wrangler.api.jsonc
-      - name: Verify API health
-        continue-on-error: true
-        env:
-          DEPLOY_URL: ${{ vars.DEPLOY_URL || 'https://earthuc.com' }}
-        run: |
-          node -e "
-            const url = process.env.DEPLOY_URL + '/api/health';
-            fetch(url)
-              .then(async (r) => {
-                if (!r.ok) throw Error('health returned ' + r.status + ' from ' + url);
-                const b = await r.json();
-                if (!b.ok) throw Error('API is not healthy');
-                console.log('API healthy:', url);
-              })
-              .catch((err) => {
-                if (err.cause?.code === 'ENOTFOUND' || err.message?.includes('ENOTFOUND') || err.message?.includes('fetch failed')) {
-                  console.warn('Live verification skipped: Domain DNS is not yet propagated (' + err.message + ')');
-                  return;
-                }
-                throw err;
-              });
-          "
-
+      - name: Require production readiness
+        run: npm run db:verify:readiness
+      - name: Run production canary and smoke verification
+        run: npm run deploy:canary:verify
+      - name: Post-deploy critical invariant check
+        run: npm run db:verify:invariants
+      - name: Promote deployment
+        run: echo "EARTH API deployment passed all database, readiness, and canary gates for $SOURCE_SHA"

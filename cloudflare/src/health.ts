@@ -1,10 +1,62 @@
 import { probePostgres } from './postgres';
 import { withPostgresRepository } from './repository';
+import { EARTH_SCHEMA_VERSION } from './schema-contract.ts';
 
-export async function healthResponse(request: Request, env: Env): Promise<Response> {
+export async function livenessResponse(request: Request): Promise<Response> {
+  return Response.json({
+    ok: true,
+    status: 'live',
+    correlationId: request.headers.get('X-Request-ID') ?? crypto.randomUUID(),
+  });
+}
+
+export async function healthResponse(request: Request, env: Env, options: { readiness?: boolean } = {}): Promise<Response> {
   const postgres = await probePostgres(env.HYPERDRIVE);
+  const baseHealth = {
+    correlationId: request.headers.get('X-Request-ID') ?? crypto.randomUUID(),
+    persistence: 'planetscale-postgres',
+    authority: 'postgres',
+    environment: env.ENVIRONMENT,
+    workerVersion: '0.1.0',
+    schemaVersion: postgres.migrationVersion ?? null,
+    expectedSchemaVersion: EARTH_SCHEMA_VERSION,
+  };
+
+  // Do not run the detailed health queries against an incompatible schema.
+  // This keeps readiness diagnostic and fail-closed when a migration is
+  // missing, while avoiding a second error from querying absent objects.
+  if (!postgres.configured || !postgres.reachable || !postgres.schemaReady) {
+    const checks = {
+      database: postgres.reachable,
+      postgresConfigured: postgres.configured,
+      postgresReachable: postgres.reachable,
+      postgresSchemaReady: postgres.schemaReady,
+      postgresDataReady: false,
+      coreSchema: false,
+      featureSchema: false,
+      criticalInvariants: false,
+      migrationManifest: postgres.migrationVersion === EARTH_SCHEMA_VERSION,
+    };
+    return Response.json({
+      ...baseHealth,
+      ok: false,
+      checks,
+      postgres: {
+        serverVersion: postgres.serverVersion ?? null,
+        featureTableCount: postgres.featureTableCount ?? 0,
+        dataReady: false,
+        missingObjects: postgres.missingObjects ?? [],
+      },
+      readiness: {
+        migrationVersion: postgres.migrationVersion ?? null,
+        expectedSchemaVersion: EARTH_SCHEMA_VERSION,
+        schemaMissingObjects: postgres.missingObjects ?? [],
+      },
+      migration: { target: 'planetscale-postgres', stage: 'not-ready' },
+    }, { status: 503 });
+  }
   const postgresChecks = await withPostgresRepository(env, async (repository) => {
-    const [core, feature, reservations, governance, financial, assets, taxed, balances, scheduler, outbox, migrations, counts, settlement, observability] = await Promise.all([
+    const [core, feature, reservations, governance, financial, assets, taxed, invariants, scheduler, outbox, migrations, counts, settlement, observability] = await Promise.all([
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['world_state', 'humans', 'market_prices', 'account_balances', 'ledger_entries', 'ownership_events', 'membership_events']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = ANY($1)", [['buildings', 'civic_dividend_payouts', 'global_bank_deposits']]),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'market_orders' AND column_name = 'reserved_quote_units'"),
@@ -12,7 +64,7 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'personal_financial_states'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'buildings'"),
       repository.query("SELECT COUNT(*)::integer AS count FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'buildings' AND column_name = 'daily_operating_credits'"),
-      repository.query('SELECT COUNT(*)::integer AS invalid FROM account_balances WHERE balance < 0'),
+      repository.query<{ invalid: string }>(`SELECT COALESCE(SUM(invalid_count) FILTER (WHERE invalid_count > 0), 0)::text AS invalid FROM earth_integrity_report()`),
       repository.query("SELECT EXTRACT(EPOCH FROM (CURRENT_TIMESTAMP - last_scheduler_at)) AS age_seconds FROM world_state WHERE id = 'WORLD'"),
       repository.query(`
         SELECT
@@ -109,19 +161,20 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
     return {
       checks: {
         database: true,
-        coreSchema: Number(core.rows[0]?.count ?? 0) === 8,
-        featureSchema: Number(feature.rows[0]?.count ?? 0) === 4,
+        coreSchema: postgres.schemaReady,
+        featureSchema: postgres.schemaReady,
         marketCreditReservations: Number(reservations.rows[0]?.count ?? 0) === 1,
         businessGovernanceSchema: Number(governance.rows[0]?.count ?? 0) === 2,
         businessFinancialSchema: Number(financial.rows[0]?.count ?? 0) === 1,
         buildingAssetSchema: Number(assets.rows[0]?.count ?? 0) === 1,
         businessTaxSchema: Number(taxed.rows[0]?.count ?? 0) === 1,
-        balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0,
+        balancesNonNegative: Number(invariants.rows[0]?.invalid ?? 0) === 0,
+        criticalInvariants: Number(invariants.rows[0]?.invalid ?? 0) === 0,
         schedulerFresh: schedulerState !== 'critical',
         outboxPressure: outboxPending < 1000,
         outboxRetryFailures: outboxRetryFailures === 0,
         dailySettlementBacklog: settlementStatus !== 'active' || settlementBacklog <= 1,
-        migrationManifest: Number(migrations.rows[0]?.version ?? 0) >= 33,
+        migrationManifest: Number(migrations.rows[0]?.version ?? 0) === EARTH_SCHEMA_VERSION,
       },
       readiness: {
         schedulerAgeSeconds: Number.isFinite(schedulerAgeSeconds) ? schedulerAgeSeconds : null,
@@ -137,6 +190,8 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
           lastSuccessfulDeliveryAt: outboxLastDeliveryAt,
         },
         migrationVersion: Number(migrations.rows[0]?.version ?? 0),
+        expectedSchemaVersion: EARTH_SCHEMA_VERSION,
+        schemaMissingObjects: postgres.missingObjects ?? [],
         dailySettlement: {
           status: settlementStatus,
           currentGameDay: settlementRow?.current_game_day != null ? Number(settlementRow.current_game_day) : null,
@@ -167,8 +222,8 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
           failedSettlementRuns: Number(settlementRow?.failed_runs ?? 0),
         },
         invariantScan: {
-          ok: Number(balances.rows[0]?.invalid ?? 0) === 0,
-          balancesNonNegative: Number(balances.rows[0]?.invalid ?? 0) === 0,
+          ok: Number(invariants.rows[0]?.invalid ?? 0) === 0,
+          balancesNonNegative: Number(invariants.rows[0]?.invalid ?? 0) === 0,
         },
       },
       counts: {
@@ -178,18 +233,27 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
         world: Number(counts[3].rows[0]?.count ?? 0),
       },
     };
-  });
+  }).catch(() => undefined);
   const checks = postgresChecks?.checks ?? {
     database: false, coreSchema: false, featureSchema: false,
     marketCreditReservations: false, businessGovernanceSchema: false, businessFinancialSchema: false,
-    buildingAssetSchema: false, businessTaxSchema: false, balancesNonNegative: false,
+    buildingAssetSchema: false, businessTaxSchema: false, balancesNonNegative: false, criticalInvariants: false,
   };
   const shadow = postgresChecks?.counts ?? null;
+  const readinessChecks = {
+    ...checks,
+    postgresConfigured: postgres.configured,
+    postgresReachable: postgres.reachable,
+    postgresSchemaReady: postgres.schemaReady,
+    postgresDataReady: postgres.dataReady,
+  };
+  const ok = Object.values(readinessChecks).every(Boolean);
   return Response.json({
     correlationId: request.headers.get('X-Request-ID') ?? crypto.randomUUID(),
-    ok: Object.values(checks).every(Boolean),
-    checks: { ...checks, postgresConfigured: postgres.configured, postgresReachable: postgres.reachable, postgresSchemaReady: postgres.schemaReady, postgresDataReady: postgres.dataReady, postgresShadowParity: Boolean(shadow && postgres.dataReady) },
-    postgres: { serverVersion: postgres.serverVersion ?? null, featureTableCount: postgres.featureTableCount ?? 0, dataReady: postgres.dataReady },
+    ok,
+    checks: { ...readinessChecks, postgresShadowParity: Boolean(shadow && postgres.dataReady) },
+    ...baseHealth,
+    postgres: { serverVersion: postgres.serverVersion ?? null, featureTableCount: postgres.featureTableCount ?? 0, dataReady: postgres.dataReady, missingObjects: postgres.missingObjects ?? [] },
     shadow: { postgres: shadow, parity: Boolean(shadow && postgres.dataReady) },
     readiness: postgresChecks?.readiness ?? null,
     persistence: 'planetscale-postgres',
@@ -197,5 +261,5 @@ export async function healthResponse(request: Request, env: Env): Promise<Respon
     authority: 'postgres',
     environment: env.ENVIRONMENT,
     workerVersion: '0.1.0',
-  });
+  }, { status: options.readiness && !ok ? 503 : 200 });
 }

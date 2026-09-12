@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 
 const baseUrl = (process.env.EARTH_REMOTE_URL || 'https://earthuc.com').replace(/\/$/, '');
+const schemaManifest = JSON.parse(await readFile(new URL('../db/schema-manifest.json', import.meta.url), 'utf8'));
 
 async function get(path, options) {
   const response = await fetch(`${baseUrl}${path}`, options);
@@ -28,6 +30,10 @@ for (const readyPath of ['/ready', '/health', '/api/ready', '/api/health']) {
   assert.equal(ready.body.ok, true, `${readyPath} must return ok: true`);
 }
 
+const live = await get('/api/live');
+assert.equal(live.response.status, 200);
+assert.deepEqual(live.body, { ok: true, status: 'live', correlationId: live.body.correlationId });
+
 const health = await get(`/api/health?probe=${Date.now()}`);
 assert.equal(health.response.status, 200);
 assert.equal(typeof health.body.correlationId, 'string');
@@ -49,7 +55,9 @@ assert.equal(health.body.checks.outboxRetryFailures, true);
 assert.equal(typeof health.body.readiness.schedulerAgeSeconds, 'number');
 assert.equal(typeof health.body.readiness.outboxPending, 'number');
 assert.equal(typeof health.body.readiness.outboxRetryFailures, 'number');
-assert.equal(health.body.readiness.migrationVersion, 17);
+assert.equal(health.body.schemaVersion, schemaManifest.migrationVersion);
+assert.equal(health.body.expectedSchemaVersion, schemaManifest.migrationVersion);
+assert.equal(health.body.readiness.migrationVersion, schemaManifest.migrationVersion);
 assert.equal(health.body.readiness.invariantScan.ok, true);
 assert.equal(health.body.readiness.invariantScan.balancesNonNegative, true);
 assert.equal(health.body.readiness.invariantScan.machineConditionsBounded, true);

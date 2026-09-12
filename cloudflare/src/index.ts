@@ -13,7 +13,7 @@ import { adoptCityForCorporation as adoptCityForCorporationPostgres, changeCityR
 import { auditWorld as auditWorldPostgres, getServiceStatus as getServiceStatusPostgres, listCemeteryProfiles as listCemeteryProfilesPostgres, listEvents as listEventsPostgres, listGovernanceProposals as listGovernanceProposalsPostgres, listGovernanceRules as listGovernanceRulesPostgres, listHistory as listHistoryPostgres, listInstitutions as listInstitutionsPostgres, listMarketPriceHistory as listMarketPriceHistoryPostgres, listMembershipEvents as listMembershipEventsPostgres, listNotifications as listNotificationsPostgres, listPantheonOfAchievements as listPantheonOfAchievementsPostgres, listProductionEvents as listProductionEventsPostgres, listOwnershipEvents as listOwnershipEventsPostgres, listRankings as listRankingsPostgres, listTechnology as listTechnologyPostgres, markAllNotificationsRead as markAllNotificationsReadPostgres, markNotificationRead as markNotificationReadPostgres } from './read-postgres';
 import { parseJsonBody, resolveIdempotencyKey } from './request-validation';
 import { currentHuman, sensitiveActionAllowed } from './auth-session';
-import { healthResponse } from './health';
+import { healthResponse, livenessResponse } from './health';
 import { authenticatedAuthRoute } from './auth-routes';
 import { isPublicAuthMutation, publicAuthRoute } from './auth-public-routes';
 import { communicationsRoutes } from './communications-routes';
@@ -36,6 +36,16 @@ import { handleMarketApiRoutes } from './market-api.ts';
 import { featureConfig, featureDisabledResponse, featureEnabled } from './feature-config.ts';
 
 const WEB_ASSET_VERSION = '2026-08-15-auth-recovery-1';
+
+function corsOriginFor(request: Request, env: Env): string | null {
+  const configured = String((env as unknown as Record<string, unknown>).CORS_ORIGIN ?? 'https://earthuc.com')
+    .split(',')
+    .map((origin) => origin.trim())
+    .filter(Boolean);
+  const requestOrigin = request.headers.get('Origin');
+  if (!requestOrigin) return null;
+  return configured.includes(requestOrigin) ? requestOrigin : null;
+}
 
 export class MarketCoordinator extends DurableObject<Env> {
   private sseControllers: Set<ReadableStreamDefaultController<Uint8Array>> = new Set();
@@ -254,16 +264,23 @@ async function membershipHistoryFromPostgres(request: Request, env: Env): Promis
 
 const worker = {
   async fetch(request: Request, env: Env): Promise<Response> {
-    const origin = request.headers.get('Origin') ?? '*';
+    const origin = corsOriginFor(request, env);
     const corsHeaders = {
-      'Access-Control-Allow-Origin': origin,
+      ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
       'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
       'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Requested-With, X-Request-ID, X-Earth-API-Version, Accept, Cache-Control',
       'Access-Control-Expose-Headers': 'X-Earth-API-Version, X-Request-ID',
-      'Access-Control-Allow-Credentials': 'true',
+      ...(origin ? { 'Access-Control-Allow-Credentials': 'true' } : {}),
+      'Vary': 'Origin',
+      'X-Content-Type-Options': 'nosniff',
+      'X-Frame-Options': 'DENY',
+      'Referrer-Policy': 'strict-origin-when-cross-origin',
+      'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
+      'Strict-Transport-Security': 'max-age=31536000; includeSubDomains',
     };
 
     if (request.method === 'OPTIONS') {
+      if (request.headers.get('Origin') && !origin) return new Response(null, { status: 403, headers: corsHeaders });
       return new Response(null, { status: 204, headers: corsHeaders });
     }
 
@@ -316,6 +333,14 @@ const worker = {
 
   async handleRequest(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url);
+
+    if (url.pathname === '/api/live') return livenessResponse(request);
+    if (url.pathname === '/api/ready' || url.pathname === '/ready') {
+      return healthResponse(request, env, { readiness: true });
+    }
+    if (url.pathname === '/api/health' || url.pathname === '/health') {
+      return healthResponse(request, env);
+    }
 
     // Authentication routes must be dispatched before the legacy fallback
     // handler. Without this, /api/auth/login and /api/auth/me fell through to
@@ -469,23 +494,6 @@ const worker = {
         return Response.json({ ok: false, error: message }, { status: /not found/i.test(message) ? 404 : 409 });
       }
     }
-    if (url.pathname === '/api/finance/personal' && request.method === 'GET') {
-      const viewer = await currentHuman(request, env);
-      if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
-      const result = await withRepository(env, async (repository) => {
-        const [account, state, buildings] = await Promise.all([
-          repository.query(`SELECT a.id::TEXT AS account_id, 'CREDIT' AS currency, (a.balance / 100.0) AS balance
-                              FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                             WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.id]),
-          repository.query('SELECT * FROM personal_financial_states WHERE human_id = $1', [viewer.id]),
-          repository.query("SELECT id, name, status FROM buildings WHERE owner_id = $1 AND ownership_class = 'private'", [viewer.id]),
-        ]);
-        const stateRow = state.rows[0] ?? { status: 'active', protected_credits: 100 };
-        return { account: account.rows[0] ?? null, state: stateRow, liquidatableAssets: { buildings: buildings.rows }, protectedMinimum: { credits: Number(stateRow.protected_credits ?? 100), basicServiceRobot: true } };
-      });
-      if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
-      return Response.json({ ...result, persistence: 'planetscale-postgres' });
-    }
     if (url.pathname === '/api/finance/personal/declare' && request.method === 'POST') {
       const viewer = await currentHuman(request, env);
       if (!viewer) return Response.json({ ok: false, error: 'Authentication required' }, { status: 401 });
@@ -509,8 +517,13 @@ const worker = {
         const [account, rules] = await Promise.all([
           repository.query(`SELECT a.id::TEXT AS account_id, o.id AS owner_id, (a.balance / 100.0) AS balance, 'CREDIT' AS currency
                               FROM economic_accounts a JOIN owner_registry o ON o.economic_id = a.owner_economic_id
-                             WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.id]),
-          repository.query('SELECT scope, category, rate, version FROM tax_rules WHERE active = true ORDER BY id'),
+                             WHERE o.id = $1 AND a.asset_id = 1 AND a.is_default_settlement AND a.status = 'active'`, [viewer.house_id]),
+          repository.query(`SELECT DISTINCT ON (tax_rule_id) tax_rule_id AS id, scope, category, rate_bps, version,
+                                   tax_base_definition, effective_from_game_day, effective_to_game_day
+                              FROM tax_rule_versions
+                             WHERE effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
+                               AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+                             ORDER BY tax_rule_id, effective_from_game_day DESC, version DESC`),
         ]);
         return { account: account.rows[0] ?? null, taxRules: rules.rows };
       });
@@ -636,9 +649,13 @@ const worker = {
         const [rows, trades, rule] = await Promise.all([
           repository.query("SELECT product, status, SUM(quantity - filled_quantity) AS open_quantity, MIN(limit_price) AS best_price, COUNT(*) AS order_count FROM market_orders WHERE status IN ('open','partial') GROUP BY product, status ORDER BY product"),
           repository.query('SELECT i.symbol AS product, SUM(f.quantity_units) AS traded_quantity_units, MAX(f.price_units) AS last_price_units, MAX(f.created_at) AS last_trade_at FROM market_fills f JOIN market_instruments i ON i.id = f.instrument_id GROUP BY i.symbol ORDER BY i.symbol'),
-          repository.query("SELECT rate FROM tax_rules WHERE scope = 'global' AND category = 'market' AND active = true LIMIT 1"),
+          repository.query(`SELECT rate_bps FROM tax_rule_versions
+                             WHERE tax_rule_id = 'TAX-OUC-MARKET'
+                               AND effective_from_game_day <= (SELECT game_day FROM world_state WHERE id = 'WORLD')
+                               AND (effective_to_game_day IS NULL OR effective_to_game_day >= (SELECT game_day FROM world_state WHERE id = 'WORLD'))
+                             ORDER BY effective_from_game_day DESC, version DESC LIMIT 1`),
         ]);
-        const feeRate = Number(rule.rows[0]?.rate ?? 0);
+        const feeRate = Number(rule.rows[0]?.rate_bps ?? 0) / 10000;
         return { book: rows.rows, trades: trades.rows, feeRate };
       });
       if (!result) return Response.json({ ok: false, error: 'PostgreSQL persistence is unavailable' }, { status: 503 });
@@ -859,16 +876,17 @@ const worker = {
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const requestId = request.headers.get('X-Request-ID') || crypto.randomUUID();
-    const origin = request.headers.get('Origin');
+    const origin = corsOriginFor(request, env);
     if (request.method === 'OPTIONS') {
+      if (request.headers.get('Origin') && !origin) return new Response(null, { status: 403, headers: { 'Vary': 'Origin' } });
       return new Response(null, {
         status: 204,
         headers: {
-          'Access-Control-Allow-Origin': origin ?? '*',
+          ...(origin ? { 'Access-Control-Allow-Origin': origin } : {}),
           'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, DELETE, OPTIONS',
           'Access-Control-Allow-Headers': 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, X-Requested-With, X-Earth-API-Version, Accept, Cache-Control',
           'Access-Control-Expose-Headers': 'X-Request-ID, X-EARTH-API-Version',
-          'Access-Control-Allow-Credentials': 'true',
+          ...(origin ? { 'Access-Control-Allow-Credentials': 'true' } : {}),
           'Access-Control-Max-Age': '86400',
           'Vary': 'Origin',
           'X-Request-ID': requestId,
@@ -904,7 +922,8 @@ export default {
       headers.set('etag', object.httpEtag);
       return new Response(object.body, { headers });
     }
-    const isDataRequest = url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/') || url.pathname === '/health' || url.pathname === '/ready' || url.pathname === '/api/ready';
+    const healthPath = url.pathname === '/api/live' || url.pathname === '/api/ready' || url.pathname === '/ready' || url.pathname === '/api/health' || url.pathname === '/health';
+    const isDataRequest = !healthPath && (url.pathname.startsWith('/api/') || url.pathname.startsWith('/edge/'));
     let response: Response;
     try {
       if (isDataRequest) authorityMode(env);
@@ -961,13 +980,19 @@ export default {
       headers.set('Access-Control-Allow-Credentials', 'true');
       headers.set('Vary', 'Origin');
     } else {
-      headers.set('Access-Control-Allow-Origin', '*');
+      headers.delete('Access-Control-Allow-Origin');
+      headers.delete('Access-Control-Allow-Credentials');
     }
     headers.set('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
     headers.set('Access-Control-Allow-Headers', 'Content-Type, Authorization, Idempotency-Key, X-Request-ID, X-Requested-With, X-Earth-API-Version, Accept, Cache-Control');
     headers.set('Access-Control-Expose-Headers', 'X-Request-ID, X-EARTH-API-Version');
     headers.set('X-Request-ID', requestId);
     headers.set('X-EARTH-API-Version', '2026-08');
+    headers.set('X-Content-Type-Options', 'nosniff');
+    headers.set('X-Frame-Options', 'DENY');
+    headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
+    headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+    headers.set('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
 
     const acceptHeader = request.headers.get('Accept') ?? '';
     const requestContentType = request.headers.get('Content-Type') ?? '';

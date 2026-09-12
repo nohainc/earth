@@ -127,24 +127,23 @@ export async function issueActionToken(
   action: 'verify_email' | 'reset_password',
   email: string,
   correlationId?: string,
-): Promise<{ correlationId: string; accepted: boolean; messageId?: string | null }> {
+): Promise<{ correlationId: string; accepted: boolean; messageId?: string | null; auditPersisted?: boolean }> {
   const token = bytesToBase64(crypto.getRandomValues(new Uint8Array(32)));
   const tokenHash = await digest(token);
   const id = crypto.randomUUID();
   const corrId = correlationId || crypto.randomUUID();
   const masked = maskEmail(email);
+  const previous = (await withRepository(env, (repository) => repository.query<{ status: string; provider_message_id: string | null }>(
+    'SELECT status, provider_message_id FROM auth_email_deliveries WHERE correlation_id = $1',
+    [corrId],
+  )))?.rows[0];
+  if (previous?.status === 'accepted') {
+    return { correlationId: corrId, accepted: true, messageId: previous.provider_message_id, auditPersisted: true };
+  }
   const expires = new Date(
     Date.now() + (action === 'verify_email' ? 24 : 1) * 3600000,
   ).toISOString();
-  const result = await withRepository(env, (repository) =>
-    repository.query(
-      `INSERT INTO auth_action_tokens (id, account_id, human_id, token_hash, action, expires_at)
-       SELECT $1, a.id, $2, $3, $4, $5
-       FROM auth_accounts a JOIN humans h ON h.house_id = a.house_id
-       WHERE h.id = $2`,
-      [id, humanId, tokenHash, action, expires],
-    ),
-  );
+  let accountId: string | null = null;
   const path =
     action === 'verify_email'
       ? `/app?verify_token=${encodeURIComponent(token)}`
@@ -160,7 +159,20 @@ export async function issueActionToken(
   const fromEmail = env.EMAIL_FROM || 'earth@nohainc.com';
 
   try {
+    const result = await withRepository(env, (repository) =>
+      repository.query<{ account_id: string }>(
+        `INSERT INTO auth_action_tokens (id, account_id, human_id, token_hash, action, expires_at)
+         SELECT $1, a.id, $2, $3, $4, $5
+         FROM auth_accounts a JOIN humans h ON h.house_id = a.house_id
+         WHERE h.id = $2
+         RETURNING account_id`,
+         [id, humanId, tokenHash, action, expires],
+      ),
+    );
+    if (!result?.rows[0]?.account_id) throw new Error('Authentication storage is unavailable');
+    accountId = result.rows[0].account_id;
     let deliveryMessageId: string | null = null;
+    let provider = 'unknown';
     if (gmailAppPassword && smtpUser) {
       const delivery = await sendSmtpEmail({
         to: email,
@@ -172,6 +184,7 @@ export async function issueActionToken(
         gmailAppPassword,
       });
       deliveryMessageId = delivery.messageId;
+      provider = 'smtp';
     } else if (env.EMAIL) {
       const delivery = await env.EMAIL.send({
         to: email,
@@ -181,15 +194,37 @@ export async function issueActionToken(
         html,
       });
       deliveryMessageId = delivery?.messageId ?? null;
+      provider = 'cloudflare_email';
     } else {
       throw new Error('Transactional email is not configured');
     }
-    await withRepository(env, (repository) =>
-      repository.query(
-        'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, provider_message_id) VALUES ($1,$2,$3,$4,$5,$6,$7)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'accepted', deliveryMessageId],
-      ),
-    ).catch(() => {});
+    let auditPersisted = true;
+    try {
+      const audit = await withRepository(env, (repository) => repository.query(
+        `INSERT INTO auth_email_deliveries
+          (id, correlation_id, account_id, human_id, recipient_masked, action, provider, status, provider_message_id, accepted_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,CURRENT_TIMESTAMP)
+         ON CONFLICT (correlation_id) DO UPDATE SET
+           account_id = EXCLUDED.account_id,
+           human_id = EXCLUDED.human_id,
+           recipient_masked = EXCLUDED.recipient_masked,
+           action = EXCLUDED.action,
+           provider = EXCLUDED.provider,
+           status = 'accepted',
+           provider_message_id = EXCLUDED.provider_message_id,
+           error_code = NULL,
+           error_message = NULL,
+           accepted_at = CURRENT_TIMESTAMP,
+           failed_at = NULL,
+           updated_at = CURRENT_TIMESTAMP
+         RETURNING id`,
+        [crypto.randomUUID(), corrId, accountId, humanId, masked, action, provider, 'accepted', deliveryMessageId],
+      ));
+      auditPersisted = Boolean(audit?.rows[0]);
+    } catch (auditError) {
+      auditPersisted = false;
+      console.error(JSON.stringify({ event: 'transactional_email_audit_persistence_failed', correlationId: corrId, humanId, recipientMasked: masked, action, error: auditError instanceof Error ? auditError.message : String(auditError) }));
+    }
     console.info(
       JSON.stringify({
         event: 'transactional_email_accepted',
@@ -198,9 +233,10 @@ export async function issueActionToken(
         recipientMasked: masked,
         action,
         messageId: deliveryMessageId,
+        auditPersisted,
       }),
     );
-    return { correlationId: corrId, accepted: true, messageId: deliveryMessageId };
+    return { correlationId: corrId, accepted: true, messageId: deliveryMessageId, auditPersisted };
   } catch (error) {
     const details =
       error && typeof error === 'object'
@@ -208,12 +244,29 @@ export async function issueActionToken(
         : {};
     const errorCode = String(details.code ?? 'unknown');
     const errorMessage = String(details.message ?? 'unknown');
-    await withRepository(env, (repository) =>
-      repository.query(
-        'INSERT INTO auth_email_deliveries (id, correlation_id, human_id, recipient_masked, action, status, error_code, error_message) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)',
-        [crypto.randomUUID(), corrId, humanId, masked, action, 'failed', errorCode, errorMessage],
-      ),
-    ).catch(() => {});
+    try {
+      await withRepository(env, (repository) => repository.query(
+        `INSERT INTO auth_email_deliveries
+          (id, correlation_id, account_id, human_id, recipient_masked, action, provider, status, error_code, error_message, failed_at)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,CURRENT_TIMESTAMP)
+         ON CONFLICT (correlation_id) DO UPDATE SET
+           account_id = EXCLUDED.account_id,
+           human_id = EXCLUDED.human_id,
+           recipient_masked = EXCLUDED.recipient_masked,
+           action = EXCLUDED.action,
+           provider = EXCLUDED.provider,
+           status = 'failed',
+           provider_message_id = NULL,
+           error_code = EXCLUDED.error_code,
+           error_message = EXCLUDED.error_message,
+           accepted_at = NULL,
+           failed_at = CURRENT_TIMESTAMP,
+           updated_at = CURRENT_TIMESTAMP`,
+        [crypto.randomUUID(), corrId, accountId, humanId, masked, action, 'unavailable', 'failed', errorCode, errorMessage],
+      ));
+    } catch (auditError) {
+      console.error(JSON.stringify({ event: 'transactional_email_audit_persistence_failed', correlationId: corrId, humanId, recipientMasked: masked, action, error: auditError instanceof Error ? auditError.message : String(auditError) }));
+    }
     console.error(
       JSON.stringify({
         event: 'transactional_email_failed',
@@ -226,9 +279,11 @@ export async function issueActionToken(
       }),
     );
     // Do not let a failed delivery consume the resend throttle window.
-    await withRepository(env, (repository) =>
-      repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]),
-    );
+    try {
+      await withRepository(env, (repository) => repository.query('DELETE FROM auth_action_tokens WHERE id = $1', [id]));
+    } catch (cleanupError) {
+      console.error(JSON.stringify({ event: 'transactional_email_token_cleanup_failed', correlationId: corrId, humanId, action, error: cleanupError instanceof Error ? cleanupError.message : String(cleanupError) }));
+    }
     throw error;
   }
 }

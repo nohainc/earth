@@ -19,6 +19,18 @@ test('tax rule changes require passed proposals and future effective days', () =
   assert.match(migration, /tax_rule_versions_governance_trigger/);
 });
 
+test('tax rule lineage serializes concurrent amendments and closes intervals', () => {
+  const migration = fs.readFileSync(new URL('../db/migrations/354_tax_rule_lineage_concurrency.sql', import.meta.url), 'utf8');
+  const executor = fs.readFileSync(new URL('../cloudflare/src/proposal-finance-actions.ts', import.meta.url), 'utf8');
+  assert.match(migration, /pg_advisory_xact_lock/);
+  assert.match(migration, /tax_rule_versions_no_overlap/);
+  assert.match(migration, /effective_to_game_day = p_effective_from_game_day - 1/);
+  assert.match(migration, /earth\.tax_rule_allow_close/);
+  assert.match(executor, /current\.id !== baseVersionId/);
+  assert.match(executor, /ORDER BY version DESC/);
+  assert.match(executor, /FOR UPDATE/);
+});
+
 test('Proposal V2 exposes typed tax amendment actions', () => {
   const actions = fs.readFileSync('cloudflare/src/proposal-actions.ts', 'utf8');
   const finance = fs.readFileSync('cloudflare/src/proposal-finance-actions.ts', 'utf8');

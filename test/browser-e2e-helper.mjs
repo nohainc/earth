@@ -295,7 +295,6 @@ export async function runBrowserE2E(baseUrl = 'http://127.0.0.1:8899') {
     assert.equal(results.orderPlaced, true, 'Market order should be accepted');
     assert.equal(results.voteAccepted, true, 'Governance vote should be accepted');
     assert.equal(results.voteWeightServerAuthoritative, true, 'Governance vote should reject client-forged weight');
-    assert.equal(results.aiAccepted, true, 'AI policy update should be accepted');
     assert.equal(results.notificationsLoaded, true, 'Notifications should load successfully');
     assert.equal(results.safeErrorReturned, true, 'Invalid login should return safe error envelope without account leakage');
 

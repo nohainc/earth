@@ -51,15 +51,6 @@ async function settleWorkforcePayroll(tx: PostgresRepository, day: number): Prom
   }
 }
 
-      const networkRevenue = 20;
-      await tx.query(
-        'UPDATE business_financials SET revenue = revenue + $1, profit = profit + $1, last_game_day = $2, updated_at = CURRENT_TIMESTAMP WHERE business_id = $3',
-        [networkRevenue, day, business.business_id],
-      );
-    }
-  }
-}
-
 async function settleBusinessTaxes(tx: PostgresRepository, day: number): Promise<void> {
   return;
   const rule = await tx.query<{ rate: string; version: number }>("SELECT rate, version FROM tax_rules WHERE id = 'TAX-OUC-BUSINESS' AND active = true");

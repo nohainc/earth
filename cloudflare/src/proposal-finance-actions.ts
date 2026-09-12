@@ -70,12 +70,16 @@ export async function executeProposalFinancialAction(
     const taxBase = required(action, 'taxBase');
     const beneficiaryEconomicId = required(action, 'beneficiaryEconomicId');
     const effectiveDay = Number(required(action, 'effectiveDay'));
-    const base = await tx.query<{ id: string; tax_rule_id: string; rate_bps: number; tax_base_definition: string; beneficiary_economic_id: string }>(
+    const latest = await tx.query<{ id: string; tax_rule_id: string; rate_bps: number; tax_base_definition: string; beneficiary_economic_id: string }>(
       `SELECT id, tax_rule_id, rate_bps, tax_base_definition, beneficiary_economic_id::TEXT
-       FROM tax_rule_versions WHERE id = $1 FOR SHARE`, [baseVersionId],
+       FROM tax_rule_versions
+       WHERE tax_rule_id = $1
+       ORDER BY version DESC
+       LIMIT 1
+       FOR UPDATE`, [taxRuleId],
     );
-    const current = base.rows[0];
-    if (!current || current.tax_rule_id !== taxRuleId || Number(current.rate_bps) !== oldRateBps || current.tax_base_definition !== taxBase || current.beneficiary_economic_id !== beneficiaryEconomicId) {
+    const current = latest.rows[0];
+    if (!current || current.id !== baseVersionId || current.tax_rule_id !== taxRuleId || Number(current.rate_bps) !== oldRateBps || current.tax_base_definition !== taxBase || current.beneficiary_economic_id !== beneficiaryEconomicId) {
       throw new Error('STALE_CONFLICT: tax rule no longer matches the proposal base version');
     }
     if (effectiveDay <= gameDay) throw new Error('Tax changes become effective on a future game day');

@@ -4,11 +4,12 @@ import { resolve } from 'node:path';
 import { verifyDeploymentConfig } from './verify-deployment-config.mjs';
 
 export function runPreflightChecks(options = { dryRun: true }) {
+  const schemaManifest = JSON.parse(readFileSync(resolve('db/schema-manifest.json'), 'utf8'));
   const report = {
     timestamp: new Date().toISOString(),
     gitCommit: 'unknown',
     flutterAssetVersion: '2026-08',
-    migrationVersion: 17,
+    migrationVersion: schemaManifest.migrationVersion,
     status: 'pending',
     checks: {},
     errors: [],
@@ -44,6 +45,7 @@ export function runPreflightChecks(options = { dryRun: true }) {
     } else {
       const manifest = JSON.parse(readFileSync(resolve('db/schema-manifest.json'), 'utf8'));
       if (!manifest.migrationVersion || !manifest.requiredTables) throw new Error('Invalid manifest JSON');
+      report.migrationVersion = manifest.migrationVersion;
     }
     report.checks.schemaManifest = 'PASSED';
   } catch (err) {

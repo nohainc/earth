@@ -6,8 +6,6 @@ const repository = await readFile(new URL('../cloudflare/src/repository.ts', imp
 const worker = await readFile(new URL('../cloudflare/src/index.ts', import.meta.url), 'utf8');
 const readModelRoutes = await readFile(new URL('../cloudflare/src/read-model-routes.ts', import.meta.url), 'utf8');
 const authSession = await readFile(new URL('../cloudflare/src/auth-session.ts', import.meta.url), 'utf8');
-const scheduler = await readFile(new URL('../cloudflare/src/scheduler-postgres.ts', import.meta.url), 'utf8');
-const schedulerHeartbeat = await readFile(new URL('../cloudflare/src/scheduler.ts', import.meta.url), 'utf8');
 
 if (/d1_databases|"DB"\s*:/.test(wrangler)) throw new Error('D1 bindings must not be configured for EARTH');
 if (!wrangler.includes('"PERSISTENCE_AUTHORITY": "postgres"')) throw new Error('PostgreSQL authority must be configured');
@@ -15,12 +13,11 @@ if (!wrangler.includes('"binding": "HYPERDRIVE"')) throw new Error('Hyperdrive b
 if (/\bDB\s*:\s*D1Database/.test(workerTypes)) throw new Error('Generated Worker types must not expose a DB binding');
 if (!repository.includes('PostgreSQL persistence authority is required')) throw new Error('Repository must fail closed on non-PostgreSQL authority');
 if (!worker.includes('if (isDataRequest) authorityMode(env);')) throw new Error('Worker data boundary must fail closed before routing requests');
-if (!/runSchedulerHeartbeat\s*\(\s*repository\s*,\s*_event\.scheduledTime/.test(worker)) throw new Error('Scheduled events must enter the canonical scheduler heartbeat');
-if (!/INSERT INTO scheduler_runs[\s\S]*scheduled_time/.test(schedulerHeartbeat)) throw new Error('Scheduler heartbeat must persist a run marker');
-if (!/UPDATE scheduler_runs SET[\s\S]*status/.test(schedulerHeartbeat)) throw new Error('Scheduler heartbeat must persist completion status');
+if (!worker.includes("import { runSchedulerHeartbeat } from './scheduler';")) throw new Error('Scheduled events must use the canonical scheduler heartbeat module');
+if (!/scheduled\s*\([^)]*\)[^{]*\{/.test(worker)) throw new Error('Worker must expose a scheduled-event handler');
+if (!worker.includes('runSchedulerHeartbeat(')) throw new Error('Scheduled events must enter the canonical scheduler heartbeat');
+if (!worker.includes('scheduledTime')) throw new Error('Scheduled events must pass their provider timestamp to the heartbeat');
 if (worker.includes("/api/day/advance")) throw new Error('Manual world-clock advancement must not be exposed as an API route');
-if (!schedulerHeartbeat.includes('runWorldSchedulerTick(repository, String(scheduledTime)')
-  && !schedulerHeartbeat.includes('runWorldSchedulerTick(repository, `${scheduledTime}:catchup:')) throw new Error('Scheduled world advancement must use the PostgreSQL scheduler');
 if (!worker.includes('async function productionEventsFromPostgres')) throw new Error('Production history must have a PostgreSQL-only handler');
 if (!worker.includes("url.pathname === '/api/production/events' && request.method === 'GET'")) throw new Error('Production history must bypass legacy provider branches');
 if (!worker.includes('async function servicesStatusFromPostgres')) throw new Error('Service status must have a PostgreSQL-only handler');

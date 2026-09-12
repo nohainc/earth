@@ -67,6 +67,33 @@ DATABASE_URL="${RECOVERY_DATABASE_URL}" npm run db:verify:invariants
 
 ## 5. Rollback & Forward-Fix Procedures
 
+## 6. Operational Certification
+
+Run the populated-world recovery drill against a dedicated recovery database:
+
+```bash
+DATABASE_URL="${DATABASE_URL}" \
+RECOVERY_DATABASE_URL="${RECOVERY_DATABASE_URL}" \
+EARTH_ALLOW_RESTORE=true \
+EARTH_BACKUP_DIR="/secure/recovery-certification" \
+  npm run certify:backup-restore
+```
+
+The drill records a source fingerprint, creates a checksummed custom-format
+backup, restores it into the isolated target, compares world and contract
+counts, and reruns schema, integrity, economy and finance verification against
+the restored database. Never point the recovery target at the live database.
+
+The deterministic closed-beta soak is also a required gate:
+
+```bash
+EARTH_SOAK_DAYS=365 EARTH_SOAK_HOUSES=10000 npm run certify:soak
+```
+
+CI additionally exercises scheduler and outbox retry behavior through the
+certification test suite. Any failed invariant, fingerprint mismatch, or
+non-idempotent retry must block promotion.
+
 ### Forward-Fix Rule (Preferred)
 In append-only financial and governance ledgers, forward migrations (`0018_fix_...sql`) are preferred over destructive down-migrations to ensure complete audit trail preservation.
 

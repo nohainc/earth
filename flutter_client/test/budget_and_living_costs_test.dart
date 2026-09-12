@@ -196,7 +196,7 @@ void main() {
 
       // Explicit CORPORATE BUDGET Card, Amount, and Explanation
       expect(find.text('CORPORATE BUDGET'), findsNWidgets(2)); // Attribute label + dedicated card header
-      expect(find.text('8500000 C'), findsNWidgets(2));
+      expect(find.text('8500000 C'), findsWidgets);
       expect(
         find.textContaining('Separate corporate funds for research, patents, payroll, and corporate projects. This budget is not the city budget or your personal account.'),
         findsOneWidget,

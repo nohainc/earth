@@ -629,6 +629,7 @@ void main() {
       expect(find.text('PROPOSE CIVIC RESEARCH TIER 2'), findsOneWidget);
 
       // Tap PROPOSE CIVIC RESEARCH TIER 2 button
+      await tester.ensureVisible(find.text('PROPOSE CIVIC RESEARCH TIER 2'));
       await tester.tap(find.text('PROPOSE CIVIC RESEARCH TIER 2'));
       await tester.pumpAndSettle();
 
@@ -638,4 +639,3 @@ void main() {
     });
   });
 }
-

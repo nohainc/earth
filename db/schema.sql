@@ -1,6 +1,6 @@
 -- EARTH PostgreSQL Canonical Schema
 --
--- Canonical fresh-install schema, reconciled through migration 351.
+-- Canonical fresh-install schema, reconciled through migration 354.
 -- Numbered migrations remain the append-only upgrade history; this file is the
 -- one-step fresh-install representation and is checked against the schema
 -- manifest in CI.
@@ -106,15 +106,23 @@ CREATE INDEX IF NOT EXISTS auth_action_tokens_lookup_idx ON auth_action_tokens(t
 
 CREATE TABLE IF NOT EXISTS auth_email_deliveries (
   id UUID PRIMARY KEY,
-  action TEXT NOT NULL CHECK (action IN ('verify_email','reset_password')),
-  recipient_email TEXT NOT NULL,
+  correlation_id TEXT NOT NULL,
+  account_id TEXT REFERENCES auth_accounts(id),
   human_id TEXT REFERENCES humans(id),
-  delivery_status TEXT NOT NULL DEFAULT 'delivered' CHECK (delivery_status IN ('delivered','bounced','failed')),
-  correlation_key TEXT,
-  delivery_metadata JSONB NOT NULL DEFAULT '{}',
-  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+  recipient_masked TEXT NOT NULL,
+  action TEXT NOT NULL CHECK (action IN ('verify_email','reset_password')),
+  provider TEXT,
+  provider_message_id TEXT,
+  status TEXT NOT NULL DEFAULT 'accepted' CHECK (status IN ('accepted','failed')),
+  error_code TEXT,
+  error_message TEXT,
+  accepted_at TIMESTAMPTZ,
+  failed_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
-CREATE INDEX IF NOT EXISTS auth_email_deliveries_recipient_idx ON auth_email_deliveries(recipient_email, created_at DESC);
+CREATE INDEX IF NOT EXISTS auth_email_deliveries_account_idx ON auth_email_deliveries(account_id, created_at DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS auth_email_deliveries_correlation_uq ON auth_email_deliveries(correlation_id);
 
 -- -----------------------------------------------------------------------------
 -- 2. Houses, Lineage & Life Continuity
@@ -3730,3 +3738,31 @@ SELECT t.id AS technology_id, t.code, t.name, t.category, t.definition_version, 
   CASE WHEN impact.expected_daily_impact_value > 0 THEN ROUND(t.research_credit_cost_units::NUMERIC / impact.expected_daily_impact_value * 0.4, 2) END AS economic_payback_real_hours,
   CASE WHEN impact.expected_daily_impact_value > 0 THEN 'REVIEW_POSITIVE_IMPACT' ELSE 'NO_MODELED_OUTPUT_IMPACT' END AS balance_assessment, benchmark.balance_version
 FROM technology_catalog t CROSS JOIN benchmark LEFT JOIN impact ON impact.technology_id = t.id LEFT JOIN prerequisites ON prerequisites.technology_id = t.id;
+
+CREATE OR REPLACE FUNCTION earth_critical_integrity_report()
+RETURNS TABLE(check_name TEXT, invalid_count BIGINT) LANGUAGE SQL AS $$
+  WITH transaction_asset_totals AS (
+    SELECT e.transaction_id, a.asset_id, SUM(e.delta)::BIGINT AS total_delta
+      FROM economic_entries e JOIN economic_accounts a ON a.id = e.account_id
+     GROUP BY e.transaction_id, a.asset_id
+  )
+  SELECT 'economic_transaction_unbalanced', COUNT(*) FROM transaction_asset_totals WHERE total_delta <> 0
+  UNION ALL SELECT 'economic_transaction_without_entries', COUNT(*) FROM economic_transactions t WHERE NOT EXISTS (SELECT 1 FROM economic_entries e WHERE e.transaction_id = t.id)
+  UNION ALL SELECT 'unauthorized_credit_issuance', COUNT(*)
+    FROM economic_entries e JOIN economic_accounts a ON a.id = e.account_id JOIN owner_registry o ON o.economic_id = a.owner_economic_id JOIN economic_transactions t ON t.id = e.transaction_id
+   WHERE a.asset_id = 1 AND ((o.id = 'SYSTEM-MONETARY-AUTHORITY' AND (a.account_type <> 7 OR e.delta >= 0 OR e.reason_code NOT IN ('GENESIS_ISSUANCE', 'PLAYER_STARTING_GRANT', 'MONETARY_STABILIZATION') OR t.source_type <> 'monetary_authority')) OR (o.id = 'SYSTEM-MONETARY-RETIREMENT' AND (a.account_type <> 8 OR e.delta <= 0 OR e.reason_code <> 'CREDIT_RETIREMENT' OR t.source_type <> 'monetary_authority')))
+  UNION ALL SELECT 'active_house_without_current_human', COUNT(*) FROM houses h LEFT JOIN humans hu ON hu.id = h.current_human_id AND hu.house_id = h.id AND hu.life_status = 'active' WHERE h.status = 'ACTIVE' AND hu.id IS NULL
+  UNION ALL SELECT 'deceased_current_house_human', COUNT(*) FROM houses h JOIN humans hu ON hu.id = h.current_human_id WHERE hu.life_status <> 'active'
+  UNION ALL SELECT 'open_market_order_without_escrow', COUNT(*) FROM market_orders WHERE status IN ('open', 'partial') AND owner_economic_id IS NOT NULL AND escrow_account_id IS NULL
+  UNION ALL SELECT 'active_research_without_funding', COUNT(*) FROM corporation_research_projects WHERE status = 'ACTIVE' AND funding_transaction_id IS NULL
+  UNION ALL SELECT 'outbox_permanent_lock', COUNT(*) FROM event_outbox WHERE processed_at IS NULL AND locked_at IS NOT NULL AND locked_at < CURRENT_TIMESTAMP - INTERVAL '30 minutes';
+$$;
+
+CREATE OR REPLACE FUNCTION earth_integrity_report_detailed()
+RETURNS TABLE(severity TEXT, check_name TEXT, invalid_count BIGINT) LANGUAGE SQL AS $$
+  SELECT 'critical', check_name, invalid_count FROM earth_integrity_report()
+  UNION ALL SELECT 'critical', check_name, invalid_count FROM earth_critical_integrity_report()
+  UNION ALL SELECT 'warning', 'outbox_backlog_pressure', COUNT(*) FROM event_outbox WHERE processed_at IS NULL
+  UNION ALL SELECT 'warning', 'scheduler_stale', COUNT(*) FROM world_state WHERE id = 'WORLD' AND last_scheduler_at < CURRENT_TIMESTAMP - INTERVAL '10 minutes'
+  UNION ALL SELECT 'expensive', 'economic_owner_totals_reconciliation', COUNT(*) FROM earth_integrity_report() WHERE check_name = 'totals_mismatch' AND invalid_count > 0;
+$$;

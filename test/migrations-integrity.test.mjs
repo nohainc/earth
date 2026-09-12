@@ -12,13 +12,15 @@ test('database migrations: verify sequential migration files, schema.sql, functi
   const files = fs.readdirSync(migrationsDir).filter((f) => f.endsWith('.sql')).sort();
   assert.ok(files.length >= 83, `Expected at least 83 migrations, found ${files.length}`);
   assert.equal(files[0], '001_initial.sql');
-  assert.equal(files.at(-1), '351_repair_economic_entry_indexes.sql');
+  const latestMigration = files.at(-1);
+  const latestVersion = Number(latestMigration.match(/^(\d+)_/)[1]);
+  assert.equal(latestMigration, '352_economic_invariant_levels.sql');
 
   const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8'));
-  assert.equal(manifest.migrationVersion, 351, 'Manifest version must match latest migration version (351)');
+  assert.equal(manifest.migrationVersion, latestVersion, 'Manifest version must match latest migration version');
 
   const schema = fs.readFileSync(schemaPath, 'utf8');
-  assert.match(schema, /reconciled through migration 351/);
+  assert.match(schema, new RegExp(`reconciled through migration ${latestVersion}`));
   assert.match(fs.readFileSync(path.resolve('db/migrations/349_remove_obsolete_building_credit_output.sql'), 'utf8'), /DROP COLUMN IF EXISTS output_credits/);
   assert.doesNotMatch(schema, /output_credits NUMERIC/);
   assert.doesNotMatch(schema, /decay_multiplier NUMERIC/);

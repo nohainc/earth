@@ -8,6 +8,13 @@ test('migration runner uses numeric ordering and deployment serialization', () =
   assert.match(source, /pg_advisory_lock/);
   assert.match(source, /BEGIN|begin/);
   assert.match(source, /checksum/);
+  assert.match(source, /MIGRATION_TARGET_VERSION/);
+});
+
+test('production migration launcher rejects repair mode', () => {
+  const source = fs.readFileSync('scripts/migrate-production-db.sh', 'utf8');
+  assert.match(source, /migration repair is disabled/);
+  assert.match(source, /--repair/);
 });
 
 test('migration audit validates the canonical schema head', () => {
@@ -24,4 +31,14 @@ test('high-volume persistence has explicit indexes and uniqueness checks', () =>
   }
   assert.ok(manifest.requiredUniqueConstraints.some(([table]) => table === 'economic_transactions'));
   assert.ok(manifest.requiredIndexes.some((name) => name === 'market_batch_instruments_lease_idx'));
+});
+
+test('integrity verification has critical, warning, and expensive levels', () => {
+  const source = fs.readFileSync('scripts/verify-postgres-invariants.mjs', 'utf8');
+  assert.match(source, /earth_integrity_report_detailed/);
+  assert.match(source, /severity === 'critical'/);
+  assert.match(source, /severity === 'warning'/);
+  assert.match(source, /severity === 'expensive'/);
+  assert.match(source, /migrationsExact/);
+  assert.match(source, /manifest\.migrationVersion/);
 });

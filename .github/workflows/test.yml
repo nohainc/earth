@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  server:
+  server-static:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     steps:
@@ -25,14 +25,99 @@ jobs:
           cache: npm
           cache-dependency-path: package-lock.json
       - run: npm ci
+      - run: npm run security:audit
+      - run: EARTH_SOAK_DAYS=365 EARTH_SOAK_HOUSES=10000 npm run certify:soak
       - run: npm run check
       - run: npm run cf:assert-postgres
+      - run: npm run db:verify:schema-contract
       - run: npm run db:verify:canonical
       - run: npm run audit:mutation-boundaries
+
+  server-unit-certification:
+    timeout-minutes: 15
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
       - run: npm run flutter:prepare
       - run: npm test
 
-  flutter:
+  postgres-integration:
+    timeout-minutes: 30
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: earth
+          POSTGRES_PASSWORD: earth_dev_only
+          POSTGRES_DB: earth_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U earth -d earth_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    env:
+      DATABASE_URL: postgres://earth:earth_dev_only@localhost:5432/earth_test
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npm run db:verify:migrations
+      - run: npm run db:migrate:postgres
+      - run: npm run db:verify:canonical
+      - run: npm run db:verify:manifest
+      - run: npm run db:verify:schema
+      - run: npm run db:seed:postgres
+      - run: npm run db:verify:surface
+      - run: npm run db:verify:invariants
+      - run: npm run db:verify:integrity
+      - run: npm run db:verify:economy-cutover
+      - run: npm run db:verify:finance-cutover
+      - run: npm run test:postgres
+      - run: npm run test:certification
+      - name: Create isolated recovery database
+        run: createdb -h localhost -U earth earth_recovery
+      - name: Run populated-world backup and restore certification
+        env:
+          RECOVERY_DATABASE_URL: postgres://earth:earth_dev_only@localhost:5432/earth_recovery
+          EARTH_ALLOW_RESTORE: 'true'
+          EARTH_BACKUP_DIR: /tmp/earth-recovery-certification
+        run: npm run certify:backup-restore
+      - name: Create previous-release upgrade fixture database
+        run: createdb -h localhost -U earth earth_upgrade
+      - name: Build previous-release fixture
+        run: MIGRATION_TARGET_VERSION=350 DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:migrate:postgres
+      - name: Seed previous-release fixture
+        run: DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:seed:postgres
+      - name: Snapshot previous-release fixture
+        run: EARTH_UPGRADE_SNAPSHOT=/tmp/earth-upgrade-snapshot.json DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:upgrade:snapshot
+      - name: Upgrade previous-release fixture
+        run: DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:migrate:postgres
+      - name: Verify upgraded fixture
+        run: |
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:canonical
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:manifest
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:schema
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:surface
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:invariants
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:integrity
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:economy-cutover
+          DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:verify:finance-cutover
+          EARTH_UPGRADE_SNAPSHOT=/tmp/earth-upgrade-snapshot.json DATABASE_URL=postgres://earth:earth_dev_only@localhost:5432/earth_upgrade npm run db:upgrade:verify
+
+  flutter-functional:
     timeout-minutes: 15
     runs-on: ubuntu-latest
     defaults:

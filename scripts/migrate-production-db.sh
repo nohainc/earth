@@ -11,6 +11,11 @@ if [[ -z "${DATABASE_URL}" ]]; then
   exit 1
 fi
 
+if [[ " ${*} " == *" --repair "* ]] || [[ "${ALLOW_MIGRATION_REPAIR:-false}" == "true" ]]; then
+  print -u2 'Error: migration repair is disabled by the production launcher. Use a documented emergency procedure against a verified recovery target.'
+  exit 1
+fi
+
 if [[ "${DATABASE_URL}" != postgresql://* && "${DATABASE_URL}" != postgres://* ]]; then
   print -u2 'Error: enter a PostgreSQL connection URL beginning with postgres:// or postgresql://.'
   exit 1
